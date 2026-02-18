@@ -1,0 +1,141 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  EC2_INSTANCE: i-07fb3cc6aeea2eb49
+  AWS_REGION: ap-southeast-2
+  DOCKER_NETWORK: app-network
+
+jobs:
+  # Discover which sites exist in sites/
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      sites: ${{ steps.sites.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: List sites
+        id: sites
+        run: |
+          SITES=$(ls -d sites/*/ 2>/dev/null | xargs -I{} basename {} | jq -R -s -c 'split("\n") | map(select(. != ""))')
+          echo "matrix=$SITES" >> $GITHUB_OUTPUT
+          echo "Sites found: $SITES"
+
+  # Build Docker image for each site and push to GHCR
+  build:
+    needs: discover
+    if: needs.discover.outputs.sites != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        site: ${{ fromJson(needs.discover.outputs.sites) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read site config
+        id: config
+        run: |
+          CONFIG="sites/${{ matrix.site }}/site.config.json"
+          CHANNEL_ID=$(jq -r '.channelId' "$CONFIG")
+          echo "channel_id=${CHANNEL_ID}" >> $GITHUB_OUTPUT
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.site
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/keenan-channels-${{ matrix.site }}:latest
+          build-args: |
+            SITE_NAME=${{ matrix.site }}
+            CHANNEL_ID=${{ steps.config.outputs.channel_id }}
+
+  # Deploy each site to EC2 via SSM
+  deploy:
+    needs: [discover, build]
+    if: needs.discover.outputs.sites != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1
+      matrix:
+        site: ${{ fromJson(needs.discover.outputs.sites) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Read site config
+        id: config
+        run: |
+          CONFIG="sites/${{ matrix.site }}/site.config.json"
+          CHANNEL_ID=$(jq -r '.channelId' "$CONFIG")
+          DOMAIN=$(jq -r '.domain' "$CONFIG")
+          PORT=$(jq -r '.port' "$CONFIG")
+
+          echo "channel_id=${CHANNEL_ID}" >> $GITHUB_OUTPUT
+          echo "domain=${DOMAIN}" >> $GITHUB_OUTPUT
+          echo "port=${PORT}" >> $GITHUB_OUTPUT
+
+      - name: Deploy via SSM
+        run: |
+          SITE="${{ matrix.site }}"
+          PORT="${{ steps.config.outputs.port }}"
+          CHANNEL_ID="${{ steps.config.outputs.channel_id }}"
+          DOMAIN="${{ steps.config.outputs.domain }}"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/keenan-channels-${SITE}:latest"
+          CONTAINER="keenan-channel-${SITE}"
+
+          aws ssm send-command \
+            --instance-ids ${{ env.EC2_INSTANCE }} \
+            --document-name "AWS-RunShellScript" \
+            --parameters "commands=[
+              \"echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin\",
+              \"docker pull ${IMAGE}\",
+              \"docker stop ${CONTAINER} || true\",
+              \"docker rm ${CONTAINER} || true\",
+              \"docker run -d --name ${CONTAINER} --restart unless-stopped --network ${DOCKER_NETWORK} -p 127.0.0.1:${PORT}:3000 -e COMMERCE_DATABASE_URL=${{ secrets.COMMERCE_DATABASE_URL }} -e CHANNEL_ID=${CHANNEL_ID} -e SITE_URL=https://${DOMAIN} ${IMAGE}\",
+              \"docker image prune -f\",
+              \"if ! grep -q '${DOMAIN}' /etc/caddy/Caddyfile 2>/dev/null; then echo '' >> /etc/caddy/Caddyfile && echo '${DOMAIN} { reverse_proxy localhost:${PORT} }' >> /etc/caddy/Caddyfile && systemctl reload caddy && echo 'Added Caddy config for ${DOMAIN}'; else echo 'Caddy config for ${DOMAIN} already exists'; fi\"
+            ]" \
+            --output text
+
+          echo "Deploy command sent for ${SITE} (https://${DOMAIN} -> port ${PORT})"
+
+      - name: Wait for deployment
+        run: |
+          DOMAIN="${{ steps.config.outputs.domain }}"
+          echo "Waiting for https://${DOMAIN} to come up..."
+          sleep 20
+
+          for i in {1..12}; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://${DOMAIN}" 2>/dev/null || echo "000")
+
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "307" ]; then
+              echo "Site ${{ matrix.site }} is live at https://${DOMAIN}"
+              exit 0
+            fi
+
+            echo "Waiting... (attempt $i/12, status: $HTTP_CODE)"
+            sleep 5
+          done
+
+          echo "Warning: ${{ matrix.site }} did not respond within 80 seconds (may still be starting)"

@@ -1,0 +1,13 @@
+{
+  "name": "keenan-group-channels",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "sites/*"
+  ],
+  "scripts": {
+    "build:commerce": "npm run build -w @keenan/commerce",
+    "dev:template": "npm run dev -w template",
+    "new-site": "node orchestrator/new-site.mjs"
+  }
+}

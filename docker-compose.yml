@@ -1,0 +1,10 @@
+version: "3.8"
+
+services: {}
+
+# Sites are added automatically by orchestrator/new-site.mjs
+# Each site runs on its own port, Caddy (on the host) routes domains to them.
+#
+# Caddy is already running on the EC2 instance at /etc/caddy/Caddyfile
+# The orchestrator generates Caddy snippets in caddy/sites/ which get
+# included into the main Caddyfile on the server.
