@@ -1,0 +1,4 @@
+# Auto-generated for chef-s-kitchen (channel 2)
+chefsdepot.com.au {
+    reverse_proxy localhost:3002
+}

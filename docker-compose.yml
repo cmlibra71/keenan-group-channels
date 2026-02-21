@@ -1,6 +1,20 @@
 version: "3.8"
 
-services: {}
+services:
+  industry-kitchens:
+    build:
+      context: .
+      dockerfile: Dockerfile.site
+      args:
+        SITE_NAME: industry-kitchens
+        CHANNEL_ID: "1"
+    ports:
+      - "3001:3000"
+    environment:
+      - COMMERCE_DATABASE_URL=postgresql://keenan_portal_user:MpbT9tXEt2G5gWkv42J2ELIu@100.73.16.9:5432/commerce
+      - CHANNEL_ID=1
+      - SITE_URL=https://industry-kitchens.localhost
+    restart: unless-stopped
 
 # Sites are added automatically by orchestrator/new-site.mjs
 # Each site runs on its own port, Caddy (on the host) routes domains to them.
@@ -8,3 +22,18 @@ services: {}
 # Caddy is already running on the EC2 instance at /etc/caddy/Caddyfile
 # The orchestrator generates Caddy snippets in caddy/sites/ which get
 # included into the main Caddyfile on the server.
+
+  chef-s-kitchen:
+    build:
+      context: .
+      dockerfile: Dockerfile.site
+      args:
+        SITE_NAME: chef-s-kitchen
+        CHANNEL_ID: "2"
+    ports:
+      - "3002:3000"
+    environment:
+      - COMMERCE_DATABASE_URL=postgresql://keenan_portal_user:MpbT9tXEt2G5gWkv42J2ELIu@100.73.16.9:5432/commerce
+      - CHANNEL_ID=2
+      - SITE_URL=https://chefsdepot.com.au
+    restart: unless-stopped
