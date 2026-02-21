@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getCategoryBySlug, getProducts } from "@/lib/commerce";
+import { getCategoryBySlug, getProducts } from "@/lib/store";
 import { ProductGrid } from "@/components/product/ProductGrid";
 
 export default async function CategoryPage({

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getSiteConfig } from "@/lib/commerce";
+import { getSiteConfig } from "@/lib/store";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import "./globals.css";

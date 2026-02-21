@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getProducts, getSiteConfig, getCategories } from "@/lib/commerce";
+import { getProducts, getSiteConfig, getCategories } from "@/lib/store";
 import { ProductGrid } from "@/components/product/ProductGrid";
 
 export default async function HomePage() {

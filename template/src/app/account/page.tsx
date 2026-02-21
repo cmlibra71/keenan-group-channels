@@ -1,58 +1,76 @@
 import Link from "next/link";
-import { User } from "lucide-react";
+import { Package, MapPin, LogOut } from "lucide-react";
+import { getSession } from "@/lib/auth";
+import { customerService } from "@/lib/store";
+import { LoginForm } from "@/components/auth/LoginForm";
+import { logout } from "@/lib/actions/auth";
 
 export const metadata = {
   title: "Account",
 };
 
-export default function AccountPage() {
+export default async function AccountPage() {
+  const session = await getSession();
+
+  if (!session) {
+    return (
+      <div className="mx-auto max-w-lg px-4 sm:px-6 lg:px-8 py-8">
+        <h1 className="text-3xl font-bold text-zinc-900 mb-8">My Account</h1>
+        <LoginForm />
+      </div>
+    );
+  }
+
+  const customer = await customerService.getById(session.customerId) as {
+    firstName: string;
+    lastName: string;
+    email: string;
+  } | null;
+
   return (
-    <div className="mx-auto max-w-lg px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-3xl font-bold text-zinc-900 mb-8">My Account</h1>
-
-      {/* Login form placeholder */}
-      <div className="border border-zinc-200 rounded-lg p-8">
-        <div className="text-center mb-6">
-          <User className="h-12 w-12 text-zinc-300 mx-auto" />
-          <p className="mt-2 text-zinc-500">Sign in to your account</p>
-        </div>
-
-        <form className="space-y-4">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-zinc-700">
-              Email
-            </label>
-            <input
-              type="email"
-              id="email"
-              className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
-              placeholder="your@email.com"
-            />
-          </div>
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-zinc-700">
-              Password
-            </label>
-            <input
-              type="password"
-              id="password"
-              className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
-            />
-          </div>
+    <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-3xl font-bold text-zinc-900">My Account</h1>
+        <form action={logout}>
           <button
             type="submit"
-            className="w-full bg-zinc-900 text-white py-2 px-4 rounded-lg font-semibold hover:bg-zinc-800 transition-colors"
+            className="inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900"
           >
-            Sign In
+            <LogOut className="h-4 w-4" />
+            Sign Out
           </button>
         </form>
+      </div>
 
-        <p className="mt-4 text-center text-sm text-zinc-500">
-          Don&apos;t have an account?{" "}
-          <Link href="/account/register" className="text-zinc-900 font-medium hover:underline">
-            Create one
-          </Link>
+      <div className="border border-zinc-200 rounded-lg p-6 mb-6">
+        <h2 className="text-lg font-semibold text-zinc-900 mb-2">Welcome back</h2>
+        <p className="text-zinc-600">
+          {customer?.firstName} {customer?.lastName}
         </p>
+        <p className="text-sm text-zinc-500">{customer?.email}</p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Link
+          href="/account/orders"
+          className="flex items-center gap-4 border border-zinc-200 rounded-lg p-6 hover:border-zinc-400 transition-colors"
+        >
+          <Package className="h-8 w-8 text-zinc-400" />
+          <div>
+            <h3 className="font-semibold text-zinc-900">Order History</h3>
+            <p className="text-sm text-zinc-500">View your past orders</p>
+          </div>
+        </Link>
+        <Link
+          href="/products"
+          className="flex items-center gap-4 border border-zinc-200 rounded-lg p-6 hover:border-zinc-400 transition-colors"
+        >
+          <MapPin className="h-8 w-8 text-zinc-400" />
+          <div>
+            <h3 className="font-semibold text-zinc-900">Continue Shopping</h3>
+            <p className="text-sm text-zinc-500">Browse our products</p>
+          </div>
+        </Link>
       </div>
     </div>
   );

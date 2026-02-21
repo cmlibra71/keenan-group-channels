@@ -1,4 +1,4 @@
-import { getProducts } from "@/lib/commerce";
+import { getProducts } from "@/lib/store";
 import { ProductGrid } from "@/components/product/ProductGrid";
 
 export const metadata = {

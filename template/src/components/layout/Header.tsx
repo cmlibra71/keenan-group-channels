@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ShoppingCart, Search, Menu } from "lucide-react";
+import { Search, Menu } from "lucide-react";
+import { CartBadge } from "./CartBadge";
 
 export function Header({ storeName }: { storeName: string }) {
   return (
@@ -26,9 +27,7 @@ export function Header({ storeName }: { storeName: string }) {
             <Link href="/search" className="text-zinc-600 hover:text-zinc-900">
               <Search className="h-5 w-5" />
             </Link>
-            <Link href="/cart" className="text-zinc-600 hover:text-zinc-900">
-              <ShoppingCart className="h-5 w-5" />
-            </Link>
+            <CartBadge />
             <Link href="/account" className="hidden sm:block text-sm font-medium text-zinc-600 hover:text-zinc-900">
               Account
             </Link>

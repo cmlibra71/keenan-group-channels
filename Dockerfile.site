@@ -15,11 +15,11 @@ COPY package.json package-lock.json* ./
 COPY packages/commerce/ ./packages/commerce/
 COPY sites/${SITE_NAME}/ ./sites/${SITE_NAME}/
 
-# Install (creates workspace symlinks for @keenan/commerce)
+# Install (creates workspace symlinks for @keenan/services)
 RUN npm install
 
 # Build the shared commerce package first
-RUN npm run build -w @keenan/commerce
+RUN npm run build -w @keenan/services
 
 # Build the Next.js site (needs dummy DB url for static generation)
 ENV COMMERCE_DATABASE_URL="postgresql://build:build@localhost:5432/build"
