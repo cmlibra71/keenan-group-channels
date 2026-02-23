@@ -31,10 +31,15 @@ const CHANNEL_ID = parseInt(process.env.CHANNEL_ID || "1", 10);
 // Site Config
 // ============================================================================
 
-export async function getSiteConfig(): Promise<{ channel: Channel; site: Site | null }> {
-  const channel = await channelService.getById(CHANNEL_ID) as Channel;
-  const site = await siteService.getPrimaryForChannel(CHANNEL_ID) as Site | null;
-  return { channel, site };
+export async function getSiteConfig(): Promise<{ channel: Channel | null; site: Site | null }> {
+  try {
+    const channel = await channelService.getById(CHANNEL_ID) as Channel;
+    const site = await siteService.getPrimaryForChannel(CHANNEL_ID) as Site | null;
+    return { channel, site };
+  } catch {
+    // DB unavailable (e.g. during Docker build with dummy URL)
+    return { channel: null, site: null };
+  }
 }
 
 // ============================================================================
