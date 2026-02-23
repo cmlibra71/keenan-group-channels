@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Package } from "lucide-react";
+import { Price } from "@/components/ui/Price";
 
 interface ProductCardProps {
   name: string;
@@ -39,17 +40,13 @@ export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName 
         <div className="mt-1 flex items-center gap-2">
           {displaySalePrice ? (
             <>
-              <span className="text-sm font-semibold text-red-600">
-                ${displaySalePrice.toFixed(2)}
-              </span>
+              <Price amount={displaySalePrice} className="text-sm font-semibold text-red-600" />
               <span className="text-sm text-zinc-400 line-through">
-                ${displayPrice.toFixed(2)}
+                <Price amount={displayPrice} />
               </span>
             </>
           ) : (
-            <span className="text-sm font-semibold text-zinc-900">
-              ${displayPrice.toFixed(2)}
-            </span>
+            <Price amount={displayPrice} className="text-sm font-semibold text-zinc-900" />
           )}
         </div>
       </div>

@@ -14,8 +14,8 @@
  * 5. Adds the site to docker-compose.yml (uses root Dockerfile.site)
  */
 
-import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync } from "fs";
-import { join, basename } from "path";
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync, symlinkSync, existsSync } from "fs";
+import { join, basename, resolve } from "path";
 import { execSync } from "child_process";
 
 const ROOT = new URL("..", import.meta.url).pathname;
@@ -71,11 +71,26 @@ SITE_URL=https://${domain}
 `;
 writeFileSync(join(siteDir, ".env"), envContent);
 
-// 4. Create site config (committed to repo - no secrets)
+// 4. Symlink @keenan/services for local dev
+const servicesRepo = resolve(ROOT, "..", "keenan-group-services");
+if (existsSync(servicesRepo)) {
+  const keenanDir = join(siteDir, "node_modules", "@keenan");
+  mkdirSync(keenanDir, { recursive: true });
+  const linkPath = join(keenanDir, "services");
+  if (!existsSync(linkPath)) {
+    symlinkSync(servicesRepo, linkPath);
+    console.log(`  Linked @keenan/services -> ${servicesRepo}`);
+  }
+} else {
+  console.log(`  Warning: keenan-group-services not found at ${servicesRepo}`);
+  console.log(`  Run: npm install  (to install @keenan/services from registry)`);
+}
+
+// 5. Create site config (committed to repo - no secrets)
 const siteConfig = { channelId, domain, port: Number(port) };
 writeFileSync(join(siteDir, "site.config.json"), JSON.stringify(siteConfig, null, 2) + "\n");
 
-// 5. Generate Caddy site config
+// 6. Generate Caddy site config
 // This snippet gets appended to the server's /etc/caddy/Caddyfile
 mkdirSync(join(CADDY_DIR, "sites"), { recursive: true });
 const caddyConf = `# Auto-generated for ${siteName} (channel ${channelId})
@@ -85,7 +100,7 @@ ${domain} {
 `;
 writeFileSync(join(CADDY_DIR, "sites", `${siteName}.caddy`), caddyConf);
 
-// 6. Update docker-compose
+// 7. Update docker-compose
 updateDockerCompose(siteName, channelId, dbUrl, port, domain);
 
 console.log(`

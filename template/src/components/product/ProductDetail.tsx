@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { AddToCartButton } from "./AddToCartButton";
+import { AddToQuoteButton } from "./AddToQuoteButton";
+import { Price } from "@/components/ui/Price";
 
 type Variant = {
   id: number;
@@ -53,17 +55,13 @@ export function ProductDetail({
       <div className="mt-4 flex items-center gap-3">
         {displaySalePrice ? (
           <>
-            <span className="text-3xl font-bold text-red-600">
-              ${displaySalePrice.toFixed(2)}
-            </span>
+            <Price amount={displaySalePrice} className="text-3xl font-bold text-red-600" />
             <span className="text-xl text-zinc-400 line-through">
-              ${displayPrice.toFixed(2)}
+              <Price amount={displayPrice} />
             </span>
           </>
         ) : (
-          <span className="text-3xl font-bold text-zinc-900">
-            ${displayPrice.toFixed(2)}
-          </span>
+          <Price amount={displayPrice} className="text-3xl font-bold text-zinc-900" />
         )}
       </div>
 
@@ -99,9 +97,14 @@ export function ProductDetail({
         </div>
       )}
 
-      {/* Add to Cart */}
-      <div className="mt-8">
+      {/* Add to Cart / Quote */}
+      <div className="mt-8 space-y-3">
         <AddToCartButton
+          productId={productId}
+          variantId={selectedVariantId}
+          disabled={!inStock || purchasingDisabled}
+        />
+        <AddToQuoteButton
           productId={productId}
           variantId={selectedVariantId}
           disabled={!inStock || purchasingDisabled}

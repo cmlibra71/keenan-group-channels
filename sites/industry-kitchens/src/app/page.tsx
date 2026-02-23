@@ -61,7 +61,7 @@ export default async function HomePage() {
       <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-zinc-900">Featured Products</h2>
-          <Link href="/products" className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
+          <Link href="/products?filter=featured" className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
             View all &rarr;
           </Link>
         </div>

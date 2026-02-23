@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { updateCartItem, removeCartItem } from "@/lib/actions/cart";
 import { Minus, Plus, Trash2 } from "lucide-react";
+import { Price } from "@/components/ui/Price";
 
 type CartItemRow = {
   id: number;
@@ -65,7 +66,7 @@ function CartItemRow({ item }: { item: CartItemRow }) {
         <p className="text-xs text-zinc-400 mt-0.5">
           SKU: {item.variantSku || item.productSku || "N/A"}
         </p>
-        <p className="text-sm text-zinc-600 mt-1">${unitPrice.toFixed(2)} each</p>
+        <p className="text-sm text-zinc-600 mt-1"><Price amount={unitPrice} /> each</p>
       </div>
 
       {/* Quantity controls */}
@@ -89,7 +90,7 @@ function CartItemRow({ item }: { item: CartItemRow }) {
 
       {/* Line total */}
       <div className="w-24 text-right">
-        <span className="text-sm font-semibold text-zinc-900">${lineTotal.toFixed(2)}</span>
+        <Price amount={lineTotal} className="text-sm font-semibold text-zinc-900" />
       </div>
 
       {/* Remove */}

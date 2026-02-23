@@ -1,8 +1,14 @@
 import Link from "next/link";
 import { Search, Menu } from "lucide-react";
-import { CartBadge } from "./CartBadge";
+import { getCart } from "@/lib/actions/cart";
+import { getQuote } from "@/lib/actions/quote";
+import { HeaderClient } from "./HeaderClient";
 
-export function Header({ storeName }: { storeName: string }) {
+export async function Header({ storeName }: { storeName: string }) {
+  const [cart, quote] = await Promise.all([getCart(), getQuote()]);
+  const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+  const quoteCount = quote?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+
   return (
     <header className="border-b border-zinc-200 bg-white sticky top-0 z-50">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -27,10 +33,7 @@ export function Header({ storeName }: { storeName: string }) {
             <Link href="/search" className="text-zinc-600 hover:text-zinc-900">
               <Search className="h-5 w-5" />
             </Link>
-            <CartBadge />
-            <Link href="/account" className="hidden sm:block text-sm font-medium text-zinc-600 hover:text-zinc-900">
-              Account
-            </Link>
+            <HeaderClient cartCount={cartCount} quoteCount={quoteCount} />
             <button className="md:hidden text-zinc-600">
               <Menu className="h-5 w-5" />
             </button>

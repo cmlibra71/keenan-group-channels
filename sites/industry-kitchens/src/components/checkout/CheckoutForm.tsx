@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { placeOrder } from "@/lib/actions/checkout";
+import { Price } from "@/components/ui/Price";
 
 type CartItem = {
   productName: string;
@@ -144,9 +145,7 @@ export function CheckoutForm({
                     <span className="text-zinc-600">
                       {item.productName} &times; {item.quantity}
                     </span>
-                    <span className="font-medium">
-                      ${(price * item.quantity).toFixed(2)}
-                    </span>
+                    <Price amount={price * item.quantity} className="font-medium" />
                   </div>
                 );
               })}
@@ -155,7 +154,7 @@ export function CheckoutForm({
             <div className="mt-4 pt-4 border-t border-zinc-200">
               <div className="flex justify-between text-sm">
                 <span className="text-zinc-500">Subtotal</span>
-                <span className="font-medium">${subtotal.toFixed(2)}</span>
+                <Price amount={subtotal} className="font-medium" />
               </div>
               <div className="flex justify-between text-sm mt-2">
                 <span className="text-zinc-500">Shipping</span>
@@ -163,7 +162,7 @@ export function CheckoutForm({
               </div>
               <div className="flex justify-between text-base font-semibold mt-4 pt-4 border-t border-zinc-200">
                 <span>Total</span>
-                <span>${subtotal.toFixed(2)}</span>
+                <span><Price amount={subtotal} /></span>
               </div>
             </div>
 

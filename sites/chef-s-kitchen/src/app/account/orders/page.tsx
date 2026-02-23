@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Package } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { orderService } from "@/lib/store";
+import { Price } from "@/components/ui/Price";
 
 interface OrderRecord {
   id: number;
@@ -96,9 +97,7 @@ export default async function OrdersPage() {
                   }`}>
                     {order.status}
                   </span>
-                  <span className="font-semibold text-zinc-900">
-                    ${parseFloat(order.totalIncTax).toFixed(2)}
-                  </span>
+                  <Price amount={order.totalIncTax} className="font-semibold text-zinc-900" />
                 </div>
               </div>
               <p className="text-sm text-zinc-500">

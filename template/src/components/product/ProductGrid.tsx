@@ -6,7 +6,7 @@ interface ProductWithImage {
   urlPath: string | null;
   price: string;
   salePrice: string | null;
-  thumbnailImage?: { urlThumbnail: string | null } | null;
+  thumbnailImage?: { urlStandard: string; urlThumbnail: string | null } | null;
 }
 
 export function ProductGrid({ products }: { products: ProductWithImage[] }) {
@@ -27,7 +27,7 @@ export function ProductGrid({ products }: { products: ProductWithImage[] }) {
           slug={product.urlPath || String(product.id)}
           price={product.price}
           salePrice={product.salePrice}
-          imageUrl={product.thumbnailImage?.urlThumbnail}
+          imageUrl={product.thumbnailImage?.urlThumbnail || product.thumbnailImage?.urlStandard}
         />
       ))}
     </div>

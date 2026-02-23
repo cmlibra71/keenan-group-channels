@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Package, MapPin, LogOut } from "lucide-react";
+import { Package, FileText, MapPin, LogOut } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { customerService } from "@/lib/store";
 import { LoginForm } from "@/components/auth/LoginForm";
@@ -50,7 +50,7 @@ export default async function AccountPage() {
         <p className="text-sm text-zinc-500">{customer?.email}</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Link
           href="/account/orders"
           className="flex items-center gap-4 border border-zinc-200 rounded-lg p-6 hover:border-zinc-400 transition-colors"
@@ -59,6 +59,16 @@ export default async function AccountPage() {
           <div>
             <h3 className="font-semibold text-zinc-900">Order History</h3>
             <p className="text-sm text-zinc-500">View your past orders</p>
+          </div>
+        </Link>
+        <Link
+          href="/account/quotes"
+          className="flex items-center gap-4 border border-zinc-200 rounded-lg p-6 hover:border-zinc-400 transition-colors"
+        >
+          <FileText className="h-8 w-8 text-zinc-400" />
+          <div>
+            <h3 className="font-semibold text-zinc-900">My Quotes</h3>
+            <p className="text-sm text-zinc-500">View and track your quotes</p>
           </div>
         </Link>
         <Link

@@ -8,6 +8,8 @@ import {
   categoryTreeService,
   cartService,
   cartItemService,
+  quoteService,
+  quoteItemService,
   productService,
   productImageService,
   productVariantService,
@@ -44,6 +46,7 @@ export async function getProducts(options?: {
   limit?: number;
   categoryId?: number;
   featured?: boolean;
+  onSale?: boolean;
   search?: string;
 }) {
   return productService.listForChannel(CHANNEL_ID, options);
@@ -58,11 +61,23 @@ export async function getProductBySlug(slug: string) {
 // ============================================================================
 
 export async function getCategories() {
-  return categoryService.listVisible();
+  return categoryService.listVisible(CHANNEL_ID);
 }
 
 export async function getCategoryBySlug(slug: string) {
-  return categoryService.getBySlug(slug);
+  return categoryService.getBySlug(slug, CHANNEL_ID);
+}
+
+export async function getSubcategories(parentId: number) {
+  return categoryService.getChildren(parentId);
+}
+
+export async function getCategoryStats(categoryId: number) {
+  return categoryService.getCategoryStats(categoryId);
+}
+
+export async function getCategoryBreadcrumbs(pathIds: number[]) {
+  return categoryService.getBreadcrumbs(pathIds);
 }
 
 // ============================================================================
@@ -78,6 +93,8 @@ export {
   categoryTreeService,
   cartService,
   cartItemService,
+  quoteService,
+  quoteItemService,
   productService,
   productImageService,
   productVariantService,

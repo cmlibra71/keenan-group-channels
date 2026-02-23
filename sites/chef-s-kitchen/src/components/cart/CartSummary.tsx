@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Price } from "@/components/ui/Price";
 
 export function CartSummary({
   subtotal,
@@ -16,12 +17,12 @@ export function CartSummary({
       <div className="space-y-2">
         <div className="flex justify-between text-sm">
           <span className="text-zinc-500">Subtotal</span>
-          <span className="font-medium">${subtotal.toFixed(2)}</span>
+          <Price amount={subtotal} className="font-medium" />
         </div>
         {discount > 0 && (
           <div className="flex justify-between text-sm">
             <span className="text-zinc-500">Discount</span>
-            <span className="font-medium text-green-600">-${discount.toFixed(2)}</span>
+            <span className="font-medium text-green-600">-<Price amount={discount} /></span>
           </div>
         )}
         <div className="flex justify-between text-sm">
@@ -33,7 +34,7 @@ export function CartSummary({
       <div className="mt-4 pt-4 border-t border-zinc-200">
         <div className="flex justify-between text-base font-semibold">
           <span>Total</span>
-          <span>${total.toFixed(2)}</span>
+          <span><Price amount={total} /></span>
         </div>
       </div>
 
