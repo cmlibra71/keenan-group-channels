@@ -46,9 +46,11 @@ jobs:
           token: ${{ secrets.GH_PAT }}
           path: _services
 
-      - name: Pack @keenan/services tarball
+      - name: Build and pack @keenan/services tarball
         run: |
           cd _services
+          npm install
+          npm run build
           npm pack
           mv keenan-services-*.tgz ../keenan-services-1.0.0.tgz
 
