@@ -1,8 +1,8 @@
 # Multi-stage Dockerfile for building any site in the monorepo.
 # Usage: docker build --build-arg SITE_NAME=my-site -f Dockerfile.site .
 #
-# The build context must be the repo root so that both
-# packages/commerce and sites/<name> are available.
+# Requires keenan-services-1.0.0.tgz in the build context root
+# (created by CI via: cd keenan-group-services && npm pack)
 
 FROM node:22-alpine AS builder
 ARG SITE_NAME
@@ -10,16 +10,16 @@ ARG CHANNEL_ID=1
 
 WORKDIR /app
 
-# Copy workspace config + package sources
-COPY package.json package-lock.json* ./
-COPY packages/commerce/ ./packages/commerce/
+# Copy workspace config + @keenan/services tarball
+COPY package.json ./
+COPY keenan-services-1.0.0.tgz ./
 COPY sites/${SITE_NAME}/ ./sites/${SITE_NAME}/
 
-# Install (creates workspace symlinks for @keenan/services)
-RUN npm install
+# Rewrite root package.json to use the tarball instead of file:../
+RUN sed -i 's|"file:../keenan-group-services"|"file:./keenan-services-1.0.0.tgz"|' package.json
 
-# Build the shared commerce package first
-RUN npm run build -w @keenan/services
+# Install dependencies
+RUN npm install
 
 # Build the Next.js site (needs dummy DB url for static generation)
 ENV COMMERCE_DATABASE_URL="postgresql://build:build@localhost:5432/build"
