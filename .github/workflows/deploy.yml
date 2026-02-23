@@ -142,7 +142,7 @@ jobs:
           sleep 20
 
           for i in {1..12}; do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://${DOMAIN}" 2>/dev/null || echo "000")
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 "https://${DOMAIN}" 2>/dev/null || echo "000")
 
             if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "307" ]; then
               echo "Site ${{ matrix.site }} is live at https://${DOMAIN}"

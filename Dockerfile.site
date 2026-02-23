@@ -33,14 +33,15 @@ ARG SITE_NAME
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV SITE_NAME=${SITE_NAME}
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/sites/${SITE_NAME}/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/sites/${SITE_NAME}/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/sites/${SITE_NAME}/.next/static ./.next/static
+COPY --from=builder /app/sites/${SITE_NAME}/public ./sites/${SITE_NAME}/public
+COPY --from=builder --chown=nextjs:nodejs /app/sites/${SITE_NAME}/.next/static ./sites/${SITE_NAME}/.next/static
 
 USER nextjs
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["sh", "-c", "node sites/$SITE_NAME/server.js"]
