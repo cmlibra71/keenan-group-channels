@@ -43,7 +43,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: cmlibra71/keenan-group-services
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_PAT }}
           path: _services
 
       - name: Pack @keenan/services tarball
