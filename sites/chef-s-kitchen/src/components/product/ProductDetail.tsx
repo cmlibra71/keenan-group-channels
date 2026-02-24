@@ -20,12 +20,16 @@ export function ProductDetail({
   price,
   salePrice,
   inventoryLevel,
+  inventoryTracking,
+  availability,
   variants,
 }: {
   productId: number;
   price: string;
   salePrice: string | null;
   inventoryLevel: number;
+  inventoryTracking: string;
+  availability: string;
   variants: Variant[];
 }) {
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
@@ -43,9 +47,14 @@ export function ProductDetail({
         ? parseFloat(salePrice)
         : null;
 
-  const inStock = selectedVariant
-    ? (selectedVariant.inventoryLevel ?? 0) > 0
-    : inventoryLevel > 0;
+  const inStock = (() => {
+    if (availability === "disabled") return false;
+    if (inventoryTracking === "none") return true;
+    if (selectedVariant) {
+      return (selectedVariant.inventoryLevel ?? 0) > 0;
+    }
+    return inventoryLevel > 0;
+  })();
 
   const purchasingDisabled = selectedVariant?.purchasingDisabled ?? false;
 

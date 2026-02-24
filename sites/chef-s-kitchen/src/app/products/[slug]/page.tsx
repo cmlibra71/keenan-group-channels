@@ -42,6 +42,8 @@ export default async function ProductPage({
             price={product.price}
             salePrice={product.salePrice}
             inventoryLevel={product.inventoryLevel ?? 0}
+            inventoryTracking={product.inventoryTracking ?? "none"}
+            availability={product.availability ?? "available"}
             variants={product.variants}
           />
 
