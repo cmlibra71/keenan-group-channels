@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { initCommerceDb } from "@keenan/services";
 import {
   channelService,
@@ -31,31 +32,36 @@ const CHANNEL_ID = parseInt(process.env.CHANNEL_ID || "1", 10);
 // Site Config
 // ============================================================================
 
-export async function getSiteConfig(): Promise<{ channel: Channel | null; site: Site | null }> {
-  try {
-    const channel = await channelService.getById(CHANNEL_ID) as Channel;
-    const site = await siteService.getPrimaryForChannel(CHANNEL_ID) as Site | null;
-    return { channel, site };
-  } catch {
-    // DB unavailable (e.g. during Docker build with dummy URL)
-    return { channel: null, site: null };
-  }
-}
+export const getSiteConfig = unstable_cache(
+  async (): Promise<{ channel: Channel | null; site: Site | null }> => {
+    try {
+      const channel = await channelService.getById(CHANNEL_ID) as Channel;
+      const site = await siteService.getPrimaryForChannel(CHANNEL_ID) as Site | null;
+      return { channel, site };
+    } catch {
+      return { channel: null, site: null };
+    }
+  },
+  [`site-config-${CHANNEL_ID}`],
+  { revalidate: 3600, tags: [`channel-${CHANNEL_ID}`, "site-config"] }
+);
 
 // ============================================================================
 // Products (channel-scoped)
 // ============================================================================
 
-export async function getProducts(options?: {
-  page?: number;
-  limit?: number;
-  categoryId?: number;
-  featured?: boolean;
-  onSale?: boolean;
-  search?: string;
-}) {
-  return productService.listForChannel(CHANNEL_ID, options);
-}
+export const getProducts = unstable_cache(
+  async (options?: {
+    page?: number;
+    limit?: number;
+    categoryId?: number;
+    featured?: boolean;
+    onSale?: boolean;
+    search?: string;
+  }) => productService.listForChannel(CHANNEL_ID, options),
+  [`products-${CHANNEL_ID}`],
+  { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "products"] }
+);
 
 export async function getProductBySlug(slug: string) {
   return productService.getBySlug(slug, CHANNEL_ID);
@@ -65,9 +71,11 @@ export async function getProductBySlug(slug: string) {
 // Categories
 // ============================================================================
 
-export async function getCategories() {
-  return categoryService.listVisible(CHANNEL_ID);
-}
+export const getCategories = unstable_cache(
+  async () => categoryService.listVisible(CHANNEL_ID),
+  [`categories-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "categories"] }
+);
 
 export async function getCategoryBySlug(slug: string) {
   return categoryService.getBySlug(slug, CHANNEL_ID);
