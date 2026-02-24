@@ -41,19 +41,27 @@ export default async function HomePage() {
               <Link
                 key={category.id}
                 href={`/categories/${category.slug}`}
-                className="group flex flex-col items-center p-4 rounded-lg border border-zinc-200 hover:border-zinc-400 transition-colors"
+                className="group block rounded-xl overflow-hidden bg-white shadow-md hover:shadow-xl transition-shadow duration-300"
               >
-                <div className="h-16 w-16 rounded-full overflow-hidden flex items-center justify-center mb-3 bg-zinc-100 group-hover:bg-zinc-200 transition-colors">
+                <div className="aspect-square overflow-hidden bg-zinc-100">
                   {category.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={category.imageUrl} alt={category.name} className="h-full w-full object-cover" />
+                    <img
+                      src={category.imageUrl}
+                      alt={category.name}
+                      className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
                   ) : (
-                    <span className="text-2xl">📦</span>
+                    <div className="h-full w-full flex items-center justify-center text-4xl">
+                      📦
+                    </div>
                   )}
                 </div>
-                <span className="text-sm font-medium text-zinc-900 text-center">
-                  {category.name}
-                </span>
+                <div className="px-3 py-3">
+                  <span className="text-sm font-semibold text-zinc-900 group-hover:text-zinc-600 transition-colors line-clamp-2">
+                    {category.name}
+                  </span>
+                </div>
               </Link>
             ))}
           </div>
