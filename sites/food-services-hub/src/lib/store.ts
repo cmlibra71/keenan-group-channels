@@ -63,9 +63,11 @@ export const getProducts = unstable_cache(
   { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "products"] }
 );
 
-export async function getProductBySlug(slug: string) {
-  return productService.getBySlug(slug, CHANNEL_ID);
-}
+export const getProductBySlug = unstable_cache(
+  async (slug: string) => productService.getBySlug(slug, CHANNEL_ID),
+  [`product-slug-${CHANNEL_ID}`],
+  { revalidate: 120, tags: [`channel-${CHANNEL_ID}`, "products"] }
+);
 
 // ============================================================================
 // Categories
@@ -77,21 +79,29 @@ export const getCategories = unstable_cache(
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "categories"] }
 );
 
-export async function getCategoryBySlug(slug: string) {
-  return categoryService.getBySlug(slug, CHANNEL_ID);
-}
+export const getCategoryBySlug = unstable_cache(
+  async (slug: string) => categoryService.getBySlug(slug, CHANNEL_ID),
+  [`category-slug-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "categories"] }
+);
 
-export async function getSubcategories(parentId: number) {
-  return categoryService.getChildren(parentId);
-}
+export const getSubcategories = unstable_cache(
+  async (parentId: number) => categoryService.getChildren(parentId),
+  [`subcategories-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "categories"] }
+);
 
-export async function getCategoryStats(categoryId: number) {
-  return categoryService.getCategoryStats(categoryId);
-}
+export const getCategoryStats = unstable_cache(
+  async (categoryId: number) => categoryService.getCategoryStats(categoryId),
+  [`category-stats-${CHANNEL_ID}`],
+  { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "categories"] }
+);
 
-export async function getCategoryBreadcrumbs(pathIds: number[]) {
-  return categoryService.getBreadcrumbs(pathIds);
-}
+export const getCategoryBreadcrumbs = unstable_cache(
+  async (pathIds: number[]) => categoryService.getBreadcrumbs(pathIds),
+  [`category-breadcrumbs-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "categories"] }
+);
 
 // ============================================================================
 // Re-export services for direct access
