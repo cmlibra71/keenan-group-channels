@@ -1,7 +1,19 @@
 import Link from "next/link";
 import { Package } from "lucide-react";
 import { getCategories } from "@/lib/store";
-import { RichContent } from "@/components/content/RichContent";
+
+function stripHtml(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 export const metadata = {
   title: "Categories",
@@ -40,11 +52,9 @@ export default async function CategoriesPage() {
               <div className="p-4">
                 <h2 className="text-lg font-semibold text-zinc-900">{category.name}</h2>
                 {category.description && (
-                  <RichContent
-                    html={category.description}
-                    stripStyles
-                    className="mt-1 text-sm text-zinc-500 line-clamp-2"
-                  />
+                  <p className="mt-1 text-sm text-zinc-500 line-clamp-2">
+                    {stripHtml(category.description)}
+                  </p>
                 )}
               </div>
             </Link>

@@ -99,6 +99,31 @@ function splitByHandlebars(html: string) {
   return parts;
 }
 
+/**
+ * Close unclosed inline formatting tags so they don't leak out of a
+ * dangerouslySetInnerHTML container and break React hydration.
+ */
+function closeOpenTags(html: string): string {
+  const openTags: string[] = [];
+  const tagRegex = /<\/?(\w+)[^>]*\/?>/g;
+  const inlineTags = new Set(["b", "i", "em", "strong", "a", "u", "s", "span", "small", "sub", "sup", "mark", "font"]);
+  let match;
+
+  while ((match = tagRegex.exec(html)) !== null) {
+    const tagName = match[1].toLowerCase();
+    if (!inlineTags.has(tagName)) continue;
+    if (match[0].endsWith("/>")) continue;
+    if (match[0][1] === "/") {
+      const idx = openTags.lastIndexOf(tagName);
+      if (idx !== -1) openTags.splice(idx, 1);
+    } else {
+      openTags.push(tagName);
+    }
+  }
+
+  return html + openTags.reverse().map((t) => `</${t}>`).join("");
+}
+
 // ── Component ─────────────────────────────────────────────────────────
 
 export function RichContent({
@@ -124,7 +149,7 @@ export function RichContent({
       <div className={className}>
         {parts.map((part, i) => {
           if (part.type === "html") {
-            return <div key={i} dangerouslySetInnerHTML={{ __html: part.content }} />;
+            return <div key={i} dangerouslySetInnerHTML={{ __html: closeOpenTags(part.content) }} />;
           }
           const Command = commands[part.commandType];
           return Command ? <Command key={i} attrs={part.attrs} /> : null;
@@ -158,7 +183,7 @@ function ReadMoreContent({
     <div className={className}>
       {beforeParts.map((part, i) => {
         if (part.type === "html") {
-          return <div key={i} dangerouslySetInnerHTML={{ __html: part.content }} />;
+          return <div key={i} dangerouslySetInnerHTML={{ __html: closeOpenTags(part.content) }} />;
         }
         const Command = commands[part.commandType];
         return Command ? <Command key={i} attrs={part.attrs} /> : null;
@@ -173,7 +198,7 @@ function ReadMoreContent({
 
       {expanded && afterParts.map((part, i) => {
         if (part.type === "html") {
-          return <div key={`after-${i}`} dangerouslySetInnerHTML={{ __html: part.content }} />;
+          return <div key={`after-${i}`} dangerouslySetInnerHTML={{ __html: closeOpenTags(part.content) }} />;
         }
         const Command = commands[part.commandType];
         return Command ? <Command key={`after-${i}`} attrs={part.attrs} /> : null;

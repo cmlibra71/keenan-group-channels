@@ -14,8 +14,8 @@ Multi-storefront system where each channel gets its own independent Next.js site
 From the workspace root:
 
 ```bash
-# Industry Kitchens (Channel 1) on port 3001
-npm run dev -w industry-kitchens -- --port 3001
+# Food Services Hub (Channel 1) on port 3001
+npm run dev -w food-services-hub -- --port 3001
 
 # Chef's Depot (Channel 2) on port 3002
 npm run dev -w chef-s-kitchen -- --port 3002

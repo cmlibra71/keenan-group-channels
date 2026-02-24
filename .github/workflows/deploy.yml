@@ -127,7 +127,7 @@ jobs:
               \"docker pull ${IMAGE}\",
               \"docker stop ${CONTAINER} || true\",
               \"docker rm ${CONTAINER} || true\",
-              \"docker run -d --name ${CONTAINER} --restart unless-stopped --network ${DOCKER_NETWORK} -p 127.0.0.1:${PORT}:3000 -e COMMERCE_DATABASE_URL=${{ secrets.COMMERCE_DATABASE_URL }} -e CHANNEL_ID=${CHANNEL_ID} -e SITE_URL=https://${DOMAIN} ${IMAGE}\",
+              \"docker run -d --name ${CONTAINER} --restart unless-stopped --network ${DOCKER_NETWORK} -p 127.0.0.1:${PORT}:3000 -e COMMERCE_DATABASE_URL=${{ secrets.COMMERCE_DATABASE_URL }} -e CHANNEL_ID=${CHANNEL_ID} -e SITE_URL=https://${DOMAIN} -e GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} ${IMAGE}\",
               \"docker image prune -f\",
               \"if ! grep -q '${DOMAIN}' /etc/caddy/Caddyfile 2>/dev/null; then echo '' >> /etc/caddy/Caddyfile && echo '${DOMAIN} { reverse_proxy localhost:${PORT} }' >> /etc/caddy/Caddyfile && systemctl reload caddy && echo 'Added Caddy config for ${DOMAIN}'; else echo 'Caddy config for ${DOMAIN} already exists'; fi\"
             ]" \

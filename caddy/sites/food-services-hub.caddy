@@ -1,0 +1,4 @@
+# Auto-generated for food-services-hub (channel 1)
+food-services-hub.localhost {
+    reverse_proxy localhost:3001
+}

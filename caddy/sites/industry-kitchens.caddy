@@ -1,4 +1,0 @@
-# Auto-generated for industry-kitchens (channel 1)
-industry-kitchens.localhost {
-    reverse_proxy localhost:3001
-}
