@@ -68,6 +68,10 @@ const envContent = `# Auto-generated for site: ${siteName}
 COMMERCE_DATABASE_URL=${dbUrl}
 CHANNEL_ID=${channelId}
 SITE_URL=https://${domain}
+
+# Meilisearch (product search)
+MEILI_URL=http://localhost:7700
+MEILI_API_KEY=dev-key
 `;
 writeFileSync(join(siteDir, ".env"), envContent);
 
