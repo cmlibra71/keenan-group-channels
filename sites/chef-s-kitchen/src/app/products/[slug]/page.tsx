@@ -45,6 +45,9 @@ export default async function ProductPage({
             inventoryTracking={product.inventoryTracking ?? "none"}
             availability={product.availability ?? "available"}
             variants={product.variants}
+            options={product.options ?? []}
+            optionValues={product.optionValues ?? []}
+            variantOptionMappings={product.variantOptionMappings ?? []}
           />
 
           {/* Description */}

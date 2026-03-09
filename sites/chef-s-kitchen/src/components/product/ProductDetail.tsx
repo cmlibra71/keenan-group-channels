@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { AddToCartButton } from "./AddToCartButton";
 import { AddToQuoteButton } from "./AddToQuoteButton";
+import { OptionSelector } from "./OptionSelector";
 import { Price } from "@/components/ui/Price";
 
 type Variant = {
@@ -15,6 +16,29 @@ type Variant = {
   inventoryLevel: number | null;
 };
 
+type Option = {
+  id: number;
+  displayName: string;
+  type: string;
+  sortOrder: number | null;
+  isRequired: boolean | null;
+};
+
+type OptionValue = {
+  id: number;
+  optionId: number;
+  label: string;
+  valueData: unknown;
+  sortOrder: number | null;
+};
+
+type VariantOptionMapping = {
+  id: number;
+  variantId: number;
+  optionId: number;
+  optionValueId: number;
+};
+
 export function ProductDetail({
   productId,
   price,
@@ -23,6 +47,9 @@ export function ProductDetail({
   inventoryTracking,
   availability,
   variants,
+  options = [],
+  optionValues = [],
+  variantOptionMappings = [],
 }: {
   productId: number;
   price: string;
@@ -31,17 +58,89 @@ export function ProductDetail({
   inventoryTracking: string;
   availability: string;
   variants: Variant[];
+  options?: Option[];
+  optionValues?: OptionValue[];
+  variantOptionMappings?: VariantOptionMapping[];
 }) {
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
+  const [selectedOptions, setSelectedOptions] = useState<Record<number, number>>({});
 
-  const selectedVariant = variants.find((v) => v.id === selectedVariantId);
+  const useGroupedMode = options.length > 0 && variantOptionMappings.length > 0;
 
-  const displayPrice = selectedVariant?.price
-    ? parseFloat(selectedVariant.price)
+  // Build variant lookup: sorted "optionId:valueId,..." → variant
+  const variantLookup = useMemo(() => {
+    if (!useGroupedMode) return new Map<string, Variant>();
+    const map = new Map<string, Variant>();
+    // Group mappings by variantId
+    const byVariant = new Map<number, VariantOptionMapping[]>();
+    for (const m of variantOptionMappings) {
+      const arr = byVariant.get(m.variantId) || [];
+      arr.push(m);
+      byVariant.set(m.variantId, arr);
+    }
+    for (const [variantId, mappings] of byVariant) {
+      const key = mappings
+        .map((m) => `${m.optionId}:${m.optionValueId}`)
+        .sort()
+        .join(",");
+      const variant = variants.find((v) => v.id === variantId);
+      if (variant) map.set(key, variant);
+    }
+    return map;
+  }, [useGroupedMode, variantOptionMappings, variants]);
+
+  // Get matched variant from current selections
+  const matchedVariant = useMemo(() => {
+    if (!useGroupedMode) return null;
+    if (Object.keys(selectedOptions).length !== options.length) return null;
+    const key = Object.entries(selectedOptions)
+      .map(([optId, valId]) => `${optId}:${valId}`)
+      .sort()
+      .join(",");
+    return variantLookup.get(key) ?? null;
+  }, [useGroupedMode, selectedOptions, options.length, variantLookup]);
+
+  // Compute which values are available per option
+  const disabledValuesPerOption = useMemo(() => {
+    if (!useGroupedMode) return new Map<number, Set<number>>();
+    const result = new Map<number, Set<number>>();
+
+    for (const option of options) {
+      const disabled = new Set<number>();
+      const valuesForOption = optionValues.filter((v) => v.optionId === option.id);
+      // For each value of this option, check if any variant exists
+      // that matches the current selections for OTHER options + this value
+      const otherSelections = { ...selectedOptions };
+      delete otherSelections[option.id];
+
+      for (const val of valuesForOption) {
+        const testSelections = { ...otherSelections, [option.id]: val.id };
+        // Check if any variant matches this combination (partial match ok)
+        const hasMatch = [...variantLookup.entries()].some(([key]) => {
+          return Object.entries(testSelections).every(([optId, valId]) =>
+            key.includes(`${optId}:${valId}`)
+          );
+        });
+        if (!hasMatch) disabled.add(val.id);
+      }
+      result.set(option.id, disabled);
+    }
+    return result;
+  }, [useGroupedMode, options, optionValues, selectedOptions, variantLookup]);
+
+  const handleOptionSelect = (optionId: number, valueId: number) => {
+    setSelectedOptions((prev) => ({ ...prev, [optionId]: valueId }));
+  };
+
+  // Determine active variant for display
+  const activeVariant = useGroupedMode ? matchedVariant : variants.find((v) => v.id === selectedVariantId);
+
+  const displayPrice = activeVariant?.price
+    ? parseFloat(activeVariant.price)
     : parseFloat(price);
-  const displaySalePrice = selectedVariant?.salePrice
-    ? parseFloat(selectedVariant.salePrice)
-    : selectedVariant
+  const displaySalePrice = activeVariant?.salePrice
+    ? parseFloat(activeVariant.salePrice)
+    : activeVariant
       ? null
       : salePrice
         ? parseFloat(salePrice)
@@ -50,13 +149,18 @@ export function ProductDetail({
   const inStock = (() => {
     if (availability === "disabled") return false;
     if (inventoryTracking === "none") return true;
-    if (selectedVariant) {
-      return (selectedVariant.inventoryLevel ?? 0) > 0;
+    if (activeVariant) {
+      return (activeVariant.inventoryLevel ?? 0) > 0;
     }
     return inventoryLevel > 0;
   })();
 
-  const purchasingDisabled = selectedVariant?.purchasingDisabled ?? false;
+  const purchasingDisabled = activeVariant?.purchasingDisabled ?? false;
+
+  // In grouped mode, require all options selected before enabling cart
+  const allOptionsSelected = useGroupedMode
+    ? Object.keys(selectedOptions).length === options.length && matchedVariant !== null
+    : true;
 
   return (
     <div>
@@ -83,8 +187,24 @@ export function ProductDetail({
         )}
       </div>
 
-      {/* Variants */}
-      {variants.length > 0 && (
+      {/* Grouped Option Selectors */}
+      {useGroupedMode && (
+        <div className="mt-6 space-y-5">
+          {options.map((option) => (
+            <OptionSelector
+              key={option.id}
+              option={option}
+              values={optionValues.filter((v) => v.optionId === option.id)}
+              selectedValueId={selectedOptions[option.id] ?? null}
+              disabledValueIds={disabledValuesPerOption.get(option.id) ?? new Set()}
+              onSelect={handleOptionSelect}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Flat variant buttons (fallback for products without options) */}
+      {!useGroupedMode && variants.length > 0 && (
         <div className="mt-6">
           <h3 className="text-sm font-semibold text-zinc-900">Options</h3>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -110,13 +230,13 @@ export function ProductDetail({
       <div className="mt-8 space-y-3">
         <AddToCartButton
           productId={productId}
-          variantId={selectedVariantId}
-          disabled={!inStock || purchasingDisabled}
+          variantId={useGroupedMode ? (matchedVariant?.id ?? null) : selectedVariantId}
+          disabled={!inStock || purchasingDisabled || !allOptionsSelected}
         />
         <AddToQuoteButton
           productId={productId}
-          variantId={selectedVariantId}
-          disabled={!inStock || purchasingDisabled}
+          variantId={useGroupedMode ? (matchedVariant?.id ?? null) : selectedVariantId}
+          disabled={!inStock || purchasingDisabled || !allOptionsSelected}
         />
       </div>
     </div>
