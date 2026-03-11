@@ -203,29 +203,6 @@ export function ProductDetail({
         </div>
       )}
 
-      {/* Flat variant buttons (fallback for products without options) */}
-      {!useGroupedMode && variants.length > 0 && (
-        <div className="mt-6">
-          <h3 className="text-sm font-semibold text-zinc-900">Options</h3>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {variants.map((variant) => (
-              <button
-                key={variant.id}
-                onClick={() => setSelectedVariantId(variant.id === selectedVariantId ? null : variant.id)}
-                className={`px-4 py-2 rounded-lg border text-sm transition-colors ${
-                  variant.id === selectedVariantId
-                    ? "border-zinc-900 bg-zinc-900 text-white"
-                    : "border-zinc-200 hover:border-zinc-400"
-                }`}
-                disabled={variant.purchasingDisabled ?? false}
-              >
-                {variant.optionDisplayName || variant.sku || `Variant ${variant.id}`}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Add to Cart / Quote */}
       <div className="mt-8 space-y-3">
         <AddToCartButton
