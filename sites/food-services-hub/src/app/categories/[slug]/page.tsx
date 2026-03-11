@@ -48,10 +48,9 @@ export default async function CategoryPage({
             <Image
               src={category.imageUrl}
               alt={category.name}
-              width={800}
-              height={600}
+              fill
               sizes="(max-width: 1024px) 100vw, 40vw"
-              className="object-contain w-full h-auto"
+              className="object-contain p-6"
             />
           </div>
         )}

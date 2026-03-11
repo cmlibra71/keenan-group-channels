@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
   let optimized: Buffer;
   try {
     optimized = await sharp(originalBuffer)
-      .resize(width, undefined, { withoutEnlargement: true })
+      .resize(width, undefined, { fit: "inside" })
       .webp({ quality })
       .toBuffer();
   } catch {
