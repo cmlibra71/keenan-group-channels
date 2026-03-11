@@ -44,13 +44,14 @@ export default async function CategoryPage({
       {/* Hero section */}
       <div className="mb-10 flex flex-col lg:flex-row gap-8 items-start bg-zinc-50 rounded-2xl overflow-hidden">
         {category.imageUrl && (
-          <div className="lg:w-2/5 flex-shrink-0 bg-white rounded-2xl m-3 p-6 relative aspect-[4/3] min-h-[280px]">
+          <div className="lg:w-2/5 flex-shrink-0 bg-white rounded-2xl m-3 p-6 relative min-h-[200px]">
             <Image
               src={category.imageUrl}
               alt={category.name}
-              fill
+              width={800}
+              height={600}
               sizes="(max-width: 1024px) 100vw, 40vw"
-              className="object-contain p-6"
+              className="object-contain w-full h-auto"
             />
           </div>
         )}
