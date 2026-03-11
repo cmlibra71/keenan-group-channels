@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import Image from "next/image";
 import { Package } from "lucide-react";
+import imageLoader from "@/lib/image-loader";
 
 interface ProductImage {
   id: number;
@@ -65,7 +67,9 @@ export function ProductImageGallery({
     );
   }
 
-  const zoomUrl = selected.urlZoom || selected.urlStandard;
+  // Use loader to get optimized zoom URL (large size for zoom)
+  const zoomSrc = selected.urlZoom || selected.urlStandard;
+  const zoomUrl = imageLoader({ src: zoomSrc, width: 1920, quality: 90 });
 
   return (
     <div>
@@ -78,11 +82,14 @@ export function ProductImageGallery({
         onMouseMove={isZooming ? handleMouseMove : undefined}
         onMouseLeave={() => setIsZooming(false)}
       >
-        <img
+        <Image
           src={selected.urlStandard}
           alt={selected.altText || productName}
-          className="h-full w-full object-cover select-none"
+          fill
+          sizes="(max-width: 1024px) 100vw, 50vw"
+          className="object-cover select-none"
           draggable={false}
+          priority
         />
         {/* Zoom overlay — bg loads lazily; standard img shows through until ready */}
         <div
@@ -108,16 +115,18 @@ export function ProductImageGallery({
             <button
               key={img.id}
               onClick={() => setSelectedIndex(idx)}
-              className={`flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 overflow-hidden rounded bg-zinc-100 cursor-pointer transition-all ${
+              className={`relative flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 overflow-hidden rounded bg-zinc-100 cursor-pointer transition-all ${
                 idx === selectedIndex
                   ? "ring-2 ring-zinc-900 ring-offset-1"
                   : "hover:ring-2 hover:ring-zinc-300"
               }`}
             >
-              <img
+              <Image
                 src={img.urlThumbnail || img.urlStandard}
                 alt={img.altText || productName}
-                className="h-full w-full object-cover"
+                fill
+                sizes="80px"
+                className="object-cover"
                 draggable={false}
               />
             </button>

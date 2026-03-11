@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { getProducts, getSiteConfig, getCategories } from "@/lib/store";
 import { ProductGrid } from "@/components/product/ProductGrid";
 
@@ -43,13 +44,14 @@ export default async function HomePage() {
                 href={`/categories/${category.slug}`}
                 className="group block rounded-xl overflow-hidden bg-white shadow-md hover:shadow-xl transition-shadow duration-300"
               >
-                <div className="aspect-square overflow-hidden bg-zinc-100">
+                <div className="relative aspect-square overflow-hidden bg-zinc-100">
                   {category.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
+                    <Image
                       src={category.imageUrl}
                       alt={category.name}
-                      className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      fill
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 16vw"
+                      className="object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                   ) : (
                     <div className="h-full w-full flex items-center justify-center text-4xl">

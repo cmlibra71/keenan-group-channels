@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Package } from "lucide-react";
 import { Price } from "@/components/ui/Price";
 
@@ -17,12 +18,14 @@ export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName 
 
   return (
     <Link href={`/products/${slug}`} className="group block">
-      <div className="aspect-square overflow-hidden rounded-lg bg-zinc-100">
+      <div className="relative aspect-square overflow-hidden rounded-lg bg-zinc-100">
         {imageUrl ? (
-          <img
+          <Image
             src={imageUrl}
             alt={name}
-            className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            className="object-cover group-hover:scale-105 transition-transform duration-300"
           />
         ) : (
           <div className="h-full w-full flex items-center justify-center text-zinc-300">

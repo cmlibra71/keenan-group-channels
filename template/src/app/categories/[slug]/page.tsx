@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { ChevronRight, Package } from "lucide-react";
 import { getCategoryBySlug, getProducts, getSubcategories, getCategoryStats, getCategoryBreadcrumbs } from "@/lib/store";
 import { ProductGrid } from "@/components/product/ProductGrid";
@@ -43,11 +44,13 @@ export default async function CategoryPage({
       {/* Hero section */}
       <div className="mb-10 flex flex-col lg:flex-row gap-8 items-start bg-zinc-50 rounded-2xl overflow-hidden">
         {category.imageUrl && (
-          <div className="lg:w-2/5 flex-shrink-0 bg-white rounded-2xl m-3 p-6 flex items-center justify-center">
-            <img
+          <div className="lg:w-2/5 flex-shrink-0 bg-white rounded-2xl m-3 p-6 relative min-h-[200px]">
+            <Image
               src={category.imageUrl}
               alt={category.name}
-              className="w-full h-auto object-contain"
+              fill
+              sizes="(max-width: 1024px) 100vw, 40vw"
+              className="object-contain p-6"
             />
           </div>
         )}
@@ -106,11 +109,15 @@ export default async function CategoryPage({
                 className="group flex items-center gap-3 rounded-lg border border-zinc-200 p-3 hover:border-zinc-400 hover:shadow-sm transition-all"
               >
                 {sub.imageUrl ? (
-                  <img
-                    src={sub.imageUrl}
-                    alt={sub.name}
-                    className="h-12 w-12 rounded object-cover flex-shrink-0"
-                  />
+                  <div className="relative h-12 w-12 flex-shrink-0">
+                    <Image
+                      src={sub.imageUrl}
+                      alt={sub.name}
+                      fill
+                      sizes="48px"
+                      className="rounded object-cover"
+                    />
+                  </div>
                 ) : (
                   <div className="h-12 w-12 rounded bg-zinc-100 flex items-center justify-center flex-shrink-0">
                     <Package className="h-5 w-5 text-zinc-300" />

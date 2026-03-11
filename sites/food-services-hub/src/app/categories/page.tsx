@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Package } from "lucide-react";
 import { getCategories } from "@/lib/store";
 
@@ -36,12 +37,14 @@ export default async function CategoriesPage() {
               href={`/categories/${category.slug || category.id}`}
               className="group block rounded-lg border border-zinc-200 overflow-hidden hover:border-zinc-400 hover:shadow-sm transition-all"
             >
-              <div className="aspect-[4/3] bg-zinc-100 overflow-hidden">
+              <div className="relative aspect-[4/3] bg-zinc-100 overflow-hidden">
                 {category.imageUrl ? (
-                  <img
+                  <Image
                     src={category.imageUrl}
                     alt={category.name}
-                    className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    fill
+                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                    className="object-cover group-hover:scale-105 transition-transform duration-300"
                   />
                 ) : (
                   <div className="h-full w-full flex items-center justify-center text-zinc-300">
