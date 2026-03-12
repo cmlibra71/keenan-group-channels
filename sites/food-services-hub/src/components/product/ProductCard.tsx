@@ -41,7 +41,9 @@ export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName 
           {name}
         </h3>
         <div className="mt-1 flex items-center gap-2">
-          {displaySalePrice ? (
+          {displayPrice === 0 ? (
+            <span className="text-sm font-semibold text-zinc-900">Call for Price</span>
+          ) : displaySalePrice ? (
             <>
               <Price amount={displaySalePrice} className="text-sm font-semibold text-red-600" />
               <span className="text-sm text-zinc-400 line-through">

@@ -166,7 +166,9 @@ export function ProductDetail({
     <div>
       {/* Price */}
       <div className="mt-4 flex items-center gap-3">
-        {displaySalePrice ? (
+        {displayPrice === 0 ? (
+          <span className="text-2xl font-bold text-zinc-900">Call for Price</span>
+        ) : displaySalePrice ? (
           <>
             <Price amount={displaySalePrice} className="text-3xl font-bold text-red-600" />
             <span className="text-xl text-zinc-400 line-through">
@@ -211,12 +213,12 @@ export function ProductDetail({
         <AddToCartButton
           productId={productId}
           variantId={useGroupedMode ? (matchedVariant?.id ?? null) : selectedVariantId}
-          disabled={!inStock || purchasingDisabled || !allOptionsSelected}
+          disabled={!inStock || purchasingDisabled || !allOptionsSelected || displayPrice === 0}
         />
         <AddToQuoteButton
           productId={productId}
           variantId={useGroupedMode ? (matchedVariant?.id ?? null) : selectedVariantId}
-          disabled={!inStock || purchasingDisabled || !allOptionsSelected}
+          disabled={!inStock || purchasingDisabled || !allOptionsSelected || displayPrice === 0}
         />
       </div>
     </div>
