@@ -152,12 +152,21 @@ export const getProductAttachments = unstable_cache(
 export const getRelatedProducts = unstable_cache(
   async (productId: number, categoryIds: number[]) => {
     if (categoryIds.length === 0) return [];
-    // Use first (primary) category
+    // Try categories from most specific to broadest, pick the first
+    // that returns enough results (at least 4 related products)
+    for (const catId of categoryIds) {
+      const result = await productService.listForChannel(CHANNEL_ID, {
+        categoryId: catId,
+        limit: 13,
+      });
+      const related = result.products.filter((p: { id: number }) => p.id !== productId).slice(0, 12);
+      if (related.length >= 4) return related;
+    }
+    // Fallback: use the broadest category if nothing had enough
     const result = await productService.listForChannel(CHANNEL_ID, {
-      categoryId: categoryIds[0],
+      categoryId: categoryIds[categoryIds.length - 1],
       limit: 13,
     });
-    // Exclude the current product, cap at 12
     return result.products.filter((p: { id: number }) => p.id !== productId).slice(0, 12);
   },
   [`related-${CHANNEL_ID}`],
