@@ -34,11 +34,11 @@ export function ProductTabs({
 }) {
   const tabs: Tab[] = [];
 
-  if (description) tabs.push({ key: "description", label: "Description" });
+  if (description) tabs.push({ key: "description", label: "FEATURES" });
   tabs.push({ key: "reviews", label: `Reviews (${reviews.length})` });
-  if (warranty) tabs.push({ key: "warranty", label: "Warranty" });
-  if (customFields?.downloads) tabs.push({ key: "downloads", label: "Downloads" });
-  if (customFields?.leaseOptions) tabs.push({ key: "leaseOptions", label: "Lease Options" });
+  tabs.push({ key: "warranty", label: "WARRANTY" });
+  tabs.push({ key: "downloads", label: "DOWNLOADS" });
+  tabs.push({ key: "leaseOptions", label: "LEASE OPTIONS" });
 
   // Custom tabs from customFields.tabs array
   if (Array.isArray(customFields?.tabs)) {
@@ -82,28 +82,40 @@ export function ProductTabs({
           <ReviewsSection reviews={reviews} productId={productId} />
         )}
 
-        {activeTab === "warranty" && warranty && (
-          <RichContent
-            html={warranty}
-            stripStyles
-            className="prose prose-sm max-w-none text-zinc-600"
-          />
+        {activeTab === "warranty" && (
+          warranty ? (
+            <RichContent
+              html={warranty}
+              stripStyles
+              className="prose prose-sm max-w-none text-zinc-600"
+            />
+          ) : (
+            <p className="text-sm text-zinc-500">No warranty information available.</p>
+          )
         )}
 
-        {activeTab === "downloads" && typeof customFields?.downloads === "string" && (
-          <RichContent
-            html={customFields.downloads}
-            stripStyles
-            className="prose prose-sm max-w-none text-zinc-600"
-          />
+        {activeTab === "downloads" && (
+          typeof customFields?.downloads === "string" ? (
+            <RichContent
+              html={customFields.downloads}
+              stripStyles
+              className="prose prose-sm max-w-none text-zinc-600"
+            />
+          ) : (
+            <p className="text-sm text-zinc-500">No downloads available.</p>
+          )
         )}
 
-        {activeTab === "leaseOptions" && typeof customFields?.leaseOptions === "string" && (
-          <RichContent
-            html={customFields.leaseOptions}
-            stripStyles
-            className="prose prose-sm max-w-none text-zinc-600"
-          />
+        {activeTab === "leaseOptions" && (
+          typeof customFields?.leaseOptions === "string" ? (
+            <RichContent
+              html={customFields.leaseOptions}
+              stripStyles
+              className="prose prose-sm max-w-none text-zinc-600"
+            />
+          ) : (
+            <p className="text-sm text-zinc-500">No lease options available.</p>
+          )
         )}
 
         {activeTab.startsWith("custom-") && Array.isArray(customFields?.tabs) && (
