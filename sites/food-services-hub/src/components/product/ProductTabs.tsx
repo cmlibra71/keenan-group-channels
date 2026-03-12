@@ -21,17 +21,31 @@ type Tab = {
 
 export function ProductTabs({
   description,
+  warranty,
+  customFields,
   reviews,
   productId,
 }: {
   description: string | null;
+  warranty: string | null;
+  customFields: Record<string, unknown> | null;
   reviews: Review[];
   productId: number;
 }) {
   const tabs: Tab[] = [];
 
-  if (description) tabs.push({ key: "description", label: "FEATURES" });
+  if (description) tabs.push({ key: "description", label: "Description" });
   tabs.push({ key: "reviews", label: `Reviews (${reviews.length})` });
+  if (warranty) tabs.push({ key: "warranty", label: "Warranty" });
+  if (customFields?.downloads) tabs.push({ key: "downloads", label: "Downloads" });
+  if (customFields?.leaseOptions) tabs.push({ key: "leaseOptions", label: "Lease Options" });
+
+  // Custom tabs from customFields.tabs array
+  if (Array.isArray(customFields?.tabs)) {
+    for (const tab of customFields.tabs as { key: string; label: string; content: string }[]) {
+      tabs.push({ key: `custom-${tab.key}`, label: tab.label });
+    }
+  }
 
   const [activeTab, setActiveTab] = useState(tabs[0]?.key ?? "description");
 
@@ -68,8 +82,58 @@ export function ProductTabs({
           <ReviewsSection reviews={reviews} productId={productId} />
         )}
 
+        {activeTab === "warranty" && warranty && (
+          <RichContent
+            html={warranty}
+            stripStyles
+            className="prose prose-sm max-w-none text-zinc-600"
+          />
+        )}
+
+        {activeTab === "downloads" && typeof customFields?.downloads === "string" && (
+          <RichContent
+            html={customFields.downloads}
+            stripStyles
+            className="prose prose-sm max-w-none text-zinc-600"
+          />
+        )}
+
+        {activeTab === "leaseOptions" && typeof customFields?.leaseOptions === "string" && (
+          <RichContent
+            html={customFields.leaseOptions}
+            stripStyles
+            className="prose prose-sm max-w-none text-zinc-600"
+          />
+        )}
+
+        {activeTab.startsWith("custom-") && Array.isArray(customFields?.tabs) && (
+          <CustomTabContent
+            activeKey={activeTab.replace("custom-", "")}
+            tabs={customFields.tabs as { key: string; content: string }[]}
+          />
+        )}
       </div>
     </div>
+  );
+}
+
+// ── Custom Tab Content ─────────────────────────────────────────────────
+
+function CustomTabContent({
+  activeKey,
+  tabs,
+}: {
+  activeKey: string;
+  tabs: { key: string; content: string }[];
+}) {
+  const tab = tabs.find((t) => t.key === activeKey);
+  if (!tab) return null;
+  return (
+    <RichContent
+      html={tab.content}
+      stripStyles
+      className="prose prose-sm max-w-none text-zinc-600"
+    />
   );
 }
 
