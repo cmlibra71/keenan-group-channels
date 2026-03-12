@@ -10,8 +10,8 @@ type Review = {
   rating: number;
   title: string | null;
   text: string | null;
-  authorName: string | null;
-  createdAt: string | Date | null;
+  author_name: string | null;
+  created_at: string | Date | null;
 };
 
 type Tab = {
@@ -256,9 +256,9 @@ function ReviewsSection({
                 <p className="mt-2 text-sm text-zinc-600">{review.text}</p>
               )}
               <p className="mt-2 text-xs text-zinc-400">
-                {review.authorName || "Anonymous"}
-                {review.createdAt && (
-                  <> &middot; {new Date(review.createdAt).toLocaleDateString()}</>
+                {review.author_name || "Anonymous"}
+                {review.created_at && (
+                  <> &middot; {new Date(review.created_at).toLocaleDateString()}</>
                 )}
               </p>
             </div>

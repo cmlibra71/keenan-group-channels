@@ -24,8 +24,8 @@ export default async function ProductPage({
     rating: number;
     title: string | null;
     text: string | null;
-    authorName: string | null;
-    createdAt: string | Date | null;
+    author_name: string | null;
+    created_at: string | Date | null;
   }[];
 
   return (
