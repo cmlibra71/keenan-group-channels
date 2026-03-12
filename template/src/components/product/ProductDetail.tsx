@@ -204,9 +204,10 @@ export function ProductDetail({
               </thead>
               <tbody className="divide-y divide-zinc-100">
                 {bulkPricing.map((rule) => {
-                  const tierPrice = rule.type === "fixed" ? parseFloat(rule.amount)
-                    : rule.type === "percent" ? displayPrice * (1 - parseFloat(rule.amount) / 100)
-                    : displayPrice - parseFloat(rule.amount);
+                  const amount = parseFloat(rule.amount);
+                  const tierPrice = rule.type === "percent"
+                    ? displayPrice * (1 - amount / 100)
+                    : amount;
                   return (
                     <tr key={rule.id} className="text-zinc-700">
                       <td className="px-3 py-2">
