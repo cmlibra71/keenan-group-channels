@@ -61,7 +61,7 @@ export function ProductImageGallery({
 
   if (images.length === 0) {
     return (
-      <div className="aspect-[4/3] overflow-hidden rounded-lg bg-zinc-100">
+      <div className="h-80 overflow-hidden rounded-lg bg-zinc-100">
         <div className="h-full w-full flex items-center justify-center text-zinc-300">
           <Package className="h-24 w-24" />
         </div>
@@ -77,7 +77,7 @@ export function ProductImageGallery({
     <div>
       {/* Main image with click-to-zoom */}
       <div
-        className={`relative aspect-[4/3] overflow-hidden rounded-lg bg-zinc-100 ${
+        className={`relative overflow-hidden rounded-lg bg-zinc-100 flex items-center justify-center max-h-[600px] ${
           isZooming ? "cursor-zoom-out" : "cursor-zoom-in"
         }`}
         onClick={handleClick}
@@ -87,9 +87,10 @@ export function ProductImageGallery({
         <Image
           src={selected.urlStandard}
           alt={selected.altText || productName}
-          fill
+          width={800}
+          height={800}
           sizes="(max-width: 1024px) 100vw, 50vw"
-          className="object-contain select-none"
+          className="w-full h-auto max-h-[600px] object-contain select-none"
           draggable={false}
           priority
         />
