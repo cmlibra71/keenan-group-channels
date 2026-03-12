@@ -87,7 +87,7 @@ export function ProductImageGallery({
           alt={selected.altText || productName}
           fill
           sizes="(max-width: 1024px) 100vw, 50vw"
-          className="object-cover select-none"
+          className="object-contain select-none"
           draggable={false}
           priority
         />
@@ -126,7 +126,7 @@ export function ProductImageGallery({
                 alt={img.altText || productName}
                 fill
                 sizes="80px"
-                className="object-cover"
+                className="object-contain"
                 draggable={false}
               />
             </button>
