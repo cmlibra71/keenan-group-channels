@@ -21,14 +21,15 @@ export function ProductImageGallery({
   images: ProductImage[];
   productName: string;
 }) {
-  const [selectedIndex, setSelectedIndex] = useState(() => {
-    const thumbIdx = images.findIndex((img) => img.isThumbnail);
-    return thumbIdx >= 0 ? thumbIdx : 0;
-  });
+  // Filter out thumbnail-only images from the gallery
+  const galleryImages = images.filter((img) => !img.isThumbnail);
+  const displayImages = galleryImages.length > 0 ? galleryImages : images;
+
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [isZooming, setIsZooming] = useState(false);
   const zoomRef = useRef<HTMLDivElement>(null);
 
-  const selected = images[selectedIndex];
+  const selected = displayImages[selectedIndex];
 
   // Direct DOM update for 60fps — no React re-renders on mousemove
   const handleMouseMove = useCallback(
@@ -109,9 +110,9 @@ export function ProductImageGallery({
       <p className="mt-2 text-xs text-zinc-400 text-center hidden sm:block">Click to zoom</p>
 
       {/* Thumbnail strip */}
-      {images.length > 1 && (
+      {displayImages.length > 1 && (
         <div className="mt-4 flex gap-2 overflow-x-auto">
-          {images.map((img, idx) => (
+          {displayImages.map((img, idx) => (
             <button
               key={img.id}
               onClick={() => setSelectedIndex(idx)}
