@@ -189,17 +189,20 @@ export function ProductDetail({
 
       {/* Grouped Option Selectors */}
       {useGroupedMode && (
-        <div className="mt-6 space-y-5">
-          {options.map((option) => (
-            <OptionSelector
-              key={option.id}
-              option={option}
-              values={optionValues.filter((v) => v.optionId === option.id)}
-              selectedValueId={selectedOptions[option.id] ?? null}
-              disabledValueIds={disabledValuesPerOption.get(option.id) ?? new Set()}
-              onSelect={handleOptionSelect}
-            />
-          ))}
+        <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-5">
+          <h3 className="text-sm font-semibold text-zinc-900 mb-4">Configure</h3>
+          <div className="space-y-5">
+            {options.map((option) => (
+              <OptionSelector
+                key={option.id}
+                option={option}
+                values={optionValues.filter((v) => v.optionId === option.id)}
+                selectedValueId={selectedOptions[option.id] ?? null}
+                disabledValueIds={disabledValuesPerOption.get(option.id) ?? new Set()}
+                onSelect={handleOptionSelect}
+              />
+            ))}
+          </div>
         </div>
       )}
 

@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getProductBySlug } from "@/lib/store";
+import { getProductBySlug, getProductReviews } from "@/lib/store";
 import { ChevronLeft } from "lucide-react";
 import { ProductDetail } from "@/components/product/ProductDetail";
 import { ProductImageGallery } from "@/components/product/ProductImageGallery";
+import { ProductTabs } from "@/components/product/ProductTabs";
 import { RichContent } from "@/components/content/RichContent";
 
 export default async function ProductPage({
@@ -17,6 +18,15 @@ export default async function ProductPage({
   if (!product) {
     notFound();
   }
+
+  const reviews = await getProductReviews(product.id) as {
+    id: number;
+    rating: number;
+    title: string | null;
+    text: string | null;
+    authorName: string | null;
+    createdAt: string | Date | null;
+  }[];
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
@@ -37,6 +47,17 @@ export default async function ProductPage({
             <p className="mt-1 text-sm text-zinc-500">SKU: {product.sku}</p>
           )}
 
+          {/* Short description / specs */}
+          {product.descriptionShort && (
+            <div className="mt-4">
+              <RichContent
+                html={product.descriptionShort}
+                stripStyles
+                className="text-sm text-zinc-600 prose prose-sm"
+              />
+            </div>
+          )}
+
           <ProductDetail
             productId={product.id}
             price={product.price}
@@ -49,20 +70,17 @@ export default async function ProductPage({
             optionValues={product.optionValues ?? []}
             variantOptionMappings={product.variantOptionMappings ?? []}
           />
-
-          {/* Description */}
-          {product.description && (
-            <div className="mt-8 border-t border-zinc-200 pt-8">
-              <h3 className="text-lg font-semibold text-zinc-900">Description</h3>
-              <RichContent
-                html={product.description}
-                stripStyles
-                className="mt-3 text-sm text-zinc-600 prose prose-sm"
-              />
-            </div>
-          )}
         </div>
       </div>
+
+      {/* Tabbed content section */}
+      <ProductTabs
+        description={product.description}
+        warranty={product.warranty ?? null}
+        customFields={product.customFields as Record<string, unknown> | null}
+        reviews={reviews}
+        productId={product.id}
+      />
     </div>
   );
 }

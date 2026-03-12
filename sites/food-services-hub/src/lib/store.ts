@@ -11,6 +11,7 @@ import {
   cartItemService,
   quoteService,
   quoteItemService,
+  reviewService,
   productService,
   productImageService,
   productVariantService,
@@ -104,6 +105,28 @@ export const getCategoryBreadcrumbs = unstable_cache(
 );
 
 // ============================================================================
+// Reviews (product-scoped)
+// ============================================================================
+
+export const getProductReviews = unstable_cache(
+  async (productId: number) => {
+    const result = await reviewService.list({
+      page: 1,
+      limit: 50,
+      sort: "created_at",
+      direction: "desc",
+      filters: {
+        product_id: { type: "eq", value: productId },
+        status: { type: "eq", value: "approved" },
+      },
+    });
+    return result.data;
+  },
+  [`reviews-${CHANNEL_ID}`],
+  { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "reviews"] }
+);
+
+// ============================================================================
 // Re-export services for direct access
 // ============================================================================
 
@@ -118,6 +141,7 @@ export {
   cartItemService,
   quoteService,
   quoteItemService,
+  reviewService,
   productService,
   productImageService,
   productVariantService,
