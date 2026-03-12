@@ -180,14 +180,6 @@ export function ProductDetail({
         )}
       </div>
 
-      {/* Availability */}
-      <div className="mt-4">
-        {inStock ? (
-          <span className="text-sm text-green-600 font-medium">In Stock</span>
-        ) : (
-          <span className="text-sm text-red-600 font-medium">Out of Stock</span>
-        )}
-      </div>
 
       {/* Grouped Option Selectors */}
       {useGroupedMode && (
@@ -218,7 +210,7 @@ export function ProductDetail({
         <AddToQuoteButton
           productId={productId}
           variantId={useGroupedMode ? (matchedVariant?.id ?? null) : selectedVariantId}
-          disabled={!inStock || purchasingDisabled || !allOptionsSelected || displayPrice === 0}
+          disabled={useGroupedMode && !allOptionsSelected}
         />
       </div>
     </div>
