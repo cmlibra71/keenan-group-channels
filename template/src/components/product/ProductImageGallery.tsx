@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import Image from "next/image";
 import { Package } from "lucide-react";
 import imageLoader from "@/lib/image-loader";
@@ -21,14 +21,17 @@ export function ProductImageGallery({
   images: ProductImage[];
   productName: string;
 }) {
-  const [selectedIndex, setSelectedIndex] = useState(() => {
-    const thumbIdx = images.findIndex((img) => img.isThumbnail);
-    return thumbIdx >= 0 ? thumbIdx : 0;
-  });
+  // Gallery images exclude the thumbnail flag image (low-res product card image)
+  const galleryImages = useMemo(() => {
+    const nonThumb = images.filter((img) => !img.isThumbnail);
+    return nonThumb.length > 0 ? nonThumb : images;
+  }, [images]);
+
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [isZooming, setIsZooming] = useState(false);
   const zoomRef = useRef<HTMLDivElement>(null);
 
-  const selected = images[selectedIndex];
+  const selected = galleryImages[selectedIndex];
 
   // Direct DOM update for 60fps — no React re-renders on mousemove
   const handleMouseMove = useCallback(
@@ -44,7 +47,6 @@ export function ProductImageGallery({
 
   function handleClick(e: React.MouseEvent<HTMLDivElement>) {
     if (!isZooming) {
-      // Enter zoom — position zoom at click point immediately
       setIsZooming(true);
       if (zoomRef.current) {
         const rect = e.currentTarget.getBoundingClientRect();
@@ -59,7 +61,7 @@ export function ProductImageGallery({
 
   if (images.length === 0) {
     return (
-      <div className="aspect-square overflow-hidden rounded-lg bg-zinc-100">
+      <div className="aspect-[4/3] overflow-hidden rounded-lg bg-zinc-100">
         <div className="h-full w-full flex items-center justify-center text-zinc-300">
           <Package className="h-24 w-24" />
         </div>
@@ -75,7 +77,7 @@ export function ProductImageGallery({
     <div>
       {/* Main image with click-to-zoom */}
       <div
-        className={`relative aspect-square overflow-hidden rounded-lg bg-zinc-100 ${
+        className={`relative aspect-[4/3] overflow-hidden rounded-lg bg-zinc-100 ${
           isZooming ? "cursor-zoom-out" : "cursor-zoom-in"
         }`}
         onClick={handleClick}
@@ -91,7 +93,7 @@ export function ProductImageGallery({
           draggable={false}
           priority
         />
-        {/* Zoom overlay — bg loads lazily; standard img shows through until ready */}
+        {/* Zoom overlay */}
         <div
           ref={zoomRef}
           className={`absolute inset-0 pointer-events-none transition-opacity duration-200 ${
@@ -109,9 +111,9 @@ export function ProductImageGallery({
       <p className="mt-2 text-xs text-zinc-400 text-center hidden sm:block">Click to zoom</p>
 
       {/* Thumbnail strip */}
-      {images.length > 1 && (
+      {galleryImages.length > 1 && (
         <div className="mt-4 flex gap-2 overflow-x-auto">
-          {images.map((img, idx) => (
+          {galleryImages.map((img, idx) => (
             <button
               key={img.id}
               onClick={() => setSelectedIndex(idx)}
