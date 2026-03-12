@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts } from "@/lib/store";
 import { ChevronLeft } from "lucide-react";
 import { ProductDetail } from "@/components/product/ProductDetail";
 import { ProductImageGallery } from "@/components/product/ProductImageGallery";
 import { ProductTabs } from "@/components/product/ProductTabs";
+import { ProductGrid } from "@/components/product/ProductGrid";
 import { RichContent } from "@/components/content/RichContent";
 
 export default async function ProductPage({
@@ -19,9 +20,10 @@ export default async function ProductPage({
     notFound();
   }
 
-  const [reviewsRaw, attachmentsRaw] = await Promise.all([
+  const [reviewsRaw, attachmentsRaw, relatedProducts] = await Promise.all([
     getProductReviews(product.id),
     getProductAttachments(product.id),
+    getRelatedProducts(product.id, product.categoryIds ?? []),
   ]);
 
   const reviews = reviewsRaw as {
@@ -97,6 +99,14 @@ export default async function ProductPage({
         attachments={attachments}
         productId={product.id}
       />
+
+      {/* Related Products */}
+      {relatedProducts.length > 0 && (
+        <div className="mt-12 border-t border-zinc-200 pt-8">
+          <h2 className="text-2xl font-bold text-zinc-900 mb-6">Related Products</h2>
+          <ProductGrid products={relatedProducts} />
+        </div>
+      )}
     </div>
   );
 }

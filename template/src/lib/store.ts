@@ -146,6 +146,25 @@ export const getProductAttachments = unstable_cache(
 );
 
 // ============================================================================
+// Related Products (same category)
+// ============================================================================
+
+export const getRelatedProducts = unstable_cache(
+  async (productId: number, categoryIds: number[]) => {
+    if (categoryIds.length === 0) return [];
+    // Use first (primary) category
+    const result = await productService.listForChannel(CHANNEL_ID, {
+      categoryId: categoryIds[0],
+      limit: 13,
+    });
+    // Exclude the current product, cap at 12
+    return result.products.filter((p: { id: number }) => p.id !== productId).slice(0, 12);
+  },
+  [`related-${CHANNEL_ID}`],
+  { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "products"] }
+);
+
+// ============================================================================
 // Re-export services for direct access
 // ============================================================================
 
