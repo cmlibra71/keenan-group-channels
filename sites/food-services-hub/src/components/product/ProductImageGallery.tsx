@@ -74,7 +74,7 @@ export function ProductImageGallery({
     <div>
       {/* Main image with click-to-zoom */}
       <div
-        className={`relative overflow-hidden rounded-lg bg-zinc-100 flex items-center justify-center max-h-[600px] ${
+        className={`relative overflow-hidden rounded-lg flex items-center justify-center max-h-[600px] ${
           isZooming ? "cursor-zoom-out" : "cursor-zoom-in"
         }`}
         onClick={handleClick}
