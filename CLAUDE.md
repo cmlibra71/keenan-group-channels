@@ -83,3 +83,33 @@ After deploying schema changes to production, grant permissions on new tables:
 ssh keenan
 docker exec postgres psql -U admin -d commerce -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO keenan_portal_user; GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO keenan_portal_user;"
 ```
+
+## Admin Tasks (Backfills, Reindexing, etc.)
+
+One-off admin scripts live in `../keenan-group-services/scripts/`. To run them in production, use the **Admin Task** workflow (`admin-task.yml`):
+
+1. Go to **Actions → Admin Task → Run workflow**
+2. Select the script (e.g. `scripts/backfill-meilisearch.ts`)
+3. Set timeout if needed (default 600s)
+
+The workflow builds a temporary Docker image from `@keenan/services` with the script, pushes to GHCR, then runs it on EC2 via SSM on the `app-network` (so it can reach Postgres, Meilisearch, etc.). The container is removed after execution.
+
+### Available scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/backfill-meilisearch.ts` | Reindex all products into Meilisearch (run after search config changes or data imports) |
+| `scripts/backfill-embeddings.ts` | Generate vector embeddings for semantic search |
+
+### Adding new admin scripts
+
+1. Create the script in `../keenan-group-services/scripts/`
+2. Add it to the `options` list in `.github/workflows/admin-task.yml`
+3. The script receives env vars: `COMMERCE_DATABASE_URL`, `MEILI_URL`, `MEILI_API_KEY`, `GOOGLE_API_KEY`
+
+### Infrastructure reference
+
+- **EC2 instance**: `i-07fb3cc6aeea2eb49` (Ubuntu, SSM-managed)
+- **Docker network**: `app-network`
+- **Containers**: `keenan-channel-{site}`, `keenan-group-portal`, `keenan-search` (Meilisearch), `postgres`
+- **Reverse proxy**: Caddy (`/etc/caddy/Caddyfile`)

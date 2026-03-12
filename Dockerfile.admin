@@ -1,0 +1,23 @@
+# Lightweight image for running admin scripts from @keenan/services.
+# Usage: docker build --build-arg SCRIPT=scripts/backfill-meilisearch.ts -f Dockerfile.admin .
+#
+# Requires keenan-services source in _services/ build context (cloned by CI).
+
+FROM node:22-alpine
+
+ARG SCRIPT=scripts/backfill-meilisearch.ts
+
+WORKDIR /app
+
+# Copy the full services repo (source + scripts)
+COPY _services/ ./
+
+# Install dependencies (including devDependencies for tsx)
+RUN npm install
+
+# Build TypeScript
+RUN npm run build
+
+# Default: run the specified script
+ENV SCRIPT=${SCRIPT}
+CMD ["sh", "-c", "npx tsx $SCRIPT"]
