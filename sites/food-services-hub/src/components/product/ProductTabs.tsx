@@ -48,7 +48,7 @@ export function ProductTabs({
   if (description) tabs.push({ key: "description", label: "FEATURES" });
   tabs.push({ key: "reviews", label: `Reviews (${reviews.length})` });
   tabs.push({ key: "warranty", label: "WARRANTY" });
-  tabs.push({ key: "downloads", label: "DOWNLOADS" });
+  tabs.push({ key: "downloads", label: `DOWNLOADS (${attachments.length})` });
   tabs.push({ key: "leaseOptions", label: "LEASE OPTIONS" });
 
   // Custom tabs from customFields.tabs array
