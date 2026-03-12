@@ -69,6 +69,7 @@ export default async function ProductPage({
             options={product.options ?? []}
             optionValues={product.optionValues ?? []}
             variantOptionMappings={product.variantOptionMappings ?? []}
+            bulkPricing={product.bulkPricing ?? []}
           />
         </div>
       </div>

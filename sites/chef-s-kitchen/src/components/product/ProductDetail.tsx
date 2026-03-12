@@ -39,6 +39,14 @@ type VariantOptionMapping = {
   optionValueId: number;
 };
 
+type BulkPricingRule = {
+  id: number;
+  quantityMin: number;
+  quantityMax: number | null;
+  type: string;
+  amount: string;
+};
+
 export function ProductDetail({
   productId,
   price,
@@ -50,6 +58,7 @@ export function ProductDetail({
   options = [],
   optionValues = [],
   variantOptionMappings = [],
+  bulkPricing = [],
 }: {
   productId: number;
   price: string;
@@ -61,6 +70,7 @@ export function ProductDetail({
   options?: Option[];
   optionValues?: OptionValue[];
   variantOptionMappings?: VariantOptionMapping[];
+  bulkPricing?: BulkPricingRule[];
 }) {
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
   const [selectedOptions, setSelectedOptions] = useState<Record<number, number>>({});
@@ -180,6 +190,41 @@ export function ProductDetail({
         )}
       </div>
 
+      {/* Bulk Pricing Tiers */}
+      {bulkPricing.length > 0 && displayPrice > 0 && (
+        <div className="mt-4">
+          <h3 className="text-sm font-semibold text-zinc-700 mb-2">Bulk Pricing</h3>
+          <div className="rounded-lg border border-zinc-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-zinc-50 text-zinc-600">
+                  <th className="px-3 py-2 text-left font-medium">Quantity</th>
+                  <th className="px-3 py-2 text-right font-medium">Price Per Unit</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {bulkPricing.map((rule) => {
+                  const tierPrice = rule.type === "fixed" ? parseFloat(rule.amount)
+                    : rule.type === "percent" ? displayPrice * (1 - parseFloat(rule.amount) / 100)
+                    : displayPrice - parseFloat(rule.amount);
+                  return (
+                    <tr key={rule.id} className="text-zinc-700">
+                      <td className="px-3 py-2">
+                        {rule.quantityMax
+                          ? `${rule.quantityMin} – ${rule.quantityMax}`
+                          : `${rule.quantityMin}+`}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <Price amount={tierPrice} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Grouped Option Selectors */}
       {useGroupedMode && (
