@@ -3,7 +3,16 @@
 import { useState, useTransition } from "react";
 import { RichContent } from "@/components/content/RichContent";
 import { submitReview } from "@/lib/actions/reviews";
-import { Star } from "lucide-react";
+import { Star, FileText, Download } from "lucide-react";
+
+type Attachment = {
+  id: number;
+  fileName: string;
+  url: string;
+  label: string | null;
+  fileType: string | null;
+  fileSize: number | null;
+};
 
 type Review = {
   id: number;
@@ -24,12 +33,14 @@ export function ProductTabs({
   warranty,
   customFields,
   reviews,
+  attachments = [],
   productId,
 }: {
   description: string | null;
   warranty: string | null;
   customFields: Record<string, unknown> | null;
   reviews: Review[];
+  attachments?: Attachment[];
   productId: number;
 }) {
   const tabs: Tab[] = [];
@@ -95,12 +106,31 @@ export function ProductTabs({
         )}
 
         {activeTab === "downloads" && (
-          typeof customFields?.downloads === "string" ? (
-            <RichContent
-              html={customFields.downloads}
-              stripStyles
-              className="prose prose-sm max-w-none text-zinc-600"
-            />
+          attachments.length > 0 ? (
+            <div className="space-y-2">
+              {attachments.map((file) => (
+                <a
+                  key={file.id}
+                  href={file.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 rounded-lg border border-zinc-200 px-4 py-3 hover:bg-zinc-50 transition-colors"
+                >
+                  <FileText className="h-5 w-5 flex-shrink-0 text-red-500" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-zinc-900 truncate">
+                      {file.label || file.fileName}
+                    </p>
+                    {file.fileSize && (
+                      <p className="text-xs text-zinc-400">
+                        {file.fileType?.toUpperCase()} &middot; {formatFileSize(file.fileSize)}
+                      </p>
+                    )}
+                  </div>
+                  <Download className="h-4 w-4 flex-shrink-0 text-zinc-400" />
+                </a>
+              ))}
+            </div>
           ) : (
             <p className="text-sm text-zinc-500">No downloads available.</p>
           )
@@ -342,4 +372,10 @@ function ReviewsSection({
       )}
     </div>
   );
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

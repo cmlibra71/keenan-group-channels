@@ -15,6 +15,7 @@ import {
   productService,
   productImageService,
   productVariantService,
+  productAttachmentService,
   customerService,
   orderService,
   orderItemService,
@@ -127,6 +128,24 @@ export const getProductReviews = unstable_cache(
 );
 
 // ============================================================================
+// Attachments (product-scoped)
+// ============================================================================
+
+export const getProductAttachments = unstable_cache(
+  async (productId: number) => {
+    const result = await productAttachmentService.listForParent(productId, {
+      page: 1,
+      limit: 50,
+      sort: "sort_order",
+      direction: "asc",
+    });
+    return result.data;
+  },
+  [`attachments-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "attachments"] }
+);
+
+// ============================================================================
 // Re-export services for direct access
 // ============================================================================
 
@@ -145,6 +164,7 @@ export {
   productService,
   productImageService,
   productVariantService,
+  productAttachmentService,
   customerService,
   orderService,
   orderItemService,

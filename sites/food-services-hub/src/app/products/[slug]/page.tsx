@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments } from "@/lib/store";
 import { ChevronLeft } from "lucide-react";
 import { ProductDetail } from "@/components/product/ProductDetail";
 import { ProductImageGallery } from "@/components/product/ProductImageGallery";
@@ -19,13 +19,27 @@ export default async function ProductPage({
     notFound();
   }
 
-  const reviews = await getProductReviews(product.id) as {
+  const [reviewsRaw, attachmentsRaw] = await Promise.all([
+    getProductReviews(product.id),
+    getProductAttachments(product.id),
+  ]);
+
+  const reviews = reviewsRaw as {
     id: number;
     rating: number;
     title: string | null;
     text: string | null;
     author_name: string | null;
     created_at: string | Date | null;
+  }[];
+
+  const attachments = attachmentsRaw as {
+    id: number;
+    fileName: string;
+    url: string;
+    label: string | null;
+    fileType: string | null;
+    fileSize: number | null;
   }[];
 
   return (
@@ -80,6 +94,7 @@ export default async function ProductPage({
         warranty={product.warranty ?? null}
         customFields={product.customFields as Record<string, unknown> | null}
         reviews={reviews}
+        attachments={attachments}
         productId={product.id}
       />
     </div>
