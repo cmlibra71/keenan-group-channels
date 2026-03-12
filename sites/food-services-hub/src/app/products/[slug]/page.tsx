@@ -76,8 +76,6 @@ export default async function ProductPage({
       {/* Tabbed content section */}
       <ProductTabs
         description={product.description}
-        warranty={product.warranty ?? null}
-        customFields={product.customFields as Record<string, unknown> | null}
         reviews={reviews}
         productId={product.id}
       />
