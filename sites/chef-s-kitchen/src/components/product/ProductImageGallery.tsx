@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback } from "react";
 import Image from "next/image";
 import { Package } from "lucide-react";
 import imageLoader from "@/lib/image-loader";
@@ -21,17 +21,14 @@ export function ProductImageGallery({
   images: ProductImage[];
   productName: string;
 }) {
-  // Gallery images exclude the thumbnail flag image (low-res product card image)
-  const galleryImages = useMemo(() => {
-    const nonThumb = images.filter((img) => !img.isThumbnail);
-    return nonThumb.length > 0 ? nonThumb : images;
-  }, [images]);
-
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState(() => {
+    const thumbIdx = images.findIndex((img) => img.isThumbnail);
+    return thumbIdx >= 0 ? thumbIdx : 0;
+  });
   const [isZooming, setIsZooming] = useState(false);
   const zoomRef = useRef<HTMLDivElement>(null);
 
-  const selected = galleryImages[selectedIndex];
+  const selected = images[selectedIndex];
 
   // Direct DOM update for 60fps — no React re-renders on mousemove
   const handleMouseMove = useCallback(
@@ -112,9 +109,9 @@ export function ProductImageGallery({
       <p className="mt-2 text-xs text-zinc-400 text-center hidden sm:block">Click to zoom</p>
 
       {/* Thumbnail strip */}
-      {galleryImages.length > 1 && (
+      {images.length > 1 && (
         <div className="mt-4 flex gap-2 overflow-x-auto">
-          {galleryImages.map((img, idx) => (
+          {images.map((img, idx) => (
             <button
               key={img.id}
               onClick={() => setSelectedIndex(idx)}
