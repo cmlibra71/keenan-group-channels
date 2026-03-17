@@ -2,11 +2,9 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts } from "@/lib/store";
 import { ChevronLeft } from "lucide-react";
-import { ProductDetail } from "@/components/product/ProductDetail";
-import { ProductImageGallery } from "@/components/product/ProductImageGallery";
+import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductTabs } from "@/components/product/ProductTabs";
 import { ProductGrid } from "@/components/product/ProductGrid";
-import { RichContent } from "@/components/content/RichContent";
 
 export default async function ProductPage({
   params,
@@ -51,44 +49,25 @@ export default async function ProductPage({
         Back to Products
       </Link>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-        {/* Images */}
-        <ProductImageGallery images={product.images} productName={product.name} />
-
-        {/* Details */}
-        <div>
-          <h1 className="text-3xl font-bold text-zinc-900">{product.name}</h1>
-
-          {product.sku && (
-            <p className="mt-1 text-sm text-zinc-500">SKU: {product.sku}</p>
-          )}
-
-          {/* Short description / specs */}
-          {product.descriptionShort && (
-            <div className="mt-4">
-              <RichContent
-                html={product.descriptionShort}
-                stripStyles
-                className="text-sm text-zinc-600 prose prose-sm"
-              />
-            </div>
-          )}
-
-          <ProductDetail
-            productId={product.id}
-            price={product.price}
-            salePrice={product.salePrice}
-            inventoryLevel={product.inventoryLevel ?? 0}
-            inventoryTracking={product.inventoryTracking ?? "none"}
-            availability={product.availability ?? "available"}
-            variants={product.variants}
-            options={product.options ?? []}
-            optionValues={product.optionValues ?? []}
-            variantOptionMappings={product.variantOptionMappings ?? []}
-            bulkPricing={product.bulkPricing ?? []}
-          />
-        </div>
-      </div>
+      <ProductPageClient
+        product={{
+          id: product.id,
+          name: product.name,
+          sku: product.sku,
+          price: product.price,
+          salePrice: product.salePrice,
+          inventoryLevel: product.inventoryLevel ?? 0,
+          inventoryTracking: product.inventoryTracking ?? "none",
+          availability: product.availability ?? "available",
+          descriptionShort: product.descriptionShort,
+          images: product.images,
+          variants: product.variants,
+          options: product.options ?? [],
+          optionValues: product.optionValues ?? [],
+          variantOptionMappings: product.variantOptionMappings ?? [],
+          bulkPricing: product.bulkPricing ?? [],
+        }}
+      />
 
       {/* Tabbed content section */}
       <ProductTabs

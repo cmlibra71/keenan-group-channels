@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { AddToCartButton } from "./AddToCartButton";
 import { AddToQuoteButton } from "./AddToQuoteButton";
 import { OptionSelector } from "./OptionSelector";
@@ -11,6 +11,7 @@ type Variant = {
   sku: string | null;
   price: string | null;
   salePrice: string | null;
+  imageUrl: string | null;
   optionDisplayName: string | null;
   purchasingDisabled: boolean | null;
   inventoryLevel: number | null;
@@ -59,6 +60,7 @@ export function ProductDetail({
   optionValues = [],
   variantOptionMappings = [],
   bulkPricing = [],
+  onVariantChange,
 }: {
   productId: number;
   price: string;
@@ -71,6 +73,7 @@ export function ProductDetail({
   optionValues?: OptionValue[];
   variantOptionMappings?: VariantOptionMapping[];
   bulkPricing?: BulkPricingRule[];
+  onVariantChange?: (variantId: number | null) => void;
 }) {
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
   const [selectedOptions, setSelectedOptions] = useState<Record<number, number>>({});
@@ -144,6 +147,12 @@ export function ProductDetail({
 
   // Determine active variant for display
   const activeVariant = useGroupedMode ? matchedVariant : variants.find((v) => v.id === selectedVariantId);
+
+  // Notify parent when active variant changes
+  const activeVariantId = activeVariant?.id ?? null;
+  useEffect(() => {
+    onVariantChange?.(activeVariantId);
+  }, [activeVariantId, onVariantChange]);
 
   const displayPrice = activeVariant?.price
     ? parseFloat(activeVariant.price)

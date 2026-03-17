@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import Image from "next/image";
 import { Package } from "lucide-react";
 import imageLoader from "@/lib/image-loader";
 
-interface ProductImage {
+export interface ProductImage {
   id: number;
   urlStandard: string;
   urlThumbnail: string | null;
@@ -17,10 +17,26 @@ interface ProductImage {
 export function ProductImageGallery({
   images,
   productName,
+  variantImageUrl,
 }: {
   images: ProductImage[];
   productName: string;
+  variantImageUrl?: string | null;
 }) {
+  // Build effective image list: prepend variant image if available
+  const effectiveImages = useMemo(() => {
+    if (!variantImageUrl) return images;
+    const variantImage: ProductImage = {
+      id: -1,
+      urlStandard: variantImageUrl,
+      urlThumbnail: variantImageUrl,
+      urlZoom: variantImageUrl,
+      altText: productName,
+      isThumbnail: null,
+    };
+    return [variantImage, ...images];
+  }, [images, variantImageUrl, productName]);
+
   const [selectedIndex, setSelectedIndex] = useState(() => {
     const thumbIdx = images.findIndex((img) => img.isThumbnail);
     return thumbIdx >= 0 ? thumbIdx : 0;
@@ -28,7 +44,18 @@ export function ProductImageGallery({
   const [isZooming, setIsZooming] = useState(false);
   const zoomRef = useRef<HTMLDivElement>(null);
 
-  const selected = images[selectedIndex];
+  // When variant image changes, jump to it (index 0) or reset to thumbnail
+  useEffect(() => {
+    if (variantImageUrl) {
+      setSelectedIndex(0);
+    } else {
+      const thumbIdx = images.findIndex((img) => img.isThumbnail);
+      setSelectedIndex(thumbIdx >= 0 ? thumbIdx : 0);
+    }
+    setIsZooming(false);
+  }, [variantImageUrl, images]);
+
+  const selected = effectiveImages[selectedIndex];
 
   // Direct DOM update for 60fps — no React re-renders on mousemove
   const handleMouseMove = useCallback(
@@ -56,7 +83,7 @@ export function ProductImageGallery({
     }
   }
 
-  if (images.length === 0) {
+  if (effectiveImages.length === 0) {
     return (
       <div className="h-80 overflow-hidden rounded-lg bg-zinc-100">
         <div className="h-full w-full flex items-center justify-center text-zinc-300">
@@ -109,11 +136,11 @@ export function ProductImageGallery({
       <p className="mt-2 text-xs text-zinc-400 text-center hidden sm:block">Click to zoom</p>
 
       {/* Thumbnail strip */}
-      {images.length > 1 && (
+      {effectiveImages.length > 1 && (
         <div className="mt-4 flex gap-2 overflow-x-auto">
-          {images.map((img, idx) => (
+          {effectiveImages.map((img, idx) => (
             <button
-              key={img.id}
+              key={img.id === -1 ? "variant" : img.id}
               onClick={() => setSelectedIndex(idx)}
               className={`relative flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 overflow-hidden rounded bg-zinc-100 cursor-pointer transition-all ${
                 idx === selectedIndex
