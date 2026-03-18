@@ -1,12 +1,12 @@
 version: "3.8"
 
 services:
-  food-services-hub:
+  industry-kitchens:
     build:
       context: .
       dockerfile: Dockerfile.site
       args:
-        SITE_NAME: food-services-hub
+        SITE_NAME: industry-kitchens
         CHANNEL_ID: "1"
     ports:
       - "3001:3000"
