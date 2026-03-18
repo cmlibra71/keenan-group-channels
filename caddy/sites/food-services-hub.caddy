@@ -1,4 +1,4 @@
 # Auto-generated for food-services-hub (channel 1)
-industrykitchens.com.au {
+industrialkitchens.com.au {
     reverse_proxy localhost:3001
 }
