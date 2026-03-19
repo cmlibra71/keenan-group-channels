@@ -1,4 +1,4 @@
 # Auto-generated for industry-kitchens (channel 1)
-industrialkitchens.com.au {
+chefsdepot.online {
     reverse_proxy localhost:3001
 }
