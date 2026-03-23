@@ -19,9 +19,14 @@ export default async function DrawsPage() {
   const session = await getSession();
   if (!session) redirect("/account");
 
+  type DrawEntry = {
+    entry: { id: number; drawId: number; status: string; entryCount: number | null };
+    drawName: string;
+  };
+
   const [upcomingDraws, entries] = await Promise.all([
     getUpcomingDraws(),
-    drawEntryService.getEntriesForCustomer(session.customerId, CHANNEL_ID),
+    drawEntryService.getEntriesForCustomer(session.customerId, CHANNEL_ID) as Promise<DrawEntry[]>,
   ]);
 
   const activeEntries = entries.filter(
