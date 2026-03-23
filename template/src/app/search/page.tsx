@@ -1,4 +1,4 @@
-import { getProducts, CHANNEL_ID } from "@/lib/store";
+import { getProducts, getFeatureFlag, CHANNEL_ID } from "@/lib/store";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { SearchTypeahead } from "@/components/search/SearchTypeahead";
 import Link from "next/link";
@@ -115,6 +115,8 @@ export default async function SearchPage({
       results = await searchWithPostgres(query, page);
     }
   }
+
+  const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
 
   const activeBrands = results?.facets?.brandName;
   const activeCategories = results?.facets?.categoryNames;
@@ -260,7 +262,7 @@ export default async function SearchPage({
                   <span className="ml-1">(page {page} of {totalPages})</span>
                 )}
               </p>
-              <ProductGrid products={results.products} />
+              <ProductGrid products={results.products} memberPricingAvailable={memberPricingEnabled} />
 
               {/* Pagination */}
               {totalPages > 1 && (

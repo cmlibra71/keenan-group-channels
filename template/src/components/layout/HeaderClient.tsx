@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { ShoppingCart, FileText } from "lucide-react";
+import { ShoppingCart, FileText, Crown } from "lucide-react";
 import { SlidePanel } from "@/components/ui/SlidePanel";
 import { CartPanel } from "@/components/cart/CartPanel";
 import { QuotePanel } from "@/components/quote/QuotePanel";
 import { AccountPanel } from "@/components/account/AccountPanel";
 
-export function HeaderClient({ cartCount, quoteCount }: { cartCount: number; quoteCount: number }) {
+export function HeaderClient({ cartCount, quoteCount, isMember }: { cartCount: number; quoteCount: number; isMember?: boolean }) {
   const [cartOpen, setCartOpen] = useState(false);
   const [quoteOpen, setQuoteOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -49,9 +49,10 @@ export function HeaderClient({ cartCount, quoteCount }: { cartCount: number; quo
       {/* Account button */}
       <button
         onClick={() => setAccountOpen(true)}
-        className="hidden sm:block text-sm font-medium text-zinc-600 hover:text-zinc-900"
+        className="hidden sm:flex items-center gap-1.5 text-sm font-medium text-zinc-600 hover:text-zinc-900"
         aria-label="Open account"
       >
+        {isMember && <Crown className="h-4 w-4 text-amber-500" />}
         Account
       </button>
 

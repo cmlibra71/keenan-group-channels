@@ -19,6 +19,17 @@ import {
   customerService,
   orderService,
   orderItemService,
+  subscriptionPlanService,
+  subscriptionService,
+  subscriptionEventService,
+  drawTypeService,
+  drawService,
+  drawEntryService,
+  prizeService,
+  drawWinnerService,
+  partnerOfferService,
+  partnerDiscountCodeService,
+  getEffectivePrice,
 } from "@keenan/services";
 import type { Channel, Site } from "@keenan/services";
 
@@ -174,6 +185,53 @@ export const getRelatedProducts = unstable_cache(
 );
 
 // ============================================================================
+// Subscriptions (channel-scoped)
+// ============================================================================
+
+export const getSubscriptionPlans = unstable_cache(
+  async () => subscriptionPlanService.listActiveForChannel(CHANNEL_ID),
+  [`subscription-plans-${CHANNEL_ID}`],
+  { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "subscription-plans"] }
+);
+
+export const getActiveSubscription = async (customerId: number) => {
+  return subscriptionService.getActiveForCustomer(customerId, CHANNEL_ID);
+};
+
+// ============================================================================
+// Draws (channel-scoped)
+// ============================================================================
+
+export const getUpcomingDraws = unstable_cache(
+  async () => drawService.getUpcomingForChannel(CHANNEL_ID),
+  [`upcoming-draws-${CHANNEL_ID}`],
+  { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "draws"] }
+);
+
+// ============================================================================
+// Partner Offers (channel-scoped)
+// ============================================================================
+
+export const getPartnerOffers = unstable_cache(
+  async () => partnerOfferService.listActiveForChannel(CHANNEL_ID),
+  [`partner-offers-${CHANNEL_ID}`],
+  { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "partner-offers"] }
+);
+
+// ============================================================================
+// Feature Flags
+// ============================================================================
+
+export const getFeatureFlag = async (key: string): Promise<boolean> => {
+  try {
+    const setting = await channelSettingsService.getByKey(CHANNEL_ID, key);
+    return setting.setting_value === true || setting.setting_value === "true";
+  } catch {
+    return false;
+  }
+};
+
+// ============================================================================
 // Re-export services for direct access
 // ============================================================================
 
@@ -196,5 +254,16 @@ export {
   customerService,
   orderService,
   orderItemService,
+  subscriptionPlanService,
+  subscriptionService,
+  subscriptionEventService,
+  drawTypeService,
+  drawService,
+  drawEntryService,
+  prizeService,
+  drawWinnerService,
+  partnerOfferService,
+  partnerDiscountCodeService,
+  getEffectivePrice,
   CHANNEL_ID,
 };

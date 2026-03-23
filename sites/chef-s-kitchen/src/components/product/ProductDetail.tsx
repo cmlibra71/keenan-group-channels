@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import Link from "next/link";
 import { AddToCartButton } from "./AddToCartButton";
 import { AddToQuoteButton } from "./AddToQuoteButton";
 import { OptionSelector } from "./OptionSelector";
@@ -61,6 +62,8 @@ export function ProductDetail({
   variantOptionMappings = [],
   bulkPricing = [],
   onVariantChange,
+  memberPrice,
+  isMember,
 }: {
   productId: number;
   price: string;
@@ -74,6 +77,8 @@ export function ProductDetail({
   variantOptionMappings?: VariantOptionMapping[];
   bulkPricing?: BulkPricingRule[];
   onVariantChange?: (variantId: number | null) => void;
+  memberPrice?: number | null;
+  isMember?: boolean;
 }) {
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
   const [selectedOptions, setSelectedOptions] = useState<Record<number, number>>({});
@@ -198,6 +203,23 @@ export function ProductDetail({
           <Price amount={displayPrice} className="text-3xl font-bold text-zinc-900" />
         )}
       </div>
+
+      {/* Member Pricing */}
+      {memberPrice != null && displayPrice > 0 && memberPrice !== (displaySalePrice ?? displayPrice) && (
+        isMember ? (
+          <div className="mt-2 inline-flex items-center gap-1.5 bg-green-50 border border-green-200 text-green-800 text-sm font-medium px-3 py-1.5 rounded-full">
+            <span>Member Price:</span>
+            <Price amount={memberPrice} className="font-bold" />
+          </div>
+        ) : (
+          <Link
+            href="/account/membership"
+            className="mt-2 inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm px-3 py-1.5 rounded-full hover:bg-emerald-100 transition-colors"
+          >
+            Join &amp; save <Price amount={(displaySalePrice ?? displayPrice) - memberPrice} className="font-bold" />/month
+          </Link>
+        )
+      )}
 
       {/* Bulk Pricing Tiers */}
       {bulkPricing.length > 0 && displayPrice > 0 && (

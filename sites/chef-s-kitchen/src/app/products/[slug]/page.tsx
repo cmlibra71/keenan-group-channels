@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, customerService, CHANNEL_ID } from "@/lib/store";
+import { getSession } from "@/lib/auth";
 import { ChevronLeft } from "lucide-react";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductTabs } from "@/components/product/ProductTabs";
@@ -23,6 +24,26 @@ export default async function ProductPage({
     getProductAttachments(product.id),
     getRelatedProducts(product.id, product.categoryIds ?? []),
   ]);
+
+  // Fetch member pricing if feature is enabled
+  let memberPrice: number | null = null;
+  let isMember = false;
+  const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
+
+  if (memberPricingEnabled) {
+    const session = await getSession();
+    if (session) {
+      const customer = await customerService.getById(session.customerId) as { customerGroupId: number | null } | null;
+      const defaultVariant = product.variants?.[0];
+      if (defaultVariant) {
+        const pricing = await getEffectivePrice(defaultVariant.id, CHANNEL_ID, customer?.customerGroupId);
+        isMember = pricing.isMember;
+        if (pricing.memberPrice) {
+          memberPrice = parseFloat(pricing.memberPrice);
+        }
+      }
+    }
+  }
 
   const reviews = reviewsRaw as {
     id: number;
@@ -67,6 +88,8 @@ export default async function ProductPage({
           variantOptionMappings: product.variantOptionMappings ?? [],
           bulkPricing: product.bulkPricing ?? [],
         }}
+        memberPrice={memberPrice}
+        isMember={isMember}
       />
 
       {/* Tabbed content section */}
@@ -83,7 +106,7 @@ export default async function ProductPage({
       {relatedProducts.length > 0 && (
         <div className="mt-12 border-t border-zinc-200 pt-8">
           <h2 className="text-2xl font-bold text-zinc-900 mb-6">Related Products</h2>
-          <ProductGrid products={relatedProducts} />
+          <ProductGrid products={relatedProducts} memberPricingAvailable={memberPricingEnabled} />
         </div>
       )}
     </div>

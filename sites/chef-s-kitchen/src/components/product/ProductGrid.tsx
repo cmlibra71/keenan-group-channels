@@ -9,7 +9,7 @@ interface ProductWithImage {
   thumbnailImage?: { urlStandard: string; urlThumbnail: string | null } | null;
 }
 
-export function ProductGrid({ products }: { products: ProductWithImage[] }) {
+export function ProductGrid({ products, memberPricingAvailable }: { products: ProductWithImage[]; memberPricingAvailable?: boolean }) {
   if (products.length === 0) {
     return (
       <div className="text-center py-16">
@@ -28,6 +28,7 @@ export function ProductGrid({ products }: { products: ProductWithImage[] }) {
           price={product.price}
           salePrice={product.salePrice}
           imageUrl={product.thumbnailImage?.urlThumbnail || product.thumbnailImage?.urlStandard}
+          memberPricingAvailable={memberPricingAvailable}
         />
       ))}
     </div>

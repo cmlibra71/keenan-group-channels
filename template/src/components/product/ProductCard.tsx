@@ -10,9 +10,10 @@ interface ProductCardProps {
   salePrice?: string | null;
   imageUrl?: string | null;
   brandName?: string;
+  memberPricingAvailable?: boolean;
 }
 
-export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName }: ProductCardProps) {
+export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName, memberPricingAvailable }: ProductCardProps) {
   const displayPrice = parseFloat(price);
   const displaySalePrice = salePrice ? parseFloat(salePrice) : null;
 
@@ -54,6 +55,9 @@ export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName 
             <Price amount={displayPrice} className="text-sm font-semibold text-zinc-900" />
           )}
         </div>
+        {memberPricingAvailable && displayPrice > 0 && (
+          <p className="mt-1 text-xs text-emerald-600 font-medium">Member pricing available</p>
+        )}
       </div>
     </Link>
   );

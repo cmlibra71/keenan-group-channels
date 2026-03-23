@@ -1,13 +1,14 @@
 import Link from "next/link";
 import Image from "next/image";
-import { getProducts, getSiteConfig, getCategories } from "@/lib/store";
+import { getProducts, getSiteConfig, getCategories, getFeatureFlag } from "@/lib/store";
 import { ProductGrid } from "@/components/product/ProductGrid";
 
 export default async function HomePage() {
-  const [{ channel }, { products: featuredProducts }, allCategories] = await Promise.all([
+  const [{ channel }, { products: featuredProducts }, allCategories, memberPricingEnabled] = await Promise.all([
     getSiteConfig(),
     getProducts({ featured: true, limit: 8 }),
     getCategories(),
+    getFeatureFlag("member_pricing_enabled"),
   ]);
 
   // Top-level categories only
@@ -78,7 +79,7 @@ export default async function HomePage() {
             View all &rarr;
           </Link>
         </div>
-        <ProductGrid products={featuredProducts} />
+        <ProductGrid products={featuredProducts} memberPricingAvailable={memberPricingEnabled} />
       </section>
     </div>
   );

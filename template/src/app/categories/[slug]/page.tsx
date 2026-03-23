@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ChevronRight, Package } from "lucide-react";
-import { getCategoryBySlug, getProducts, getSubcategories, getCategoryStats, getCategoryBreadcrumbs } from "@/lib/store";
+import { getCategoryBySlug, getProducts, getSubcategories, getCategoryStats, getCategoryBreadcrumbs, getFeatureFlag } from "@/lib/store";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { RichContent } from "@/components/content/RichContent";
 import { Price } from "@/components/ui/Price";
@@ -19,11 +19,12 @@ export default async function CategoryPage({
     notFound();
   }
 
-  const [{ products }, subcategories, stats, breadcrumbs] = await Promise.all([
+  const [{ products }, subcategories, stats, breadcrumbs, memberPricingEnabled] = await Promise.all([
     getProducts({ categoryId: category.id, limit: 24 }),
     getSubcategories(category.id),
     getCategoryStats(category.id),
     getCategoryBreadcrumbs(category.pathIds || []),
+    getFeatureFlag("member_pricing_enabled"),
   ]);
 
   return (
@@ -136,7 +137,7 @@ export default async function CategoryPage({
       {products.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold text-zinc-900 mb-4">Products</h2>
-          <ProductGrid products={products} />
+          <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} />
         </div>
       )}
 

@@ -2,12 +2,24 @@ import Link from "next/link";
 import { Search, Menu } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
+import { getSession } from "@/lib/auth";
+import { getActiveSubscription, getFeatureFlag } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 
 export async function Header({ storeName }: { storeName: string }) {
   const [cart, quote] = await Promise.all([getCart(), getQuote()]);
   const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   const quoteCount = quote?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+
+  let isMember = false;
+  const subscriptionsEnabled = await getFeatureFlag("subscriptions_enabled");
+  if (subscriptionsEnabled) {
+    const session = await getSession();
+    if (session) {
+      const activeSub = await getActiveSubscription(session.customerId);
+      isMember = !!activeSub;
+    }
+  }
 
   return (
     <header className="border-b border-zinc-200 bg-white sticky top-0 z-50">
@@ -33,7 +45,7 @@ export async function Header({ storeName }: { storeName: string }) {
             <Link href="/search" className="text-zinc-600 hover:text-zinc-900">
               <Search className="h-5 w-5" />
             </Link>
-            <HeaderClient cartCount={cartCount} quoteCount={quoteCount} />
+            <HeaderClient cartCount={cartCount} quoteCount={quoteCount} isMember={isMember} />
             <button className="md:hidden text-zinc-600">
               <Menu className="h-5 w-5" />
             </button>
