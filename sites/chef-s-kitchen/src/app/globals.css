@@ -65,7 +65,7 @@ body {
   color: white;
 }
 
-/* ── Heading treatments (kept outside @layer for global use) */
+/* ── Heading treatments ────────────────────────────── */
 
 .heading-serif {
   font-family: var(--font-serif);
@@ -109,208 +109,166 @@ body {
    COMPONENT CLASSES
    Semantic classes that reference design tokens.
    Components use these instead of raw Tailwind utilities.
+   Not in @layer so they can freely @apply each other.
    ══════════════════════════════════════════════════════ */
 
-@layer components {
+/* ═══ BUTTONS ═══════════════════════════════════════ */
 
-  /* ═══ BUTTONS ═══════════════════════════════════════ */
+.btn {
+  @apply inline-flex items-center justify-center gap-2.5
+         font-medium text-sm tracking-wide
+         px-7 py-3.5
+         transition-colors duration-300;
+}
 
-  .btn {
-    @apply inline-flex items-center justify-center gap-2.5
-           font-medium text-sm tracking-wide
-           px-7 py-3.5
-           transition-colors duration-300;
-  }
+.btn-primary {
+  @apply btn bg-accent text-white
+         hover:bg-accent-hover
+         disabled:bg-surface-secondary disabled:text-text-muted
+         disabled:cursor-not-allowed;
+}
 
-  .btn-primary {
-    @apply inline-flex items-center justify-center gap-2.5
-           font-medium text-sm tracking-wide px-7 py-3.5
-           transition-colors duration-300
-           bg-accent text-white
-           hover:bg-accent-hover
-           disabled:bg-surface-secondary disabled:text-text-muted
-           disabled:cursor-not-allowed;
-  }
+.btn-secondary {
+  @apply btn border border-border text-text-body
+         hover:border-text-primary/30;
+}
 
-  .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2.5
-           font-medium text-sm tracking-wide px-7 py-3.5
-           transition-colors duration-300
-           border border-border text-text-body
-           hover:border-text-primary/30;
-  }
+.btn-secondary-dark {
+  @apply btn border border-slate-600 text-slate-300
+         hover:border-slate-400 hover:text-white;
+}
 
-  .btn-secondary-dark {
-    @apply inline-flex items-center justify-center gap-2.5
-           font-medium text-sm tracking-wide px-7 py-3.5
-           transition-colors duration-300
-           border border-slate-600 text-slate-300
-           hover:border-slate-400 hover:text-white;
-  }
+.btn-ghost {
+  @apply inline-flex items-center gap-2 text-sm
+         text-text-secondary hover:text-text-primary
+         transition-colors duration-300;
+}
 
-  .btn-ghost {
-    @apply inline-flex items-center gap-2 text-sm
-           text-text-secondary hover:text-text-primary
-           transition-colors duration-300;
-  }
+/* ═══ TYPOGRAPHY ════════════════════════════════════ */
 
-  /* ═══ TYPOGRAPHY ════════════════════════════════════ */
+.eyebrow {
+  @apply heading-sans text-accent tracking-widest;
+}
 
-  .eyebrow {
-    font-family: var(--font-sans);
-    font-weight: 600;
-    letter-spacing: -0.03em;
-    text-transform: uppercase;
-    font-size: 0.6875rem;
-    @apply text-accent tracking-widest;
-  }
+.section-title {
+  @apply heading-serif text-3xl sm:text-4xl text-text-primary;
+}
 
-  .section-title {
-    font-family: var(--font-serif);
-    font-weight: 400;
-    letter-spacing: -0.02em;
-    line-height: 1.15;
-    @apply text-3xl sm:text-4xl text-text-primary;
-  }
+.hero-title {
+  @apply heading-serif text-4xl sm:text-5xl lg:text-6xl;
+}
 
-  .hero-title {
-    font-family: var(--font-serif);
-    font-weight: 400;
-    letter-spacing: -0.02em;
-    line-height: 1.15;
-    @apply text-4xl sm:text-5xl lg:text-6xl;
-  }
+.page-title {
+  @apply heading-serif text-2xl sm:text-3xl text-text-primary;
+}
 
-  .page-title {
-    font-family: var(--font-serif);
-    font-weight: 400;
-    letter-spacing: -0.02em;
-    line-height: 1.15;
-    @apply text-2xl sm:text-3xl text-text-primary;
-  }
+.panel-title {
+  @apply text-lg heading-serif text-text-primary;
+}
 
-  .panel-title {
-    font-family: var(--font-serif);
-    font-weight: 400;
-    letter-spacing: -0.02em;
-    line-height: 1.15;
-    @apply text-lg text-text-primary;
-  }
+.body-text {
+  @apply text-sm text-text-secondary leading-relaxed;
+}
 
-  .body-text {
-    @apply text-sm text-text-secondary leading-relaxed;
-  }
+.caption {
+  @apply text-xs text-text-muted tracking-wide;
+}
 
-  .caption {
-    @apply text-xs text-text-muted tracking-wide;
-  }
+/* ═══ FORM INPUTS ══════════════════════════════════ */
 
-  /* ═══ FORM INPUTS ══════════════════════════════════ */
+.input {
+  @apply mt-1 block w-full border border-border
+         px-3 py-2 text-sm
+         focus:border-text-primary focus:outline-none;
+}
 
-  .input {
-    @apply mt-1 block w-full border border-border
-           px-3 py-2 text-sm
-           focus:border-text-primary focus:outline-none;
-  }
+.input-search {
+  @apply w-full pl-10 pr-4 py-3 border border-border
+         text-sm focus:border-text-primary focus:outline-none;
+}
 
-  .input-search {
-    @apply w-full pl-10 pr-4 py-3 border border-border
-           text-sm focus:border-text-primary focus:outline-none;
-  }
+.field-label {
+  @apply block text-sm font-medium text-text-body;
+}
 
-  .field-label {
-    @apply block text-sm font-medium text-text-body;
-  }
+/* ═══ CARDS & CONTAINERS ═══════════════════════════ */
 
-  /* ═══ CARDS & CONTAINERS ═══════════════════════════ */
+.card {
+  @apply border border-border;
+}
 
-  .card {
-    @apply border border-border;
-  }
+.card-padded {
+  @apply card p-6;
+}
 
-  .card-padded {
-    @apply card p-6;
-  }
+.card-interactive {
+  @apply card-padded hover:border-text-primary/30
+         transition-colors duration-300;
+}
 
-  .card-interactive {
-    @apply card-padded hover:border-text-primary/30
-           transition-colors duration-300;
-  }
+.card-dark {
+  @apply border border-slate-700/50 bg-surface-dark-alt/50
+         backdrop-blur-sm p-8;
+}
 
-  .card-dark {
-    @apply border border-slate-700/50 bg-surface-dark-alt/50
-           backdrop-blur-sm p-8;
-  }
+.card-dark-interactive {
+  @apply card-dark hover:border-accent/30
+         transition-all duration-500;
+}
 
-  .card-dark-interactive {
-    @apply card-dark hover:border-accent/30
-           transition-all duration-500;
-  }
+/* ═══ SECTIONS & LAYOUT ════════════════════════════ */
 
-  /* ═══ SECTIONS & LAYOUT ════════════════════════════ */
+.container-page {
+  @apply mx-auto max-w-7xl px-6 lg:px-8;
+}
 
-  .container-page {
-    @apply mx-auto max-w-7xl px-6 lg:px-8;
-  }
+.section-padding {
+  @apply py-20 sm:py-24;
+}
 
-  .section-padding {
-    @apply py-20 sm:py-24;
-  }
+.section-light {
+  @apply container-page section-padding;
+}
 
-  .section-light {
-    @apply container-page section-padding;
-  }
+.section-dark {
+  @apply relative bg-surface-dark overflow-hidden grain;
+}
 
-  .section-dark {
-    @apply relative bg-surface-dark overflow-hidden grain;
-  }
+.section-bordered {
+  @apply border-y border-border bg-white;
+}
 
-  .section-bordered {
-    @apply border-y border-border bg-white;
-  }
+/* ═══ BADGES & PILLS ═══════════════════════════════ */
 
-  /* ═══ BADGES & PILLS ═══════════════════════════════ */
+.badge-member {
+  @apply inline-flex items-center gap-1 text-xs font-medium
+         px-2 py-1 rounded-full bg-accent-subtle text-accent;
+}
 
-  .badge-member {
-    @apply inline-flex items-center gap-1 text-xs font-medium
-           px-2 py-1 rounded-full bg-accent-subtle text-accent;
-  }
+.badge-member-pricing {
+  @apply inline-flex items-center gap-1.5
+         text-accent text-xs font-medium tracking-wide;
+}
 
-  .badge-member-pricing {
-    @apply inline-flex items-center gap-1.5
-           text-accent text-xs font-medium tracking-wide;
-  }
+/* ═══ ALERTS ════════════════════════════════════════ */
 
-  /* ═══ ALERTS ════════════════════════════════════════ */
+.alert-error {
+  @apply p-3 bg-red-50 text-red-700 text-sm;
+}
 
-  .alert-error {
-    @apply p-3 bg-red-50 text-red-700 text-sm;
-  }
+/* ═══ NAV LINKS ════════════════════════════════════ */
 
-  /* ═══ NAV LINKS ════════════════════════════════════ */
+.nav-link {
+  @apply heading-sans text-text-secondary
+         hover:text-text-primary transition-colors duration-300;
+}
 
-  .nav-link {
-    font-family: var(--font-sans);
-    font-weight: 600;
-    letter-spacing: -0.03em;
-    text-transform: uppercase;
-    font-size: 0.6875rem;
-    @apply text-text-secondary
-           hover:text-text-primary transition-colors duration-300;
-  }
+.nav-link-accent {
+  @apply heading-sans text-accent
+         hover:text-accent-dark transition-colors duration-300;
+}
 
-  .nav-link-accent {
-    font-family: var(--font-sans);
-    font-weight: 600;
-    letter-spacing: -0.03em;
-    text-transform: uppercase;
-    font-size: 0.6875rem;
-    @apply text-accent
-           hover:text-accent-dark transition-colors duration-300;
-  }
-
-  .footer-link {
-    @apply text-sm text-text-secondary
-           hover:text-text-primary transition-colors duration-300;
-  }
+.footer-link {
+  @apply text-sm text-text-secondary
+         hover:text-text-primary transition-colors duration-300;
 }
