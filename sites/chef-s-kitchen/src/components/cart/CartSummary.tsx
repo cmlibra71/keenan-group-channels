@@ -11,27 +11,27 @@ export function CartSummary({
   total: number;
 }) {
   return (
-    <div className="border border-stone p-6">
-      <h2 className="text-lg heading-serif text-navy mb-4">Order Summary</h2>
+    <div className="card-padded">
+      <h2 className="panel-title mb-4">Order Summary</h2>
 
       <div className="space-y-2">
         <div className="flex justify-between text-sm">
-          <span className="text-ink-light">Subtotal</span>
+          <span className="text-text-secondary">Subtotal</span>
           <Price amount={subtotal} className="font-medium" />
         </div>
         {discount > 0 && (
           <div className="flex justify-between text-sm">
-            <span className="text-ink-light">Discount</span>
-            <span className="font-medium text-teal">-<Price amount={discount} /></span>
+            <span className="text-text-secondary">Discount</span>
+            <span className="font-medium text-accent">-<Price amount={discount} /></span>
           </div>
         )}
         <div className="flex justify-between text-sm">
-          <span className="text-ink-light">Shipping</span>
-          <span className="font-medium text-ink-faint">Calculated at checkout</span>
+          <span className="text-text-secondary">Shipping</span>
+          <span className="font-medium text-text-muted">Calculated at checkout</span>
         </div>
       </div>
 
-      <div className="mt-4 pt-4 border-t border-stone">
+      <div className="mt-4 pt-4 border-t border-border">
         <div className="flex justify-between text-base font-semibold">
           <span>Total</span>
           <span><Price amount={total} /></span>
@@ -40,7 +40,7 @@ export function CartSummary({
 
       <Link
         href="/checkout"
-        className="mt-6 block w-full bg-teal text-white text-center px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300"
+        className="btn-primary w-full mt-6 text-center block"
       >
         Proceed to Checkout
       </Link>

@@ -34,7 +34,7 @@ function ReadMore({ attrs }: CommandProps) {
   return (
     <button
       onClick={() => setExpanded(!expanded)}
-      className="text-sm font-medium text-ink-light hover:text-navy underline underline-offset-2 transition-colors duration-300"
+      className="text-sm font-medium text-text-secondary hover:text-text-primary underline underline-offset-2 transition-colors duration-300"
       data-readmore-toggle
       data-expanded={expanded ? "true" : "false"}
     >
@@ -44,7 +44,7 @@ function ReadMore({ attrs }: CommandProps) {
 }
 
 function Divider() {
-  return <hr className="my-6 border-stone" />;
+  return <hr className="my-6 border-border" />;
 }
 
 function Callout({ attrs }: CommandProps) {
@@ -53,7 +53,7 @@ function Callout({ attrs }: CommandProps) {
   const styles: Record<string, string> = {
     info: "bg-blue-50 border-blue-200 text-blue-800",
     warning: "bg-amber-50 border-amber-200 text-amber-800",
-    success: "bg-teal/5 border-teal/20 text-teal-dark",
+    success: "bg-accent/5 border-accent/20 text-accent-dark",
   };
 
   return (
@@ -191,7 +191,7 @@ function ReadMoreContent({
 
       <button
         onClick={() => setExpanded(!expanded)}
-        className="text-sm font-medium text-ink-light hover:text-navy underline underline-offset-2 transition-colors duration-300 my-2"
+        className="text-sm font-medium text-text-secondary hover:text-text-primary underline underline-offset-2 transition-colors duration-300 my-2"
       >
         {expanded ? collapseLabel : label}
       </button>

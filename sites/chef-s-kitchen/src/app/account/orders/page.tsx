@@ -34,15 +34,15 @@ export default async function OrdersPage() {
 
   if (customerOrders.length === 0) {
     return (
-      <div className="mx-auto max-w-3xl px-6 lg:px-8 py-20 sm:py-24">
-        <p className="heading-sans text-teal tracking-widest mb-3">ORDERS</p>
-        <h1 className="text-3xl heading-serif text-navy mb-8">Order History</h1>
-        <div className="text-center py-20 sm:py-24">
-          <Package className="h-16 w-16 text-ink-faint mx-auto" />
-          <p className="mt-4 text-ink-light">No orders yet.</p>
+      <div className="mx-auto max-w-3xl px-6 lg:px-8 section-padding">
+        <p className="eyebrow mb-3">ORDERS</p>
+        <h1 className="text-3xl heading-serif text-text-primary mb-8">Order History</h1>
+        <div className="text-center section-padding">
+          <Package className="h-16 w-16 text-text-muted mx-auto" />
+          <p className="mt-4 text-text-secondary">No orders yet.</p>
           <Link
             href="/products"
-            className="mt-6 inline-block bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300"
+            className="mt-6 inline-block btn-primary"
           >
             Start Shopping
           </Link>
@@ -60,13 +60,13 @@ export default async function OrdersPage() {
   );
 
   return (
-    <div className="mx-auto max-w-3xl px-6 lg:px-8 py-20 sm:py-24">
+    <div className="mx-auto max-w-3xl px-6 lg:px-8 section-padding">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <p className="heading-sans text-teal tracking-widest mb-3">ORDERS</p>
-          <h1 className="text-3xl heading-serif text-navy">Order History</h1>
+          <p className="eyebrow mb-3">ORDERS</p>
+          <h1 className="text-3xl heading-serif text-text-primary">Order History</h1>
         </div>
-        <Link href="/account" className="text-sm text-ink-light hover:text-navy transition-colors duration-300">
+        <Link href="/account" className="text-sm text-text-secondary hover:text-text-primary transition-colors duration-300">
           Back to Account
         </Link>
       </div>
@@ -81,30 +81,30 @@ export default async function OrdersPage() {
             .join(", ");
 
           return (
-            <div key={order.id} className="border border-stone p-6">
+            <div key={order.id} className="card-padded">
               <div className="flex items-center justify-between mb-2">
                 <div>
-                  <span className="font-semibold text-navy">
+                  <span className="font-semibold text-text-primary">
                     Order #{order.orderNumber}
                   </span>
-                  <span className="ml-3 text-sm text-ink-light">
+                  <span className="ml-3 text-sm text-text-secondary">
                     {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : ""}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className={`text-xs font-medium px-2 py-1 rounded-full ${
                     order.status === "completed"
-                      ? "text-teal bg-teal/10"
+                      ? "text-accent bg-accent-subtle"
                       : order.status === "shipped"
                         ? "bg-blue-100 text-blue-700"
-                        : "bg-stone-warm text-ink-light"
+                        : "bg-surface-secondary text-text-secondary"
                   }`}>
                     {order.status}
                   </span>
-                  <Price amount={order.totalIncTax} className="font-semibold text-navy" />
+                  <Price amount={order.totalIncTax} className="font-semibold text-text-primary" />
                 </div>
               </div>
-              <p className="text-sm text-ink-light">
+              <p className="text-sm text-text-secondary">
                 {totalItems} item{totalItems !== 1 ? "s" : ""}
                 {itemNames ? `: ${itemNames}` : ""}
                 {orderItemsList.length > 3 ? "..." : ""}

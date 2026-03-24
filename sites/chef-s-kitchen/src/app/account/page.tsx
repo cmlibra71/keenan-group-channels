@@ -14,9 +14,9 @@ export default async function AccountPage() {
 
   if (!session) {
     return (
-      <div className="mx-auto max-w-lg px-6 lg:px-8 py-20 sm:py-24">
-        <p className="heading-sans text-teal tracking-widest mb-3">SIGN IN</p>
-        <h1 className="text-3xl heading-serif text-navy mb-8">My Account</h1>
+      <div className="mx-auto max-w-lg px-6 lg:px-8 section-padding">
+        <p className="eyebrow mb-3">SIGN IN</p>
+        <h1 className="text-3xl heading-serif text-text-primary mb-8">My Account</h1>
         <LoginForm />
       </div>
     );
@@ -58,12 +58,12 @@ export default async function AccountPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-6 lg:px-8 py-20 sm:py-24">
+    <div className="mx-auto max-w-3xl px-6 lg:px-8 section-padding">
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
-          <h1 className="text-3xl heading-serif text-navy">My Account</h1>
+          <h1 className="text-3xl heading-serif text-text-primary">My Account</h1>
           {activeSub && (
-            <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full bg-teal/10 text-teal">
+            <span className="badge-member">
               <Crown className="h-3 w-3" />
               Member
             </span>
@@ -72,7 +72,7 @@ export default async function AccountPage() {
         <form action={logout}>
           <button
             type="submit"
-            className="inline-flex items-center gap-2 text-sm text-ink-light hover:text-navy transition-colors duration-300"
+            className="inline-flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors duration-300"
           >
             <LogOut className="h-4 w-4" />
             Sign Out
@@ -82,7 +82,7 @@ export default async function AccountPage() {
 
       {/* Member Dashboard Card */}
       {activeSub ? (
-        <div className="bg-gradient-to-br from-navy to-navy-light text-white p-6 mb-6">
+        <div className="bg-gradient-to-br from-surface-dark to-surface-dark-alt text-white p-6 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <p className="text-slate-400 text-sm">Welcome back</p>
@@ -94,13 +94,13 @@ export default async function AccountPage() {
             <div className="flex items-center gap-4 text-sm">
               {activeSub.consecutiveMonths != null && (
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-teal">{activeSub.consecutiveMonths}</p>
+                  <p className="text-2xl font-bold text-accent">{activeSub.consecutiveMonths}</p>
                   <p className="text-xs text-slate-400">months</p>
                 </div>
               )}
               {drawsEnabled && (
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-teal">{totalEntries}</p>
+                  <p className="text-2xl font-bold text-accent">{totalEntries}</p>
                   <p className="text-xs text-slate-400">draw entries</p>
                 </div>
               )}
@@ -116,31 +116,31 @@ export default async function AccountPage() {
           </div>
         </div>
       ) : (
-        <div className="border border-stone p-6 mb-6">
-          <h2 className="text-lg font-semibold text-navy mb-2">Welcome back</h2>
-          <p className="text-ink-light">
+        <div className="card-padded mb-6">
+          <h2 className="text-lg font-semibold text-text-primary mb-2">Welcome back</h2>
+          <p className="text-text-secondary">
             {customer?.firstName} {customer?.lastName}
           </p>
-          <p className="text-sm text-ink-light">{customer?.email}</p>
+          <p className="text-sm text-text-secondary">{customer?.email}</p>
         </div>
       )}
 
       {/* Non-member upsell */}
       {subscriptionsEnabled && !activeSub && (
-        <div className="border-2 border-teal/20 bg-offwhite p-6 mb-6">
+        <div className="border-2 border-accent/20 bg-surface-primary p-6 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <Crown className="h-5 w-5 text-teal" />
-                <h3 className="font-semibold text-navy">Become a Member</h3>
+                <Crown className="h-5 w-5 text-accent" />
+                <h3 className="font-semibold text-text-primary">Become a Member</h3>
               </div>
-              <p className="text-sm text-ink-light">
+              <p className="text-sm text-text-secondary">
                 Unlock exclusive pricing, prize draws, free delivery, and partner discounts.
               </p>
             </div>
             <Link
               href="/membership"
-              className="inline-flex items-center justify-center gap-2 bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300 shrink-0"
+              className="btn-primary shrink-0"
             >
               Learn More
               <ArrowRight className="h-4 w-4" />
@@ -155,24 +155,24 @@ export default async function AccountPage() {
         {drawsEnabled && activeSub && (
           <Link
             href="/account/draws"
-            className="flex items-center gap-4 border border-stone p-6 hover:border-navy/30 transition-colors duration-300"
+            className="flex items-center gap-4 card-interactive"
           >
             <Trophy className="h-8 w-8 text-purple-500" />
             <div>
-              <h3 className="font-semibold text-navy">My Draws</h3>
-              <p className="text-sm text-ink-light">{totalEntries} active entries</p>
+              <h3 className="font-semibold text-text-primary">My Draws</h3>
+              <p className="text-sm text-text-secondary">{totalEntries} active entries</p>
             </div>
           </Link>
         )}
         {subscriptionsEnabled && (
           <Link
             href="/account/membership"
-            className="flex items-center gap-4 border border-stone p-6 hover:border-navy/30 transition-colors duration-300"
+            className="flex items-center gap-4 card-interactive"
           >
-            <Crown className="h-8 w-8 text-teal" />
+            <Crown className="h-8 w-8 text-accent" />
             <div>
-              <h3 className="font-semibold text-navy">Membership</h3>
-              <p className="text-sm text-ink-light">
+              <h3 className="font-semibold text-text-primary">Membership</h3>
+              <p className="text-sm text-text-secondary">
                 {activeSub ? "Manage your plan" : "Join & save"}
               </p>
             </div>
@@ -181,68 +181,68 @@ export default async function AccountPage() {
         {partnerOffersEnabled && activeSub && (
           <Link
             href="/account/partner-offers"
-            className="flex items-center gap-4 border border-stone p-6 hover:border-navy/30 transition-colors duration-300"
+            className="flex items-center gap-4 card-interactive"
           >
             <Gift className="h-8 w-8 text-blue-500" />
             <div>
-              <h3 className="font-semibold text-navy">Partner Offers</h3>
-              <p className="text-sm text-ink-light">Exclusive discounts</p>
+              <h3 className="font-semibold text-text-primary">Partner Offers</h3>
+              <p className="text-sm text-text-secondary">Exclusive discounts</p>
             </div>
           </Link>
         )}
         <Link
           href="/account/orders"
-          className="flex items-center gap-4 border border-stone p-6 hover:border-navy/30 transition-colors duration-300"
+          className="flex items-center gap-4 card-interactive"
         >
-          <Package className="h-8 w-8 text-ink-faint" />
+          <Package className="h-8 w-8 text-text-muted" />
           <div>
-            <h3 className="font-semibold text-navy">Order History</h3>
-            <p className="text-sm text-ink-light">View your past orders</p>
+            <h3 className="font-semibold text-text-primary">Order History</h3>
+            <p className="text-sm text-text-secondary">View your past orders</p>
           </div>
         </Link>
         <Link
           href="/account/quotes"
-          className="flex items-center gap-4 border border-stone p-6 hover:border-navy/30 transition-colors duration-300"
+          className="flex items-center gap-4 card-interactive"
         >
-          <FileText className="h-8 w-8 text-ink-faint" />
+          <FileText className="h-8 w-8 text-text-muted" />
           <div>
-            <h3 className="font-semibold text-navy">My Quotes</h3>
-            <p className="text-sm text-ink-light">View and track your quotes</p>
+            <h3 className="font-semibold text-text-primary">My Quotes</h3>
+            <p className="text-sm text-text-secondary">View and track your quotes</p>
           </div>
         </Link>
         {/* Non-member draws and partner offers */}
         {drawsEnabled && !activeSub && (
           <Link
             href="/account/draws"
-            className="flex items-center gap-4 border border-stone p-6 hover:border-navy/30 transition-colors duration-300"
+            className="flex items-center gap-4 card-interactive"
           >
             <Trophy className="h-8 w-8 text-purple-500" />
             <div>
-              <h3 className="font-semibold text-navy">My Draws</h3>
-              <p className="text-sm text-ink-light">Entries & prizes</p>
+              <h3 className="font-semibold text-text-primary">My Draws</h3>
+              <p className="text-sm text-text-secondary">Entries & prizes</p>
             </div>
           </Link>
         )}
         {partnerOffersEnabled && !activeSub && (
           <Link
             href="/account/partner-offers"
-            className="flex items-center gap-4 border border-stone p-6 hover:border-navy/30 transition-colors duration-300"
+            className="flex items-center gap-4 card-interactive"
           >
             <Gift className="h-8 w-8 text-blue-500" />
             <div>
-              <h3 className="font-semibold text-navy">Partner Offers</h3>
-              <p className="text-sm text-ink-light">Exclusive discounts</p>
+              <h3 className="font-semibold text-text-primary">Partner Offers</h3>
+              <p className="text-sm text-text-secondary">Exclusive discounts</p>
             </div>
           </Link>
         )}
         <Link
           href="/products"
-          className="flex items-center gap-4 border border-stone p-6 hover:border-navy/30 transition-colors duration-300"
+          className="flex items-center gap-4 card-interactive"
         >
-          <MapPin className="h-8 w-8 text-ink-faint" />
+          <MapPin className="h-8 w-8 text-text-muted" />
           <div>
-            <h3 className="font-semibold text-navy">Continue Shopping</h3>
-            <p className="text-sm text-ink-light">Browse our products</p>
+            <h3 className="font-semibold text-text-primary">Continue Shopping</h3>
+            <p className="text-sm text-text-secondary">Browse our products</p>
           </div>
         </Link>
       </div>

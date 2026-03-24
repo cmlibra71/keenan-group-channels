@@ -17,15 +17,15 @@ export default async function CartPage() {
 
   if (items.length === 0) {
     return (
-      <div className="mx-auto max-w-3xl px-6 lg:px-8 py-20 sm:py-24">
-        <p className="heading-sans text-teal tracking-widest mb-3">SHOPPING</p>
-        <h1 className="text-3xl heading-serif text-navy mb-8">Your Cart</h1>
-        <div className="text-center py-20 sm:py-24">
-          <ShoppingCart className="h-16 w-16 text-ink-faint mx-auto" />
-          <p className="mt-4 text-ink-light">Your cart is empty.</p>
+      <div className="mx-auto max-w-3xl px-6 lg:px-8 section-padding">
+        <p className="eyebrow mb-3">SHOPPING</p>
+        <h1 className="text-3xl heading-serif text-text-primary mb-8">Your Cart</h1>
+        <div className="text-center section-padding">
+          <ShoppingCart className="h-16 w-16 text-text-muted mx-auto" />
+          <p className="mt-4 text-text-secondary">Your cart is empty.</p>
           <Link
             href="/products"
-            className="mt-6 inline-block bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300"
+            className="mt-6 inline-block btn-primary"
           >
             Continue Shopping
           </Link>
@@ -62,9 +62,9 @@ export default async function CartPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-6 lg:px-8 py-20 sm:py-24">
-      <p className="heading-sans text-teal tracking-widest mb-3">SHOPPING</p>
-      <h1 className="text-3xl heading-serif text-navy mb-8">Your Cart</h1>
+    <div className="mx-auto max-w-5xl px-6 lg:px-8 section-padding">
+      <p className="eyebrow mb-3">SHOPPING</p>
+      <h1 className="text-3xl heading-serif text-text-primary mb-8">Your Cart</h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2">

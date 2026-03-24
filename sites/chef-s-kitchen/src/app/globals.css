@@ -1,10 +1,18 @@
 @import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600&display=swap');
 
+/* ══════════════════════════════════════════════════════
+   DESIGN TOKENS
+   Change accent color, surfaces, or text hierarchy here.
+   Every component references these — one change propagates.
+   ══════════════════════════════════════════════════════ */
+
 @theme {
+  /* ── Fonts ─────────────────────────────────────────── */
   --font-serif: 'DM Serif Display', Georgia, 'Times New Roman', serif;
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
 
+  /* ── Palette (raw values, keep for reference) ──────── */
   --color-navy: #0F172A;
   --color-navy-light: #1E293B;
   --color-stone: #E2E8F0;
@@ -16,9 +24,33 @@
   --color-ink: #334155;
   --color-ink-light: #64748B;
   --color-ink-faint: #94A3B8;
+
+  /* ── Semantic roles (use these in components) ──────── */
+  --color-accent: #0D9488;
+  --color-accent-hover: #14B8A6;
+  --color-accent-dark: #0F766E;
+  --color-accent-subtle: oklch(from #0D9488 l c h / 0.10);
+
+  --color-surface-primary: #F8FAFC;
+  --color-surface-secondary: #F1F5F9;
+  --color-surface-dark: #0F172A;
+  --color-surface-dark-alt: #1E293B;
+
+  --color-text-primary: #0F172A;
+  --color-text-body: #334155;
+  --color-text-secondary: #64748B;
+  --color-text-muted: #94A3B8;
+
+  --color-border: #E2E8F0;
 }
 
-/* ── Base typography ─────────────────────────────────── */
+/* ══════════════════════════════════════════════════════
+   BASE STYLES
+   ══════════════════════════════════════════════════════ */
+
+html {
+  scroll-behavior: smooth;
+}
 
 body {
   font-family: var(--font-sans);
@@ -28,7 +60,12 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ── Editorial heading treatment ─────────────────────── */
+::selection {
+  background-color: var(--color-accent);
+  color: white;
+}
+
+/* ── Heading treatments (kept outside @layer for global use) */
 
 .heading-serif {
   font-family: var(--font-serif);
@@ -45,7 +82,7 @@ body {
   font-size: 0.6875rem;
 }
 
-/* ── Subtle grain overlay for depth ──────────────────── */
+/* ── Texture & decoration ────────────────────────────── */
 
 .grain::after {
   content: '';
@@ -57,28 +94,183 @@ body {
   background-size: 128px 128px;
 }
 
-/* ── Refined divider ─────────────────────────────────── */
-
 .divider {
   height: 1px;
   background: linear-gradient(
     90deg,
     transparent 0%,
-    var(--color-stone) 20%,
-    var(--color-stone) 80%,
+    var(--color-border) 20%,
+    var(--color-border) 80%,
     transparent 100%
   );
 }
 
-/* ── Smooth scroll ───────────────────────────────────── */
+/* ══════════════════════════════════════════════════════
+   COMPONENT CLASSES
+   Semantic classes that reference design tokens.
+   Components use these instead of raw Tailwind utilities.
+   ══════════════════════════════════════════════════════ */
 
-html {
-  scroll-behavior: smooth;
-}
+@layer components {
 
-/* ── Selection color ─────────────────────────────────── */
+  /* ═══ BUTTONS ═══════════════════════════════════════ */
 
-::selection {
-  background-color: var(--color-teal);
-  color: white;
+  .btn {
+    @apply inline-flex items-center justify-center gap-2.5
+           font-medium text-sm tracking-wide
+           px-7 py-3.5
+           transition-colors duration-300;
+  }
+
+  .btn-primary {
+    @apply btn bg-accent text-white
+           hover:bg-accent-hover
+           disabled:bg-surface-secondary disabled:text-text-muted
+           disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply btn border border-border text-text-body
+           hover:border-text-primary/30;
+  }
+
+  .btn-secondary-dark {
+    @apply btn border border-slate-600 text-slate-300
+           hover:border-slate-400 hover:text-white;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 text-sm
+           text-text-secondary hover:text-text-primary
+           transition-colors duration-300;
+  }
+
+  /* ═══ TYPOGRAPHY ════════════════════════════════════ */
+
+  .eyebrow {
+    @apply heading-sans text-accent tracking-widest;
+  }
+
+  .section-title {
+    @apply heading-serif text-3xl sm:text-4xl text-text-primary;
+  }
+
+  .hero-title {
+    @apply heading-serif text-4xl sm:text-5xl lg:text-6xl;
+  }
+
+  .page-title {
+    @apply heading-serif text-2xl sm:text-3xl text-text-primary;
+  }
+
+  .panel-title {
+    @apply text-lg heading-serif text-text-primary;
+  }
+
+  .body-text {
+    @apply text-sm text-text-secondary leading-relaxed;
+  }
+
+  .caption {
+    @apply text-xs text-text-muted tracking-wide;
+  }
+
+  /* ═══ FORM INPUTS ══════════════════════════════════ */
+
+  .input {
+    @apply mt-1 block w-full border border-border
+           px-3 py-2 text-sm
+           focus:border-text-primary focus:outline-none;
+  }
+
+  .input-search {
+    @apply w-full pl-10 pr-4 py-3 border border-border
+           text-sm focus:border-text-primary focus:outline-none;
+  }
+
+  .field-label {
+    @apply block text-sm font-medium text-text-body;
+  }
+
+  /* ═══ CARDS & CONTAINERS ═══════════════════════════ */
+
+  .card {
+    @apply border border-border;
+  }
+
+  .card-padded {
+    @apply card p-6;
+  }
+
+  .card-interactive {
+    @apply card-padded hover:border-text-primary/30
+           transition-colors duration-300;
+  }
+
+  .card-dark {
+    @apply border border-slate-700/50 bg-surface-dark-alt/50
+           backdrop-blur-sm p-8;
+  }
+
+  .card-dark-interactive {
+    @apply card-dark hover:border-accent/30
+           transition-all duration-500;
+  }
+
+  /* ═══ SECTIONS & LAYOUT ════════════════════════════ */
+
+  .container-page {
+    @apply mx-auto max-w-7xl px-6 lg:px-8;
+  }
+
+  .section-padding {
+    @apply py-20 sm:py-24;
+  }
+
+  .section-light {
+    @apply container-page section-padding;
+  }
+
+  .section-dark {
+    @apply relative bg-surface-dark overflow-hidden grain;
+  }
+
+  .section-bordered {
+    @apply border-y border-border bg-white;
+  }
+
+  /* ═══ BADGES & PILLS ═══════════════════════════════ */
+
+  .badge-member {
+    @apply inline-flex items-center gap-1 text-xs font-medium
+           px-2 py-1 rounded-full bg-accent-subtle text-accent;
+  }
+
+  .badge-member-pricing {
+    @apply inline-flex items-center gap-1.5
+           text-accent text-xs font-medium tracking-wide;
+  }
+
+  /* ═══ ALERTS ════════════════════════════════════════ */
+
+  .alert-error {
+    @apply p-3 bg-red-50 text-red-700 text-sm;
+  }
+
+  /* ═══ NAV LINKS ════════════════════════════════════ */
+
+  .nav-link {
+    @apply heading-sans text-text-secondary
+           hover:text-text-primary transition-colors duration-300;
+  }
+
+  .nav-link-accent {
+    @apply heading-sans text-accent
+           hover:text-accent-dark transition-colors duration-300;
+  }
+
+  .footer-link {
+    @apply text-sm text-text-secondary
+           hover:text-text-primary transition-colors duration-300;
+  }
 }

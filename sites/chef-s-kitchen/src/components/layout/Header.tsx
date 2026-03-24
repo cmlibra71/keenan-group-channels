@@ -32,26 +32,26 @@ export async function Header({ storeName }: { storeName: string }) {
   }
 
   return (
-    <header className="bg-white/80 backdrop-blur-md border-b border-stone sticky top-0 z-50">
-      <div className="mx-auto max-w-7xl px-6 lg:px-8">
+    <header className="bg-white/80 backdrop-blur-md border-b border-border sticky top-0 z-50">
+      <div className="container-page">
         <div className="flex h-[4.5rem] items-center justify-between">
           {/* Logo — serif wordmark */}
-          <Link href="/" className="heading-serif text-2xl text-navy hover:text-teal transition-colors duration-300">
+          <Link href="/" className="heading-serif text-2xl text-text-primary hover:text-accent transition-colors duration-300">
             {storeName}
           </Link>
 
           {/* Navigation — understated, uppercase sans */}
           <nav className="hidden md:flex items-center gap-10">
-            <Link href="/products" className="heading-sans text-ink-light hover:text-navy transition-colors duration-300">
+            <Link href="/products" className="nav-link">
               Products
             </Link>
-            <Link href="/categories" className="heading-sans text-ink-light hover:text-navy transition-colors duration-300">
+            <Link href="/categories" className="nav-link">
               Categories
             </Link>
             {subscriptionsEnabled && !isMember && (
               <Link
                 href="/membership"
-                className="inline-flex items-center gap-1.5 heading-sans text-teal hover:text-teal-dark transition-colors duration-300"
+                className="inline-flex items-center gap-1.5 nav-link-accent"
               >
                 <Crown className="h-3 w-3" />
                 Membership
@@ -61,11 +61,11 @@ export async function Header({ storeName }: { storeName: string }) {
 
           {/* Actions */}
           <div className="flex items-center gap-5">
-            <Link href="/search" className="text-ink-light hover:text-navy transition-colors duration-300">
+            <Link href="/search" className="text-text-secondary hover:text-text-primary transition-colors duration-300">
               <Search className="h-[1.125rem] w-[1.125rem]" strokeWidth={1.5} />
             </Link>
             <HeaderClient cartCount={cartCount} quoteCount={quoteCount} isMember={isMember} entryCount={entryCount} />
-            <button className="md:hidden text-ink-light hover:text-navy transition-colors duration-300">
+            <button className="md:hidden text-text-secondary hover:text-text-primary transition-colors duration-300">
               <Menu className="h-5 w-5" strokeWidth={1.5} />
             </button>
           </div>

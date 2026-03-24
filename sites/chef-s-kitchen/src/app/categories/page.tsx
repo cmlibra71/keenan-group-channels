@@ -24,21 +24,21 @@ export default async function CategoriesPage() {
   const categories = await getCategories();
 
   return (
-    <div className="mx-auto max-w-7xl px-6 lg:px-8 py-20 sm:py-24">
-      <p className="heading-sans text-teal tracking-widest mb-3">BROWSE</p>
-      <h1 className="text-3xl heading-serif text-navy mb-8">Categories</h1>
+    <div className="container-page section-padding">
+      <p className="eyebrow mb-3">BROWSE</p>
+      <h1 className="text-3xl heading-serif text-text-primary mb-8">Categories</h1>
 
       {categories.length === 0 ? (
-        <p className="text-ink-light">No categories found.</p>
+        <p className="text-text-secondary">No categories found.</p>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           {categories.map((category) => (
             <Link
               key={category.id}
               href={`/categories/${category.slug || category.id}`}
-              className="group block border border-stone overflow-hidden hover:border-navy/30 hover:shadow-sm transition-all duration-300"
+              className="group block card hover:border-text-primary/30 hover:shadow-sm transition-all duration-300"
             >
-              <div className="relative aspect-[4/3] bg-stone-warm overflow-hidden">
+              <div className="relative aspect-[4/3] bg-surface-secondary overflow-hidden">
                 {category.imageUrl ? (
                   <Image
                     src={category.imageUrl}
@@ -48,15 +48,15 @@ export default async function CategoriesPage() {
                     className="object-cover group-hover:scale-105 transition-transform duration-300"
                   />
                 ) : (
-                  <div className="h-full w-full flex items-center justify-center text-ink-faint">
+                  <div className="h-full w-full flex items-center justify-center text-text-muted">
                     <Package className="h-12 w-12" />
                   </div>
                 )}
               </div>
               <div className="p-4">
-                <h2 className="text-lg font-semibold text-navy">{category.name}</h2>
+                <h2 className="text-lg font-semibold text-text-primary">{category.name}</h2>
                 {category.description && (
-                  <p className="mt-1 text-sm text-ink-light line-clamp-2">
+                  <p className="mt-1 text-sm text-text-secondary line-clamp-2">
                     {stripHtml(category.description)}
                   </p>
                 )}

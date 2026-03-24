@@ -24,7 +24,7 @@ export function AddToQuoteButton({
     <button
       onClick={handleClick}
       disabled={disabled || isPending}
-      className="w-full border border-stone text-ink hover:border-navy/30 transition-colors duration-300 py-3.5 px-7 font-medium text-sm tracking-wide disabled:border-stone disabled:text-ink-faint disabled:cursor-not-allowed"
+      className="btn-secondary w-full"
     >
       {isPending ? "Adding..." : "Add to Quote"}
     </button>

@@ -52,18 +52,18 @@ export default async function HomePage() {
     <div>
       {/* ═══ Hero ═══ */}
       {subscriptionsEnabled && plan ? (
-        <section className="relative bg-navy overflow-hidden grain">
+        <section className="section-dark">
           {/* Subtle diagonal accent */}
-          <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-teal/5 to-transparent pointer-events-none" />
+          <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-accent/5 to-transparent pointer-events-none" />
 
-          <div className="relative mx-auto max-w-7xl px-6 lg:px-8 py-20 sm:py-28 lg:py-32">
+          <div className="relative container-page py-20 sm:py-28 lg:py-32">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
               {/* Left — editorial type lockup */}
               <div className="lg:col-span-7">
-                <p className="heading-sans text-teal tracking-widest mb-6">
+                <p className="eyebrow mb-6">
                   Members-Only Supply Partner
                 </p>
-                <h1 className="heading-serif text-4xl sm:text-5xl lg:text-6xl text-white">
+                <h1 className="hero-title text-white">
                   Professional Kitchen Equipment at Prices Reserved for the Trade
                 </h1>
                 <p className="mt-6 text-lg text-slate-400 max-w-xl leading-relaxed font-light">
@@ -73,14 +73,14 @@ export default async function HomePage() {
                 <div className="mt-10 flex flex-col sm:flex-row gap-4">
                   <Link
                     href="/membership"
-                    className="inline-flex items-center justify-center gap-2.5 bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300"
+                    className="btn-primary"
                   >
                     Become a Member
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                   <Link
                     href="/products"
-                    className="inline-flex items-center justify-center gap-2.5 border border-slate-600 text-slate-300 px-7 py-3.5 font-medium text-sm tracking-wide hover:border-slate-400 hover:text-white transition-colors duration-300"
+                    className="btn-secondary-dark"
                   >
                     Browse Equipment
                   </Link>
@@ -90,8 +90,8 @@ export default async function HomePage() {
               {/* Right — featured prize or benefits card */}
               <div className="lg:col-span-5">
                 {featuredPrize ? (
-                  <Link href="/membership#draws" className="block border border-slate-700/50 bg-navy-light/50 backdrop-blur-sm p-8 hover:border-teal/30 transition-all duration-500 group">
-                    <p className="heading-sans text-teal tracking-widest mb-5">
+                  <Link href="/membership#draws" className="block card-dark-interactive group">
+                    <p className="eyebrow mb-5">
                       Members-Only Draw
                     </p>
                     <div className="flex items-start gap-5">
@@ -106,14 +106,14 @@ export default async function HomePage() {
                           />
                         ) : (
                           <div className="h-full w-full flex items-center justify-center">
-                            <Crown className="h-8 w-8 text-teal/30" />
+                            <Crown className="h-8 w-8 text-accent/30" />
                           </div>
                         )}
                       </div>
                       <div>
                         <h3 className="font-medium text-white text-lg leading-snug">{featuredPrize.name}</h3>
                         {featuredPrize.value && parseFloat(featuredPrize.value) > 0 && (
-                          <p className="text-xl heading-serif text-teal-light mt-1">
+                          <p className="text-xl heading-serif text-accent-hover mt-1">
                             ${parseFloat(featuredPrize.value).toLocaleString("en-AU", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                           </p>
                         )}
@@ -126,8 +126,8 @@ export default async function HomePage() {
                     </div>
                   </Link>
                 ) : (
-                  <div className="border border-slate-700/50 bg-navy-light/50 backdrop-blur-sm p-8">
-                    <Crown className="h-6 w-6 text-teal mb-4" />
+                  <div className="card-dark">
+                    <Crown className="h-6 w-6 text-accent mb-4" />
                     <h3 className="heading-serif text-xl text-white mb-4">Member Benefits</h3>
                     <ul className="space-y-3">
                       {planBenefits.slice(0, 4).map((b, i) => (
@@ -144,12 +144,12 @@ export default async function HomePage() {
           </div>
         </section>
       ) : (
-        <section className="relative bg-navy overflow-hidden grain">
-          <div className="relative mx-auto max-w-7xl px-6 lg:px-8 py-24 sm:py-32">
-            <p className="heading-sans text-teal tracking-widest mb-6">
+        <section className="section-dark">
+          <div className="relative container-page py-24 sm:py-32">
+            <p className="eyebrow mb-6">
               Commercial Kitchen Equipment
             </p>
-            <h1 className="heading-serif text-4xl sm:text-5xl lg:text-6xl text-white max-w-3xl">
+            <h1 className="hero-title text-white max-w-3xl">
               Welcome to {channel?.name || "our store"}
             </h1>
             <p className="mt-6 text-lg text-slate-400 max-w-xl leading-relaxed font-light">
@@ -157,7 +157,7 @@ export default async function HomePage() {
             </p>
             <Link
               href="/products"
-              className="mt-10 inline-flex items-center gap-2.5 bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300"
+              className="mt-10 btn-primary"
             >
               Browse Equipment
               <ArrowRight className="h-4 w-4" />
@@ -171,13 +171,13 @@ export default async function HomePage() {
 
       {/* ═══ Categories — editorial grid ═══ */}
       {topCategories.length > 0 && (
-        <section className="mx-auto max-w-7xl px-6 lg:px-8 py-20 sm:py-24">
+        <section className="container-page section-padding">
           <div className="flex items-end justify-between mb-10">
             <div>
-              <p className="heading-sans text-teal tracking-widest mb-3">Departments</p>
-              <h2 className="heading-serif text-3xl sm:text-4xl text-navy">Shop by Category</h2>
+              <p className="eyebrow mb-3">Departments</p>
+              <h2 className="section-title">Shop by Category</h2>
             </div>
-            <Link href="/categories" className="hidden sm:inline-flex items-center gap-1.5 heading-sans text-ink-light hover:text-navy transition-colors duration-300">
+            <Link href="/categories" className="hidden sm:inline-flex items-center gap-1.5 nav-link">
               View All
               <ChevronRight className="h-3 w-3" />
             </Link>
@@ -187,7 +187,7 @@ export default async function HomePage() {
               <Link
                 key={category.id}
                 href={`/categories/${category.slug}`}
-                className="group relative overflow-hidden bg-stone-warm aspect-[4/3]"
+                className="group relative overflow-hidden bg-surface-secondary aspect-[4/3]"
               >
                 <div className="absolute inset-0 overflow-hidden">
                   {category.imageUrl ? (
@@ -202,7 +202,7 @@ export default async function HomePage() {
                     <div className="h-full w-full bg-gradient-to-br from-stone to-stone-warm" />
                   )}
                   {/* Dark overlay for text legibility */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-navy/70 via-navy/20 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-surface-dark/70 via-surface-dark/20 to-transparent" />
                 </div>
                 <div className="relative h-full flex flex-col justify-end p-5 sm:p-6">
                   <span className="heading-serif text-lg sm:text-xl text-white drop-shadow-sm">
@@ -229,13 +229,13 @@ export default async function HomePage() {
       )}
 
       {/* ═══ Featured Products ═══ */}
-      <section className="mx-auto max-w-7xl px-6 lg:px-8 py-20 sm:py-24">
+      <section className="container-page section-padding">
         <div className="flex items-end justify-between mb-10">
           <div>
-            <p className="heading-sans text-teal tracking-widest mb-3">Curated Selection</p>
-            <h2 className="heading-serif text-3xl sm:text-4xl text-navy">Featured Equipment</h2>
+            <p className="eyebrow mb-3">Curated Selection</p>
+            <h2 className="section-title">Featured Equipment</h2>
           </div>
-          <Link href="/products?filter=featured" className="hidden sm:inline-flex items-center gap-1.5 heading-sans text-ink-light hover:text-navy transition-colors duration-300">
+          <Link href="/products?filter=featured" className="hidden sm:inline-flex items-center gap-1.5 nav-link">
             View All
             <ChevronRight className="h-3 w-3" />
           </Link>

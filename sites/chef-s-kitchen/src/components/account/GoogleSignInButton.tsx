@@ -99,7 +99,7 @@ export function GoogleSignInButton({
       />
       <div ref={buttonRef} className="flex justify-center" />
       {loading && (
-        <p className="text-center text-sm text-ink-light mt-2">Signing in...</p>
+        <p className="text-center text-sm text-text-secondary mt-2">Signing in...</p>
       )}
       {error && (
         <p className="text-center text-sm text-red-600 mt-2">{error}</p>

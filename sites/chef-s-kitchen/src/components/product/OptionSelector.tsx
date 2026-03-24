@@ -32,7 +32,7 @@ export function OptionSelector({
   if (type === "dropdown") {
     return (
       <div>
-        <label className="block text-sm font-semibold text-navy mb-2">
+        <label className="block text-sm font-semibold text-text-primary mb-2">
           {option.displayName}
         </label>
         <select
@@ -41,7 +41,7 @@ export function OptionSelector({
             const val = parseInt(e.target.value, 10);
             if (!isNaN(val)) onSelect(option.id, val);
           }}
-          className="w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none"
+          className="w-full input"
         >
           <option value="">Select {option.displayName}</option>
           {values.map((v) => (
@@ -57,10 +57,10 @@ export function OptionSelector({
   if (type === "swatch") {
     return (
       <div>
-        <label className="block text-sm font-semibold text-navy mb-2">
+        <label className="block text-sm font-semibold text-text-primary mb-2">
           {option.displayName}
           {selectedValueId && (
-            <span className="ml-2 font-normal text-ink-light">
+            <span className="ml-2 font-normal text-text-secondary">
               {values.find((v) => v.id === selectedValueId)?.label}
             </span>
           )}
@@ -81,8 +81,8 @@ export function OptionSelector({
                 title={v.label}
                 className={`h-9 w-9 rounded-full border-2 transition-all ${
                   isSelected
-                    ? "border-navy ring-2 ring-navy ring-offset-1"
-                    : "border-stone hover:border-ink-light"
+                    ? "border-text-primary ring-2 ring-text-primary ring-offset-1"
+                    : "border-border hover:border-text-secondary"
                 } ${isDisabled ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}`}
                 style={
                   imageUrl
@@ -102,7 +102,7 @@ export function OptionSelector({
   if (type === "radio_buttons") {
     return (
       <div>
-        <label className="block text-sm font-semibold text-navy mb-2">
+        <label className="block text-sm font-semibold text-text-primary mb-2">
           {option.displayName}
         </label>
         <div className="space-y-2">
@@ -119,7 +119,7 @@ export function OptionSelector({
                   checked={v.id === selectedValueId}
                   onChange={() => onSelect(option.id, v.id)}
                   disabled={isDisabled}
-                  className="accent-navy"
+                  className="accent-text-primary"
                 />
                 {v.label}
               </label>
@@ -133,7 +133,7 @@ export function OptionSelector({
   // Default: rectangles (button pills)
   return (
     <div>
-      <label className="block text-sm font-semibold text-navy mb-2">
+      <label className="block text-sm font-semibold text-text-primary mb-2">
         {option.displayName}
       </label>
       <div className="flex flex-wrap gap-2">
@@ -147,10 +147,10 @@ export function OptionSelector({
               disabled={isDisabled}
               className={`px-4 py-2 border text-sm transition-colors duration-300 ${
                 isSelected
-                  ? "border-navy bg-navy text-white"
+                  ? "border-text-primary bg-surface-dark text-white"
                   : isDisabled
-                    ? "border-stone text-ink-faint cursor-not-allowed"
-                    : "border-stone hover:border-navy/30"
+                    ? "border-border text-text-muted cursor-not-allowed"
+                    : "border-border hover:border-text-primary/30"
               }`}
             >
               {v.label}

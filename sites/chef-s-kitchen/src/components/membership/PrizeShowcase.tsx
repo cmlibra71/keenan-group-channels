@@ -7,6 +7,7 @@ type Prize = {
   description: string | null;
   imageUrl: string | null;
   value: string | null;
+  productId?: number | null;
 };
 
 type Draw = {
@@ -25,21 +26,19 @@ export function PrizeShowcase({
   const value = prize.value ? parseFloat(prize.value) : null;
 
   return (
-    <section className="relative bg-navy overflow-hidden grain">
-      <div className="relative mx-auto max-w-7xl px-6 lg:px-8 py-20 sm:py-24">
-        <div className="text-center mb-12">
-          <p className="heading-sans text-teal tracking-widest mb-3">
-            Members-Only Prize Draw
-          </p>
-          <h2 className="heading-serif text-3xl sm:text-4xl text-white">
+    <section className="section-dark text-white">
+      <div className="container-page section-padding">
+        <div className="text-center mb-10">
+          <p className="eyebrow mb-2">Members-Only Prize Draw</p>
+          <h2 className="section-title text-white">
             Win Big Just by Being a Member
           </h2>
         </div>
 
         <div className="max-w-2xl mx-auto">
-          <div className="border border-slate-700/50 bg-navy-light/50 overflow-hidden">
+          <div className="card-dark overflow-hidden p-0">
             {prize.imageUrl ? (
-              <div className="relative aspect-video bg-navy-light">
+              <div className="relative aspect-video bg-surface-dark-alt">
                 <Image
                   src={prize.imageUrl}
                   alt={prize.name}
@@ -49,22 +48,22 @@ export function PrizeShowcase({
                 />
               </div>
             ) : (
-              <div className="flex items-center justify-center py-16 bg-navy-light">
-                <Trophy className="h-20 w-20 text-teal/20" />
+              <div className="flex items-center justify-center py-16 bg-surface-dark-alt">
+                <Trophy className="h-20 w-20 text-accent/30" />
               </div>
             )}
-            <div className="p-8 text-center">
-              <h3 className="heading-serif text-xl text-white mb-2">{prize.name}</h3>
+            <div className="p-6 text-center">
+              <h3 className="text-xl font-bold text-white mb-1">{prize.name}</h3>
               {prize.description && (
-                <p className="text-sm text-slate-400 mb-3">{prize.description}</p>
+                <p className="text-sm text-text-muted mb-3">{prize.description}</p>
               )}
               {value != null && value > 0 && (
-                <p className="heading-serif text-2xl text-teal-light">
+                <p className="text-2xl font-bold text-accent">
                   Valued at ${value.toLocaleString("en-AU", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                 </p>
               )}
               {draw?.scheduledAt && (
-                <p className="text-sm text-slate-500 mt-3 tracking-wide">
+                <p className="text-sm text-text-muted mt-2">
                   Draw date: {new Date(draw.scheduledAt).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })}
                 </p>
               )}

@@ -11,9 +11,9 @@ export default async function RegisterPage() {
   if (session) redirect("/account");
 
   return (
-    <div className="mx-auto max-w-lg px-6 lg:px-8 py-20 sm:py-24">
-      <p className="heading-sans text-teal tracking-widest mb-3">JOIN US</p>
-      <h1 className="text-3xl heading-serif text-navy mb-8">Create Account</h1>
+    <div className="mx-auto max-w-lg px-6 lg:px-8 section-padding">
+      <p className="eyebrow mb-3">JOIN US</p>
+      <h1 className="text-3xl heading-serif text-text-primary mb-8">Create Account</h1>
       <RegisterForm />
     </div>
   );

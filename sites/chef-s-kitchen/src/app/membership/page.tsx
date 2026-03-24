@@ -53,11 +53,11 @@ export default async function MembershipLandingPage() {
   return (
     <div>
       {/* Hero */}
-      <section className="relative bg-navy overflow-hidden grain">
-        <div className="absolute top-0 right-0 w-1/3 h-full bg-gradient-to-l from-teal/5 to-transparent pointer-events-none" />
-        <div className="relative mx-auto max-w-7xl px-6 lg:px-8 py-20 sm:py-28">
+      <section className="section-dark">
+        <div className="absolute top-0 right-0 w-1/3 h-full bg-gradient-to-l from-accent/5 to-transparent pointer-events-none" />
+        <div className="relative container-page py-20 sm:py-28">
           <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 border border-teal/30 text-teal text-sm font-medium px-4 py-1.5 mb-6">
+            <div className="inline-flex items-center gap-2 border border-accent/30 text-accent text-sm font-medium px-4 py-1.5 mb-6">
               <Crown className="h-3.5 w-3.5" />
               From ${planPrice.toFixed(2)}/{plan.billingInterval}
             </div>
@@ -80,14 +80,14 @@ export default async function MembershipLandingPage() {
             <div className="mt-10 flex flex-col sm:flex-row gap-4">
               <Link
                 href={`/account/membership/subscribe/${plan.slug}`}
-                className="inline-flex items-center justify-center gap-2.5 bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300"
+                className="btn-primary"
               >
                 Start Your Membership
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <a
                 href="#savings"
-                className="inline-flex items-center justify-center gap-2.5 border border-slate-600 text-slate-300 px-7 py-3.5 font-medium text-sm tracking-wide hover:border-slate-400 hover:text-white transition-colors duration-300"
+                className="btn-secondary-dark"
               >
                 See What You&apos;ll Save
               </a>
@@ -97,11 +97,11 @@ export default async function MembershipLandingPage() {
       </section>
 
       {/* Benefits Grid */}
-      <section className="mx-auto max-w-7xl px-6 lg:px-8 py-20 sm:py-24">
+      <section className="container-page section-padding">
         <div className="text-center mb-12">
-          <p className="heading-sans text-teal tracking-widest mb-3">Benefits</p>
-          <h2 className="heading-serif text-3xl sm:text-4xl text-navy">Why Members Love It</h2>
-          <p className="mt-3 text-ink-light">Everything you get with your membership</p>
+          <p className="eyebrow mb-3">Benefits</p>
+          <h2 className="section-title">Why Members Love It</h2>
+          <p className="mt-3 text-text-secondary">Everything you get with your membership</p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <BenefitCard
@@ -133,12 +133,12 @@ export default async function MembershipLandingPage() {
       )}
 
       {/* Entry Accumulation */}
-      <section id="draws" className="mx-auto max-w-7xl px-6 lg:px-8 py-20 sm:py-24">
+      <section id="draws" className="container-page section-padding">
         <div className="max-w-2xl mx-auto">
           <div className="text-center mb-12">
-            <p className="heading-sans text-teal tracking-widest mb-3">Draw Entries</p>
-            <h2 className="heading-serif text-3xl sm:text-4xl text-navy">The Longer You Stay, The Better Your Odds</h2>
-            <p className="mt-3 text-ink-light">
+            <p className="eyebrow mb-3">Draw Entries</p>
+            <h2 className="section-title">The Longer You Stay, The Better Your Odds</h2>
+            <p className="mt-3 text-text-secondary">
               Each month you&apos;re a member, you earn more entries. They accumulate and never reset (unless you cancel).
             </p>
           </div>
@@ -147,13 +147,13 @@ export default async function MembershipLandingPage() {
       </section>
 
       {/* Savings Calculator */}
-      <section id="savings" className="border-y border-stone bg-white">
-        <div className="mx-auto max-w-7xl px-6 lg:px-8 py-20 sm:py-24">
+      <section id="savings" className="section-bordered">
+        <div className="container-page section-padding">
           <div className="max-w-2xl mx-auto">
             <div className="text-center mb-12">
-              <p className="heading-sans text-teal tracking-widest mb-3">Savings</p>
-              <h2 className="heading-serif text-3xl sm:text-4xl text-navy">Calculate Your Savings</h2>
-              <p className="mt-3 text-ink-light">
+              <p className="eyebrow mb-3">Savings</p>
+              <h2 className="section-title">Calculate Your Savings</h2>
+              <p className="mt-3 text-text-secondary">
                 See how much you could save with a membership
               </p>
             </div>
@@ -169,23 +169,23 @@ export default async function MembershipLandingPage() {
       <PartnerLogos offers={partnerOffers} />
 
       {/* Final CTA */}
-      <section className="mx-auto max-w-7xl px-6 lg:px-8 py-20 sm:py-24">
+      <section className="container-page section-padding">
         <div className="max-w-md mx-auto text-center">
-          <div className="border border-navy p-10">
-            <Crown className="h-8 w-8 text-teal mx-auto mb-5" />
-            <h2 className="heading-serif text-2xl text-navy mb-2">{plan.name}</h2>
-            <p className="heading-serif text-4xl text-navy mb-1">
+          <div className="border border-text-primary p-10">
+            <Crown className="h-8 w-8 text-accent mx-auto mb-5" />
+            <h2 className="heading-serif text-2xl text-text-primary mb-2">{plan.name}</h2>
+            <p className="heading-serif text-4xl text-text-primary mb-1">
               ${planPrice.toFixed(2)}
-              <span className="text-base font-normal text-ink-light">/{plan.billingInterval}</span>
+              <span className="text-base font-normal text-text-secondary">/{plan.billingInterval}</span>
             </p>
             {plan.description && (
-              <p className="text-sm text-ink-light mb-5">{plan.description}</p>
+              <p className="text-sm text-text-secondary mb-5">{plan.description}</p>
             )}
             {benefits.length > 0 && (
               <ul className="text-left space-y-2.5 mb-8">
                 {benefits.map((benefit, i) => (
-                  <li key={i} className="flex items-start gap-3 text-sm text-ink">
-                    <Check className="h-4 w-4 text-teal mt-0.5 shrink-0" />
+                  <li key={i} className="flex items-start gap-3 text-sm text-text-body">
+                    <Check className="h-4 w-4 text-accent mt-0.5 shrink-0" />
                     {benefit}
                   </li>
                 ))}
@@ -193,7 +193,7 @@ export default async function MembershipLandingPage() {
             )}
             <Link
               href={`/account/membership/subscribe/${plan.slug}`}
-              className="block w-full text-center bg-teal text-white py-3.5 px-6 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300"
+              className="btn-primary w-full"
             >
               Start Your Membership
             </Link>

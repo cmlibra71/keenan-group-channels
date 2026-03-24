@@ -7,6 +7,7 @@ type Prize = {
   description: string | null;
   imageUrl: string | null;
   value: string | null;
+  productId?: number | null;
 };
 
 type Draw = {

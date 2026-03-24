@@ -85,8 +85,8 @@ export function ProductImageGallery({
 
   if (effectiveImages.length === 0) {
     return (
-      <div className="h-80 overflow-hidden bg-stone-warm">
-        <div className="h-full w-full flex items-center justify-center text-ink-faint">
+      <div className="h-80 overflow-hidden bg-surface-secondary">
+        <div className="h-full w-full flex items-center justify-center text-text-muted">
           <Package className="h-24 w-24" strokeWidth={1.5} />
         </div>
       </div>
@@ -133,7 +133,7 @@ export function ProductImageGallery({
         />
       </div>
 
-      <p className="mt-2 text-xs text-ink-faint text-center hidden sm:block">Click to zoom</p>
+      <p className="mt-2 text-xs text-text-muted text-center hidden sm:block">Click to zoom</p>
 
       {/* Thumbnail strip */}
       {effectiveImages.length > 1 && (
@@ -142,10 +142,10 @@ export function ProductImageGallery({
             <button
               key={img.id === -1 ? "variant" : img.id}
               onClick={() => setSelectedIndex(idx)}
-              className={`relative flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 overflow-hidden bg-stone-warm cursor-pointer transition-all ${
+              className={`relative flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 overflow-hidden bg-surface-secondary cursor-pointer transition-all ${
                 idx === selectedIndex
-                  ? "ring-2 ring-navy ring-offset-1"
-                  : "hover:ring-2 hover:ring-ink-faint"
+                  ? "ring-2 ring-text-primary ring-offset-1"
+                  : "hover:ring-2 hover:ring-text-muted"
               }`}
             >
               <Image

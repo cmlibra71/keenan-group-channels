@@ -15,9 +15,9 @@ export function PartnerLogos({ offers }: { offers: PartnerOffer[] }) {
   }, []);
 
   return (
-    <section className="border-y border-stone bg-white">
-      <div className="mx-auto max-w-7xl px-6 lg:px-8 py-12">
-        <p className="text-center heading-sans text-ink-faint tracking-widest mb-8">
+    <section className="section-bordered">
+      <div className="container-page py-12">
+        <p className="text-center heading-sans text-text-muted tracking-widest mb-8">
           Exclusive discounts from {uniquePartners.length} partner{uniquePartners.length !== 1 ? "s" : ""}
         </p>
         <div className="flex flex-wrap items-center justify-center gap-10">
@@ -32,7 +32,7 @@ export function PartnerLogos({ offers }: { offers: PartnerOffer[] }) {
             ) : (
               <span
                 key={partner.id}
-                className="text-sm font-medium text-ink-faint"
+                className="text-sm font-medium text-text-muted"
               >
                 {partner.partnerName}
               </span>

@@ -40,27 +40,27 @@ export function EntryAccumulationChart({ currentMonth }: { currentMonth?: number
         return (
           <div key={m.month} className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-ink font-medium">
+              <span className="text-text-body font-medium">
                 Month {m.month}
                 {isCurrentPosition && (
-                  <span className="ml-2 text-xs text-teal font-medium">You are here</span>
+                  <span className="ml-2 text-xs text-accent font-medium">You are here</span>
                 )}
               </span>
-              <span className="text-navy font-semibold">{m.total} entries</span>
+              <span className="text-text-primary font-semibold">{m.total} entries</span>
             </div>
-            <div className="h-2.5 bg-stone overflow-hidden">
+            <div className="h-2.5 bg-border overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-teal to-teal-light transition-all duration-1000 ease-out"
+                className="h-full bg-gradient-to-r from-accent to-accent-hover transition-all duration-1000 ease-out"
                 style={{ width: visible ? `${pct}%` : "0%" }}
               />
             </div>
-            <p className="text-xs text-ink-faint">
+            <p className="caption">
               +{m.entries} new {m.entries === 1 ? "entry" : "entries"} this month
             </p>
           </div>
         );
       })}
-      <p className="mt-5 text-sm text-ink font-medium border border-stone bg-white px-5 py-3.5">
+      <p className="mt-5 text-sm text-text-body font-medium card px-5 py-3.5 bg-white">
         Cancel and you lose all entries. Stay and they keep growing.
       </p>
     </div>

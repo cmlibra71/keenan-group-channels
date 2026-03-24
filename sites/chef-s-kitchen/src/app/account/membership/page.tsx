@@ -31,24 +31,24 @@ export default async function MembershipPage() {
     const subDetails = await subscriptionService.getById(activeSub.id, ["events"]);
 
     return (
-      <div className="mx-auto max-w-2xl px-6 lg:px-8 py-20 sm:py-24">
-        <p className="heading-sans text-teal tracking-widest mb-3">MEMBERSHIP</p>
-        <h1 className="text-3xl heading-serif text-navy mb-8">Membership</h1>
+      <div className="mx-auto max-w-2xl px-6 lg:px-8 section-padding">
+        <p className="eyebrow mb-3">MEMBERSHIP</p>
+        <h1 className="text-3xl heading-serif text-text-primary mb-8">Membership</h1>
 
-        <div className="border border-teal/30 bg-teal/5 p-6 mb-6">
+        <div className="border border-accent/30 bg-teal/5 p-6 mb-6">
           <div className="flex items-center gap-2 mb-2">
-            <Check className="h-5 w-5 text-teal" />
-            <h2 className="text-lg font-semibold text-navy">Active Member</h2>
+            <Check className="h-5 w-5 text-accent" />
+            <h2 className="text-lg font-semibold text-text-primary">Active Member</h2>
           </div>
-          <p className="text-ink text-sm">
+          <p className="text-text-body text-sm">
             Your membership is {activeSub.cancelAtPeriodEnd ? "set to cancel at the end of the current period" : "active and renewing"}.
           </p>
           {activeSub.currentPeriodEnd && (
-            <p className="text-ink-light text-sm mt-1">
+            <p className="text-text-secondary text-sm mt-1">
               Current period ends: {new Date(activeSub.currentPeriodEnd).toLocaleDateString()}
             </p>
           )}
-          <p className="text-ink-light text-sm mt-1">
+          <p className="text-text-secondary text-sm mt-1">
             Consecutive months: {activeSub.consecutiveMonths ?? 0}
           </p>
         </div>
@@ -72,10 +72,10 @@ export default async function MembershipPage() {
 
   // Show available plans
   return (
-    <div className="mx-auto max-w-3xl px-6 lg:px-8 py-20 sm:py-24">
-      <p className="heading-sans text-teal tracking-widest mb-3">MEMBERSHIP</p>
-      <h1 className="text-3xl heading-serif text-navy mb-2">Membership</h1>
-      <p className="text-ink-light mb-8">
+    <div className="mx-auto max-w-3xl px-6 lg:px-8 section-padding">
+      <p className="eyebrow mb-3">MEMBERSHIP</p>
+      <h1 className="text-3xl heading-serif text-text-primary mb-2">Membership</h1>
+      <p className="text-text-secondary mb-8">
         Join our membership program for exclusive pricing and benefits.
       </p>
 
@@ -85,25 +85,25 @@ export default async function MembershipPage() {
           return (
             <div
               key={plan.id}
-              className="border border-stone p-6 hover:border-navy/30 transition-colors duration-300"
+              className="card-interactive"
             >
-              <h2 className="text-xl heading-serif text-navy mb-1">
+              <h2 className="text-xl heading-serif text-text-primary mb-1">
                 {plan.name}
               </h2>
-              <p className="text-3xl font-bold text-navy mb-1">
+              <p className="text-3xl font-bold text-text-primary mb-1">
                 ${parseFloat(plan.price).toFixed(2)}
-                <span className="text-base font-normal text-ink-light">
+                <span className="text-base font-normal text-text-secondary">
                   /{plan.billingInterval}
                 </span>
               </p>
               {plan.description && (
-                <p className="text-sm text-ink-light mb-4">{plan.description}</p>
+                <p className="text-sm text-text-secondary mb-4">{plan.description}</p>
               )}
               {benefits.length > 0 && (
                 <ul className="space-y-2 mb-6">
                   {benefits.map((benefit, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-ink">
-                      <Check className="h-4 w-4 text-teal mt-0.5 shrink-0" />
+                    <li key={i} className="flex items-start gap-2 text-sm text-text-body">
+                      <Check className="h-4 w-4 text-accent mt-0.5 shrink-0" />
                       {benefit}
                     </li>
                   ))}
@@ -111,7 +111,7 @@ export default async function MembershipPage() {
               )}
               <Link
                 href={`/account/membership/subscribe/${plan.slug}`}
-                className="block w-full text-center bg-teal text-white py-3.5 px-7 hover:bg-teal-light transition-colors duration-300 text-sm font-medium tracking-wide"
+                className="btn-primary w-full"
               >
                 Subscribe
               </Link>
@@ -121,7 +121,7 @@ export default async function MembershipPage() {
       </div>
 
       {plans.length === 0 && (
-        <p className="text-ink-light text-center py-12">
+        <p className="text-text-secondary text-center py-12">
           No membership plans are currently available.
         </p>
       )}

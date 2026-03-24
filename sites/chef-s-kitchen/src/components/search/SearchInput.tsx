@@ -23,24 +23,24 @@ export function SearchInput({ defaultValue }: { defaultValue?: string }) {
     <form onSubmit={handleSubmit}>
       <div className="relative">
         {isPending ? (
-          <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-ink-faint animate-spin" />
+          <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-text-muted animate-spin" />
         ) : (
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-ink-faint" strokeWidth={1.5} />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-text-muted" strokeWidth={1.5} />
         )}
         <input
           type="search"
           name="q"
           defaultValue={defaultValue}
           placeholder="Search products..."
-          className="w-full pl-10 pr-4 py-3 border border-stone text-sm focus:border-navy focus:outline-none"
+          className="w-full pl-10 pr-4 py-3 input"
           autoFocus
           disabled={isPending}
         />
       </div>
       {isPending && (
-        <div className="mt-2 h-1 w-full overflow-hidden bg-stone">
+        <div className="mt-2 h-1 w-full overflow-hidden bg-border">
           <div
-            className="h-full bg-navy"
+            className="h-full bg-surface-dark"
             style={{
               width: "40%",
               animation: "searchSlide 1s ease-in-out infinite alternate",
@@ -55,7 +55,7 @@ export function SearchInput({ defaultValue }: { defaultValue?: string }) {
         </div>
       )}
       {isPending && (
-        <p className="mt-3 text-sm text-ink-light">Searching...</p>
+        <p className="mt-3 text-sm text-text-secondary">Searching...</p>
       )}
     </form>
   );

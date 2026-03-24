@@ -9,14 +9,14 @@ export function EntryHero({
   consecutiveMonths: number;
 }) {
   return (
-    <div className="bg-navy text-white p-6 sm:p-8 mb-8">
+    <div className="bg-surface-dark text-white p-6 sm:p-8 mb-8">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6">
         <div>
           <div className="flex items-center gap-2 text-slate-400 text-sm mb-2">
             <Ticket className="h-4 w-4" strokeWidth={1.5} />
             Your Active Entries
           </div>
-          <p className="text-5xl font-bold text-teal">{totalEntries}</p>
+          <p className="text-5xl font-bold text-accent">{totalEntries}</p>
           <div className="flex items-center gap-2 mt-2">
             <Calendar className="h-3.5 w-3.5 text-slate-400" strokeWidth={1.5} />
             <span className="text-sm text-slate-400">
@@ -27,7 +27,7 @@ export function EntryHero({
 
         <div className="sm:w-1/2">
           <p className="text-xs text-slate-400 mb-3 uppercase tracking-wider">Your accumulation progress</p>
-          <div className="[&_p]:text-slate-400 [&_span]:text-slate-400 [&_.text-zinc-900]:text-white [&_.text-zinc-600]:text-slate-400 [&_.bg-zinc-100]:bg-navy-light">
+          <div className="[&_p]:text-slate-400 [&_span]:text-slate-400 [&_.text-zinc-900]:text-white [&_.text-zinc-600]:text-slate-400 [&_.bg-zinc-100]:bg-surface-dark-alt">
             <EntryAccumulationChart currentMonth={consecutiveMonths} />
           </div>
         </div>

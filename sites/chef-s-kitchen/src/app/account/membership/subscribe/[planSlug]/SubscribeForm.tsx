@@ -143,24 +143,24 @@ export function SubscribeForm({
       )}
 
       <div className="mb-6">
-        <label className="block text-sm font-medium text-ink mb-2">
+        <label className="field-label mb-2">
           Card details
         </label>
         <div
           ref={cardContainerRef}
-          className="border border-stone px-4 py-3 bg-white focus-within:ring-2 focus-within:ring-navy focus-within:border-navy transition-shadow"
+          className="border border-border px-4 py-3 bg-white focus-within:ring-2 focus-within:ring-text-primary focus-within:border-text-primary transition-shadow"
         />
       </div>
 
       <button
         type="submit"
         disabled={loading || !cardReady}
-        className="w-full bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {loading ? "Processing..." : "Subscribe Now"}
       </button>
 
-      <p className="text-xs text-ink-light mt-4 text-center">
+      <p className="text-xs text-text-secondary mt-4 text-center">
         By subscribing, you agree to our terms of service. You can cancel at any time.
       </p>
     </form>

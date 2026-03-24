@@ -42,7 +42,7 @@ export function AccountPanel() {
   if (!loaded || isPending) {
     return (
       <div className="flex items-center justify-center py-16">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-stone border-t-navy" />
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-text-primary" />
       </div>
     );
   }
@@ -102,30 +102,30 @@ function PanelLoginForm({
   return (
     <div className="px-6 py-8">
       <div className="text-center mb-6">
-        <User className="h-12 w-12 text-ink-faint mx-auto" strokeWidth={1.5} />
-        <p className="mt-2 text-ink-light">Sign in to your account</p>
+        <User className="h-12 w-12 text-text-muted mx-auto" strokeWidth={1.5} />
+        <p className="mt-2 text-text-secondary">Sign in to your account</p>
       </div>
 
       <GoogleSignInButton onSuccess={(session) => onSuccess(session)} />
 
       <div className="relative my-6">
         <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-stone" />
+          <div className="w-full border-t border-border" />
         </div>
         <div className="relative flex justify-center text-sm">
-          <span className="bg-white px-4 text-ink-faint">or</span>
+          <span className="bg-white px-4 text-text-muted">or</span>
         </div>
       </div>
 
       {state?.error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm">
+        <div className="mb-4 alert-error">
           {state.error}
         </div>
       )}
 
       <form action={formAction} className="space-y-4">
         <div>
-          <label htmlFor="panel-email" className="block text-sm font-medium text-ink">
+          <label htmlFor="panel-email" className="field-label">
             Email
           </label>
           <input
@@ -133,12 +133,12 @@ function PanelLoginForm({
             id="panel-email"
             name="email"
             required
-            className="mt-1 block w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none"
+            className="mt-1 block w-full input"
             placeholder="your@email.com"
           />
         </div>
         <div>
-          <label htmlFor="panel-password" className="block text-sm font-medium text-ink">
+          <label htmlFor="panel-password" className="field-label">
             Password
           </label>
           <input
@@ -146,23 +146,23 @@ function PanelLoginForm({
             id="panel-password"
             name="password"
             required
-            className="mt-1 block w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none"
+            className="mt-1 block w-full input"
           />
         </div>
         <button
           type="submit"
           disabled={isPending}
-          className="w-full bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300 disabled:bg-stone-warm disabled:text-ink-faint"
+          className="btn-primary w-full"
         >
           {isPending ? "Signing in..." : "Sign In"}
         </button>
       </form>
 
-      <p className="mt-4 text-center text-sm text-ink-light">
+      <p className="mt-4 text-center body-text">
         Don&apos;t have an account?{" "}
         <button
           onClick={onSwitchToRegister}
-          className="text-navy font-medium hover:underline"
+          className="text-text-primary font-medium hover:underline"
         >
           Create one
         </button>
@@ -191,23 +191,23 @@ function PanelRegisterForm({
   return (
     <div className="px-6 py-8">
       <div className="text-center mb-6">
-        <User className="h-12 w-12 text-ink-faint mx-auto" strokeWidth={1.5} />
-        <p className="mt-2 text-ink-light">Create an account</p>
+        <User className="h-12 w-12 text-text-muted mx-auto" strokeWidth={1.5} />
+        <p className="mt-2 text-text-secondary">Create an account</p>
       </div>
 
       <GoogleSignInButton onSuccess={(session) => onSuccess(session)} />
 
       <div className="relative my-6">
         <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-stone" />
+          <div className="w-full border-t border-border" />
         </div>
         <div className="relative flex justify-center text-sm">
-          <span className="bg-white px-4 text-ink-faint">or</span>
+          <span className="bg-white px-4 text-text-muted">or</span>
         </div>
       </div>
 
       {state?.error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm">
+        <div className="mb-4 alert-error">
           {state.error}
         </div>
       )}
@@ -215,7 +215,7 @@ function PanelRegisterForm({
       <form action={formAction} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label htmlFor="panel-firstName" className="block text-sm font-medium text-ink">
+            <label htmlFor="panel-firstName" className="field-label">
               First Name
             </label>
             <input
@@ -223,11 +223,11 @@ function PanelRegisterForm({
               id="panel-firstName"
               name="firstName"
               required
-              className="mt-1 block w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none"
+              className="mt-1 block w-full input"
             />
           </div>
           <div>
-            <label htmlFor="panel-lastName" className="block text-sm font-medium text-ink">
+            <label htmlFor="panel-lastName" className="field-label">
               Last Name
             </label>
             <input
@@ -235,12 +235,12 @@ function PanelRegisterForm({
               id="panel-lastName"
               name="lastName"
               required
-              className="mt-1 block w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none"
+              className="mt-1 block w-full input"
             />
           </div>
         </div>
         <div>
-          <label htmlFor="panel-reg-email" className="block text-sm font-medium text-ink">
+          <label htmlFor="panel-reg-email" className="field-label">
             Email
           </label>
           <input
@@ -248,12 +248,12 @@ function PanelRegisterForm({
             id="panel-reg-email"
             name="email"
             required
-            className="mt-1 block w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none"
+            className="mt-1 block w-full input"
             placeholder="your@email.com"
           />
         </div>
         <div>
-          <label htmlFor="panel-reg-password" className="block text-sm font-medium text-ink">
+          <label htmlFor="panel-reg-password" className="field-label">
             Password
           </label>
           <input
@@ -262,24 +262,24 @@ function PanelRegisterForm({
             name="password"
             required
             minLength={8}
-            className="mt-1 block w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none"
+            className="mt-1 block w-full input"
             placeholder="At least 8 characters"
           />
         </div>
         <button
           type="submit"
           disabled={isPending}
-          className="w-full bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300 disabled:bg-stone-warm disabled:text-ink-faint"
+          className="btn-primary w-full"
         >
           {isPending ? "Creating account..." : "Create Account"}
         </button>
       </form>
 
-      <p className="mt-4 text-center text-sm text-ink-light">
+      <p className="mt-4 text-center body-text">
         Already have an account?{" "}
         <button
           onClick={onSwitchToLogin}
-          className="text-navy font-medium hover:underline"
+          className="text-text-primary font-medium hover:underline"
         >
           Sign in
         </button>
@@ -306,43 +306,43 @@ function PanelProfile({
 
   return (
     <div className="px-6 py-6 space-y-6">
-      <div className="border border-stone p-6">
-        <h3 className="text-lg heading-serif text-navy mb-1">Welcome back</h3>
-        <p className="text-ink-light">
+      <div className="card-padded">
+        <h3 className="panel-title mb-1">Welcome back</h3>
+        <p className="text-text-secondary">
           {session.firstName} {session.lastName}
         </p>
-        <p className="text-sm text-ink-light">{session.email}</p>
+        <p className="text-sm text-text-secondary">{session.email}</p>
       </div>
 
       <nav className="space-y-2">
         <Link
           href="/account"
-          className="flex items-center gap-3 px-4 py-3 hover:bg-stone-warm transition-colors duration-300"
+          className="flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary transition-colors duration-300"
         >
-          <User className="h-5 w-5 text-ink-faint" strokeWidth={1.5} />
-          <span className="text-sm font-medium text-ink">My Account</span>
+          <User className="h-5 w-5 text-text-muted" strokeWidth={1.5} />
+          <span className="text-sm font-medium text-text-body">My Account</span>
         </Link>
         <Link
           href="/account/quotes"
-          className="flex items-center gap-3 px-4 py-3 hover:bg-stone-warm transition-colors duration-300"
+          className="flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary transition-colors duration-300"
         >
-          <FileText className="h-5 w-5 text-ink-faint" strokeWidth={1.5} />
-          <span className="text-sm font-medium text-ink">My Quotes</span>
+          <FileText className="h-5 w-5 text-text-muted" strokeWidth={1.5} />
+          <span className="text-sm font-medium text-text-body">My Quotes</span>
         </Link>
         <Link
           href="/account/orders"
-          className="flex items-center gap-3 px-4 py-3 hover:bg-stone-warm transition-colors duration-300"
+          className="flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary transition-colors duration-300"
         >
-          <Package className="h-5 w-5 text-ink-faint" strokeWidth={1.5} />
-          <span className="text-sm font-medium text-ink">Order History</span>
+          <Package className="h-5 w-5 text-text-muted" strokeWidth={1.5} />
+          <span className="text-sm font-medium text-text-body">Order History</span>
         </Link>
         <button
           onClick={handleLogout}
           disabled={isPending}
-          className="flex items-center gap-3 px-4 py-3 hover:bg-stone-warm transition-colors duration-300 w-full text-left disabled:opacity-50"
+          className="flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary transition-colors duration-300 w-full text-left disabled:opacity-50"
         >
-          <LogOut className="h-5 w-5 text-ink-faint" strokeWidth={1.5} />
-          <span className="text-sm font-medium text-ink">
+          <LogOut className="h-5 w-5 text-text-muted" strokeWidth={1.5} />
+          <span className="text-sm font-medium text-text-body">
             {isPending ? "Signing out..." : "Sign Out"}
           </span>
         </button>

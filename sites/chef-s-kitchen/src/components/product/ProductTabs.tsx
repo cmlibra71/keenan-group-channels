@@ -61,17 +61,17 @@ export function ProductTabs({
   const [activeTab, setActiveTab] = useState(tabs[0]?.key ?? "description");
 
   return (
-    <div className="mt-12 border-t border-stone pt-8">
+    <div className="mt-12 border-t border-border pt-8">
       {/* Tab bar */}
-      <div className="flex gap-1 border-b border-stone">
+      <div className="flex gap-1 border-b border-border">
         {tabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
             className={`px-4 py-2.5 text-sm font-medium transition-colors duration-300 ${
               activeTab === tab.key
-                ? "border-b-2 border-navy text-navy"
-                : "text-ink-light hover:text-navy"
+                ? "border-b-2 border-text-primary text-text-primary"
+                : "text-text-secondary hover:text-text-primary"
             }`}
           >
             {tab.label}
@@ -85,7 +85,7 @@ export function ProductTabs({
           <RichContent
             html={description}
             stripStyles
-            className="prose prose-sm max-w-none text-ink-light"
+            className="prose prose-sm max-w-none text-text-secondary"
           />
         )}
 
@@ -98,10 +98,10 @@ export function ProductTabs({
             <RichContent
               html={warranty}
               stripStyles
-              className="prose prose-sm max-w-none text-ink-light"
+              className="prose prose-sm max-w-none text-text-secondary"
             />
           ) : (
-            <p className="text-sm text-ink-light">No warranty information available.</p>
+            <p className="text-sm text-text-secondary">No warranty information available.</p>
           )
         )}
 
@@ -114,25 +114,25 @@ export function ProductTabs({
                   href={file.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-3 border border-stone px-4 py-3 hover:bg-stone-warm transition-colors duration-300"
+                  className="flex items-center gap-3 card px-4 py-3 hover:bg-surface-secondary transition-colors duration-300"
                 >
                   <FileText className="h-5 w-5 flex-shrink-0 text-red-500" strokeWidth={1.5} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-navy truncate">
+                    <p className="text-sm font-medium text-text-primary truncate">
                       {file.label || file.fileName}
                     </p>
                     {file.fileSize && (
-                      <p className="text-xs text-ink-faint">
+                      <p className="caption">
                         {file.fileType?.toUpperCase()} &middot; {formatFileSize(file.fileSize)}
                       </p>
                     )}
                   </div>
-                  <Download className="h-4 w-4 flex-shrink-0 text-ink-faint" strokeWidth={1.5} />
+                  <Download className="h-4 w-4 flex-shrink-0 text-text-muted" strokeWidth={1.5} />
                 </a>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-ink-light">No downloads available.</p>
+            <p className="text-sm text-text-secondary">No downloads available.</p>
           )
         )}
 
@@ -141,10 +141,10 @@ export function ProductTabs({
             <RichContent
               html={customFields.leaseOptions}
               stripStyles
-              className="prose prose-sm max-w-none text-ink-light"
+              className="prose prose-sm max-w-none text-text-secondary"
             />
           ) : (
-            <p className="text-sm text-ink-light">No lease options available.</p>
+            <p className="text-sm text-text-secondary">No lease options available.</p>
           )
         )}
 
@@ -159,7 +159,7 @@ export function ProductTabs({
   );
 }
 
-// ── Custom Tab Content ─────────────────────────────────────────────────
+// -- Custom Tab Content ---------------------------------------------------------
 
 function CustomTabContent({
   activeKey,
@@ -174,12 +174,12 @@ function CustomTabContent({
     <RichContent
       html={tab.content}
       stripStyles
-      className="prose prose-sm max-w-none text-ink-light"
+      className="prose prose-sm max-w-none text-text-secondary"
     />
   );
 }
 
-// ── Stars ──────────────────────────────────────────────────────────────
+// -- Stars --------------------------------------------------------------------
 
 function StarRating({ rating, size = 16 }: { rating: number; size?: number }) {
   return (
@@ -188,7 +188,7 @@ function StarRating({ rating, size = 16 }: { rating: number; size?: number }) {
         <Star
           key={i}
           size={size}
-          className={i <= rating ? "fill-yellow-400 text-yellow-400" : "text-ink-faint"}
+          className={i <= rating ? "fill-yellow-400 text-yellow-400" : "text-text-muted"}
         />
       ))}
     </div>
@@ -220,7 +220,7 @@ function StarPicker({
             className={
               i <= (hover || rating)
                 ? "fill-yellow-400 text-yellow-400"
-                : "text-ink-faint"
+                : "text-text-muted"
             }
           />
         </button>
@@ -229,7 +229,7 @@ function StarPicker({
   );
 }
 
-// ── Reviews Section ────────────────────────────────────────────────────
+// -- Reviews Section ----------------------------------------------------------
 
 function ReviewsSection({
   reviews,
@@ -275,17 +275,17 @@ function ReviewsSection({
       {reviews.length > 0 ? (
         <div className="space-y-6">
           {reviews.map((review) => (
-            <div key={review.id} className="border-b border-stone pb-6 last:border-0">
+            <div key={review.id} className="border-b border-border pb-6 last:border-0">
               <div className="flex items-center gap-3">
                 <StarRating rating={review.rating} />
                 {review.title && (
-                  <h4 className="font-medium text-navy">{review.title}</h4>
+                  <h4 className="font-medium text-text-primary">{review.title}</h4>
                 )}
               </div>
               {review.text && (
-                <p className="mt-2 text-sm text-ink-light">{review.text}</p>
+                <p className="mt-2 body-text">{review.text}</p>
               )}
-              <p className="mt-2 text-xs text-ink-faint">
+              <p className="mt-2 caption">
                 {review.author_name || "Anonymous"}
                 {review.created_at && (
                   <> &middot; {new Date(review.created_at).toLocaleDateString()}</>
@@ -295,31 +295,31 @@ function ReviewsSection({
           ))}
         </div>
       ) : (
-        <p className="text-sm text-ink-light">
+        <p className="text-sm text-text-secondary">
           Be the first to review this product!
         </p>
       )}
 
       {/* Review form */}
       {submitted ? (
-        <div className="mt-8 border border-teal/30 bg-teal/5 p-4 text-sm text-teal-dark">
+        <div className="mt-8 border border-accent/30 bg-accent/5 p-4 text-sm text-accent-dark">
           Thank you for your review! It will appear after approval.
         </div>
       ) : (
-        <div className="mt-8 border-t border-stone pt-6">
-          <h3 className="text-base font-semibold text-navy mb-4">
+        <div className="mt-8 border-t border-border pt-6">
+          <h3 className="text-base font-semibold text-text-primary mb-4">
             Write a Review
           </h3>
           <form action={handleSubmit} className="space-y-4 max-w-lg">
             <div>
-              <label className="block text-sm font-medium text-ink mb-1">
+              <label className="field-label mb-1">
                 Rating
               </label>
               <StarPicker rating={rating} onChange={setRating} />
             </div>
 
             <div>
-              <label htmlFor="authorName" className="block text-sm font-medium text-ink mb-1">
+              <label htmlFor="authorName" className="field-label mb-1">
                 Your Name
               </label>
               <input
@@ -327,24 +327,24 @@ function ReviewsSection({
                 name="authorName"
                 type="text"
                 required
-                className="w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                className="w-full input focus:ring-1 focus:ring-text-primary"
               />
             </div>
 
             <div>
-              <label htmlFor="title" className="block text-sm font-medium text-ink mb-1">
+              <label htmlFor="title" className="field-label mb-1">
                 Title (optional)
               </label>
               <input
                 id="title"
                 name="title"
                 type="text"
-                className="w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                className="w-full input focus:ring-1 focus:ring-text-primary"
               />
             </div>
 
             <div>
-              <label htmlFor="text" className="block text-sm font-medium text-ink mb-1">
+              <label htmlFor="text" className="field-label mb-1">
                 Review
               </label>
               <textarea
@@ -352,7 +352,7 @@ function ReviewsSection({
                 name="text"
                 rows={4}
                 required
-                className="w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
+                className="w-full input focus:ring-1 focus:ring-text-primary"
               />
             </div>
 
@@ -363,7 +363,7 @@ function ReviewsSection({
             <button
               type="submit"
               disabled={isPending}
-              className="bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300 disabled:opacity-50"
+              className="btn-primary disabled:opacity-50"
             >
               {isPending ? "Submitting..." : "Submit Review"}
             </button>

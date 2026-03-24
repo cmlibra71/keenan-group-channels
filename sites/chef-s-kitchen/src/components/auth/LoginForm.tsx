@@ -9,21 +9,21 @@ export function LoginForm() {
   const [state, formAction, isPending] = useActionState(login, null);
 
   return (
-    <div className="border border-stone p-8">
+    <div className="card p-8">
       <div className="text-center mb-6">
-        <User className="h-12 w-12 text-ink-faint mx-auto" strokeWidth={1.5} />
-        <p className="mt-2 text-ink-light">Sign in to your account</p>
+        <User className="h-12 w-12 text-text-muted mx-auto" strokeWidth={1.5} />
+        <p className="mt-2 text-text-secondary">Sign in to your account</p>
       </div>
 
       {state?.error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm">
+        <div className="mb-4 alert-error">
           {state.error}
         </div>
       )}
 
       <form action={formAction} className="space-y-4">
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-ink">
+          <label htmlFor="email" className="field-label">
             Email
           </label>
           <input
@@ -31,12 +31,12 @@ export function LoginForm() {
             id="email"
             name="email"
             required
-            className="mt-1 block w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none"
+            className="mt-1 block w-full input"
             placeholder="your@email.com"
           />
         </div>
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-ink">
+          <label htmlFor="password" className="field-label">
             Password
           </label>
           <input
@@ -44,21 +44,21 @@ export function LoginForm() {
             id="password"
             name="password"
             required
-            className="mt-1 block w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none"
+            className="mt-1 block w-full input"
           />
         </div>
         <button
           type="submit"
           disabled={isPending}
-          className="w-full bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300 disabled:bg-stone-warm disabled:text-ink-faint"
+          className="btn-primary w-full"
         >
           {isPending ? "Signing in..." : "Sign In"}
         </button>
       </form>
 
-      <p className="mt-4 text-center text-sm text-ink-light">
+      <p className="mt-4 text-center body-text">
         Don&apos;t have an account?{" "}
-        <Link href="/account/register" className="text-navy font-medium hover:underline">
+        <Link href="/account/register" className="text-text-primary font-medium hover:underline">
           Create one
         </Link>
       </p>

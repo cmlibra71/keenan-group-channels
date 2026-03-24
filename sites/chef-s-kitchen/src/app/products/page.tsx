@@ -51,9 +51,9 @@ export default async function ProductsPage({
   const pageTitle = filters.find((f) => f.key === activeFilter)?.label || "All Products";
 
   return (
-    <div className="mx-auto max-w-7xl px-6 lg:px-8 py-20 sm:py-24">
-      <p className="heading-sans text-teal tracking-widest mb-3">CATALOGUE</p>
-      <h1 className="text-3xl heading-serif text-navy mb-6">{pageTitle}</h1>
+    <div className="container-page section-padding">
+      <p className="eyebrow mb-3">CATALOGUE</p>
+      <h1 className="text-3xl heading-serif text-text-primary mb-6">{pageTitle}</h1>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-8">
@@ -63,8 +63,8 @@ export default async function ProductsPage({
             href={f.href}
             className={`px-4 py-2 rounded-full text-sm font-medium transition-colors duration-300 ${
               activeFilter === f.key
-                ? "bg-navy text-white"
-                : "bg-stone-warm text-ink-light hover:bg-stone-200"
+                ? "bg-surface-dark text-white"
+                : "bg-surface-secondary text-text-secondary hover:bg-stone-200"
             }`}
           >
             {f.label}
@@ -73,7 +73,7 @@ export default async function ProductsPage({
       </div>
 
       {products.length === 0 ? (
-        <p className="text-ink-light text-center py-20 sm:py-24">No products found.</p>
+        <p className="text-text-secondary text-center section-padding">No products found.</p>
       ) : (
         <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} />
       )}
@@ -82,22 +82,22 @@ export default async function ProductsPage({
       {totalPages > 1 && (
         <div className="mt-12 flex items-center justify-center gap-2">
           {page > 1 && (
-            <a href={`/products?page=${page - 1}${filterParam}`} className="px-3 py-2 text-sm font-medium bg-stone-warm text-ink-light hover:bg-stone-200 transition-colors duration-300">
+            <a href={`/products?page=${page - 1}${filterParam}`} className="px-3 py-2 text-sm font-medium bg-surface-secondary text-text-secondary hover:bg-stone-200 transition-colors duration-300">
               Previous
             </a>
           )}
 
           {getPageNumbers(page, totalPages).map((p, i) =>
             p === "..." ? (
-              <span key={`ellipsis-${i}`} className="px-2 py-2 text-sm text-ink-faint">...</span>
+              <span key={`ellipsis-${i}`} className="px-2 py-2 text-sm text-text-muted">...</span>
             ) : (
               <a
                 key={p}
                 href={`/products?page=${p}${filterParam}`}
                 className={`px-4 py-2 text-sm font-medium transition-colors duration-300 ${
                   p === page
-                    ? "bg-navy text-white"
-                    : "bg-stone-warm text-ink-light hover:bg-stone-200"
+                    ? "bg-surface-dark text-white"
+                    : "bg-surface-secondary text-text-secondary hover:bg-stone-200"
                 }`}
               >
                 {p}
@@ -106,7 +106,7 @@ export default async function ProductsPage({
           )}
 
           {page < totalPages && (
-            <a href={`/products?page=${page + 1}${filterParam}`} className="px-3 py-2 text-sm font-medium bg-stone-warm text-ink-light hover:bg-stone-200 transition-colors duration-300">
+            <a href={`/products?page=${page + 1}${filterParam}`} className="px-3 py-2 text-sm font-medium bg-surface-secondary text-text-secondary hover:bg-stone-200 transition-colors duration-300">
               Next
             </a>
           )}
