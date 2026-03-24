@@ -27,7 +27,7 @@ export default async function RootLayout({
 
   return (
     <html lang="en">
-      <body className="min-h-screen flex flex-col bg-white text-zinc-900 antialiased">
+      <body className="min-h-screen flex flex-col bg-offwhite text-ink antialiased">
         <Header storeName={storeName} />
         <main className="flex-1">{children}</main>
         <Footer storeName={storeName} subscriptionsEnabled={subscriptionsEnabled} />

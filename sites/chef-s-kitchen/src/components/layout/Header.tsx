@@ -32,41 +32,41 @@ export async function Header({ storeName }: { storeName: string }) {
   }
 
   return (
-    <header className="border-b border-zinc-200 bg-white sticky top-0 z-50">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between">
-          {/* Logo */}
-          <Link href="/" className="text-xl font-bold text-zinc-900">
+    <header className="bg-white/80 backdrop-blur-md border-b border-stone sticky top-0 z-50">
+      <div className="mx-auto max-w-7xl px-6 lg:px-8">
+        <div className="flex h-[4.5rem] items-center justify-between">
+          {/* Logo — serif wordmark */}
+          <Link href="/" className="heading-serif text-2xl text-navy hover:text-teal transition-colors duration-300">
             {storeName}
           </Link>
 
-          {/* Navigation */}
-          <nav className="hidden md:flex items-center gap-8">
-            <Link href="/products" className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
+          {/* Navigation — understated, uppercase sans */}
+          <nav className="hidden md:flex items-center gap-10">
+            <Link href="/products" className="heading-sans text-ink-light hover:text-navy transition-colors duration-300">
               Products
             </Link>
-            <Link href="/categories" className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
+            <Link href="/categories" className="heading-sans text-ink-light hover:text-navy transition-colors duration-300">
               Categories
             </Link>
             {subscriptionsEnabled && !isMember && (
               <Link
                 href="/membership"
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-amber-700 hover:text-amber-800"
+                className="inline-flex items-center gap-1.5 heading-sans text-teal hover:text-teal-dark transition-colors duration-300"
               >
-                <Crown className="h-3.5 w-3.5" />
+                <Crown className="h-3 w-3" />
                 Membership
               </Link>
             )}
           </nav>
 
           {/* Actions */}
-          <div className="flex items-center gap-4">
-            <Link href="/search" className="text-zinc-600 hover:text-zinc-900">
-              <Search className="h-5 w-5" />
+          <div className="flex items-center gap-5">
+            <Link href="/search" className="text-ink-light hover:text-navy transition-colors duration-300">
+              <Search className="h-[1.125rem] w-[1.125rem]" strokeWidth={1.5} />
             </Link>
             <HeaderClient cartCount={cartCount} quoteCount={quoteCount} isMember={isMember} entryCount={entryCount} />
-            <button className="md:hidden text-zinc-600">
-              <Menu className="h-5 w-5" />
+            <button className="md:hidden text-ink-light hover:text-navy transition-colors duration-300">
+              <Menu className="h-5 w-5" strokeWidth={1.5} />
             </button>
           </div>
         </div>
