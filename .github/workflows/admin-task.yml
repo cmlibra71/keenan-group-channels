@@ -11,6 +11,7 @@ on:
         options:
           - scripts/backfill-meilisearch.ts
           - scripts/backfill-embeddings.ts
+          - scripts/seed-chefs-depot-membership.ts
       timeout:
         description: "Timeout in seconds"
         required: false

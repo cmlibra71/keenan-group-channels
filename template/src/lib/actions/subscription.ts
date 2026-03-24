@@ -115,6 +115,44 @@ export async function createSubscription(planId: number): Promise<{
 }
 
 /**
+ * Create a Stripe Billing Portal session for the current customer.
+ * Returns the portal URL to redirect to.
+ */
+export async function createBillingPortalSession(returnUrl: string): Promise<{
+  success: boolean;
+  url?: string;
+  error?: string;
+}> {
+  const session = await getSession();
+  if (!session) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  try {
+    const sub = await subscriptionService.getActiveForCustomer(
+      session.customerId,
+      CHANNEL_ID
+    );
+    if (!sub?.stripeCustomerId) {
+      return { success: false, error: "No active subscription found" };
+    }
+
+    const stripeProvider = await getStripeProvider();
+    const url = await stripeProvider.createBillingPortalSession(
+      sub.stripeCustomerId,
+      returnUrl
+    );
+
+    return { success: true, url };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to create billing session",
+    };
+  }
+}
+
+/**
  * Cancel the current customer's subscription (at period end).
  */
 export async function cancelSubscription(): Promise<{

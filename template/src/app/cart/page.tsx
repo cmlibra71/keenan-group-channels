@@ -41,11 +41,11 @@ export default async function CartPage() {
   let showUpsell = false;
   let planPrice = 0;
   let billingInterval = "month";
+  let isMember = false;
 
   const subscriptionsEnabled = await getFeatureFlag("subscriptions_enabled");
   if (subscriptionsEnabled) {
     const session = await getSession();
-    let isMember = false;
     if (session) {
       const activeSub = await getActiveSubscription(session.customerId);
       isMember = !!activeSub;
@@ -69,7 +69,7 @@ export default async function CartPage() {
           <CartItemsList items={items} />
         </div>
         <div className="space-y-4">
-          <CartSummary subtotal={subtotal} discount={discount} total={total} />
+          <CartSummary subtotal={subtotal} discount={discount} total={total} isMember={isMember} />
           {showUpsell && (
             <MembershipCartUpsell
               cartTotal={total}

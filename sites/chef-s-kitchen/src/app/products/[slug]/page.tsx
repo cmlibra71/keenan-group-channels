@@ -32,15 +32,17 @@ export default async function ProductPage({
 
   if (memberPricingEnabled) {
     const session = await getSession();
+    let customerGroupId: number | null = null;
     if (session) {
       const customer = await customerService.getById(session.customerId) as { customerGroupId: number | null } | null;
-      const defaultVariant = product.variants?.[0];
-      if (defaultVariant) {
-        const pricing = await getEffectivePrice(defaultVariant.id, CHANNEL_ID, customer?.customerGroupId);
-        isMember = pricing.isMember;
-        if (pricing.memberPrice) {
-          memberPrice = parseFloat(pricing.memberPrice);
-        }
+      customerGroupId = customer?.customerGroupId ?? null;
+      isMember = !!customerGroupId;
+    }
+    const defaultVariant = product.variants?.[0];
+    if (defaultVariant) {
+      const pricing = await getEffectivePrice(defaultVariant.id, CHANNEL_ID, customerGroupId);
+      if (pricing.memberPrice) {
+        memberPrice = parseFloat(pricing.memberPrice);
       }
     }
   }

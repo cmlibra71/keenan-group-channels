@@ -1,7 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { cartService, orderService, orderItemService, CHANNEL_ID } from "@/lib/store";
+import { cartService, orderService, orderItemService, CHANNEL_ID, getEffectivePrice, productVariantService } from "@/lib/store";
+import { getFeatureFlag, getActiveSubscription } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 
@@ -47,8 +48,32 @@ export async function placeOrder(
     country,
   };
 
+  // Re-validate subscription status — if member pricing is enabled but subscription
+  // has expired since items were added, recalculate at non-member prices
+  const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
+  if (memberPricingEnabled && session) {
+    const activeSub = await getActiveSubscription(session.customerId);
+    if (!activeSub) {
+      // Subscription expired — recalculate any member-priced items at standard price
+      for (const item of fullCart.items) {
+        if (item.salePrice && item.listPrice) {
+          const variantId = item.variantId;
+          const pricingVariantId = variantId || (await productVariantService.listForParent(item.productId, { page: 1, limit: 1, sort: "id", direction: "asc" }))?.data[0]?.id;
+          if (pricingVariantId) {
+            const pricing = await getEffectivePrice(pricingVariantId as number, CHANNEL_ID, null);
+            // Reset to non-member pricing
+            item.salePrice = pricing.salePrice || null;
+          }
+        }
+      }
+    }
+  }
+
   // Calculate totals
-  const subtotal = parseFloat(cartWithItems.cartAmount ?? "0");
+  const subtotal = fullCart.items.reduce((sum, item) => {
+    const unitPrice = item.salePrice ? parseFloat(item.salePrice) : parseFloat(item.listPrice);
+    return sum + unitPrice * item.quantity;
+  }, 0);
   const totalItems = fullCart.items.reduce((sum, i) => sum + i.quantity, 0);
 
   // Create order

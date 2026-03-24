@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { cartService, cartItemService, productService, productVariantService, customerService, getEffectivePrice, CHANNEL_ID } from "@/lib/store";
-import { getFeatureFlag } from "@/lib/store";
+import { getFeatureFlag, getActiveSubscription } from "@/lib/store";
 import { getCartUuid, setCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 
@@ -37,20 +37,23 @@ export async function addToCart(productId: number, variantId?: number | null) {
     if (variant?.salePrice) salePrice = variant.salePrice;
   }
 
-  // Apply member pricing if enabled and user is a member
+  // Apply member pricing if enabled and user has an active subscription
   const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
   if (memberPricingEnabled) {
     const session = await getSession();
     if (session) {
-      const customer = await customerService.getById(session.customerId) as { customerGroupId: number | null } | null;
-      if (customer?.customerGroupId) {
-        // Use the variant ID or find the default variant for pricing lookup
-        const variantResult = variantId ? null : await productVariantService.listForParent(productId, { page: 1, limit: 1, sort: "id", direction: "asc" });
-        const pricingVariantId = variantId || (variantResult?.data[0] as { id: number } | undefined)?.id;
-        if (pricingVariantId) {
-          const pricing = await getEffectivePrice(pricingVariantId, CHANNEL_ID, customer.customerGroupId);
-          if (pricing.memberPrice) {
-            salePrice = pricing.memberPrice;
+      const activeSub = await getActiveSubscription(session.customerId);
+      if (activeSub) {
+        const customer = await customerService.getById(session.customerId) as { customerGroupId: number | null } | null;
+        if (customer?.customerGroupId) {
+          // Use the variant ID or find the default variant for pricing lookup
+          const variantResult = variantId ? null : await productVariantService.listForParent(productId, { page: 1, limit: 1, sort: "id", direction: "asc" });
+          const pricingVariantId = variantId || (variantResult?.data[0] as { id: number } | undefined)?.id;
+          if (pricingVariantId) {
+            const pricing = await getEffectivePrice(pricingVariantId, CHANNEL_ID, customer.customerGroupId);
+            if (pricing.memberPrice) {
+              salePrice = pricing.memberPrice;
+            }
           }
         }
       }

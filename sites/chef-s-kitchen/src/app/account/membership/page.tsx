@@ -7,8 +7,11 @@ import {
   getActiveSubscription,
   getFeatureFlag,
   subscriptionService,
+  drawEntryService,
+  CHANNEL_ID,
 } from "@/lib/store";
-import { cancelSubscription } from "@/lib/actions/subscription";
+import { CancelConfirmationModal } from "@/components/membership/CancelConfirmationModal";
+import { ManageBillingButton } from "@/components/membership/ManageBillingButton";
 
 export const metadata = {
   title: "Membership",
@@ -29,6 +32,12 @@ export default async function MembershipPage() {
   // If user has active subscription, show status
   if (activeSub) {
     const subDetails = await subscriptionService.getById(activeSub.id, ["events"]);
+    const drawsEnabled = await getFeatureFlag("draws_enabled");
+    let totalEntries = 0;
+    if (drawsEnabled) {
+      const entries = await drawEntryService.getEntriesForCustomer(session.customerId, CHANNEL_ID);
+      totalEntries = entries?.length ?? 0;
+    }
 
     return (
       <div className="mx-auto max-w-2xl px-6 lg:px-8 section-padding">
@@ -53,19 +62,16 @@ export default async function MembershipPage() {
           </p>
         </div>
 
-        {!activeSub.cancelAtPeriodEnd && (
-          <form action={async () => {
-            "use server";
-            await cancelSubscription();
-          }}>
-            <button
-              type="submit"
-              className="text-sm text-red-600 hover:text-red-800 underline"
-            >
-              Cancel membership
-            </button>
-          </form>
-        )}
+        <div className="flex items-center gap-4 mt-4">
+          <ManageBillingButton />
+          {!activeSub.cancelAtPeriodEnd && (
+            <CancelConfirmationModal
+              currentPeriodEnd={activeSub.currentPeriodEnd ? String(activeSub.currentPeriodEnd) : null}
+              totalEntries={totalEntries}
+              consecutiveMonths={activeSub.consecutiveMonths ?? 0}
+            />
+          )}
+        </div>
       </div>
     );
   }

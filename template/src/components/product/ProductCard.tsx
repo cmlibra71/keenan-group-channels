@@ -57,7 +57,7 @@ export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName,
         </div>
         {memberPricingAvailable && displayPrice > 0 && (
           <span className="mt-1 inline-block bg-green-50 text-green-700 px-2 py-0.5 rounded text-xs font-medium">
-            Member pricing available
+            Members save up to 25%
           </span>
         )}
       </div>

@@ -5,10 +5,12 @@ export function CartSummary({
   subtotal,
   discount,
   total,
+  isMember,
 }: {
   subtotal: number;
   discount: number;
   total: number;
+  isMember?: boolean;
 }) {
   return (
     <div className="border border-zinc-200 rounded-lg p-6">
@@ -21,9 +23,14 @@ export function CartSummary({
         </div>
         {discount > 0 && (
           <div className="flex justify-between text-sm">
-            <span className="text-zinc-500">Discount</span>
+            <span className="text-zinc-500">{isMember ? "Member Discount" : "Discount"}</span>
             <span className="font-medium text-green-600">-<Price amount={discount} /></span>
           </div>
+        )}
+        {isMember && discount > 0 && (
+          <p className="text-xs text-green-600 mt-1">
+            You saved ${discount.toFixed(2)} with your membership!
+          </p>
         )}
         <div className="flex justify-between text-sm">
           <span className="text-zinc-500">Shipping</span>

@@ -20,18 +20,22 @@ export default async function CheckoutPage() {
   const session = await getSession();
   const subtotal = parseFloat(cart.cartAmount ?? "0");
 
-  // Check if non-member should see banner
+  // Check membership status for checkout banners
   let showMemberBanner = false;
   let estimatedSavings = 0;
+  let isMember = false;
+  let memberSavings = 0;
 
   const subscriptionsEnabled = await getFeatureFlag("subscriptions_enabled");
   if (subscriptionsEnabled) {
-    let isMember = false;
     if (session) {
       const activeSub = await getActiveSubscription(session.customerId);
       isMember = !!activeSub;
     }
-    if (!isMember) {
+    if (isMember) {
+      // Calculate actual member savings from cart discount
+      memberSavings = parseFloat(cart.discountAmount ?? "0");
+    } else {
       const plans = await getSubscriptionPlans();
       if (plans.length > 0) {
         showMemberBanner = true;
@@ -44,6 +48,15 @@ export default async function CheckoutPage() {
     <div className="mx-auto max-w-5xl px-6 lg:px-8 section-padding">
       <p className="eyebrow mb-3">ORDER</p>
       <h1 className="text-3xl heading-serif text-text-primary mb-8">Checkout</h1>
+
+      {isMember && memberSavings > 0 && (
+        <div className="mb-6 flex items-center gap-2 bg-surface-primary border border-accent/30 px-4 py-3">
+          <Crown className="h-4 w-4 text-accent shrink-0" />
+          <span className="text-sm text-text-body">
+            You&apos;re saving ${memberSavings.toFixed(2)} with your membership on this order
+          </span>
+        </div>
+      )}
 
       {showMemberBanner && estimatedSavings > 0 && (
         <div className="mb-6 flex items-center justify-between bg-surface-primary border border-border px-4 py-3">

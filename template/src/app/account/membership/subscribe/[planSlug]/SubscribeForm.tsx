@@ -124,8 +124,8 @@ export function SubscribeForm({
         }
       }
 
-      // Success — redirect to membership page
-      router.push("/account/membership");
+      // Success — redirect to welcome page
+      router.push("/membership/welcome");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
