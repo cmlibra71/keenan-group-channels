@@ -18,12 +18,12 @@ export function BenefitCard({
 }) {
   const Icon = icons[icon];
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-6 hover:shadow-md transition-shadow">
-      <div className="inline-flex items-center justify-center h-10 w-10 rounded-lg bg-amber-50 text-amber-600 mb-4">
-        <Icon className="h-5 w-5" />
+    <div className="border border-stone bg-white p-6 hover:border-teal/30 transition-colors duration-300">
+      <div className="inline-flex items-center justify-center h-10 w-10 bg-offwhite text-teal mb-5">
+        <Icon className="h-5 w-5" strokeWidth={1.5} />
       </div>
-      <h3 className="font-semibold text-zinc-900 mb-2">{title}</h3>
-      <p className="text-sm text-zinc-600 leading-relaxed">{description}</p>
+      <h3 className="font-medium text-navy mb-2">{title}</h3>
+      <p className="text-sm text-ink-light leading-relaxed">{description}</p>
     </div>
   );
 }

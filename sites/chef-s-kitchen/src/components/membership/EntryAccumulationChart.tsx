@@ -32,35 +32,35 @@ export function EntryAccumulationChart({ currentMonth }: { currentMonth?: number
   const maxTotal = milestones[milestones.length - 1].total;
 
   return (
-    <div ref={ref} className="space-y-4">
+    <div ref={ref} className="space-y-5">
       {milestones.map((m) => {
         const pct = (m.total / maxTotal) * 100;
         const isCurrentPosition = currentMonth != null && currentMonth >= m.month && (m === milestones[milestones.length - 1] || currentMonth < milestones[milestones.indexOf(m) + 1].month);
 
         return (
-          <div key={m.month} className="space-y-1.5">
+          <div key={m.month} className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-zinc-600 font-medium">
+              <span className="text-ink font-medium">
                 Month {m.month}
                 {isCurrentPosition && (
-                  <span className="ml-2 text-xs text-amber-600 font-semibold">You are here</span>
+                  <span className="ml-2 text-xs text-teal font-medium">You are here</span>
                 )}
               </span>
-              <span className="text-zinc-900 font-bold">{m.total} entries</span>
+              <span className="text-navy font-semibold">{m.total} entries</span>
             </div>
-            <div className="h-3 bg-zinc-100 rounded-full overflow-hidden">
+            <div className="h-2.5 bg-stone overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full transition-all duration-1000 ease-out"
+                className="h-full bg-gradient-to-r from-teal to-teal-light transition-all duration-1000 ease-out"
                 style={{ width: visible ? `${pct}%` : "0%" }}
               />
             </div>
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-ink-faint">
               +{m.entries} new {m.entries === 1 ? "entry" : "entries"} this month
             </p>
           </div>
         );
       })}
-      <p className="mt-4 text-sm text-red-600 font-medium bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+      <p className="mt-5 text-sm text-ink font-medium border border-stone bg-white px-5 py-3.5">
         Cancel and you lose all entries. Stay and they keep growing.
       </p>
     </div>

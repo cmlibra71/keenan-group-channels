@@ -19,9 +19,9 @@ export function SavingsCalculator({
   const netSavings = annualSavings - annualFee;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <label className="block text-sm font-medium text-zinc-700 mb-3">
+        <label className="block text-sm font-medium text-ink mb-4">
           What do you spend per month on kitchen equipment?
         </label>
         <div className="flex flex-wrap gap-2">
@@ -29,10 +29,10 @@ export function SavingsCalculator({
             <button
               key={amount}
               onClick={() => setSpend(amount)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-5 py-2.5 text-sm font-medium transition-colors duration-300 ${
                 spend === amount
-                  ? "bg-zinc-900 text-white"
-                  : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                  ? "bg-navy text-white"
+                  : "bg-white border border-stone text-ink hover:border-navy/30"
               }`}
             >
               ${amount.toLocaleString()}
@@ -42,27 +42,27 @@ export function SavingsCalculator({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="rounded-lg border border-zinc-200 p-4 text-center">
-          <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Retail cost</p>
-          <p className="text-xl font-bold text-zinc-900">
-            ${(spend * 12).toLocaleString()}<span className="text-sm font-normal text-zinc-500">/yr</span>
+        <div className="border border-stone p-5 text-center">
+          <p className="heading-sans text-ink-faint tracking-widest mb-2">Retail cost</p>
+          <p className="text-xl font-medium text-navy">
+            ${(spend * 12).toLocaleString()}<span className="text-sm font-normal text-ink-light">/yr</span>
           </p>
         </div>
-        <div className="rounded-lg border border-zinc-200 p-4 text-center">
-          <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Member cost</p>
-          <p className="text-xl font-bold text-green-700">
-            ${((spend * 12) - annualSavings + annualFee).toLocaleString()}<span className="text-sm font-normal text-zinc-500">/yr</span>
+        <div className="border border-stone p-5 text-center">
+          <p className="heading-sans text-ink-faint tracking-widest mb-2">Member cost</p>
+          <p className="text-xl font-medium text-teal-dark">
+            ${((spend * 12) - annualSavings + annualFee).toLocaleString()}<span className="text-sm font-normal text-ink-light">/yr</span>
           </p>
         </div>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-center">
-          <p className="text-xs text-amber-700 uppercase tracking-wider mb-1">You save</p>
-          <p className="text-xl font-bold text-amber-700">
-            {netSavings > 0 ? `$${netSavings.toLocaleString()}` : "$0"}<span className="text-sm font-normal text-amber-600">/yr</span>
+        <div className="border border-teal/30 bg-offwhite p-5 text-center">
+          <p className="heading-sans text-teal tracking-widest mb-2">You save</p>
+          <p className="text-xl font-medium text-teal">
+            {netSavings > 0 ? `$${netSavings.toLocaleString()}` : "$0"}<span className="text-sm font-normal text-teal-dark">/yr</span>
           </p>
         </div>
       </div>
 
-      <p className="text-xs text-zinc-500 text-center">
+      <p className="text-xs text-ink-faint text-center">
         Based on {discountPercent}% average member discount. Membership fee: ${monthlyPlanPrice.toFixed(2)}/month (${annualFee.toFixed(2)}/year).
       </p>
     </div>

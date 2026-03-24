@@ -25,21 +25,21 @@ export function PrizeShowcase({
   const value = prize.value ? parseFloat(prize.value) : null;
 
   return (
-    <section className="bg-zinc-900 text-white">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
-        <div className="text-center mb-10">
-          <p className="text-amber-400 font-semibold text-sm uppercase tracking-wider mb-2">
+    <section className="relative bg-navy overflow-hidden grain">
+      <div className="relative mx-auto max-w-7xl px-6 lg:px-8 py-20 sm:py-24">
+        <div className="text-center mb-12">
+          <p className="heading-sans text-teal tracking-widest mb-3">
             Members-Only Prize Draw
           </p>
-          <h2 className="text-3xl sm:text-4xl font-bold">
+          <h2 className="heading-serif text-3xl sm:text-4xl text-white">
             Win Big Just by Being a Member
           </h2>
         </div>
 
         <div className="max-w-2xl mx-auto">
-          <div className="rounded-2xl border border-zinc-700 bg-zinc-800/50 overflow-hidden">
+          <div className="border border-slate-700/50 bg-navy-light/50 overflow-hidden">
             {prize.imageUrl ? (
-              <div className="relative aspect-video bg-zinc-800">
+              <div className="relative aspect-video bg-navy-light">
                 <Image
                   src={prize.imageUrl}
                   alt={prize.name}
@@ -49,22 +49,22 @@ export function PrizeShowcase({
                 />
               </div>
             ) : (
-              <div className="flex items-center justify-center py-16 bg-zinc-800">
-                <Trophy className="h-20 w-20 text-amber-400/30" />
+              <div className="flex items-center justify-center py-16 bg-navy-light">
+                <Trophy className="h-20 w-20 text-teal/20" />
               </div>
             )}
-            <div className="p-6 text-center">
-              <h3 className="text-xl font-bold text-white mb-1">{prize.name}</h3>
+            <div className="p-8 text-center">
+              <h3 className="heading-serif text-xl text-white mb-2">{prize.name}</h3>
               {prize.description && (
-                <p className="text-sm text-zinc-400 mb-3">{prize.description}</p>
+                <p className="text-sm text-slate-400 mb-3">{prize.description}</p>
               )}
               {value != null && value > 0 && (
-                <p className="text-2xl font-bold text-amber-400">
+                <p className="heading-serif text-2xl text-teal-light">
                   Valued at ${value.toLocaleString("en-AU", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                 </p>
               )}
               {draw?.scheduledAt && (
-                <p className="text-sm text-zinc-400 mt-2">
+                <p className="text-sm text-slate-500 mt-3 tracking-wide">
                   Draw date: {new Date(draw.scheduledAt).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })}
                 </p>
               )}
