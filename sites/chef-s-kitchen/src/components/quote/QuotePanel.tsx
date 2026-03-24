@@ -86,7 +86,7 @@ export function QuotePanel() {
   if (isPending && !needsLogin && !isSubmitting) {
     return (
       <div className="flex items-center justify-center py-16">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900" />
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-stone border-t-navy" />
       </div>
     );
   }
@@ -94,22 +94,22 @@ export function QuotePanel() {
   if (submitted) {
     return (
       <div className="flex flex-col items-center justify-center py-16 px-6">
-        <CheckCircle className="h-16 w-16 text-green-500" />
-        <p className="mt-4 text-lg font-semibold text-zinc-900">Quote Submitted</p>
-        <p className="mt-2 text-sm text-zinc-500 text-center">
+        <CheckCircle className="h-16 w-16 text-teal" strokeWidth={1.5} />
+        <p className="mt-4 text-lg font-semibold text-navy">Quote Submitted</p>
+        <p className="mt-2 text-sm text-ink-light text-center">
           Our sales team will review your quote and get back to you shortly. You can track your quotes in My Account.
         </p>
         <div className="mt-6 flex gap-3">
           <button
             onClick={close}
-            className="inline-block bg-zinc-900 text-white px-6 py-3 rounded-lg font-semibold hover:bg-zinc-800 transition-colors text-sm"
+            className="inline-block bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300"
           >
             Continue Shopping
           </button>
           <Link
             href="/account/quotes"
             onClick={close}
-            className="inline-block border border-zinc-300 text-zinc-700 px-6 py-3 rounded-lg font-semibold hover:bg-zinc-50 transition-colors text-sm"
+            className="inline-block border border-stone text-ink hover:border-navy/30 transition-colors duration-300 px-7 py-3.5 font-medium text-sm tracking-wide"
           >
             View My Quotes
           </Link>
@@ -121,11 +121,11 @@ export function QuotePanel() {
   if (items.length === 0 && !needsLogin) {
     return (
       <div className="flex flex-col items-center justify-center py-16 px-6">
-        <FileText className="h-16 w-16 text-zinc-300" />
-        <p className="mt-4 text-zinc-500">Your quote is empty.</p>
+        <FileText className="h-16 w-16 text-ink-faint" strokeWidth={1.5} />
+        <p className="mt-4 text-ink-light">Your quote is empty.</p>
         <button
           onClick={close}
-          className="mt-6 inline-block bg-zinc-900 text-white px-6 py-3 rounded-lg font-semibold hover:bg-zinc-800 transition-colors text-sm"
+          className="mt-6 inline-block bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300"
         >
           Continue Shopping
         </button>
@@ -157,7 +157,7 @@ export function QuotePanel() {
 
         {/* Customer notes */}
         <div className="mt-6">
-          <label htmlFor="quote-notes" className="block text-sm font-medium text-zinc-700">
+          <label htmlFor="quote-notes" className="block text-sm font-medium text-ink">
             Notes for sales team (optional)
           </label>
           <textarea
@@ -165,29 +165,29 @@ export function QuotePanel() {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
-            className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+            className="mt-1 w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
             placeholder="Any special requirements or questions..."
           />
         </div>
       </div>
 
       {/* Footer */}
-      <div className="border-t border-zinc-200 px-6 py-4 space-y-3">
+      <div className="border-t border-stone px-6 py-4 space-y-3">
         <div className="flex items-center justify-between text-sm">
-          <span className="font-medium text-zinc-600">Estimated Total</span>
-          <Price amount={subtotal} className="font-semibold text-zinc-900" />
+          <span className="font-medium text-ink-light">Estimated Total</span>
+          <Price amount={subtotal} className="font-semibold text-navy" />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <button
             onClick={close}
-            className="text-center border border-zinc-300 text-zinc-700 py-2.5 px-4 rounded-lg font-semibold hover:bg-zinc-50 transition-colors text-sm"
+            className="text-center border border-stone text-ink hover:border-navy/30 transition-colors duration-300 py-2.5 px-4 font-semibold text-sm"
           >
             Continue Shopping
           </button>
           <button
             onClick={doSubmit}
             disabled={isSubmitting}
-            className="text-center bg-zinc-900 text-white py-2.5 px-4 rounded-lg font-semibold hover:bg-zinc-800 transition-colors text-sm disabled:bg-zinc-300 disabled:cursor-not-allowed"
+            className="text-center bg-teal text-white px-7 py-2.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300 disabled:bg-stone-warm disabled:text-ink-faint disabled:cursor-not-allowed"
           >
             {isSubmitting ? "Submitting..." : "Submit Quote"}
           </button>
@@ -217,30 +217,30 @@ function QuotePanelLogin({
   return (
     <div className="px-6 py-8">
       <div className="text-center mb-6">
-        <User className="h-12 w-12 text-zinc-300 mx-auto" />
-        <p className="mt-2 text-zinc-500">Sign in to submit your quote</p>
+        <User className="h-12 w-12 text-ink-faint mx-auto" strokeWidth={1.5} />
+        <p className="mt-2 text-ink-light">Sign in to submit your quote</p>
       </div>
 
       <GoogleSignInButton onSuccess={(session) => onSuccess(session)} />
 
       <div className="relative my-6">
         <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-zinc-200" />
+          <div className="w-full border-t border-stone" />
         </div>
         <div className="relative flex justify-center text-sm">
-          <span className="bg-white px-4 text-zinc-400">or</span>
+          <span className="bg-white px-4 text-ink-faint">or</span>
         </div>
       </div>
 
       {state?.error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg">
+        <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm">
           {state.error}
         </div>
       )}
 
       <form action={formAction} className="space-y-4">
         <div>
-          <label htmlFor="quote-login-email" className="block text-sm font-medium text-zinc-700">
+          <label htmlFor="quote-login-email" className="block text-sm font-medium text-ink">
             Email
           </label>
           <input
@@ -248,12 +248,12 @@ function QuotePanelLogin({
             id="quote-login-email"
             name="email"
             required
-            className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+            className="mt-1 block w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none"
             placeholder="your@email.com"
           />
         </div>
         <div>
-          <label htmlFor="quote-login-password" className="block text-sm font-medium text-zinc-700">
+          <label htmlFor="quote-login-password" className="block text-sm font-medium text-ink">
             Password
           </label>
           <input
@@ -261,23 +261,23 @@ function QuotePanelLogin({
             id="quote-login-password"
             name="password"
             required
-            className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+            className="mt-1 block w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none"
           />
         </div>
         <button
           type="submit"
           disabled={isPending}
-          className="w-full bg-zinc-900 text-white py-2 px-4 rounded-lg font-semibold hover:bg-zinc-800 transition-colors disabled:bg-zinc-300 text-sm"
+          className="w-full bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300 disabled:bg-stone-warm disabled:text-ink-faint"
         >
           {isPending ? "Signing in..." : "Sign In"}
         </button>
       </form>
 
-      <p className="mt-4 text-center text-sm text-zinc-500">
+      <p className="mt-4 text-center text-sm text-ink-light">
         Don&apos;t have an account?{" "}
         <button
           onClick={onSwitchToRegister}
-          className="text-zinc-900 font-medium hover:underline"
+          className="text-navy font-medium hover:underline"
         >
           Create one
         </button>
@@ -306,23 +306,23 @@ function QuotePanelRegister({
   return (
     <div className="px-6 py-8">
       <div className="text-center mb-6">
-        <User className="h-12 w-12 text-zinc-300 mx-auto" />
-        <p className="mt-2 text-zinc-500">Create an account to submit your quote</p>
+        <User className="h-12 w-12 text-ink-faint mx-auto" strokeWidth={1.5} />
+        <p className="mt-2 text-ink-light">Create an account to submit your quote</p>
       </div>
 
       <GoogleSignInButton onSuccess={(session) => onSuccess(session)} />
 
       <div className="relative my-6">
         <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-zinc-200" />
+          <div className="w-full border-t border-stone" />
         </div>
         <div className="relative flex justify-center text-sm">
-          <span className="bg-white px-4 text-zinc-400">or</span>
+          <span className="bg-white px-4 text-ink-faint">or</span>
         </div>
       </div>
 
       {state?.error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg">
+        <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm">
           {state.error}
         </div>
       )}
@@ -330,7 +330,7 @@ function QuotePanelRegister({
       <form action={formAction} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label htmlFor="quote-reg-firstName" className="block text-sm font-medium text-zinc-700">
+            <label htmlFor="quote-reg-firstName" className="block text-sm font-medium text-ink">
               First Name
             </label>
             <input
@@ -338,11 +338,11 @@ function QuotePanelRegister({
               id="quote-reg-firstName"
               name="firstName"
               required
-              className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+              className="mt-1 block w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none"
             />
           </div>
           <div>
-            <label htmlFor="quote-reg-lastName" className="block text-sm font-medium text-zinc-700">
+            <label htmlFor="quote-reg-lastName" className="block text-sm font-medium text-ink">
               Last Name
             </label>
             <input
@@ -350,12 +350,12 @@ function QuotePanelRegister({
               id="quote-reg-lastName"
               name="lastName"
               required
-              className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+              className="mt-1 block w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none"
             />
           </div>
         </div>
         <div>
-          <label htmlFor="quote-reg-email" className="block text-sm font-medium text-zinc-700">
+          <label htmlFor="quote-reg-email" className="block text-sm font-medium text-ink">
             Email
           </label>
           <input
@@ -363,12 +363,12 @@ function QuotePanelRegister({
             id="quote-reg-email"
             name="email"
             required
-            className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+            className="mt-1 block w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none"
             placeholder="your@email.com"
           />
         </div>
         <div>
-          <label htmlFor="quote-reg-password" className="block text-sm font-medium text-zinc-700">
+          <label htmlFor="quote-reg-password" className="block text-sm font-medium text-ink">
             Password
           </label>
           <input
@@ -377,24 +377,24 @@ function QuotePanelRegister({
             name="password"
             required
             minLength={8}
-            className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+            className="mt-1 block w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none"
             placeholder="At least 8 characters"
           />
         </div>
         <button
           type="submit"
           disabled={isPending}
-          className="w-full bg-zinc-900 text-white py-2 px-4 rounded-lg font-semibold hover:bg-zinc-800 transition-colors disabled:bg-zinc-300 text-sm"
+          className="w-full bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300 disabled:bg-stone-warm disabled:text-ink-faint"
         >
           {isPending ? "Creating account..." : "Create Account"}
         </button>
       </form>
 
-      <p className="mt-4 text-center text-sm text-zinc-500">
+      <p className="mt-4 text-center text-sm text-ink-light">
         Already have an account?{" "}
         <button
           onClick={onSwitchToLogin}
-          className="text-zinc-900 font-medium hover:underline"
+          className="text-navy font-medium hover:underline"
         >
           Sign in
         </button>

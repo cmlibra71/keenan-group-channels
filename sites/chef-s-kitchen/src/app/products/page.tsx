@@ -51,8 +51,9 @@ export default async function ProductsPage({
   const pageTitle = filters.find((f) => f.key === activeFilter)?.label || "All Products";
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-3xl font-bold text-zinc-900 mb-6">{pageTitle}</h1>
+    <div className="mx-auto max-w-7xl px-6 lg:px-8 py-20 sm:py-24">
+      <p className="heading-sans text-teal tracking-widest mb-3">CATALOGUE</p>
+      <h1 className="text-3xl heading-serif text-navy mb-6">{pageTitle}</h1>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-8">
@@ -60,10 +61,10 @@ export default async function ProductsPage({
           <Link
             key={f.key}
             href={f.href}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors duration-300 ${
               activeFilter === f.key
-                ? "bg-zinc-900 text-white"
-                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+                ? "bg-navy text-white"
+                : "bg-stone-warm text-ink-light hover:bg-stone-200"
             }`}
           >
             {f.label}
@@ -72,7 +73,7 @@ export default async function ProductsPage({
       </div>
 
       {products.length === 0 ? (
-        <p className="text-zinc-500 text-center py-16">No products found.</p>
+        <p className="text-ink-light text-center py-20 sm:py-24">No products found.</p>
       ) : (
         <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} />
       )}
@@ -81,22 +82,22 @@ export default async function ProductsPage({
       {totalPages > 1 && (
         <div className="mt-12 flex items-center justify-center gap-2">
           {page > 1 && (
-            <a href={`/products?page=${page - 1}${filterParam}`} className="px-3 py-2 rounded-lg text-sm font-medium bg-zinc-100 text-zinc-600 hover:bg-zinc-200">
+            <a href={`/products?page=${page - 1}${filterParam}`} className="px-3 py-2 text-sm font-medium bg-stone-warm text-ink-light hover:bg-stone-200 transition-colors duration-300">
               Previous
             </a>
           )}
 
           {getPageNumbers(page, totalPages).map((p, i) =>
             p === "..." ? (
-              <span key={`ellipsis-${i}`} className="px-2 py-2 text-sm text-zinc-400">...</span>
+              <span key={`ellipsis-${i}`} className="px-2 py-2 text-sm text-ink-faint">...</span>
             ) : (
               <a
                 key={p}
                 href={`/products?page=${p}${filterParam}`}
-                className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                className={`px-4 py-2 text-sm font-medium transition-colors duration-300 ${
                   p === page
-                    ? "bg-zinc-900 text-white"
-                    : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+                    ? "bg-navy text-white"
+                    : "bg-stone-warm text-ink-light hover:bg-stone-200"
                 }`}
               >
                 {p}
@@ -105,7 +106,7 @@ export default async function ProductsPage({
           )}
 
           {page < totalPages && (
-            <a href={`/products?page=${page + 1}${filterParam}`} className="px-3 py-2 rounded-lg text-sm font-medium bg-zinc-100 text-zinc-600 hover:bg-zinc-200">
+            <a href={`/products?page=${page + 1}${filterParam}`} className="px-3 py-2 text-sm font-medium bg-stone-warm text-ink-light hover:bg-stone-200 transition-colors duration-300">
               Next
             </a>
           )}

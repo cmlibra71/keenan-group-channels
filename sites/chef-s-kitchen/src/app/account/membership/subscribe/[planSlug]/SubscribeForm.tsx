@@ -137,30 +137,30 @@ export function SubscribeForm({
   return (
     <form onSubmit={handleSubscribe}>
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 mb-4 text-sm">
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 mb-4 text-sm">
           {error}
         </div>
       )}
 
       <div className="mb-6">
-        <label className="block text-sm font-medium text-zinc-700 mb-2">
+        <label className="block text-sm font-medium text-ink mb-2">
           Card details
         </label>
         <div
           ref={cardContainerRef}
-          className="border border-zinc-300 rounded-lg px-4 py-3 bg-white focus-within:ring-2 focus-within:ring-zinc-900 focus-within:border-zinc-900 transition-shadow"
+          className="border border-stone px-4 py-3 bg-white focus-within:ring-2 focus-within:ring-navy focus-within:border-navy transition-shadow"
         />
       </div>
 
       <button
         type="submit"
         disabled={loading || !cardReady}
-        className="w-full bg-zinc-900 text-white py-3 px-4 rounded-lg hover:bg-zinc-800 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {loading ? "Processing..." : "Subscribe Now"}
       </button>
 
-      <p className="text-xs text-zinc-500 mt-4 text-center">
+      <p className="text-xs text-ink-light mt-4 text-center">
         By subscribing, you agree to our terms of service. You can cancel at any time.
       </p>
     </form>

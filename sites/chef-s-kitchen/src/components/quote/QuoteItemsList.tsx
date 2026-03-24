@@ -24,7 +24,7 @@ type QuoteItemRow = {
 
 export function QuoteItemsList({ items, onMutate }: { items: QuoteItemRow[]; onMutate?: () => void }) {
   return (
-    <div className="divide-y divide-zinc-200">
+    <div className="divide-y divide-stone">
       {items.map((item) => (
         <QuoteItemRow key={item.id} item={item} onMutate={onMutate} />
       ))}
@@ -59,17 +59,17 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
       <div className="flex-1 min-w-0">
         <a
           href={item.productSlug ? `/products/${item.productSlug}` : "#"}
-          className="text-sm font-medium text-zinc-900 hover:underline truncate block"
+          className="text-sm font-medium text-navy hover:underline truncate block"
         >
           {item.productName}
         </a>
         {item.variantOptionName && (
-          <p className="text-xs text-zinc-500 mt-0.5">{item.variantOptionName}</p>
+          <p className="text-xs text-ink-light mt-0.5">{item.variantOptionName}</p>
         )}
-        <p className="text-xs text-zinc-400 mt-0.5">
+        <p className="text-xs text-ink-faint mt-0.5">
           SKU: {item.variantSku || item.productSku || "N/A"}
         </p>
-        <p className="text-sm text-zinc-600 mt-1"><Price amount={unitPrice} /> each</p>
+        <p className="text-sm text-ink-light mt-1"><Price amount={unitPrice} /> each</p>
       </div>
 
       {/* Quantity controls */}
@@ -77,7 +77,7 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
         <button
           onClick={() => handleQuantity(item.quantity - 1)}
           disabled={isPending}
-          className="h-8 w-8 flex items-center justify-center rounded border border-zinc-300 text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
+          className="h-8 w-8 flex items-center justify-center border border-stone text-ink-light hover:bg-stone-warm disabled:opacity-50"
         >
           <Minus className="h-3 w-3" />
         </button>
@@ -85,7 +85,7 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
         <button
           onClick={() => handleQuantity(item.quantity + 1)}
           disabled={isPending}
-          className="h-8 w-8 flex items-center justify-center rounded border border-zinc-300 text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
+          className="h-8 w-8 flex items-center justify-center border border-stone text-ink-light hover:bg-stone-warm disabled:opacity-50"
         >
           <Plus className="h-3 w-3" />
         </button>
@@ -93,16 +93,16 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
 
       {/* Line total */}
       <div className="w-24 text-right">
-        <Price amount={lineTotal} className="text-sm font-semibold text-zinc-900" />
+        <Price amount={lineTotal} className="text-sm font-semibold text-navy" />
       </div>
 
       {/* Remove */}
       <button
         onClick={handleRemove}
         disabled={isPending}
-        className="text-zinc-400 hover:text-red-600 disabled:opacity-50"
+        className="text-ink-faint hover:text-red-600 disabled:opacity-50"
       >
-        <Trash2 className="h-4 w-4" />
+        <Trash2 className="h-4 w-4" strokeWidth={1.5} />
       </button>
     </div>
   );

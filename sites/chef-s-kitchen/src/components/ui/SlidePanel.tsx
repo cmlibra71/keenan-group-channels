@@ -69,14 +69,14 @@ export function SlidePanel({ isOpen, onClose, title, children }: SlidePanelProps
       >
         <div className="flex h-full flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4">
-            <h2 className="text-lg font-semibold text-zinc-900">{title}</h2>
+          <div className="flex items-center justify-between border-b border-stone px-6 py-4">
+            <h2 className="text-lg heading-serif text-navy">{title}</h2>
             <button
               onClick={onClose}
-              className="text-zinc-400 hover:text-zinc-600"
+              className="text-ink-faint hover:text-ink-light"
               aria-label="Close panel"
             >
-              <X className="h-5 w-5" />
+              <X className="h-5 w-5" strokeWidth={1.5} />
             </button>
           </div>
 

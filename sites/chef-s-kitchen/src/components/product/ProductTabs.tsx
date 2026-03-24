@@ -61,17 +61,17 @@ export function ProductTabs({
   const [activeTab, setActiveTab] = useState(tabs[0]?.key ?? "description");
 
   return (
-    <div className="mt-12 border-t border-zinc-200 pt-8">
+    <div className="mt-12 border-t border-stone pt-8">
       {/* Tab bar */}
-      <div className="flex gap-1 border-b border-zinc-200">
+      <div className="flex gap-1 border-b border-stone">
         {tabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-2.5 text-sm font-medium transition-colors ${
+            className={`px-4 py-2.5 text-sm font-medium transition-colors duration-300 ${
               activeTab === tab.key
-                ? "border-b-2 border-zinc-900 text-zinc-900"
-                : "text-zinc-500 hover:text-zinc-700"
+                ? "border-b-2 border-navy text-navy"
+                : "text-ink-light hover:text-navy"
             }`}
           >
             {tab.label}
@@ -85,7 +85,7 @@ export function ProductTabs({
           <RichContent
             html={description}
             stripStyles
-            className="prose prose-sm max-w-none text-zinc-600"
+            className="prose prose-sm max-w-none text-ink-light"
           />
         )}
 
@@ -98,10 +98,10 @@ export function ProductTabs({
             <RichContent
               html={warranty}
               stripStyles
-              className="prose prose-sm max-w-none text-zinc-600"
+              className="prose prose-sm max-w-none text-ink-light"
             />
           ) : (
-            <p className="text-sm text-zinc-500">No warranty information available.</p>
+            <p className="text-sm text-ink-light">No warranty information available.</p>
           )
         )}
 
@@ -114,25 +114,25 @@ export function ProductTabs({
                   href={file.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-3 rounded-lg border border-zinc-200 px-4 py-3 hover:bg-zinc-50 transition-colors"
+                  className="flex items-center gap-3 border border-stone px-4 py-3 hover:bg-stone-warm transition-colors duration-300"
                 >
-                  <FileText className="h-5 w-5 flex-shrink-0 text-red-500" />
+                  <FileText className="h-5 w-5 flex-shrink-0 text-red-500" strokeWidth={1.5} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-zinc-900 truncate">
+                    <p className="text-sm font-medium text-navy truncate">
                       {file.label || file.fileName}
                     </p>
                     {file.fileSize && (
-                      <p className="text-xs text-zinc-400">
+                      <p className="text-xs text-ink-faint">
                         {file.fileType?.toUpperCase()} &middot; {formatFileSize(file.fileSize)}
                       </p>
                     )}
                   </div>
-                  <Download className="h-4 w-4 flex-shrink-0 text-zinc-400" />
+                  <Download className="h-4 w-4 flex-shrink-0 text-ink-faint" strokeWidth={1.5} />
                 </a>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-zinc-500">No downloads available.</p>
+            <p className="text-sm text-ink-light">No downloads available.</p>
           )
         )}
 
@@ -141,10 +141,10 @@ export function ProductTabs({
             <RichContent
               html={customFields.leaseOptions}
               stripStyles
-              className="prose prose-sm max-w-none text-zinc-600"
+              className="prose prose-sm max-w-none text-ink-light"
             />
           ) : (
-            <p className="text-sm text-zinc-500">No lease options available.</p>
+            <p className="text-sm text-ink-light">No lease options available.</p>
           )
         )}
 
@@ -174,7 +174,7 @@ function CustomTabContent({
     <RichContent
       html={tab.content}
       stripStyles
-      className="prose prose-sm max-w-none text-zinc-600"
+      className="prose prose-sm max-w-none text-ink-light"
     />
   );
 }
@@ -188,7 +188,7 @@ function StarRating({ rating, size = 16 }: { rating: number; size?: number }) {
         <Star
           key={i}
           size={size}
-          className={i <= rating ? "fill-yellow-400 text-yellow-400" : "text-zinc-300"}
+          className={i <= rating ? "fill-yellow-400 text-yellow-400" : "text-ink-faint"}
         />
       ))}
     </div>
@@ -220,7 +220,7 @@ function StarPicker({
             className={
               i <= (hover || rating)
                 ? "fill-yellow-400 text-yellow-400"
-                : "text-zinc-300"
+                : "text-ink-faint"
             }
           />
         </button>
@@ -275,17 +275,17 @@ function ReviewsSection({
       {reviews.length > 0 ? (
         <div className="space-y-6">
           {reviews.map((review) => (
-            <div key={review.id} className="border-b border-zinc-100 pb-6 last:border-0">
+            <div key={review.id} className="border-b border-stone pb-6 last:border-0">
               <div className="flex items-center gap-3">
                 <StarRating rating={review.rating} />
                 {review.title && (
-                  <h4 className="font-medium text-zinc-900">{review.title}</h4>
+                  <h4 className="font-medium text-navy">{review.title}</h4>
                 )}
               </div>
               {review.text && (
-                <p className="mt-2 text-sm text-zinc-600">{review.text}</p>
+                <p className="mt-2 text-sm text-ink-light">{review.text}</p>
               )}
-              <p className="mt-2 text-xs text-zinc-400">
+              <p className="mt-2 text-xs text-ink-faint">
                 {review.author_name || "Anonymous"}
                 {review.created_at && (
                   <> &middot; {new Date(review.created_at).toLocaleDateString()}</>
@@ -295,31 +295,31 @@ function ReviewsSection({
           ))}
         </div>
       ) : (
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-ink-light">
           Be the first to review this product!
         </p>
       )}
 
       {/* Review form */}
       {submitted ? (
-        <div className="mt-8 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800">
+        <div className="mt-8 border border-teal/30 bg-teal/5 p-4 text-sm text-teal-dark">
           Thank you for your review! It will appear after approval.
         </div>
       ) : (
-        <div className="mt-8 border-t border-zinc-200 pt-6">
-          <h3 className="text-base font-semibold text-zinc-900 mb-4">
+        <div className="mt-8 border-t border-stone pt-6">
+          <h3 className="text-base font-semibold text-navy mb-4">
             Write a Review
           </h3>
           <form action={handleSubmit} className="space-y-4 max-w-lg">
             <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">
+              <label className="block text-sm font-medium text-ink mb-1">
                 Rating
               </label>
               <StarPicker rating={rating} onChange={setRating} />
             </div>
 
             <div>
-              <label htmlFor="authorName" className="block text-sm font-medium text-zinc-700 mb-1">
+              <label htmlFor="authorName" className="block text-sm font-medium text-ink mb-1">
                 Your Name
               </label>
               <input
@@ -327,24 +327,24 @@ function ReviewsSection({
                 name="authorName"
                 type="text"
                 required
-                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+                className="w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
               />
             </div>
 
             <div>
-              <label htmlFor="title" className="block text-sm font-medium text-zinc-700 mb-1">
+              <label htmlFor="title" className="block text-sm font-medium text-ink mb-1">
                 Title (optional)
               </label>
               <input
                 id="title"
                 name="title"
                 type="text"
-                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+                className="w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
               />
             </div>
 
             <div>
-              <label htmlFor="text" className="block text-sm font-medium text-zinc-700 mb-1">
+              <label htmlFor="text" className="block text-sm font-medium text-ink mb-1">
                 Review
               </label>
               <textarea
@@ -352,7 +352,7 @@ function ReviewsSection({
                 name="text"
                 rows={4}
                 required
-                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+                className="w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none focus:ring-1 focus:ring-navy"
               />
             </div>
 
@@ -363,7 +363,7 @@ function ReviewsSection({
             <button
               type="submit"
               disabled={isPending}
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+              className="bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300 disabled:opacity-50"
             >
               {isPending ? "Submitting..." : "Submit Review"}
             </button>

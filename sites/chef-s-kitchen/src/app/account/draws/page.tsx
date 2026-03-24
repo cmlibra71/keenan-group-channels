@@ -59,8 +59,9 @@ export default async function DrawsPage() {
   const featuredDraw = featuredPrize ? upcomingDraws[0] ?? null : null;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-3xl font-bold text-zinc-900 mb-8">My Draws</h1>
+    <div className="mx-auto max-w-3xl px-6 lg:px-8 py-20 sm:py-24">
+      <p className="heading-sans text-teal tracking-widest mb-3">PRIZES</p>
+      <h1 className="text-3xl heading-serif text-navy mb-8">My Draws</h1>
 
       {/* Entry Accumulation Hero */}
       <EntryHero totalEntries={totalTickets} consecutiveMonths={consecutiveMonths} />
@@ -68,7 +69,7 @@ export default async function DrawsPage() {
       {/* Featured Prize */}
       {featuredPrize && featuredDraw && (
         <div className="mb-8">
-          <h2 className="text-xl font-semibold text-zinc-900 mb-4">Featured Prize</h2>
+          <h2 className="text-xl heading-serif text-navy mb-4">Featured Prize</h2>
           <PrizeCard
             prize={featuredPrize}
             drawName={featuredDraw.name}
@@ -81,7 +82,8 @@ export default async function DrawsPage() {
       )}
 
       {/* Upcoming Draws */}
-      <h2 className="text-xl font-semibold text-zinc-900 mb-4">Upcoming Draws</h2>
+      <p className="heading-sans text-teal tracking-widest mb-3">UPCOMING</p>
+      <h2 className="text-xl heading-serif text-navy mb-4">Upcoming Draws</h2>
       {upcomingDraws.length > 0 ? (
         <div className="grid gap-4 sm:grid-cols-2 mb-8">
           {upcomingDraws.map((draw) => {
@@ -92,16 +94,17 @@ export default async function DrawsPage() {
             return (
               <div
                 key={draw.id}
-                className="rounded-xl border border-zinc-200 p-5 hover:shadow-md transition-shadow"
+                className="border border-stone p-5 hover:shadow-md transition-shadow duration-300"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <h3 className="font-semibold text-zinc-900">{draw.name}</h3>
+                    <h3 className="font-semibold text-navy">{draw.name}</h3>
                     {draw.description && (
-                      <p className="text-sm text-zinc-600 mt-0.5">{draw.description}</p>
+                      <p className="text-sm text-ink-light mt-0.5">{draw.description}</p>
                     )}
                   </div>
-                  <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 shrink-0">
+                  <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full text-teal bg-teal/10 shrink-0">
+                    <span className="h-1.5 w-1.5 rounded-full bg-teal" />
                     {draw.status}
                   </span>
                 </div>
@@ -112,12 +115,12 @@ export default async function DrawsPage() {
                   </div>
                 )}
 
-                <div className="flex items-center justify-between pt-3 border-t border-zinc-100">
-                  <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 text-xs font-medium px-2 py-1 rounded-full">
+                <div className="flex items-center justify-between pt-3 border-t border-stone">
+                  <span className="inline-flex items-center gap-1 bg-offwhite text-teal text-xs font-medium px-2 py-1 rounded-full">
                     Your entries: {myEntryCount}
                   </span>
                   {draw.entryDeadline && (
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-xs text-ink-light">
                       Entries close: {new Date(draw.entryDeadline).toLocaleDateString()}
                     </p>
                   )}
@@ -127,7 +130,7 @@ export default async function DrawsPage() {
           })}
         </div>
       ) : (
-        <p className="text-zinc-500 text-center py-8 border border-zinc-200 rounded-lg mb-8">
+        <p className="text-ink-light text-center py-8 border border-stone mb-8">
           No upcoming draws at this time.
         </p>
       )}
@@ -135,22 +138,22 @@ export default async function DrawsPage() {
       {/* Past Entries */}
       {entries.some((e) => e.entry.status !== "active") && (
         <>
-          <h2 className="text-xl font-semibold text-zinc-900 mb-4">Past Entries</h2>
+          <h2 className="text-xl heading-serif text-navy mb-4">Past Entries</h2>
           <div className="space-y-3">
             {entries
               .filter((e) => e.entry.status !== "active")
               .map((e) => (
                 <div
                   key={e.entry.id}
-                  className="flex items-center justify-between border border-zinc-200 rounded-lg p-4 opacity-60"
+                  className="flex items-center justify-between border border-stone p-4 opacity-60"
                 >
                   <div>
-                    <p className="font-medium text-zinc-900">{e.drawName}</p>
-                    <p className="text-xs text-zinc-500">
+                    <p className="font-medium text-navy">{e.drawName}</p>
+                    <p className="text-xs text-ink-light">
                       {e.entry.entryCount} {(e.entry.entryCount ?? 1) === 1 ? "entry" : "entries"} &middot; {e.entry.status}
                     </p>
                   </div>
-                  <Trophy className="h-4 w-4 text-zinc-400" />
+                  <Trophy className="h-4 w-4 text-ink-faint" />
                 </div>
               ))}
           </div>

@@ -30,7 +30,7 @@ export function CartPanel() {
   if (isPending) {
     return (
       <div className="flex items-center justify-center py-16">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900" />
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-stone border-t-navy" />
       </div>
     );
   }
@@ -38,11 +38,11 @@ export function CartPanel() {
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 px-6">
-        <ShoppingCart className="h-16 w-16 text-zinc-300" />
-        <p className="mt-4 text-zinc-500">Your cart is empty.</p>
+        <ShoppingCart className="h-16 w-16 text-ink-faint" strokeWidth={1.5} />
+        <p className="mt-4 text-ink-light">Your cart is empty.</p>
         <button
           onClick={close}
-          className="mt-6 inline-block bg-zinc-900 text-white px-6 py-3 rounded-lg font-semibold hover:bg-zinc-800 transition-colors text-sm"
+          className="mt-6 inline-block bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300"
         >
           Continue Shopping
         </button>
@@ -57,21 +57,21 @@ export function CartPanel() {
       </div>
 
       {/* Footer */}
-      <div className="border-t border-zinc-200 px-6 py-4 space-y-3">
+      <div className="border-t border-stone px-6 py-4 space-y-3">
         <div className="flex items-center justify-between text-sm">
-          <span className="font-medium text-zinc-600">Subtotal</span>
-          <Price amount={subtotal} className="font-semibold text-zinc-900" />
+          <span className="font-medium text-ink-light">Subtotal</span>
+          <Price amount={subtotal} className="font-semibold text-navy" />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Link
             href="/cart"
-            className="text-center border border-zinc-300 text-zinc-700 py-2.5 px-4 rounded-lg font-semibold hover:bg-zinc-50 transition-colors text-sm"
+            className="text-center border border-stone text-ink hover:border-navy/30 transition-colors duration-300 py-2.5 px-4 font-semibold text-sm"
           >
             View Cart
           </Link>
           <Link
             href="/checkout"
-            className="text-center bg-zinc-900 text-white py-2.5 px-4 rounded-lg font-semibold hover:bg-zinc-800 transition-colors text-sm"
+            className="text-center bg-teal text-white px-7 py-2.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300"
           >
             Checkout
           </Link>

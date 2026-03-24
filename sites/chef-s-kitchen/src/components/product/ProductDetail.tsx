@@ -191,39 +191,39 @@ export function ProductDetail({
       {/* Price */}
       <div className="mt-4 flex items-center gap-3">
         {displayPrice === 0 ? (
-          <span className="text-2xl font-bold text-zinc-900">Call for Price</span>
+          <span className="text-2xl font-bold text-navy">Call for Price</span>
         ) : displaySalePrice ? (
           <>
             <Price amount={displaySalePrice} className="text-3xl font-bold text-red-600" />
-            <span className="text-xl text-zinc-400 line-through">
+            <span className="text-xl text-ink-faint line-through">
               <Price amount={displayPrice} />
             </span>
           </>
         ) : (
-          <Price amount={displayPrice} className="text-3xl font-bold text-zinc-900" />
+          <Price amount={displayPrice} className="text-3xl font-bold text-navy" />
         )}
       </div>
 
       {/* Member Pricing */}
       {memberPrice != null && displayPrice > 0 && memberPrice !== (displaySalePrice ?? displayPrice) && (
         isMember ? (
-          <div className="mt-2 inline-flex items-center gap-1.5 bg-green-50 border border-green-200 text-green-800 text-sm font-medium px-3 py-1.5 rounded-full">
+          <div className="mt-2 inline-flex items-center gap-1.5 bg-teal/10 border border-teal/30 text-teal-dark text-sm font-medium px-3 py-1.5 rounded-full">
             <span>Member Price:</span>
             <Price amount={memberPrice} className="font-bold" />
           </div>
         ) : (
           <Link
             href="/membership"
-            className="mt-3 block rounded-lg border border-emerald-200 bg-emerald-50 p-3 hover:bg-emerald-100 transition-colors"
+            className="mt-3 block border border-teal/30 bg-teal/5 p-3 hover:bg-teal/10 transition-colors"
           >
-            <div className="flex items-center gap-2 text-emerald-800">
+            <div className="flex items-center gap-2 text-teal-dark">
               <span className="text-sm font-semibold">Member Price: <Price amount={memberPrice} className="font-bold" /></span>
-              <span className="text-xs text-emerald-600">(Save <Price amount={(displaySalePrice ?? displayPrice) - memberPrice} />)</span>
+              <span className="text-xs text-teal">(Save <Price amount={(displaySalePrice ?? displayPrice) - memberPrice} />)</span>
             </div>
-            <p className="text-xs text-emerald-600 mt-1">
+            <p className="text-xs text-teal mt-1">
               Plus: Prize draw entries, free delivery $500+, partner discounts
             </p>
-            <span className="text-xs font-semibold text-emerald-700 mt-1 inline-block">Join now &rarr;</span>
+            <span className="text-xs font-semibold text-teal-dark mt-1 inline-block">Join now &rarr;</span>
           </Link>
         )
       )}
@@ -231,23 +231,23 @@ export function ProductDetail({
       {/* Bulk Pricing Tiers */}
       {bulkPricing.length > 0 && displayPrice > 0 && (
         <div className="mt-4">
-          <h3 className="text-sm font-semibold text-zinc-700 mb-2">Bulk Pricing</h3>
-          <div className="rounded-lg border border-zinc-200 overflow-hidden">
+          <h3 className="text-sm font-semibold text-ink mb-2">Bulk Pricing</h3>
+          <div className="border border-stone overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-zinc-50 text-zinc-600">
+                <tr className="bg-offwhite text-ink-light">
                   <th className="px-3 py-2 text-left font-medium">Quantity</th>
                   <th className="px-3 py-2 text-right font-medium">Price Per Unit</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100">
+              <tbody className="divide-y divide-stone">
                 {bulkPricing.map((rule) => {
                   const amount = parseFloat(rule.amount);
                   const tierPrice = rule.type === "percent"
                     ? displayPrice * (1 - amount / 100)
                     : amount;
                   return (
-                    <tr key={rule.id} className="text-zinc-700">
+                    <tr key={rule.id} className="text-ink">
                       <td className="px-3 py-2">
                         {rule.quantityMax
                           ? `${rule.quantityMin} – ${rule.quantityMax}`
@@ -267,8 +267,8 @@ export function ProductDetail({
 
       {/* Grouped Option Selectors */}
       {useGroupedMode && (
-        <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-5">
-          <h3 className="text-sm font-semibold text-zinc-900 mb-4">Configure</h3>
+        <div className="mt-6 border border-stone bg-offwhite p-5">
+          <h3 className="text-sm font-semibold text-navy mb-4">Configure</h3>
           <div className="space-y-5">
             {options.map((option) => (
               <OptionSelector

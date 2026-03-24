@@ -25,10 +25,10 @@ interface QuoteWithItems extends QuoteRecord {
 const statusStyles: Record<string, string> = {
   submitted: "bg-yellow-100 text-yellow-700",
   reviewed: "bg-blue-100 text-blue-700",
-  accepted: "bg-green-100 text-green-700",
+  accepted: "text-teal bg-teal/10",
   rejected: "bg-red-100 text-red-700",
-  converted: "bg-green-100 text-green-700",
-  expired: "bg-zinc-100 text-zinc-600",
+  converted: "text-teal bg-teal/10",
+  expired: "bg-stone-warm text-ink-light",
 };
 
 export const metadata = {
@@ -46,14 +46,15 @@ export default async function QuotesPage() {
 
   if (customerQuotes.length === 0) {
     return (
-      <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-3xl font-bold text-zinc-900 mb-8">My Quotes</h1>
-        <div className="text-center py-16">
-          <FileText className="h-16 w-16 text-zinc-300 mx-auto" />
-          <p className="mt-4 text-zinc-500">No quotes yet.</p>
+      <div className="mx-auto max-w-3xl px-6 lg:px-8 py-20 sm:py-24">
+        <p className="heading-sans text-teal tracking-widest mb-3">QUOTES</p>
+        <h1 className="text-3xl heading-serif text-navy mb-8">My Quotes</h1>
+        <div className="text-center py-20 sm:py-24">
+          <FileText className="h-16 w-16 text-ink-faint mx-auto" />
+          <p className="mt-4 text-ink-light">No quotes yet.</p>
           <Link
             href="/products"
-            className="mt-6 inline-block bg-zinc-900 text-white px-6 py-3 rounded-lg font-semibold hover:bg-zinc-800 transition-colors"
+            className="mt-6 inline-block bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300"
           >
             Start Shopping
           </Link>
@@ -70,10 +71,13 @@ export default async function QuotesPage() {
   );
 
   return (
-    <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
+    <div className="mx-auto max-w-3xl px-6 lg:px-8 py-20 sm:py-24">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold text-zinc-900">My Quotes</h1>
-        <Link href="/account" className="text-sm text-zinc-500 hover:text-zinc-900">
+        <div>
+          <p className="heading-sans text-teal tracking-widest mb-3">QUOTES</p>
+          <h1 className="text-3xl heading-serif text-navy">My Quotes</h1>
+        </div>
+        <Link href="/account" className="text-sm text-ink-light hover:text-navy transition-colors duration-300">
           Back to Account
         </Link>
       </div>
@@ -89,26 +93,26 @@ export default async function QuotesPage() {
           const status = quote.status || "submitted";
 
           return (
-            <div key={quote.id} className="border border-zinc-200 rounded-lg p-6">
+            <div key={quote.id} className="border border-stone p-6">
               <div className="flex items-center justify-between mb-2">
                 <div>
-                  <span className="font-semibold text-zinc-900">
+                  <span className="font-semibold text-navy">
                     Quote #{quote.id}
                   </span>
-                  <span className="ml-3 text-sm text-zinc-500">
+                  <span className="ml-3 text-sm text-ink-light">
                     {quote.createdAt ? new Date(quote.createdAt).toLocaleDateString() : ""}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                    statusStyles[status] || "bg-zinc-100 text-zinc-600"
+                    statusStyles[status] || "bg-stone-warm text-ink-light"
                   }`}>
                     {status}
                   </span>
-                  <Price amount={quote.quoteAmount || "0"} className="font-semibold text-zinc-900" />
+                  <Price amount={quote.quoteAmount || "0"} className="font-semibold text-navy" />
                 </div>
               </div>
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-ink-light">
                 {totalItems} item{totalItems !== 1 ? "s" : ""}
                 {itemNames ? `: ${itemNames}` : ""}
                 {itemsList.length > 3 ? "..." : ""}

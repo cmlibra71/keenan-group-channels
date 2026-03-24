@@ -24,7 +24,7 @@ export function AddToCartButton({
     <button
       onClick={handleClick}
       disabled={disabled || isPending}
-      className="w-full bg-zinc-900 text-white py-3 px-6 rounded-lg font-semibold hover:bg-zinc-800 transition-colors disabled:bg-zinc-300 disabled:cursor-not-allowed"
+      className="w-full bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300 disabled:bg-stone-warm disabled:text-ink-faint disabled:cursor-not-allowed"
     >
       {isPending ? "Adding..." : "Add to Cart"}
     </button>

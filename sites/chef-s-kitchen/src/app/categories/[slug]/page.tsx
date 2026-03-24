@@ -28,24 +28,24 @@ export default async function CategoryPage({
   ]);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    <div className="mx-auto max-w-7xl px-6 lg:px-8 py-20 sm:py-24">
       {/* Breadcrumbs */}
-      <nav className="flex flex-wrap items-center gap-1.5 text-sm text-zinc-400 mb-6">
-        <Link href="/categories" className="hover:text-zinc-600">Categories</Link>
+      <nav className="flex flex-wrap items-center gap-1.5 text-sm text-ink-faint mb-6">
+        <Link href="/categories" className="hover:text-ink-light transition-colors duration-300">Categories</Link>
         {breadcrumbs.slice(0, -1).map((crumb) => (
           <span key={crumb.id} className="flex items-center gap-1.5">
             <ChevronRight className="h-3.5 w-3.5" />
-            <Link href={`/categories/${crumb.slug}`} className="hover:text-zinc-600">{crumb.name}</Link>
+            <Link href={`/categories/${crumb.slug}`} className="hover:text-ink-light transition-colors duration-300">{crumb.name}</Link>
           </span>
         ))}
         <ChevronRight className="h-3.5 w-3.5" />
-        <span className="text-zinc-700">{category.name}</span>
+        <span className="text-ink">{category.name}</span>
       </nav>
 
       {/* Hero section */}
-      <div className="mb-10 flex flex-col lg:flex-row gap-8 items-start bg-zinc-50 rounded-2xl overflow-hidden">
+      <div className="mb-10 flex flex-col lg:flex-row gap-8 items-start bg-offwhite overflow-hidden">
         {category.imageUrl && (
-          <div className="lg:w-2/5 flex-shrink-0 bg-white rounded-2xl m-3 p-6 relative min-h-[200px]">
+          <div className="lg:w-2/5 flex-shrink-0 bg-white m-3 p-6 relative min-h-[200px]">
             <Image
               src={category.imageUrl}
               alt={category.name}
@@ -56,18 +56,18 @@ export default async function CategoryPage({
           </div>
         )}
         <div className={`flex-1 py-8 pr-8 text-left ${category.imageUrl ? "" : "pl-8"}`}>
-          <h1 className="text-3xl font-bold text-zinc-900">{category.name}</h1>
+          <h1 className="text-3xl heading-serif text-navy">{category.name}</h1>
 
           {category.description && (
             <RichContent
               html={category.description}
               stripStyles
-              className="mt-3 text-zinc-600 leading-relaxed prose prose-sm prose-zinc"
+              className="mt-3 text-ink-light leading-relaxed prose prose-sm prose-zinc"
             />
           )}
 
           {/* Stats */}
-          <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-zinc-500">
+          <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-ink-light">
             <span>{stats.productCount} {stats.productCount === 1 ? "product" : "products"}</span>
             {stats.minPrice > 0 && stats.maxPrice > 0 && (
               <span>
@@ -85,13 +85,13 @@ export default async function CategoryPage({
               {stats.brands.slice(0, 12).map((brand) => (
                 <span
                   key={brand}
-                  className="px-3 py-1 rounded-full bg-white text-xs font-medium text-zinc-600 border border-zinc-200"
+                  className="px-3 py-1 rounded-full bg-white text-xs font-medium text-ink-light border border-stone"
                 >
                   {brand}
                 </span>
               ))}
               {stats.brands.length > 12 && (
-                <span className="px-3 py-1 text-xs text-zinc-400">+{stats.brands.length - 12} more</span>
+                <span className="px-3 py-1 text-xs text-ink-faint">+{stats.brands.length - 12} more</span>
               )}
             </div>
           )}
@@ -101,13 +101,14 @@ export default async function CategoryPage({
       {/* Subcategories */}
       {subcategories.length > 0 && (
         <div className="mb-10">
-          <h2 className="text-lg font-semibold text-zinc-900 mb-4">Subcategories</h2>
+          <p className="heading-sans text-teal tracking-widest mb-3">EXPLORE</p>
+          <h2 className="text-lg heading-serif text-navy mb-4">Subcategories</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {subcategories.map((sub) => (
               <Link
                 key={sub.id}
                 href={`/categories/${sub.slug}`}
-                className="group flex items-center gap-3 rounded-lg border border-zinc-200 p-3 hover:border-zinc-400 hover:shadow-sm transition-all"
+                className="group flex items-center gap-3 border border-stone p-3 hover:border-navy/30 hover:shadow-sm transition-all duration-300"
               >
                 {sub.imageUrl ? (
                   <div className="relative h-12 w-12 flex-shrink-0">
@@ -116,15 +117,15 @@ export default async function CategoryPage({
                       alt={sub.name}
                       fill
                       sizes="48px"
-                      className="rounded object-cover"
+                      className="object-cover"
                     />
                   </div>
                 ) : (
-                  <div className="h-12 w-12 rounded bg-zinc-100 flex items-center justify-center flex-shrink-0">
-                    <Package className="h-5 w-5 text-zinc-300" />
+                  <div className="h-12 w-12 bg-stone-warm flex items-center justify-center flex-shrink-0">
+                    <Package className="h-5 w-5 text-ink-faint" />
                   </div>
                 )}
-                <span className="text-sm font-medium text-zinc-700 group-hover:text-zinc-900 line-clamp-2">
+                <span className="text-sm font-medium text-ink group-hover:text-navy line-clamp-2 transition-colors duration-300">
                   {sub.name}
                 </span>
               </Link>
@@ -136,13 +137,14 @@ export default async function CategoryPage({
       {/* Products */}
       {products.length > 0 && (
         <div>
-          <h2 className="text-lg font-semibold text-zinc-900 mb-4">Products</h2>
+          <p className="heading-sans text-teal tracking-widest mb-3">PRODUCTS</p>
+          <h2 className="text-lg heading-serif text-navy mb-4">Products</h2>
           <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} />
         </div>
       )}
 
       {products.length === 0 && subcategories.length === 0 && (
-        <p className="text-zinc-500 text-center py-12">No products in this category yet.</p>
+        <p className="text-ink-light text-center py-12">No products in this category yet.</p>
       )}
     </div>
   );

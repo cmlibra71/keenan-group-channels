@@ -88,10 +88,10 @@ export function ProductPageClient({
 
       {/* Details */}
       <div>
-        <h1 className="text-3xl font-bold text-zinc-900">{product.name}</h1>
+        <h1 className="text-3xl heading-serif text-navy">{product.name}</h1>
 
         {product.sku && (
-          <p className="mt-1 text-sm text-zinc-500">SKU: {product.sku}</p>
+          <p className="mt-1 text-sm text-ink-light">SKU: {product.sku}</p>
         )}
 
         {product.descriptionShort && (
@@ -99,7 +99,7 @@ export function ProductPageClient({
             <RichContent
               html={product.descriptionShort}
               stripStyles
-              className="text-sm text-zinc-600 prose prose-sm"
+              className="text-sm text-ink-light prose prose-sm"
             />
           </div>
         )}

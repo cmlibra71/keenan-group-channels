@@ -14,8 +14,9 @@ export default async function AccountPage() {
 
   if (!session) {
     return (
-      <div className="mx-auto max-w-lg px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-3xl font-bold text-zinc-900 mb-8">My Account</h1>
+      <div className="mx-auto max-w-lg px-6 lg:px-8 py-20 sm:py-24">
+        <p className="heading-sans text-teal tracking-widest mb-3">SIGN IN</p>
+        <h1 className="text-3xl heading-serif text-navy mb-8">My Account</h1>
         <LoginForm />
       </div>
     );
@@ -57,12 +58,12 @@ export default async function AccountPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
+    <div className="mx-auto max-w-3xl px-6 lg:px-8 py-20 sm:py-24">
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold text-zinc-900">My Account</h1>
+          <h1 className="text-3xl heading-serif text-navy">My Account</h1>
           {activeSub && (
-            <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full bg-amber-100 text-amber-800">
+            <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full bg-teal/10 text-teal">
               <Crown className="h-3 w-3" />
               Member
             </span>
@@ -71,7 +72,7 @@ export default async function AccountPage() {
         <form action={logout}>
           <button
             type="submit"
-            className="inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900"
+            className="inline-flex items-center gap-2 text-sm text-ink-light hover:text-navy transition-colors duration-300"
           >
             <LogOut className="h-4 w-4" />
             Sign Out
@@ -81,31 +82,31 @@ export default async function AccountPage() {
 
       {/* Member Dashboard Card */}
       {activeSub ? (
-        <div className="rounded-xl bg-gradient-to-br from-zinc-900 to-zinc-800 text-white p-6 mb-6">
+        <div className="bg-gradient-to-br from-navy to-navy-light text-white p-6 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <p className="text-zinc-400 text-sm">Welcome back</p>
+              <p className="text-slate-400 text-sm">Welcome back</p>
               <p className="text-lg font-semibold">
                 {customer?.firstName} {customer?.lastName}
               </p>
-              <p className="text-sm text-zinc-400">{customer?.email}</p>
+              <p className="text-sm text-slate-400">{customer?.email}</p>
             </div>
             <div className="flex items-center gap-4 text-sm">
               {activeSub.consecutiveMonths != null && (
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-amber-400">{activeSub.consecutiveMonths}</p>
-                  <p className="text-xs text-zinc-400">months</p>
+                  <p className="text-2xl font-bold text-teal">{activeSub.consecutiveMonths}</p>
+                  <p className="text-xs text-slate-400">months</p>
                 </div>
               )}
               {drawsEnabled && (
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-amber-400">{totalEntries}</p>
-                  <p className="text-xs text-zinc-400">draw entries</p>
+                  <p className="text-2xl font-bold text-teal">{totalEntries}</p>
+                  <p className="text-xs text-slate-400">draw entries</p>
                 </div>
               )}
               {nextDrawDate && (
                 <div className="text-center">
-                  <p className="text-xs text-zinc-400">Next draw</p>
+                  <p className="text-xs text-slate-400">Next draw</p>
                   <p className="text-sm font-medium text-white">
                     {nextDrawDate.toLocaleDateString("en-AU", { day: "numeric", month: "short" })}
                   </p>
@@ -115,31 +116,31 @@ export default async function AccountPage() {
           </div>
         </div>
       ) : (
-        <div className="border border-zinc-200 rounded-lg p-6 mb-6">
-          <h2 className="text-lg font-semibold text-zinc-900 mb-2">Welcome back</h2>
-          <p className="text-zinc-600">
+        <div className="border border-stone p-6 mb-6">
+          <h2 className="text-lg font-semibold text-navy mb-2">Welcome back</h2>
+          <p className="text-ink-light">
             {customer?.firstName} {customer?.lastName}
           </p>
-          <p className="text-sm text-zinc-500">{customer?.email}</p>
+          <p className="text-sm text-ink-light">{customer?.email}</p>
         </div>
       )}
 
       {/* Non-member upsell */}
       {subscriptionsEnabled && !activeSub && (
-        <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-6 mb-6">
+        <div className="border-2 border-teal/20 bg-offwhite p-6 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <Crown className="h-5 w-5 text-amber-600" />
-                <h3 className="font-semibold text-zinc-900">Become a Member</h3>
+                <Crown className="h-5 w-5 text-teal" />
+                <h3 className="font-semibold text-navy">Become a Member</h3>
               </div>
-              <p className="text-sm text-zinc-600">
+              <p className="text-sm text-ink-light">
                 Unlock exclusive pricing, prize draws, free delivery, and partner discounts.
               </p>
             </div>
             <Link
               href="/membership"
-              className="inline-flex items-center justify-center gap-2 bg-amber-500 text-zinc-900 px-5 py-2.5 rounded-lg font-semibold text-sm hover:bg-amber-400 transition-colors shrink-0"
+              className="inline-flex items-center justify-center gap-2 bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300 shrink-0"
             >
               Learn More
               <ArrowRight className="h-4 w-4" />
@@ -154,24 +155,24 @@ export default async function AccountPage() {
         {drawsEnabled && activeSub && (
           <Link
             href="/account/draws"
-            className="flex items-center gap-4 border border-zinc-200 rounded-lg p-6 hover:border-zinc-400 transition-colors"
+            className="flex items-center gap-4 border border-stone p-6 hover:border-navy/30 transition-colors duration-300"
           >
             <Trophy className="h-8 w-8 text-purple-500" />
             <div>
-              <h3 className="font-semibold text-zinc-900">My Draws</h3>
-              <p className="text-sm text-zinc-500">{totalEntries} active entries</p>
+              <h3 className="font-semibold text-navy">My Draws</h3>
+              <p className="text-sm text-ink-light">{totalEntries} active entries</p>
             </div>
           </Link>
         )}
         {subscriptionsEnabled && (
           <Link
             href="/account/membership"
-            className="flex items-center gap-4 border border-zinc-200 rounded-lg p-6 hover:border-zinc-400 transition-colors"
+            className="flex items-center gap-4 border border-stone p-6 hover:border-navy/30 transition-colors duration-300"
           >
-            <Crown className="h-8 w-8 text-amber-500" />
+            <Crown className="h-8 w-8 text-teal" />
             <div>
-              <h3 className="font-semibold text-zinc-900">Membership</h3>
-              <p className="text-sm text-zinc-500">
+              <h3 className="font-semibold text-navy">Membership</h3>
+              <p className="text-sm text-ink-light">
                 {activeSub ? "Manage your plan" : "Join & save"}
               </p>
             </div>
@@ -180,68 +181,68 @@ export default async function AccountPage() {
         {partnerOffersEnabled && activeSub && (
           <Link
             href="/account/partner-offers"
-            className="flex items-center gap-4 border border-zinc-200 rounded-lg p-6 hover:border-zinc-400 transition-colors"
+            className="flex items-center gap-4 border border-stone p-6 hover:border-navy/30 transition-colors duration-300"
           >
             <Gift className="h-8 w-8 text-blue-500" />
             <div>
-              <h3 className="font-semibold text-zinc-900">Partner Offers</h3>
-              <p className="text-sm text-zinc-500">Exclusive discounts</p>
+              <h3 className="font-semibold text-navy">Partner Offers</h3>
+              <p className="text-sm text-ink-light">Exclusive discounts</p>
             </div>
           </Link>
         )}
         <Link
           href="/account/orders"
-          className="flex items-center gap-4 border border-zinc-200 rounded-lg p-6 hover:border-zinc-400 transition-colors"
+          className="flex items-center gap-4 border border-stone p-6 hover:border-navy/30 transition-colors duration-300"
         >
-          <Package className="h-8 w-8 text-zinc-400" />
+          <Package className="h-8 w-8 text-ink-faint" />
           <div>
-            <h3 className="font-semibold text-zinc-900">Order History</h3>
-            <p className="text-sm text-zinc-500">View your past orders</p>
+            <h3 className="font-semibold text-navy">Order History</h3>
+            <p className="text-sm text-ink-light">View your past orders</p>
           </div>
         </Link>
         <Link
           href="/account/quotes"
-          className="flex items-center gap-4 border border-zinc-200 rounded-lg p-6 hover:border-zinc-400 transition-colors"
+          className="flex items-center gap-4 border border-stone p-6 hover:border-navy/30 transition-colors duration-300"
         >
-          <FileText className="h-8 w-8 text-zinc-400" />
+          <FileText className="h-8 w-8 text-ink-faint" />
           <div>
-            <h3 className="font-semibold text-zinc-900">My Quotes</h3>
-            <p className="text-sm text-zinc-500">View and track your quotes</p>
+            <h3 className="font-semibold text-navy">My Quotes</h3>
+            <p className="text-sm text-ink-light">View and track your quotes</p>
           </div>
         </Link>
         {/* Non-member draws and partner offers */}
         {drawsEnabled && !activeSub && (
           <Link
             href="/account/draws"
-            className="flex items-center gap-4 border border-zinc-200 rounded-lg p-6 hover:border-zinc-400 transition-colors"
+            className="flex items-center gap-4 border border-stone p-6 hover:border-navy/30 transition-colors duration-300"
           >
             <Trophy className="h-8 w-8 text-purple-500" />
             <div>
-              <h3 className="font-semibold text-zinc-900">My Draws</h3>
-              <p className="text-sm text-zinc-500">Entries & prizes</p>
+              <h3 className="font-semibold text-navy">My Draws</h3>
+              <p className="text-sm text-ink-light">Entries & prizes</p>
             </div>
           </Link>
         )}
         {partnerOffersEnabled && !activeSub && (
           <Link
             href="/account/partner-offers"
-            className="flex items-center gap-4 border border-zinc-200 rounded-lg p-6 hover:border-zinc-400 transition-colors"
+            className="flex items-center gap-4 border border-stone p-6 hover:border-navy/30 transition-colors duration-300"
           >
             <Gift className="h-8 w-8 text-blue-500" />
             <div>
-              <h3 className="font-semibold text-zinc-900">Partner Offers</h3>
-              <p className="text-sm text-zinc-500">Exclusive discounts</p>
+              <h3 className="font-semibold text-navy">Partner Offers</h3>
+              <p className="text-sm text-ink-light">Exclusive discounts</p>
             </div>
           </Link>
         )}
         <Link
           href="/products"
-          className="flex items-center gap-4 border border-zinc-200 rounded-lg p-6 hover:border-zinc-400 transition-colors"
+          className="flex items-center gap-4 border border-stone p-6 hover:border-navy/30 transition-colors duration-300"
         >
-          <MapPin className="h-8 w-8 text-zinc-400" />
+          <MapPin className="h-8 w-8 text-ink-faint" />
           <div>
-            <h3 className="font-semibold text-zinc-900">Continue Shopping</h3>
-            <p className="text-sm text-zinc-500">Browse our products</p>
+            <h3 className="font-semibold text-navy">Continue Shopping</h3>
+            <p className="text-sm text-ink-light">Browse our products</p>
           </div>
         </Link>
       </div>

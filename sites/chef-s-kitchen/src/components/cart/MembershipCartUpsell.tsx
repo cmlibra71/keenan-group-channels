@@ -14,35 +14,35 @@ export function MembershipCartUpsell({
   const freeDeliveryEligible = cartTotal >= 500;
 
   return (
-    <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-5">
+    <div className="border-2 border-teal/30 bg-teal/5 p-5">
       <div className="flex items-start gap-3 mb-3">
-        <Crown className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+        <Crown className="h-5 w-5 text-teal shrink-0 mt-0.5" strokeWidth={1.5} />
         <div>
-          <h3 className="font-semibold text-zinc-900">Members save on this order</h3>
-          <p className="text-sm text-zinc-600 mt-1">
+          <h3 className="font-semibold text-navy">Members save on this order</h3>
+          <p className="text-sm text-ink-light mt-1">
             If you were a member, you&apos;d save approximately{" "}
-            <span className="font-bold text-amber-700">${estimatedSavings.toFixed(2)}</span> on this order.
+            <span className="font-bold text-teal">${estimatedSavings.toFixed(2)}</span> on this order.
           </p>
         </div>
       </div>
 
       {freeDeliveryEligible && (
-        <div className="flex items-center gap-2 mb-3 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-          <Truck className="h-4 w-4 shrink-0" />
+        <div className="flex items-center gap-2 mb-3 text-sm text-teal-dark bg-teal/5 border border-teal/20 px-3 py-2">
+          <Truck className="h-4 w-4 shrink-0" strokeWidth={1.5} />
           Members get FREE delivery on this order
         </div>
       )}
 
       <div className="flex items-center justify-between">
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-ink-light">
           From ${planPrice.toFixed(2)}/{billingInterval}
         </p>
         <Link
           href="/membership"
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-amber-700 hover:text-amber-800"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal hover:text-teal-light"
         >
           Join now
-          <ArrowRight className="h-3.5 w-3.5" />
+          <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.5} />
         </Link>
       </div>
     </div>

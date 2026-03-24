@@ -125,23 +125,24 @@ export default async function SearchPage({
   const totalPages = results ? Math.ceil(results.total / PER_PAGE) : 0;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-3xl font-bold text-zinc-900 mb-8">Search</h1>
+    <div className="mx-auto max-w-7xl px-6 lg:px-8 py-20 sm:py-24">
+      <p className="heading-sans text-teal tracking-widest mb-3">FIND</p>
+      <h1 className="text-3xl heading-serif text-navy mb-8">Search</h1>
 
       <SearchTypeahead defaultValue={query} />
 
       <div className="mt-8">
         {!query && (
-          <div className="text-center py-16">
-            <p className="text-zinc-500">
+          <div className="text-center py-20 sm:py-24">
+            <p className="text-ink-light">
               Enter a search term to find products.
             </p>
           </div>
         )}
 
         {query && results && results.products.length === 0 && (
-          <div className="text-center py-16">
-            <p className="text-zinc-500">
+          <div className="text-center py-20 sm:py-24">
+            <p className="text-ink-light">
               No products found for &ldquo;{query}&rdquo;
               {brand && <> in brand &ldquo;{brand}&rdquo;</>}
               {category && <> in category &ldquo;{category}&rdquo;</>}.
@@ -149,7 +150,7 @@ export default async function SearchPage({
             {(brand || category) && (
               <Link
                 href={buildSearchUrl({ q: query })}
-                className="mt-2 inline-block text-sm text-zinc-600 underline hover:text-zinc-900"
+                className="mt-2 inline-block text-sm text-ink-light underline hover:text-navy transition-colors duration-300"
               >
                 Clear filters
               </Link>
@@ -165,14 +166,14 @@ export default async function SearchPage({
                 {/* Active Filters */}
                 {(brand || category) && (
                   <div className="mb-6">
-                    <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">
+                    <h3 className="text-xs font-semibold text-ink-light uppercase tracking-wide mb-2">
                       Active Filters
                     </h3>
                     <div className="flex flex-wrap gap-2">
                       {brand && (
                         <Link
                           href={buildSearchUrl({ q: query, category })}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-zinc-100 text-zinc-700 rounded hover:bg-zinc-200"
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-stone-warm text-ink hover:bg-stone-200 transition-colors duration-300"
                         >
                           {brand} &times;
                         </Link>
@@ -180,7 +181,7 @@ export default async function SearchPage({
                       {category && (
                         <Link
                           href={buildSearchUrl({ q: query, brand })}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-zinc-100 text-zinc-700 rounded hover:bg-zinc-200"
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-stone-warm text-ink hover:bg-stone-200 transition-colors duration-300"
                         >
                           {category} &times;
                         </Link>
@@ -192,7 +193,7 @@ export default async function SearchPage({
                 {/* Brand Facets */}
                 {activeBrands && Object.keys(activeBrands).length > 0 && (
                   <div className="mb-6">
-                    <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">
+                    <h3 className="text-xs font-semibold text-ink-light uppercase tracking-wide mb-2">
                       Brand
                     </h3>
                     <ul className="space-y-1">
@@ -202,14 +203,14 @@ export default async function SearchPage({
                           <li key={name}>
                             <Link
                               href={buildSearchUrl({ q: query, brand: name, category })}
-                              className={`flex items-center justify-between text-sm py-0.5 ${
+                              className={`flex items-center justify-between text-sm py-0.5 transition-colors duration-300 ${
                                 brand === name
-                                  ? "font-medium text-zinc-900"
-                                  : "text-zinc-600 hover:text-zinc-900"
+                                  ? "font-medium text-navy"
+                                  : "text-ink-light hover:text-navy"
                               }`}
                             >
                               <span className="truncate">{name}</span>
-                              <span className="text-xs text-zinc-400 ml-2">
+                              <span className="text-xs text-ink-faint ml-2">
                                 {count}
                               </span>
                             </Link>
@@ -222,7 +223,7 @@ export default async function SearchPage({
                 {/* Category Facets */}
                 {activeCategories && Object.keys(activeCategories).length > 0 && (
                   <div className="mb-6">
-                    <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">
+                    <h3 className="text-xs font-semibold text-ink-light uppercase tracking-wide mb-2">
                       Category
                     </h3>
                     <ul className="space-y-1">
@@ -232,14 +233,14 @@ export default async function SearchPage({
                           <li key={name}>
                             <Link
                               href={buildSearchUrl({ q: query, brand, category: name })}
-                              className={`flex items-center justify-between text-sm py-0.5 ${
+                              className={`flex items-center justify-between text-sm py-0.5 transition-colors duration-300 ${
                                 category === name
-                                  ? "font-medium text-zinc-900"
-                                  : "text-zinc-600 hover:text-zinc-900"
+                                  ? "font-medium text-navy"
+                                  : "text-ink-light hover:text-navy"
                               }`}
                             >
                               <span className="truncate">{name}</span>
-                              <span className="text-xs text-zinc-400 ml-2">
+                              <span className="text-xs text-ink-faint ml-2">
                                 {count}
                               </span>
                             </Link>
@@ -253,7 +254,7 @@ export default async function SearchPage({
 
             {/* Results */}
             <div className="flex-1">
-              <p className="text-sm text-zinc-500 mb-4">
+              <p className="text-sm text-ink-light mb-4">
                 {results.total} result{results.total !== 1 ? "s" : ""} for
                 &ldquo;{query}&rdquo;
                 {brand && <> in <strong>{brand}</strong></>}
@@ -270,13 +271,13 @@ export default async function SearchPage({
                   {page > 1 ? (
                     <Link
                       href={buildSearchUrl({ q: query, page: page - 1, brand, category })}
-                      className="inline-flex items-center gap-1 px-4 py-2 text-sm font-medium text-zinc-700 bg-white border border-zinc-300 rounded-lg hover:bg-zinc-50"
+                      className="inline-flex items-center gap-1 px-4 py-2 text-sm font-medium text-ink bg-white border border-stone hover:bg-offwhite transition-colors duration-300"
                     >
                       <ChevronLeft className="h-4 w-4" />
                       Previous
                     </Link>
                   ) : (
-                    <span className="inline-flex items-center gap-1 px-4 py-2 text-sm font-medium text-zinc-300 bg-white border border-zinc-200 rounded-lg cursor-not-allowed">
+                    <span className="inline-flex items-center gap-1 px-4 py-2 text-sm font-medium text-ink-faint bg-white border border-stone cursor-not-allowed">
                       <ChevronLeft className="h-4 w-4" />
                       Previous
                     </span>
@@ -299,10 +300,10 @@ export default async function SearchPage({
                         <Link
                           key={pageNum}
                           href={buildSearchUrl({ q: query, page: pageNum, brand, category })}
-                          className={`px-3 py-2 text-sm font-medium rounded-lg ${
+                          className={`px-3 py-2 text-sm font-medium transition-colors duration-300 ${
                             pageNum === page
-                              ? "bg-zinc-900 text-white"
-                              : "text-zinc-700 hover:bg-zinc-100"
+                              ? "bg-navy text-white"
+                              : "text-ink hover:bg-stone-warm"
                           }`}
                         >
                           {pageNum}
@@ -312,20 +313,20 @@ export default async function SearchPage({
                   </div>
 
                   {/* Mobile page indicator */}
-                  <span className="sm:hidden text-sm text-zinc-500">
+                  <span className="sm:hidden text-sm text-ink-light">
                     {page} / {totalPages}
                   </span>
 
                   {page < totalPages ? (
                     <Link
                       href={buildSearchUrl({ q: query, page: page + 1, brand, category })}
-                      className="inline-flex items-center gap-1 px-4 py-2 text-sm font-medium text-zinc-700 bg-white border border-zinc-300 rounded-lg hover:bg-zinc-50"
+                      className="inline-flex items-center gap-1 px-4 py-2 text-sm font-medium text-ink bg-white border border-stone hover:bg-offwhite transition-colors duration-300"
                     >
                       Next
                       <ChevronRight className="h-4 w-4" />
                     </Link>
                   ) : (
-                    <span className="inline-flex items-center gap-1 px-4 py-2 text-sm font-medium text-zinc-300 bg-white border border-zinc-200 rounded-lg cursor-not-allowed">
+                    <span className="inline-flex items-center gap-1 px-4 py-2 text-sm font-medium text-ink-faint bg-white border border-stone cursor-not-allowed">
                       Next
                       <ChevronRight className="h-4 w-4" />
                     </span>

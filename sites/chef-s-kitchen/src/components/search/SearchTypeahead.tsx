@@ -161,9 +161,9 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
       {/* Search Input */}
       <div className="relative">
         {isLoading ? (
-          <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-400 animate-spin" />
+          <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-ink-faint animate-spin" />
         ) : (
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-ink-faint" strokeWidth={1.5} />
         )}
         <input
           ref={inputRef}
@@ -178,7 +178,7 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
           }}
           onKeyDown={handleKeyDown}
           placeholder="Search products..."
-          className="w-full pl-10 pr-10 py-3 rounded-lg border border-zinc-300 text-sm focus:border-zinc-500 focus:outline-none"
+          className="w-full pl-10 pr-10 py-3 border border-stone text-sm focus:border-navy focus:outline-none"
           autoFocus
           autoComplete="off"
         />
@@ -191,9 +191,9 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
               setIsOpen(false);
               inputRef.current?.focus();
             }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink-light"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" strokeWidth={1.5} />
           </button>
         )}
       </div>
@@ -202,7 +202,7 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
       {isOpen && results && results.hits.length > 0 && (
         <div
           ref={dropdownRef}
-          className="absolute z-50 mt-1 w-full rounded-lg border border-zinc-200 bg-white shadow-lg overflow-hidden"
+          className="absolute z-50 mt-1 w-full border border-stone bg-white shadow-lg overflow-hidden"
         >
           <ul role="listbox">
             {results.hits.map((hit, index) => (
@@ -210,14 +210,14 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
                 key={hit.id}
                 role="option"
                 aria-selected={index === activeIndex}
-                className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-b border-zinc-100 last:border-b-0 ${
-                  index === activeIndex ? "bg-zinc-50" : "hover:bg-zinc-50"
+                className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-b border-stone last:border-b-0 ${
+                  index === activeIndex ? "bg-stone-warm" : "hover:bg-stone-warm"
                 }`}
                 onClick={() => navigateToProduct(hit)}
                 onMouseEnter={() => setActiveIndex(index)}
               >
                 {/* Thumbnail */}
-                <div className="h-10 w-10 flex-shrink-0 rounded bg-zinc-100 overflow-hidden">
+                <div className="h-10 w-10 flex-shrink-0 bg-stone-warm overflow-hidden">
                   {hit.thumbnailUrl ? (
                     <img
                       src={hit.thumbnailUrl}
@@ -225,8 +225,8 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <div className="h-full w-full flex items-center justify-center text-zinc-300">
-                      <Search className="h-4 w-4" />
+                    <div className="h-full w-full flex items-center justify-center text-ink-faint">
+                      <Search className="h-4 w-4" strokeWidth={1.5} />
                     </div>
                   )}
                 </div>
@@ -234,12 +234,12 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
                 {/* Product Info */}
                 <div className="flex-1 min-w-0">
                   <p
-                    className="text-sm font-medium text-zinc-900 truncate"
+                    className="text-sm font-medium text-navy truncate"
                     dangerouslySetInnerHTML={{
                       __html: hit._formatted?.name || hit.name,
                     }}
                   />
-                  <p className="text-xs text-zinc-500 truncate">
+                  <p className="text-xs text-ink-light truncate">
                     {hit.brandName && <span>{hit.brandName}</span>}
                     {hit.brandName && hit.sku && <span> &middot; </span>}
                     {hit.sku && <span>{hit.sku}</span>}
@@ -253,12 +253,12 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
                       <p className="text-sm font-medium text-red-600">
                         {formatPrice(hit.salePrice)}
                       </p>
-                      <p className="text-xs text-zinc-400 line-through">
+                      <p className="text-xs text-ink-faint line-through">
                         {formatPrice(hit.price)}
                       </p>
                     </>
                   ) : (
-                    <p className="text-sm font-medium text-zinc-900">
+                    <p className="text-sm font-medium text-navy">
                       {formatPrice(hit.price)}
                     </p>
                   )}
@@ -271,8 +271,8 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
           {results.estimatedTotalHits > results.hits.length && (
             <button
               type="button"
-              className={`w-full px-4 py-3 text-sm text-center font-medium text-zinc-600 hover:bg-zinc-50 border-t border-zinc-200 ${
-                activeIndex === results.hits.length ? "bg-zinc-50" : ""
+              className={`w-full px-4 py-3 text-sm text-center font-medium text-ink-light hover:bg-stone-warm border-t border-stone ${
+                activeIndex === results.hits.length ? "bg-stone-warm" : ""
               }`}
               onClick={() => navigateToSearch(query)}
               onMouseEnter={() => setActiveIndex(results.hits.length)}
@@ -287,9 +287,9 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
       {isOpen && results && results.hits.length === 0 && query.length >= 2 && !isLoading && (
         <div
           ref={dropdownRef}
-          className="absolute z-50 mt-1 w-full rounded-lg border border-zinc-200 bg-white shadow-lg p-4"
+          className="absolute z-50 mt-1 w-full border border-stone bg-white shadow-lg p-4"
         >
-          <p className="text-sm text-zinc-500 text-center">
+          <p className="text-sm text-ink-light text-center">
             No results for &ldquo;{query}&rdquo;
           </p>
         </div>

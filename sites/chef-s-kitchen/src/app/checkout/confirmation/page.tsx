@@ -13,33 +13,33 @@ export default async function ConfirmationPage({
   const { order } = await searchParams;
 
   return (
-    <div className="mx-auto max-w-lg px-4 sm:px-6 lg:px-8 py-16 text-center">
-      <CheckCircle className="h-16 w-16 text-green-500 mx-auto" />
+    <div className="mx-auto max-w-lg px-6 lg:px-8 py-20 sm:py-24 text-center">
+      <CheckCircle className="h-16 w-16 text-teal mx-auto" />
 
-      <h1 className="mt-6 text-3xl font-bold text-zinc-900">Order Confirmed</h1>
+      <h1 className="mt-6 text-3xl heading-serif text-navy">Order Confirmed</h1>
 
-      <p className="mt-4 text-zinc-600">
+      <p className="mt-4 text-ink-light">
         Thank you for your order! Your order number is:
       </p>
 
       {order && (
-        <p className="mt-2 text-xl font-semibold text-zinc-900">{order}</p>
+        <p className="mt-2 text-xl font-semibold text-navy">{order}</p>
       )}
 
-      <p className="mt-4 text-sm text-zinc-500">
+      <p className="mt-4 text-sm text-ink-light">
         You will receive an email confirmation shortly.
       </p>
 
       <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
         <Link
           href="/account/orders"
-          className="bg-zinc-900 text-white px-6 py-3 rounded-lg font-semibold hover:bg-zinc-800 transition-colors"
+          className="bg-teal text-white px-7 py-3.5 font-medium text-sm tracking-wide hover:bg-teal-light transition-colors duration-300"
         >
           View Orders
         </Link>
         <Link
           href="/products"
-          className="border border-zinc-300 text-zinc-700 px-6 py-3 rounded-lg font-semibold hover:border-zinc-400 transition-colors"
+          className="border border-stone text-ink px-7 py-3.5 font-medium text-sm tracking-wide hover:border-navy/30 transition-colors duration-300"
         >
           Continue Shopping
         </Link>

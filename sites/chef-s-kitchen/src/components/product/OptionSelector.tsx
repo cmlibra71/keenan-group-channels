@@ -32,7 +32,7 @@ export function OptionSelector({
   if (type === "dropdown") {
     return (
       <div>
-        <label className="block text-sm font-semibold text-zinc-900 mb-2">
+        <label className="block text-sm font-semibold text-navy mb-2">
           {option.displayName}
         </label>
         <select
@@ -41,7 +41,7 @@ export function OptionSelector({
             const val = parseInt(e.target.value, 10);
             if (!isNaN(val)) onSelect(option.id, val);
           }}
-          className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-900 focus:outline-none"
+          className="w-full border border-stone px-3 py-2 text-sm focus:border-navy focus:outline-none"
         >
           <option value="">Select {option.displayName}</option>
           {values.map((v) => (
@@ -57,10 +57,10 @@ export function OptionSelector({
   if (type === "swatch") {
     return (
       <div>
-        <label className="block text-sm font-semibold text-zinc-900 mb-2">
+        <label className="block text-sm font-semibold text-navy mb-2">
           {option.displayName}
           {selectedValueId && (
-            <span className="ml-2 font-normal text-zinc-500">
+            <span className="ml-2 font-normal text-ink-light">
               {values.find((v) => v.id === selectedValueId)?.label}
             </span>
           )}
@@ -81,8 +81,8 @@ export function OptionSelector({
                 title={v.label}
                 className={`h-9 w-9 rounded-full border-2 transition-all ${
                   isSelected
-                    ? "border-zinc-900 ring-2 ring-zinc-900 ring-offset-1"
-                    : "border-zinc-200 hover:border-zinc-400"
+                    ? "border-navy ring-2 ring-navy ring-offset-1"
+                    : "border-stone hover:border-ink-light"
                 } ${isDisabled ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}`}
                 style={
                   imageUrl
@@ -102,7 +102,7 @@ export function OptionSelector({
   if (type === "radio_buttons") {
     return (
       <div>
-        <label className="block text-sm font-semibold text-zinc-900 mb-2">
+        <label className="block text-sm font-semibold text-navy mb-2">
           {option.displayName}
         </label>
         <div className="space-y-2">
@@ -119,7 +119,7 @@ export function OptionSelector({
                   checked={v.id === selectedValueId}
                   onChange={() => onSelect(option.id, v.id)}
                   disabled={isDisabled}
-                  className="accent-zinc-900"
+                  className="accent-navy"
                 />
                 {v.label}
               </label>
@@ -133,7 +133,7 @@ export function OptionSelector({
   // Default: rectangles (button pills)
   return (
     <div>
-      <label className="block text-sm font-semibold text-zinc-900 mb-2">
+      <label className="block text-sm font-semibold text-navy mb-2">
         {option.displayName}
       </label>
       <div className="flex flex-wrap gap-2">
@@ -145,12 +145,12 @@ export function OptionSelector({
               key={v.id}
               onClick={() => onSelect(option.id, v.id)}
               disabled={isDisabled}
-              className={`px-4 py-2 rounded-lg border text-sm transition-colors ${
+              className={`px-4 py-2 border text-sm transition-colors duration-300 ${
                 isSelected
-                  ? "border-zinc-900 bg-zinc-900 text-white"
+                  ? "border-navy bg-navy text-white"
                   : isDisabled
-                    ? "border-zinc-100 text-zinc-300 cursor-not-allowed"
-                    : "border-zinc-200 hover:border-zinc-400"
+                    ? "border-stone text-ink-faint cursor-not-allowed"
+                    : "border-stone hover:border-navy/30"
               }`}
             >
               {v.label}

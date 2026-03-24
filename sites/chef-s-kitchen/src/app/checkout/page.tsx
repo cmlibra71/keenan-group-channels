@@ -41,18 +41,19 @@ export default async function CheckoutPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-3xl font-bold text-zinc-900 mb-8">Checkout</h1>
+    <div className="mx-auto max-w-5xl px-6 lg:px-8 py-20 sm:py-24">
+      <p className="heading-sans text-teal tracking-widest mb-3">ORDER</p>
+      <h1 className="text-3xl heading-serif text-navy mb-8">Checkout</h1>
 
       {showMemberBanner && estimatedSavings > 0 && (
-        <div className="mb-6 flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-          <div className="flex items-center gap-2 text-sm text-amber-800">
-            <Crown className="h-4 w-4 text-amber-600 shrink-0" />
+        <div className="mb-6 flex items-center justify-between bg-offwhite border border-stone px-4 py-3">
+          <div className="flex items-center gap-2 text-sm text-ink">
+            <Crown className="h-4 w-4 text-teal shrink-0" />
             Members save ~${estimatedSavings.toFixed(2)} on this order.
           </div>
           <Link
             href="/membership"
-            className="inline-flex items-center gap-1 text-sm font-semibold text-amber-700 hover:text-amber-800 shrink-0"
+            className="inline-flex items-center gap-1 text-sm font-semibold text-teal hover:text-teal-dark shrink-0 transition-colors duration-300"
           >
             Join now
             <ArrowRight className="h-3.5 w-3.5" />

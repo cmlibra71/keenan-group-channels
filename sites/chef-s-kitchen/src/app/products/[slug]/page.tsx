@@ -64,8 +64,8 @@ export default async function ProductPage({
   }[];
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-      <Link href="/products" className="inline-flex items-center text-sm text-zinc-500 hover:text-zinc-900 mb-6">
+    <div className="mx-auto max-w-7xl px-6 lg:px-8 py-20 sm:py-24">
+      <Link href="/products" className="inline-flex items-center text-sm text-ink-light hover:text-navy mb-6 transition-colors duration-300">
         <ChevronLeft className="h-4 w-4 mr-1" />
         Back to Products
       </Link>
@@ -104,8 +104,9 @@ export default async function ProductPage({
 
       {/* Related Products */}
       {relatedProducts.length > 0 && (
-        <div className="mt-12 border-t border-zinc-200 pt-8">
-          <h2 className="text-2xl font-bold text-zinc-900 mb-6">Related Products</h2>
+        <div className="mt-12 border-t border-stone pt-8">
+          <p className="heading-sans text-teal tracking-widest mb-3">YOU MAY ALSO LIKE</p>
+          <h2 className="text-2xl heading-serif text-navy mb-6">Related Products</h2>
           <ProductGrid products={relatedProducts} memberPricingAvailable={memberPricingEnabled} />
         </div>
       )}

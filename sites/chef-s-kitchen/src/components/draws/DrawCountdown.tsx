@@ -25,22 +25,22 @@ export function DrawCountdown({ targetDate }: { targetDate: string | Date }) {
   }, [target.getTime()]);
 
   if (!timeLeft) {
-    return <span className="text-xs text-zinc-500">Draw complete</span>;
+    return <span className="text-xs text-ink-light">Draw complete</span>;
   }
 
   return (
     <div className="flex items-center gap-2 text-xs">
-      <div className="bg-zinc-100 rounded px-2 py-1 text-center">
-        <span className="font-bold text-zinc-900">{timeLeft.days}</span>
-        <span className="text-zinc-500 ml-0.5">d</span>
+      <div className="bg-stone-warm px-2 py-1 text-center">
+        <span className="font-bold text-navy">{timeLeft.days}</span>
+        <span className="text-ink-light ml-0.5">d</span>
       </div>
-      <div className="bg-zinc-100 rounded px-2 py-1 text-center">
-        <span className="font-bold text-zinc-900">{timeLeft.hours}</span>
-        <span className="text-zinc-500 ml-0.5">h</span>
+      <div className="bg-stone-warm px-2 py-1 text-center">
+        <span className="font-bold text-navy">{timeLeft.hours}</span>
+        <span className="text-ink-light ml-0.5">h</span>
       </div>
-      <div className="bg-zinc-100 rounded px-2 py-1 text-center">
-        <span className="font-bold text-zinc-900">{timeLeft.minutes}</span>
-        <span className="text-zinc-500 ml-0.5">m</span>
+      <div className="bg-stone-warm px-2 py-1 text-center">
+        <span className="font-bold text-navy">{timeLeft.minutes}</span>
+        <span className="text-ink-light ml-0.5">m</span>
       </div>
     </div>
   );

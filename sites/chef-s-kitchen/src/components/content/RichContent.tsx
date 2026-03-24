@@ -34,7 +34,7 @@ function ReadMore({ attrs }: CommandProps) {
   return (
     <button
       onClick={() => setExpanded(!expanded)}
-      className="text-sm font-medium text-zinc-600 hover:text-zinc-900 underline underline-offset-2 transition-colors"
+      className="text-sm font-medium text-ink-light hover:text-navy underline underline-offset-2 transition-colors duration-300"
       data-readmore-toggle
       data-expanded={expanded ? "true" : "false"}
     >
@@ -44,7 +44,7 @@ function ReadMore({ attrs }: CommandProps) {
 }
 
 function Divider() {
-  return <hr className="my-6 border-zinc-200" />;
+  return <hr className="my-6 border-stone" />;
 }
 
 function Callout({ attrs }: CommandProps) {
@@ -53,11 +53,11 @@ function Callout({ attrs }: CommandProps) {
   const styles: Record<string, string> = {
     info: "bg-blue-50 border-blue-200 text-blue-800",
     warning: "bg-amber-50 border-amber-200 text-amber-800",
-    success: "bg-green-50 border-green-200 text-green-800",
+    success: "bg-teal/5 border-teal/20 text-teal-dark",
   };
 
   return (
-    <div className={`rounded-lg border px-4 py-3 text-sm ${styles[variant] || styles.info}`}>
+    <div className={`border px-4 py-3 text-sm ${styles[variant] || styles.info}`}>
       {text}
     </div>
   );
@@ -191,7 +191,7 @@ function ReadMoreContent({
 
       <button
         onClick={() => setExpanded(!expanded)}
-        className="text-sm font-medium text-zinc-600 hover:text-zinc-900 underline underline-offset-2 transition-colors my-2"
+        className="text-sm font-medium text-ink-light hover:text-navy underline underline-offset-2 transition-colors duration-300 my-2"
       >
         {expanded ? collapseLabel : label}
       </button>
