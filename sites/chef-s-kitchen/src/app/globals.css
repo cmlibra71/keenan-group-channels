@@ -123,19 +123,28 @@ body {
   }
 
   .btn-primary {
-    @apply btn bg-accent text-white
+    @apply inline-flex items-center justify-center gap-2.5
+           font-medium text-sm tracking-wide px-7 py-3.5
+           transition-colors duration-300
+           bg-accent text-white
            hover:bg-accent-hover
            disabled:bg-surface-secondary disabled:text-text-muted
            disabled:cursor-not-allowed;
   }
 
   .btn-secondary {
-    @apply btn border border-border text-text-body
+    @apply inline-flex items-center justify-center gap-2.5
+           font-medium text-sm tracking-wide px-7 py-3.5
+           transition-colors duration-300
+           border border-border text-text-body
            hover:border-text-primary/30;
   }
 
   .btn-secondary-dark {
-    @apply btn border border-slate-600 text-slate-300
+    @apply inline-flex items-center justify-center gap-2.5
+           font-medium text-sm tracking-wide px-7 py-3.5
+           transition-colors duration-300
+           border border-slate-600 text-slate-300
            hover:border-slate-400 hover:text-white;
   }
 
