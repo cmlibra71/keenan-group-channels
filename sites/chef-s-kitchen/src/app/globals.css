@@ -157,23 +157,44 @@ body {
   /* ═══ TYPOGRAPHY ════════════════════════════════════ */
 
   .eyebrow {
-    @apply heading-sans text-accent tracking-widest;
+    font-family: var(--font-sans);
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    text-transform: uppercase;
+    font-size: 0.6875rem;
+    @apply text-accent tracking-widest;
   }
 
   .section-title {
-    @apply heading-serif text-3xl sm:text-4xl text-text-primary;
+    font-family: var(--font-serif);
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    @apply text-3xl sm:text-4xl text-text-primary;
   }
 
   .hero-title {
-    @apply heading-serif text-4xl sm:text-5xl lg:text-6xl;
+    font-family: var(--font-serif);
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    @apply text-4xl sm:text-5xl lg:text-6xl;
   }
 
   .page-title {
-    @apply heading-serif text-2xl sm:text-3xl text-text-primary;
+    font-family: var(--font-serif);
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    @apply text-2xl sm:text-3xl text-text-primary;
   }
 
   .panel-title {
-    @apply text-lg heading-serif text-text-primary;
+    font-family: var(--font-serif);
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    @apply text-lg text-text-primary;
   }
 
   .body-text {
@@ -269,12 +290,22 @@ body {
   /* ═══ NAV LINKS ════════════════════════════════════ */
 
   .nav-link {
-    @apply heading-sans text-text-secondary
+    font-family: var(--font-sans);
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    text-transform: uppercase;
+    font-size: 0.6875rem;
+    @apply text-text-secondary
            hover:text-text-primary transition-colors duration-300;
   }
 
   .nav-link-accent {
-    @apply heading-sans text-accent
+    font-family: var(--font-sans);
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    text-transform: uppercase;
+    font-size: 0.6875rem;
+    @apply text-accent
            hover:text-accent-dark transition-colors duration-300;
   }
 
