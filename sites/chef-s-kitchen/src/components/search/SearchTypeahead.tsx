@@ -178,7 +178,7 @@ export function SearchTypeahead({ defaultValue, inline }: { defaultValue?: strin
           }}
           onKeyDown={handleKeyDown}
           placeholder="Search products..."
-          className={`w-full pl-10 pr-10 input ${inline ? "py-2 text-sm" : "py-3"}`}
+          className={inline ? "w-full pl-10 pr-10 py-2 text-sm border border-border focus:border-text-primary focus:outline-none" : "w-full pl-10 pr-10 py-3 input-search"}
           autoFocus={!inline}
           autoComplete="off"
         />

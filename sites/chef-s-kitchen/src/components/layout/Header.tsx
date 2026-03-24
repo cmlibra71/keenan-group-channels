@@ -41,21 +41,12 @@ export async function Header({ storeName }: { storeName: string }) {
             {storeName}
           </Link>
 
-          {/* Navigation — search bar + links */}
-          <nav className="hidden md:flex items-center gap-8 flex-1 mx-8">
-            <div className="flex-1 max-w-md">
+          {/* Search bar — centered */}
+          <div className="hidden md:flex flex-1 justify-center mx-8">
+            <div className="w-full max-w-md">
               <SearchTypeahead inline />
             </div>
-            {subscriptionsEnabled && !isMember && (
-              <Link
-                href="/membership"
-                className="inline-flex items-center gap-1.5 nav-link-accent"
-              >
-                <Crown className="h-3 w-3" />
-                Membership
-              </Link>
-            )}
-          </nav>
+          </div>
 
           {/* Actions */}
           <div className="flex items-center gap-5">
@@ -68,6 +59,19 @@ export async function Header({ storeName }: { storeName: string }) {
             </button>
           </div>
         </div>
+
+        {/* Sub-nav — centered menu items */}
+        {subscriptionsEnabled && !isMember && (
+          <nav className="hidden md:flex justify-center pb-2">
+            <Link
+              href="/membership"
+              className="inline-flex items-center gap-1.5 nav-link-accent"
+            >
+              <Crown className="h-3 w-3" />
+              Membership
+            </Link>
+          </nav>
+        )}
       </div>
     </header>
   );
