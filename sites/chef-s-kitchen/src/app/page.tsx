@@ -16,8 +16,11 @@ export default async function HomePage() {
     getFeatureFlag("subscriptions_enabled"),
   ]);
 
-  // Top-level categories only
-  const topCategories = allCategories.filter((c) => c.depth === 0).slice(0, 6);
+  // Top-level categories, filling to 6 with depth-1 if needed
+  const depth0 = allCategories.filter((c) => c.depth === 0);
+  const topCategories = depth0.length >= 6
+    ? depth0.slice(0, 6)
+    : [...depth0, ...allCategories.filter((c) => c.depth === 1 && !depth0.some((d) => d.id === c.id))].slice(0, 6);
 
   // Fetch membership data if enabled
   let plan: { price: string; billingInterval: string; slug: string; benefits: unknown } | null = null;
