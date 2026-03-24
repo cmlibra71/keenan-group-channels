@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import Script from "next/script";
-import { getSiteConfig } from "@/lib/store";
+import { getSiteConfig, getFeatureFlag } from "@/lib/store";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import "./globals.css";
@@ -20,29 +19,18 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { site, channel } = await getSiteConfig();
+  const [{ site, channel }, subscriptionsEnabled] = await Promise.all([
+    getSiteConfig(),
+    getFeatureFlag("subscriptions_enabled"),
+  ]);
   const storeName = site?.siteName || channel?.name || "Store";
 
   return (
     <html lang="en">
-      <head>
-        <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-Y5ZDZGQ7ZB"
-          strategy="afterInteractive"
-        />
-        <Script id="gtag-init" strategy="afterInteractive">
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-Y5ZDZGQ7ZB');
-          `}
-        </Script>
-      </head>
       <body className="min-h-screen flex flex-col bg-white text-zinc-900 antialiased">
         <Header storeName={storeName} />
         <main className="flex-1">{children}</main>
-        <Footer storeName={storeName} />
+        <Footer storeName={storeName} subscriptionsEnabled={subscriptionsEnabled} />
       </body>
     </html>
   );

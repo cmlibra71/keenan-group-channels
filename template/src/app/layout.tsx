@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getSiteConfig } from "@/lib/store";
+import { getSiteConfig, getFeatureFlag } from "@/lib/store";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import "./globals.css";
@@ -19,7 +19,10 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { site, channel } = await getSiteConfig();
+  const [{ site, channel }, subscriptionsEnabled] = await Promise.all([
+    getSiteConfig(),
+    getFeatureFlag("subscriptions_enabled"),
+  ]);
   const storeName = site?.siteName || channel?.name || "Store";
 
   return (
@@ -27,7 +30,7 @@ export default async function RootLayout({
       <body className="min-h-screen flex flex-col bg-white text-zinc-900 antialiased">
         <Header storeName={storeName} />
         <main className="flex-1">{children}</main>
-        <Footer storeName={storeName} />
+        <Footer storeName={storeName} subscriptionsEnabled={subscriptionsEnabled} />
       </body>
     </html>
   );

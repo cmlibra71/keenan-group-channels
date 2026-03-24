@@ -213,10 +213,17 @@ export function ProductDetail({
           </div>
         ) : (
           <Link
-            href="/account/membership"
-            className="mt-2 inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm px-3 py-1.5 rounded-full hover:bg-emerald-100 transition-colors"
+            href="/membership"
+            className="mt-3 block rounded-lg border border-emerald-200 bg-emerald-50 p-3 hover:bg-emerald-100 transition-colors"
           >
-            Join &amp; save <Price amount={(displaySalePrice ?? displayPrice) - memberPrice} className="font-bold" />/month
+            <div className="flex items-center gap-2 text-emerald-800">
+              <span className="text-sm font-semibold">Member Price: <Price amount={memberPrice} className="font-bold" /></span>
+              <span className="text-xs text-emerald-600">(Save <Price amount={(displaySalePrice ?? displayPrice) - memberPrice} />)</span>
+            </div>
+            <p className="text-xs text-emerald-600 mt-1">
+              Plus: Prize draw entries, free delivery $500+, partner discounts
+            </p>
+            <span className="text-xs font-semibold text-emerald-700 mt-1 inline-block">Join now &rarr;</span>
           </Link>
         )
       )}

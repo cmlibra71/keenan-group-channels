@@ -1,10 +1,10 @@
 import Link from "next/link";
 
-export function Footer({ storeName }: { storeName: string }) {
+export function Footer({ storeName, subscriptionsEnabled }: { storeName: string; subscriptionsEnabled?: boolean }) {
   return (
     <footer className="border-t border-zinc-200 bg-zinc-50 mt-16">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+        <div className={`grid grid-cols-1 gap-8 ${subscriptionsEnabled ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
           <div>
             <h3 className="font-bold text-zinc-900">{storeName}</h3>
             <p className="mt-2 text-sm text-zinc-500">
@@ -18,6 +18,17 @@ export function Footer({ storeName }: { storeName: string }) {
               <li><Link href="/categories" className="text-sm text-zinc-500 hover:text-zinc-900">Categories</Link></li>
             </ul>
           </div>
+          {subscriptionsEnabled && (
+            <div>
+              <h4 className="text-sm font-semibold text-zinc-900">Membership</h4>
+              <ul className="mt-2 space-y-2">
+                <li><Link href="/membership" className="text-sm text-zinc-500 hover:text-zinc-900">Join</Link></li>
+                <li><Link href="/membership#savings" className="text-sm text-zinc-500 hover:text-zinc-900">Member Benefits</Link></li>
+                <li><Link href="/membership#draws" className="text-sm text-zinc-500 hover:text-zinc-900">Prize Draws</Link></li>
+                <li><Link href="/account/partner-offers" className="text-sm text-zinc-500 hover:text-zinc-900">Partner Offers</Link></li>
+              </ul>
+            </div>
+          )}
           <div>
             <h4 className="text-sm font-semibold text-zinc-900">Account</h4>
             <ul className="mt-2 space-y-2">

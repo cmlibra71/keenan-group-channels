@@ -7,7 +7,17 @@ import { CartPanel } from "@/components/cart/CartPanel";
 import { QuotePanel } from "@/components/quote/QuotePanel";
 import { AccountPanel } from "@/components/account/AccountPanel";
 
-export function HeaderClient({ cartCount, quoteCount, isMember }: { cartCount: number; quoteCount: number; isMember?: boolean }) {
+export function HeaderClient({
+  cartCount,
+  quoteCount,
+  isMember,
+  entryCount,
+}: {
+  cartCount: number;
+  quoteCount: number;
+  isMember?: boolean;
+  entryCount?: number;
+}) {
   const [cartOpen, setCartOpen] = useState(false);
   const [quoteOpen, setQuoteOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -52,7 +62,16 @@ export function HeaderClient({ cartCount, quoteCount, isMember }: { cartCount: n
         className="hidden sm:flex items-center gap-1.5 text-sm font-medium text-zinc-600 hover:text-zinc-900"
         aria-label="Open account"
       >
-        {isMember && <Crown className="h-4 w-4 text-amber-500" />}
+        {isMember && (
+          <span className="relative">
+            <Crown className="h-4 w-4 text-amber-500" />
+            {entryCount != null && entryCount > 0 && (
+              <span className="absolute -top-2 -right-3 bg-amber-500 text-white text-[10px] font-bold rounded-full h-3.5 min-w-[14px] flex items-center justify-center px-0.5">
+                {entryCount > 99 ? "99+" : entryCount}
+              </span>
+            )}
+          </span>
+        )}
         Account
       </button>
 
