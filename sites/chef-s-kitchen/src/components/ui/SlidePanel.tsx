@@ -54,7 +54,7 @@ export function SlidePanel({ isOpen, onClose, title, children }: SlidePanelProps
         <>
           {/* Backdrop */}
           <div
-            className={`fixed inset-0 z-50 bg-black/30 transition-opacity duration-300 ${
+            className={`fixed inset-0 z-[60] bg-black/30 transition-opacity duration-300 ${
               isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
             }`}
             onClick={onClose}
@@ -63,7 +63,7 @@ export function SlidePanel({ isOpen, onClose, title, children }: SlidePanelProps
 
           {/* Panel */}
           <div
-            className={`fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-xl transition-transform duration-300 ease-in-out ${
+            className={`fixed inset-y-0 right-0 z-[60] w-full max-w-md bg-white shadow-xl transition-transform duration-300 ease-in-out ${
               isOpen ? "translate-x-0" : "translate-x-full"
             }`}
             role="dialog"
