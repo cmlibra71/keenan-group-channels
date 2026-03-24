@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { Search, Menu, Crown } from "lucide-react";
+import { Menu, Crown, Search } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
 import { getActiveSubscription, getFeatureFlag, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
+import { SearchTypeahead } from "../search/SearchTypeahead";
 
 export async function Header({ storeName }: { storeName: string }) {
   const [cart, quote] = await Promise.all([getCart(), getQuote()]);
@@ -40,14 +41,11 @@ export async function Header({ storeName }: { storeName: string }) {
             {storeName}
           </Link>
 
-          {/* Navigation — understated, uppercase sans */}
-          <nav className="hidden md:flex items-center gap-10">
-            <Link href="/products" className="nav-link">
-              Products
-            </Link>
-            <Link href="/categories" className="nav-link">
-              Categories
-            </Link>
+          {/* Navigation — search bar + links */}
+          <nav className="hidden md:flex items-center gap-8 flex-1 mx-8">
+            <div className="flex-1 max-w-md">
+              <SearchTypeahead inline />
+            </div>
             {subscriptionsEnabled && !isMember && (
               <Link
                 href="/membership"
@@ -61,7 +59,7 @@ export async function Header({ storeName }: { storeName: string }) {
 
           {/* Actions */}
           <div className="flex items-center gap-5">
-            <Link href="/search" className="text-text-secondary hover:text-text-primary transition-colors duration-300">
+            <Link href="/search" className="md:hidden text-text-secondary hover:text-text-primary transition-colors duration-300">
               <Search className="h-[1.125rem] w-[1.125rem]" strokeWidth={1.5} />
             </Link>
             <HeaderClient cartCount={cartCount} quoteCount={quoteCount} isMember={isMember} entryCount={entryCount} />

@@ -24,7 +24,7 @@ interface SearchResponse {
   estimatedTotalHits: number;
 }
 
-export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
+export function SearchTypeahead({ defaultValue, inline }: { defaultValue?: string; inline?: boolean }) {
   const router = useRouter();
   const [query, setQuery] = useState(defaultValue || "");
   const [results, setResults] = useState<SearchResponse | null>(null);
@@ -114,7 +114,7 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
 
   function navigateToProduct(hit: SearchHit) {
     setIsOpen(false);
-    router.push(`/products/${hit.urlPath || hit.id}`);
+    router.push(`/search?q=${encodeURIComponent(hit.name)}`);
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -161,9 +161,9 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
       {/* Search Input */}
       <div className="relative">
         {isLoading ? (
-          <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-text-muted animate-spin" />
+          <Loader2 className={`absolute left-3 top-1/2 -translate-y-1/2 text-text-muted animate-spin ${inline ? "h-4 w-4" : "h-5 w-5"}`} />
         ) : (
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-text-muted" strokeWidth={1.5} />
+          <Search className={`absolute left-3 top-1/2 -translate-y-1/2 text-text-muted ${inline ? "h-4 w-4" : "h-5 w-5"}`} strokeWidth={1.5} />
         )}
         <input
           ref={inputRef}
@@ -178,8 +178,8 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
           }}
           onKeyDown={handleKeyDown}
           placeholder="Search products..."
-          className="w-full pl-10 pr-10 py-3 input"
-          autoFocus
+          className={`w-full pl-10 pr-10 input ${inline ? "py-2 text-sm" : "py-3"}`}
+          autoFocus={!inline}
           autoComplete="off"
         />
         {query && (
