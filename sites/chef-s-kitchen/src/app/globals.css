@@ -109,7 +109,6 @@ body {
    COMPONENT CLASSES
    Semantic classes that reference design tokens.
    Components use these instead of raw Tailwind utilities.
-   Not in @layer so they can freely @apply each other.
    ══════════════════════════════════════════════════════ */
 
 /* ═══ BUTTONS ═══════════════════════════════════════ */
@@ -122,19 +121,28 @@ body {
 }
 
 .btn-primary {
-  @apply btn bg-accent text-white
+  @apply inline-flex items-center justify-center gap-2.5
+         font-medium text-sm tracking-wide px-7 py-3.5
+         transition-colors duration-300
+         bg-accent text-white
          hover:bg-accent-hover
          disabled:bg-surface-secondary disabled:text-text-muted
          disabled:cursor-not-allowed;
 }
 
 .btn-secondary {
-  @apply btn border border-border text-text-body
+  @apply inline-flex items-center justify-center gap-2.5
+         font-medium text-sm tracking-wide px-7 py-3.5
+         transition-colors duration-300
+         border border-border text-text-body
          hover:border-text-primary/30;
 }
 
 .btn-secondary-dark {
-  @apply btn border border-slate-600 text-slate-300
+  @apply inline-flex items-center justify-center gap-2.5
+         font-medium text-sm tracking-wide px-7 py-3.5
+         transition-colors duration-300
+         border border-slate-600 text-slate-300
          hover:border-slate-400 hover:text-white;
 }
 
@@ -147,23 +155,44 @@ body {
 /* ═══ TYPOGRAPHY ════════════════════════════════════ */
 
 .eyebrow {
-  @apply heading-sans text-accent tracking-widest;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+  font-size: 0.6875rem;
+  @apply text-accent tracking-widest;
 }
 
 .section-title {
-  @apply heading-serif text-3xl sm:text-4xl text-text-primary;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  @apply text-3xl sm:text-4xl text-text-primary;
 }
 
 .hero-title {
-  @apply heading-serif text-4xl sm:text-5xl lg:text-6xl;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  @apply text-4xl sm:text-5xl lg:text-6xl;
 }
 
 .page-title {
-  @apply heading-serif text-2xl sm:text-3xl text-text-primary;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  @apply text-2xl sm:text-3xl text-text-primary;
 }
 
 .panel-title {
-  @apply text-lg heading-serif text-text-primary;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  @apply text-lg text-text-primary;
 }
 
 .body-text {
@@ -198,11 +227,12 @@ body {
 }
 
 .card-padded {
-  @apply card p-6;
+  @apply border border-border p-6;
 }
 
 .card-interactive {
-  @apply card-padded hover:border-text-primary/30
+  @apply border border-border p-6
+         hover:border-text-primary/30
          transition-colors duration-300;
 }
 
@@ -212,7 +242,9 @@ body {
 }
 
 .card-dark-interactive {
-  @apply card-dark hover:border-accent/30
+  @apply border border-slate-700/50 bg-surface-dark-alt/50
+         backdrop-blur-sm p-8
+         hover:border-accent/30
          transition-all duration-500;
 }
 
@@ -227,11 +259,22 @@ body {
 }
 
 .section-light {
-  @apply container-page section-padding;
+  @apply mx-auto max-w-7xl px-6 lg:px-8 py-20 sm:py-24;
 }
 
 .section-dark {
-  @apply relative bg-surface-dark overflow-hidden grain;
+  position: relative;
+  overflow: hidden;
+  @apply bg-surface-dark;
+}
+.section-dark::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.03;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 128px 128px;
 }
 
 .section-bordered {
@@ -259,12 +302,22 @@ body {
 /* ═══ NAV LINKS ════════════════════════════════════ */
 
 .nav-link {
-  @apply heading-sans text-text-secondary
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+  font-size: 0.6875rem;
+  @apply text-text-secondary
          hover:text-text-primary transition-colors duration-300;
 }
 
 .nav-link-accent {
-  @apply heading-sans text-accent
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+  font-size: 0.6875rem;
+  @apply text-accent
          hover:text-accent-dark transition-colors duration-300;
 }
 
