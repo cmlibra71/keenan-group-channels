@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, customerService, CHANNEL_ID } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscription, customerService, CHANNEL_ID } from "@/lib/store";
 import { getSession } from "@/lib/auth";
 import { ChevronLeft } from "lucide-react";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
@@ -34,9 +34,12 @@ export default async function ProductPage({
     const session = await getSession();
     let customerGroupId: number | null = null;
     if (session) {
-      const customer = await customerService.getById(session.customerId) as { customerGroupId: number | null } | null;
-      customerGroupId = customer?.customerGroupId ?? null;
-      isMember = !!customerGroupId;
+      const activeSub = await getActiveSubscription(session.customerId);
+      if (activeSub) {
+        const customer = await customerService.getById(session.customerId) as { customerGroupId: number | null } | null;
+        customerGroupId = customer?.customerGroupId ?? null;
+        isMember = true;
+      }
     }
     const defaultVariant = product.variants?.[0];
     if (defaultVariant) {
