@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, subscriptionPlanService, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getActiveSubscription, subscriptionPlanService, CHANNEL_ID } from "@/lib/store";
 import { SubscribeForm } from "./SubscribeForm";
 
 export const metadata = {
@@ -18,6 +18,10 @@ export default async function SubscribePage({
   const session = await getSession();
   if (!session) redirect("/account");
 
+  // Redirect active subscribers back to membership page
+  const activeSub = await getActiveSubscription(session.customerId);
+  if (activeSub) redirect("/account/membership");
+
   const { planSlug } = await params;
   const plan = await subscriptionPlanService.getBySlugForChannel(CHANNEL_ID, planSlug);
 
@@ -28,8 +32,8 @@ export default async function SubscribePage({
 
   if (!stripePublishableKey || !metafields?.stripe_price_id) {
     return (
-      <div className="mx-auto max-w-lg px-6 lg:px-8 section-padding">
-        <h1 className="page-title mb-4">Subscribe</h1>
+      <div className="mx-auto max-w-lg px-4 sm:px-6 lg:px-8 py-8">
+        <h1 className="text-2xl font-bold text-zinc-900 mb-4">Subscribe</h1>
         <p className="text-red-600">
           Payment is not properly configured. Please contact support.
         </p>
@@ -38,12 +42,11 @@ export default async function SubscribePage({
   }
 
   return (
-    <div className="mx-auto max-w-lg px-6 lg:px-8 section-padding">
-      <p className="eyebrow mb-3">SUBSCRIBE</p>
-      <h1 className="page-title mb-2">
+    <div className="mx-auto max-w-lg px-4 sm:px-6 lg:px-8 py-8">
+      <h1 className="text-2xl font-bold text-zinc-900 mb-2">
         Subscribe to {plan.name}
       </h1>
-      <p className="text-text-secondary mb-6">
+      <p className="text-zinc-600 mb-6">
         ${parseFloat(plan.price).toFixed(2)} / {plan.billingInterval}
       </p>
 

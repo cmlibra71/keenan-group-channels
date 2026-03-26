@@ -30,6 +30,7 @@ export default async function ProductPage({
   let isMember = false;
   const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
 
+  let memberPriceMap: Record<number, number> = {};
   if (memberPricingEnabled) {
     const session = await getSession();
     let customerGroupId: number | null = null;
@@ -41,12 +42,21 @@ export default async function ProductPage({
         isMember = true;
       }
     }
-    const defaultVariant = product.variants?.[0];
-    if (defaultVariant) {
-      const pricing = await getEffectivePrice(defaultVariant.id, CHANNEL_ID, customerGroupId);
+    // Fetch member prices for ALL variants so client can update on variant change
+    const variants = product.variants ?? [];
+    const pricingResults = await Promise.all(
+      variants.map((v) => getEffectivePrice(v.id, CHANNEL_ID, customerGroupId))
+    );
+    for (let i = 0; i < variants.length; i++) {
+      const pricing = pricingResults[i];
       if (pricing.memberPrice) {
-        memberPrice = parseFloat(pricing.memberPrice);
+        memberPriceMap[variants[i].id] = parseFloat(pricing.memberPrice);
       }
+    }
+    // Set default member price from first variant for initial render
+    const defaultVariant = variants[0];
+    if (defaultVariant && memberPriceMap[defaultVariant.id] != null) {
+      memberPrice = memberPriceMap[defaultVariant.id];
     }
   }
 
@@ -94,6 +104,7 @@ export default async function ProductPage({
           bulkPricing: product.bulkPricing ?? [],
         }}
         memberPrice={memberPrice}
+        memberPriceMap={memberPriceMap}
         isMember={isMember}
       />
 

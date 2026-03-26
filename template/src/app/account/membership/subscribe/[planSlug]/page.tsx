@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, subscriptionPlanService, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getActiveSubscription, subscriptionPlanService, CHANNEL_ID } from "@/lib/store";
 import { SubscribeForm } from "./SubscribeForm";
 
 export const metadata = {
@@ -17,6 +17,10 @@ export default async function SubscribePage({
 
   const session = await getSession();
   if (!session) redirect("/account");
+
+  // Redirect active subscribers back to membership page
+  const activeSub = await getActiveSubscription(session.customerId);
+  if (activeSub) redirect("/account/membership");
 
   const { planSlug } = await params;
   const plan = await subscriptionPlanService.getBySlugForChannel(CHANNEL_ID, planSlug);

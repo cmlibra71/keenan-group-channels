@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Crown, ArrowRight } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription, channelSettingsService, CHANNEL_ID } from "@/lib/store";
 import { CheckoutForm } from "@/components/checkout/CheckoutForm";
 
 export const metadata = {
@@ -20,6 +20,16 @@ export default async function CheckoutPage() {
   const session = await getSession();
   const subtotal = parseFloat(cart.cartAmount ?? "0");
 
+  // Check tax mode
+  let pricesIncludeTax = false;
+  try {
+    const taxSetting = await channelSettingsService.getByKey(CHANNEL_ID, "prices_include_tax");
+    pricesIncludeTax = taxSetting.setting_value === true || taxSetting.setting_value === "true";
+  } catch {}
+  const gstAmount = pricesIncludeTax
+    ? Math.round((subtotal / 1.1 * 0.1) * 100) / 100
+    : Math.round(subtotal * 0.1 * 100) / 100;
+
   // Check membership status for checkout banners
   let showMemberBanner = false;
   let estimatedSavings = 0;
@@ -33,7 +43,6 @@ export default async function CheckoutPage() {
       isMember = !!activeSub;
     }
     if (isMember) {
-      // Calculate actual member savings from cart discount
       memberSavings = parseFloat(cart.discountAmount ?? "0");
     } else {
       const plans = await getSubscriptionPlans();
@@ -45,28 +54,27 @@ export default async function CheckoutPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-6 lg:px-8 section-padding">
-      <p className="eyebrow mb-3">ORDER</p>
-      <h1 className="text-3xl heading-serif text-text-primary mb-8">Checkout</h1>
+    <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
+      <h1 className="text-3xl font-bold text-zinc-900 mb-8">Checkout</h1>
 
       {isMember && memberSavings > 0 && (
-        <div className="mb-6 flex items-center gap-2 bg-surface-primary border border-accent/30 px-4 py-3">
-          <Crown className="h-4 w-4 text-accent shrink-0" />
-          <span className="text-sm text-text-body">
+        <div className="mb-6 flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+          <Crown className="h-4 w-4 text-green-600 shrink-0" />
+          <span className="text-sm text-green-800">
             You&apos;re saving ${memberSavings.toFixed(2)} with your membership on this order
           </span>
         </div>
       )}
 
       {showMemberBanner && estimatedSavings > 0 && (
-        <div className="mb-6 flex items-center justify-between bg-surface-primary border border-border px-4 py-3">
-          <div className="flex items-center gap-2 text-sm text-text-body">
-            <Crown className="h-4 w-4 text-accent shrink-0" />
+        <div className="mb-6 flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+          <div className="flex items-center gap-2 text-sm text-amber-800">
+            <Crown className="h-4 w-4 text-amber-600 shrink-0" />
             Members save ~${estimatedSavings.toFixed(2)} on this order.
           </div>
           <Link
             href="/membership"
-            className="inline-flex items-center gap-1 text-sm font-semibold text-accent hover:text-accent-dark shrink-0 transition-colors duration-300"
+            className="inline-flex items-center gap-1 text-sm font-semibold text-amber-700 hover:text-amber-800 shrink-0"
           >
             Join now
             <ArrowRight className="h-3.5 w-3.5" />
@@ -77,6 +85,9 @@ export default async function CheckoutPage() {
       <CheckoutForm
         items={cart.items}
         subtotal={subtotal}
+        gstAmount={gstAmount}
+        isMember={isMember}
+        pricesIncludeTax={pricesIncludeTax}
         customerEmail={session?.email}
       />
     </div>

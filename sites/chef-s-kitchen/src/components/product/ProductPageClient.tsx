@@ -50,6 +50,7 @@ type BulkPricingRule = {
 export function ProductPageClient({
   product,
   memberPrice,
+  memberPriceMap,
   isMember,
 }: {
   product: {
@@ -70,12 +71,18 @@ export function ProductPageClient({
     bulkPricing: BulkPricingRule[];
   };
   memberPrice?: number | null;
+  memberPriceMap?: Record<number, number>;
   isMember?: boolean;
 }) {
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
 
   const selectedVariant = product.variants.find((v) => v.id === selectedVariantId);
   const variantImageUrl = selectedVariant?.imageUrl ?? null;
+
+  // Resolve member price for the currently selected variant
+  const activeMemberPrice = selectedVariantId && memberPriceMap?.[selectedVariantId] != null
+    ? memberPriceMap[selectedVariantId]
+    : memberPrice ?? null;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
@@ -88,10 +95,10 @@ export function ProductPageClient({
 
       {/* Details */}
       <div>
-        <h1 className="text-3xl heading-serif text-text-primary">{product.name}</h1>
+        <h1 className="text-3xl font-bold text-zinc-900">{product.name}</h1>
 
         {product.sku && (
-          <p className="mt-1 text-sm text-text-secondary">SKU: {product.sku}</p>
+          <p className="mt-1 text-sm text-zinc-500">SKU: {product.sku}</p>
         )}
 
         {product.descriptionShort && (
@@ -99,7 +106,7 @@ export function ProductPageClient({
             <RichContent
               html={product.descriptionShort}
               stripStyles
-              className="text-sm text-text-secondary prose prose-sm"
+              className="text-sm text-zinc-600 prose prose-sm"
             />
           </div>
         )}
@@ -117,7 +124,7 @@ export function ProductPageClient({
           variantOptionMappings={product.variantOptionMappings}
           bulkPricing={product.bulkPricing}
           onVariantChange={setSelectedVariantId}
-          memberPrice={memberPrice}
+          memberPrice={activeMemberPrice}
           isMember={isMember}
         />
       </div>

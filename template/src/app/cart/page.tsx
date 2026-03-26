@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription, channelSettingsService, CHANNEL_ID } from "@/lib/store";
 import { CartItemsList } from "@/components/cart/CartItemsList";
 import { CartSummary } from "@/components/cart/CartSummary";
 import { MembershipCartUpsell } from "@/components/cart/MembershipCartUpsell";
@@ -37,6 +37,13 @@ export default async function CartPage() {
   const discount = parseFloat(cart!.discountAmount ?? "0");
   const total = parseFloat(cart!.cartAmount ?? "0");
 
+  // Check tax mode
+  let pricesIncludeTax = false;
+  try {
+    const taxSetting = await channelSettingsService.getByKey(CHANNEL_ID, "prices_include_tax");
+    pricesIncludeTax = taxSetting.setting_value === true || taxSetting.setting_value === "true";
+  } catch {}
+
   // Check membership upsell eligibility
   let showUpsell = false;
   let planPrice = 0;
@@ -69,7 +76,7 @@ export default async function CartPage() {
           <CartItemsList items={items} />
         </div>
         <div className="space-y-4">
-          <CartSummary subtotal={subtotal} discount={discount} total={total} isMember={isMember} />
+          <CartSummary subtotal={subtotal} discount={discount} total={total} isMember={isMember} pricesIncludeTax={pricesIncludeTax} />
           {showUpsell && (
             <MembershipCartUpsell
               cartTotal={total}

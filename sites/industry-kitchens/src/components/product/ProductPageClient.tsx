@@ -50,6 +50,7 @@ type BulkPricingRule = {
 export function ProductPageClient({
   product,
   memberPrice,
+  memberPriceMap,
   isMember,
 }: {
   product: {
@@ -70,12 +71,18 @@ export function ProductPageClient({
     bulkPricing: BulkPricingRule[];
   };
   memberPrice?: number | null;
+  memberPriceMap?: Record<number, number>;
   isMember?: boolean;
 }) {
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
 
   const selectedVariant = product.variants.find((v) => v.id === selectedVariantId);
   const variantImageUrl = selectedVariant?.imageUrl ?? null;
+
+  // Resolve member price for the currently selected variant
+  const activeMemberPrice = selectedVariantId && memberPriceMap?.[selectedVariantId] != null
+    ? memberPriceMap[selectedVariantId]
+    : memberPrice ?? null;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
@@ -117,7 +124,7 @@ export function ProductPageClient({
           variantOptionMappings={product.variantOptionMappings}
           bulkPricing={product.bulkPricing}
           onVariantChange={setSelectedVariantId}
-          memberPrice={memberPrice}
+          memberPrice={activeMemberPrice}
           isMember={isMember}
         />
       </div>

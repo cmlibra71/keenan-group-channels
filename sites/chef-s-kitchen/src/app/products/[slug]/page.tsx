@@ -30,6 +30,7 @@ export default async function ProductPage({
   let isMember = false;
   const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
 
+  let memberPriceMap: Record<number, number> = {};
   if (memberPricingEnabled) {
     const session = await getSession();
     let customerGroupId: number | null = null;
@@ -41,12 +42,21 @@ export default async function ProductPage({
         isMember = true;
       }
     }
-    const defaultVariant = product.variants?.[0];
-    if (defaultVariant) {
-      const pricing = await getEffectivePrice(defaultVariant.id, CHANNEL_ID, customerGroupId);
+    // Fetch member prices for ALL variants so client can update on variant change
+    const variants = product.variants ?? [];
+    const pricingResults = await Promise.all(
+      variants.map((v) => getEffectivePrice(v.id, CHANNEL_ID, customerGroupId))
+    );
+    for (let i = 0; i < variants.length; i++) {
+      const pricing = pricingResults[i];
       if (pricing.memberPrice) {
-        memberPrice = parseFloat(pricing.memberPrice);
+        memberPriceMap[variants[i].id] = parseFloat(pricing.memberPrice);
       }
+    }
+    // Set default member price from first variant for initial render
+    const defaultVariant = variants[0];
+    if (defaultVariant && memberPriceMap[defaultVariant.id] != null) {
+      memberPrice = memberPriceMap[defaultVariant.id];
     }
   }
 
@@ -69,8 +79,8 @@ export default async function ProductPage({
   }[];
 
   return (
-    <div className="container-page section-padding">
-      <Link href="/products" className="inline-flex items-center text-sm text-text-secondary hover:text-text-primary mb-6 transition-colors duration-300">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+      <Link href="/products" className="inline-flex items-center text-sm text-zinc-500 hover:text-zinc-900 mb-6">
         <ChevronLeft className="h-4 w-4 mr-1" />
         Back to Products
       </Link>
@@ -94,6 +104,7 @@ export default async function ProductPage({
           bulkPricing: product.bulkPricing ?? [],
         }}
         memberPrice={memberPrice}
+        memberPriceMap={memberPriceMap}
         isMember={isMember}
       />
 
@@ -109,9 +120,8 @@ export default async function ProductPage({
 
       {/* Related Products */}
       {relatedProducts.length > 0 && (
-        <div className="mt-12 border-t border-border pt-8">
-          <p className="eyebrow mb-3">YOU MAY ALSO LIKE</p>
-          <h2 className="text-2xl heading-serif text-text-primary mb-6">Related Products</h2>
+        <div className="mt-12 border-t border-zinc-200 pt-8">
+          <h2 className="text-2xl font-bold text-zinc-900 mb-6">Related Products</h2>
           <ProductGrid products={relatedProducts} memberPricingAvailable={memberPricingEnabled} />
         </div>
       )}

@@ -2,12 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const milestones = [
-  { month: 1, entries: 1, total: 1 },
-  { month: 3, entries: 3, total: 6 },
-  { month: 6, entries: 6, total: 21 },
-  { month: 12, entries: 12, total: 78 },
-];
+// Generate real cumulative entry data: month N earns N entries, cumulative = N*(N+1)/2
+function generateProgression(months: number) {
+  const data = [];
+  let cumulative = 0;
+  for (let m = 1; m <= months; m++) {
+    cumulative += m;
+    data.push({ month: m, entriesThisMonth: m, total: cumulative });
+  }
+  return data;
+}
+
+const DISPLAY_MONTHS = 12;
+const progression = generateProgression(DISPLAY_MONTHS);
+const maxTotal = progression[progression.length - 1].total; // 78
 
 export function EntryAccumulationChart({ currentMonth }: { currentMonth?: number }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -29,33 +37,43 @@ export function EntryAccumulationChart({ currentMonth }: { currentMonth?: number
     return () => observer.disconnect();
   }, []);
 
-  const maxTotal = milestones[milestones.length - 1].total;
-
   return (
-    <div ref={ref} className="space-y-4">
-      {milestones.map((m) => {
+    <div ref={ref} className="space-y-3">
+      <p className="text-sm text-zinc-600 mb-4">
+        You earn entries each month you stay subscribed. Month 1 = 1 entry, Month 2 = 2 more, and so on.
+        Your entries accumulate — the longer you stay, the better your chances.
+      </p>
+
+      {progression.map((m) => {
         const pct = (m.total / maxTotal) * 100;
-        const isCurrentPosition = currentMonth != null && currentMonth >= m.month && (m === milestones[milestones.length - 1] || currentMonth < milestones[milestones.indexOf(m) + 1].month);
+        const isCurrent = currentMonth != null && currentMonth === m.month;
+        const isPast = currentMonth != null && currentMonth > m.month;
 
         return (
-          <div key={m.month} className="space-y-1.5">
+          <div key={m.month} className="space-y-1">
             <div className="flex justify-between text-sm">
-              <span className="text-zinc-600 font-medium">
+              <span className={`font-medium ${isCurrent ? "text-amber-700" : "text-zinc-600"}`}>
                 Month {m.month}
-                {isCurrentPosition && (
+                {isCurrent && (
                   <span className="ml-2 text-xs text-amber-600 font-semibold">You are here</span>
                 )}
               </span>
               <span className="text-zinc-900 font-bold">{m.total} entries</span>
             </div>
-            <div className="h-3 bg-zinc-100 rounded-full overflow-hidden">
+            <div className="h-2.5 bg-zinc-100 rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full transition-all duration-1000 ease-out"
+                className={`h-full rounded-full transition-all duration-1000 ease-out ${
+                  isCurrent
+                    ? "bg-gradient-to-r from-amber-500 to-amber-400"
+                    : isPast
+                      ? "bg-gradient-to-r from-amber-400 to-amber-300"
+                      : "bg-gradient-to-r from-amber-400 to-amber-500"
+                }`}
                 style={{ width: visible ? `${pct}%` : "0%" }}
               />
             </div>
             <p className="text-xs text-zinc-500">
-              +{m.entries} new {m.entries === 1 ? "entry" : "entries"} this month
+              +{m.entriesThisMonth} new {m.entriesThisMonth === 1 ? "entry" : "entries"} this month
             </p>
           </div>
         );

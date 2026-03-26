@@ -6,12 +6,18 @@ export function CartSummary({
   discount,
   total,
   isMember,
+  pricesIncludeTax,
 }: {
   subtotal: number;
   discount: number;
   total: number;
   isMember?: boolean;
+  pricesIncludeTax?: boolean;
 }) {
+  const gstAmount = pricesIncludeTax
+    ? Math.round((total / 1.1 * 0.1) * 100) / 100
+    : Math.round(total * 0.1 * 100) / 100;
+
   return (
     <div className="border border-zinc-200 rounded-lg p-6">
       <h2 className="text-lg font-semibold text-zinc-900 mb-4">Order Summary</h2>
@@ -33,16 +39,30 @@ export function CartSummary({
           </p>
         )}
         <div className="flex justify-between text-sm">
+          <span className="text-zinc-500">GST {pricesIncludeTax ? "(included)" : "(10%)"}</span>
+          <Price amount={gstAmount} className={`font-medium ${pricesIncludeTax ? "text-zinc-400" : ""}`} />
+        </div>
+        <div className="flex justify-between text-sm">
           <span className="text-zinc-500">Shipping</span>
-          <span className="font-medium text-zinc-400">Calculated at checkout</span>
+          {isMember && total >= 500 ? (
+            <span className="font-medium text-green-600">FREE</span>
+          ) : (
+            <span className="font-medium text-zinc-400">Calculated at checkout</span>
+          )}
         </div>
       </div>
 
       <div className="mt-4 pt-4 border-t border-zinc-200">
         <div className="flex justify-between text-base font-semibold">
-          <span>Total</span>
+          <span>Total {!pricesIncludeTax && "(ex GST)"}</span>
           <span><Price amount={total} /></span>
         </div>
+        {!pricesIncludeTax && (
+          <div className="flex justify-between text-sm text-zinc-500 mt-1">
+            <span>Total (inc GST)</span>
+            <Price amount={total + gstAmount} className="font-medium" />
+          </div>
+        )}
       </div>
 
       <Link

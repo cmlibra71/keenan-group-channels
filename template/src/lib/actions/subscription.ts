@@ -56,6 +56,16 @@ export async function createSubscription(planId: number): Promise<{
       return { success: false, error: "You already have an active subscription" };
     }
 
+    // Check for pending subscription that hasn't been activated yet
+    const allSubs = await subscriptionService.listForCustomer(
+      session.customerId,
+      CHANNEL_ID
+    );
+    const pendingSub = allSubs.find((s) => s.status === "pending");
+    if (pendingSub) {
+      return { success: false, error: "You have a pending subscription being processed" };
+    }
+
     const stripeProvider = await getStripeProvider();
 
     // Get or create Stripe customer

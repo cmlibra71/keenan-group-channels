@@ -14,10 +14,16 @@ type CartItem = {
 export function CheckoutForm({
   items,
   subtotal,
+  gstAmount,
+  isMember,
+  pricesIncludeTax,
   customerEmail,
 }: {
   items: CartItem[];
   subtotal: number;
+  gstAmount: number;
+  isMember?: boolean;
+  pricesIncludeTax?: boolean;
   customerEmail?: string;
 }) {
   const [state, formAction, isPending] = useActionState(placeOrder, null);
@@ -114,7 +120,7 @@ export function CheckoutForm({
                 <input
                   type="text"
                   name="country"
-                  defaultValue="US"
+                  defaultValue="AU"
                   className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
                 />
               </div>
@@ -157,12 +163,24 @@ export function CheckoutForm({
                 <Price amount={subtotal} className="font-medium" />
               </div>
               <div className="flex justify-between text-sm mt-2">
+                <span className="text-zinc-500">GST {pricesIncludeTax ? "(included)" : "(10%)"}</span>
+                {pricesIncludeTax ? (
+                  <Price amount={gstAmount} className="font-medium text-zinc-400" />
+                ) : (
+                  <Price amount={gstAmount} className="font-medium" />
+                )}
+              </div>
+              <div className="flex justify-between text-sm mt-2">
                 <span className="text-zinc-500">Shipping</span>
-                <span className="font-medium text-zinc-400">--</span>
+                {isMember && subtotal >= 500 ? (
+                  <span className="font-medium text-green-600">FREE</span>
+                ) : (
+                  <span className="font-medium text-zinc-400">--</span>
+                )}
               </div>
               <div className="flex justify-between text-base font-semibold mt-4 pt-4 border-t border-zinc-200">
                 <span>Total</span>
-                <span><Price amount={subtotal} /></span>
+                <span><Price amount={pricesIncludeTax ? subtotal : subtotal + gstAmount} /></span>
               </div>
             </div>
 

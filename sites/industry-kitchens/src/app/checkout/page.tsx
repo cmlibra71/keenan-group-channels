@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Crown, ArrowRight } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription, channelSettingsService, CHANNEL_ID } from "@/lib/store";
 import { CheckoutForm } from "@/components/checkout/CheckoutForm";
 
 export const metadata = {
@@ -19,6 +19,16 @@ export default async function CheckoutPage() {
 
   const session = await getSession();
   const subtotal = parseFloat(cart.cartAmount ?? "0");
+
+  // Check tax mode
+  let pricesIncludeTax = false;
+  try {
+    const taxSetting = await channelSettingsService.getByKey(CHANNEL_ID, "prices_include_tax");
+    pricesIncludeTax = taxSetting.setting_value === true || taxSetting.setting_value === "true";
+  } catch {}
+  const gstAmount = pricesIncludeTax
+    ? Math.round((subtotal / 1.1 * 0.1) * 100) / 100
+    : Math.round(subtotal * 0.1 * 100) / 100;
 
   // Check membership status for checkout banners
   let showMemberBanner = false;
@@ -75,6 +85,9 @@ export default async function CheckoutPage() {
       <CheckoutForm
         items={cart.items}
         subtotal={subtotal}
+        gstAmount={gstAmount}
+        isMember={isMember}
+        pricesIncludeTax={pricesIncludeTax}
         customerEmail={session?.email}
       />
     </div>
