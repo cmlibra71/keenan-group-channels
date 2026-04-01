@@ -65,7 +65,7 @@ export default async function MembershipLandingPage() {
               Professional Kitchen Equipment at Members-Only Prices
             </h1>
             <p className="mt-5 text-lg text-slate-400 max-w-xl leading-relaxed font-light">
-              Join our membership and unlock exclusive pricing, free delivery, monthly prize draws, and partner discounts.
+              Join our membership and unlock exclusive pricing, monthly prize draws, and partner discounts.
             </p>
             {benefits.length > 0 && (
               <ul className="mt-6 space-y-2.5">
@@ -111,8 +111,8 @@ export default async function MembershipLandingPage() {
           />
           <BenefitCard
             icon="delivery"
-            title="Free Delivery $500+"
-            description="Free shipping on orders over $500. No code needed, automatically applied at checkout."
+            title="Australia-Wide Delivery"
+            description="We deliver commercial kitchen equipment across Australia."
           />
           <BenefitCard
             icon="draws"

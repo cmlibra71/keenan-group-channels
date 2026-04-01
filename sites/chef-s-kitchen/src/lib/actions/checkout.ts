@@ -122,21 +122,10 @@ export async function placeOrder(
   const totalItems = fullCart.items.reduce((sum, i) => sum + i.quantity, 0);
 
   // Shipping calculation
-  // Members get free delivery on orders $500+ (inc tax)
   let shippingIncTax = 0;
   let shippingExTax = 0;
   let shippingTax = 0;
-  const isMember = !!(session && await getActiveSubscription(session.customerId));
-  const FREE_DELIVERY_THRESHOLD = 500;
-
-  if (isMember && subtotalIncTax >= FREE_DELIVERY_THRESHOLD) {
-    // Free delivery for members over threshold
-    shippingIncTax = 0;
-  } else {
-    // Flat rate shipping — configurable per channel, default $0 until shipping rates set up
-    // TODO: Calculate from shipping zones/methods when configured
-    shippingIncTax = 0;
-  }
+  // TODO: Calculate from shipping zones/methods when configured
   // Shipping is always specified as inc-tax amount
   const shippingCalc = calcTax(shippingIncTax, true);
   shippingExTax = shippingCalc.exTax;

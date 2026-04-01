@@ -194,13 +194,13 @@ export function ProductDetail({
           <span className="text-2xl font-bold text-text-primary">Call for Price</span>
         ) : displaySalePrice ? (
           <>
-            <Price amount={displaySalePrice} className="text-3xl font-bold text-red-600" />
+            <Price amount={displaySalePrice} className="text-3xl font-bold text-red-600" showExGst />
             <span className="text-xl text-text-muted line-through">
               <Price amount={displayPrice} />
             </span>
           </>
         ) : (
-          <Price amount={displayPrice} className="text-3xl font-bold text-text-primary" />
+          <Price amount={displayPrice} className="text-3xl font-bold text-text-primary" showExGst />
         )}
       </div>
 
@@ -221,7 +221,7 @@ export function ProductDetail({
               <span className="text-xs text-accent">(Save <Price amount={(displaySalePrice ?? displayPrice) - memberPrice} />)</span>
             </div>
             <p className="text-xs text-accent mt-1">
-              Plus: Prize draw entries, free delivery $500+, partner discounts
+              Plus: Prize draw entries, partner discounts
             </p>
             <span className="text-xs font-semibold text-accent-dark mt-1 inline-block">Join now &rarr;</span>
           </Link>

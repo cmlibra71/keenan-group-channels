@@ -52,37 +52,38 @@ export default async function HomePage() {
     <div>
       {/* ═══ Hero ═══ */}
       {subscriptionsEnabled && plan ? (
-        <section className="section-dark">
-          {/* Subtle diagonal accent */}
-          <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-accent/5 to-transparent pointer-events-none" />
+        <section className="relative overflow-hidden">
+          {/* Background image with darkening gradient behind left card */}
+          <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/images/hero-bg.webp')" }} />
+          <div className="absolute inset-0 bg-gradient-to-r from-zinc-900/80 via-zinc-900/50 to-zinc-900/30" />
 
-          <div className="relative container-page py-20 sm:py-28 lg:py-32">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
-              {/* Left — editorial type lockup */}
-              <div className="lg:col-span-7">
-                <p className="eyebrow mb-6">
+          <div className="relative z-10 container-page py-20 sm:py-28 lg:py-32">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center">
+              {/* Left — main card */}
+              <div className="lg:col-span-7 backdrop-blur-xl bg-white/30 border border-white/25 rounded-[28px] p-10 shadow-[0_8px_40px_rgba(0,0,0,0.15)]">
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/70 mb-5">
                   Members-Only Supply Partner
                 </p>
-                <h1 className="hero-title text-white">
-                  Professional Kitchen Equipment at Prices Reserved for the Trade
+                <h1 className="hero-title text-white leading-[1.08]">
+                  Professional Kitchen Equipment{"\u00A0"}at Prices Reserved for the Trade
                 </h1>
-                <p className="mt-6 text-lg text-slate-400 max-w-xl leading-relaxed font-light">
+                <p className="mt-5 text-base text-white/80 max-w-lg leading-relaxed">
                   From ${planPrice!.toFixed(2)}/{plan.billingInterval} — access wholesale pricing,
                   priority fulfilment, and member-exclusive draws across our full commercial range.
                 </p>
-                <div className="mt-10 flex flex-col sm:flex-row gap-4">
+                <div className="mt-9 flex flex-col sm:flex-row gap-3">
                   <Link
                     href="/membership"
-                    className="btn-primary"
+                    className="inline-flex items-center justify-center gap-2 bg-teal-700 text-white px-7 py-3.5 rounded-[14px] font-semibold text-sm hover:bg-teal-800 transition-colors shadow-sm"
                   >
-                    Become a Member
+                    Join & Save
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                   <Link
                     href="/products"
-                    className="btn-secondary-dark"
+                    className="inline-flex items-center justify-center gap-2 border border-white/30 bg-white/10 text-white px-7 py-3.5 rounded-[14px] font-semibold text-sm hover:bg-white/20 hover:border-white/50 transition-colors"
                   >
-                    Browse Equipment
+                    Shop All Products
                   </Link>
                 </div>
               </div>
@@ -90,12 +91,12 @@ export default async function HomePage() {
               {/* Right — featured prize or benefits card */}
               <div className="lg:col-span-5">
                 {featuredPrize ? (
-                  <Link href="/membership#draws" className="block card-dark-interactive group">
-                    <p className="eyebrow mb-5">
+                  <Link href="/membership#draws" className="block backdrop-blur-xl bg-zinc-900/30 border border-white/10 rounded-[24px] p-7 shadow-[0_8px_40px_rgba(0,0,0,0.25)] hover:border-amber-500/30 transition-colors group">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-400 mb-4">
                       Members-Only Draw
                     </p>
                     <div className="flex items-start gap-5">
-                      <div className="relative h-28 w-28 bg-slate-800 overflow-hidden shrink-0">
+                      <div className="relative h-28 w-28 bg-zinc-800 rounded-[10px] overflow-hidden shrink-0 border border-white/5">
                         {featuredPrize.imageUrl ? (
                           <Image
                             src={featuredPrize.imageUrl}
@@ -106,19 +107,19 @@ export default async function HomePage() {
                           />
                         ) : (
                           <div className="h-full w-full flex items-center justify-center">
-                            <Crown className="h-8 w-8 text-accent/30" />
+                            <Crown className="h-8 w-8 text-amber-400/30" />
                           </div>
                         )}
                       </div>
                       <div>
-                        <h3 className="font-medium text-white text-lg leading-snug">{featuredPrize.name}</h3>
+                        <h3 className="font-semibold text-white text-lg leading-snug">{featuredPrize.name}</h3>
                         {featuredPrize.value && parseFloat(featuredPrize.value) > 0 && (
-                          <p className="text-xl heading-serif text-accent-hover mt-1">
+                          <p className="text-2xl font-bold text-amber-400 mt-2">
                             ${parseFloat(featuredPrize.value).toLocaleString("en-AU", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                           </p>
                         )}
                         {featuredDraw?.scheduledAt && (
-                          <p className="text-xs text-slate-500 mt-2 tracking-wide">
+                          <p className="text-xs text-zinc-400 mt-2 tracking-wide font-medium">
                             Draw: {new Date(featuredDraw.scheduledAt).toLocaleDateString("en-AU", { day: "numeric", month: "long" })}
                           </p>
                         )}
@@ -126,13 +127,13 @@ export default async function HomePage() {
                     </div>
                   </Link>
                 ) : (
-                  <div className="card-dark">
-                    <Crown className="h-6 w-6 text-accent mb-4" />
+                  <div className="backdrop-blur-xl bg-zinc-900/30 border border-white/10 rounded-[24px] p-7 shadow-[0_8px_40px_rgba(0,0,0,0.25)]">
+                    <Crown className="h-6 w-6 text-amber-400 mb-4" />
                     <h3 className="heading-serif text-xl text-white mb-4">Member Benefits</h3>
                     <ul className="space-y-3">
                       {planBenefits.slice(0, 4).map((b, i) => (
-                        <li key={i} className="text-sm text-slate-400 flex items-start gap-3 leading-relaxed">
-                          <span className="h-px w-4 bg-teal/60 mt-2.5 shrink-0" />
+                        <li key={i} className="text-sm text-zinc-300 flex items-start gap-3 leading-relaxed">
+                          <span className="h-px w-4 bg-teal-500/60 mt-2.5 shrink-0" />
                           {b}
                         </li>
                       ))}
@@ -144,24 +145,28 @@ export default async function HomePage() {
           </div>
         </section>
       ) : (
-        <section className="section-dark">
-          <div className="relative container-page py-24 sm:py-32">
-            <p className="eyebrow mb-6">
-              Commercial Kitchen Equipment
-            </p>
-            <h1 className="hero-title text-white max-w-3xl">
-              Welcome to {channel?.name || "our store"}
-            </h1>
-            <p className="mt-6 text-lg text-slate-400 max-w-xl leading-relaxed font-light">
-              Discover our curated range of professional-grade kitchen equipment.
-            </p>
-            <Link
-              href="/products"
-              className="mt-10 btn-primary"
-            >
-              Browse Equipment
-              <ArrowRight className="h-4 w-4" />
-            </Link>
+        <section className="relative overflow-hidden">
+          <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/images/hero-bg.webp')" }} />
+          <div className="absolute inset-0 bg-gradient-to-r from-zinc-900/80 via-zinc-900/50 to-zinc-900/30" />
+          <div className="relative z-10 container-page py-24 sm:py-32">
+            <div className="backdrop-blur-xl bg-white/30 border border-white/25 rounded-[28px] p-10 shadow-[0_8px_40px_rgba(0,0,0,0.15)] max-w-2xl">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/70 mb-5">
+                Commercial Kitchen Equipment
+              </p>
+              <h1 className="hero-title text-white">
+                Welcome to {channel?.name || "our store"}
+              </h1>
+              <p className="mt-5 text-base text-white/80 max-w-lg leading-relaxed">
+                Discover our curated range of professional-grade kitchen equipment.
+              </p>
+              <Link
+                href="/products"
+                className="mt-9 inline-flex items-center justify-center gap-2 bg-teal-700 text-white px-7 py-3.5 rounded-[14px] font-semibold text-sm hover:bg-teal-800 transition-colors shadow-sm"
+              >
+                Browse Equipment
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
           </div>
         </section>
       )}

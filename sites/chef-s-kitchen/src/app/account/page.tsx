@@ -135,7 +135,7 @@ export default async function AccountPage() {
                 <h3 className="font-semibold text-text-primary">Become a Member</h3>
               </div>
               <p className="text-sm text-text-secondary">
-                Unlock exclusive pricing, prize draws, free delivery, and partner discounts.
+                Unlock exclusive pricing, prize draws, and partner discounts.
               </p>
             </div>
             <Link

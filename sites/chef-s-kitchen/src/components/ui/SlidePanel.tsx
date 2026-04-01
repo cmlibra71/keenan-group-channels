@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
@@ -16,6 +16,11 @@ interface SlidePanelProps {
 export function SlidePanel({ isOpen, onClose, title, children }: SlidePanelProps) {
   const pathname = usePathname();
   const prevPathname = useRef(pathname);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Auto-close when pathname changes while panel is open
   useEffect(() => {
@@ -50,7 +55,7 @@ export function SlidePanel({ isOpen, onClose, title, children }: SlidePanelProps
 
   return (
     <PanelContext.Provider value={panelValue}>
-      {createPortal(
+      {mounted && createPortal(
         <>
           {/* Backdrop */}
           <div
