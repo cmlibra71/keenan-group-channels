@@ -63,65 +63,76 @@ export const getSiteConfig = unstable_cache(
 // Products (channel-scoped)
 // ============================================================================
 
-export const getProducts = unstable_cache(
-  async (options?: {
-    page?: number;
-    limit?: number;
-    categoryId?: number;
-    featured?: boolean;
-    onSale?: boolean;
-    search?: string;
-  }) => productService.listForChannel(CHANNEL_ID, options),
-  [`products-${CHANNEL_ID}`],
-  { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "products"] }
-);
+export const getProducts = (options?: {
+  page?: number;
+  limit?: number;
+  categoryId?: number;
+  featured?: boolean;
+  onSale?: boolean;
+  search?: string;
+}) => {
+  const key = `products-${CHANNEL_ID}-${JSON.stringify(options || {})}`;
+  return unstable_cache(
+    async () => productService.listForChannel(CHANNEL_ID, options),
+    [key],
+    { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "products"] }
+  )();
+};
 
-export const getProductBySlug = unstable_cache(
-  async (slug: string) => productService.getBySlug(slug, CHANNEL_ID),
-  [`product-slug-${CHANNEL_ID}`],
+export const getProductBySlug = (slug: string) => unstable_cache(
+  async () => productService.getBySlug(slug, CHANNEL_ID),
+  [`product-slug-${CHANNEL_ID}-${slug}`],
   { revalidate: 120, tags: [`channel-${CHANNEL_ID}`, "products"] }
-);
+)();
 
 // ============================================================================
 // Categories
 // ============================================================================
 
-export const getCategories = unstable_cache(
-  async () => categoryService.listVisible(CHANNEL_ID),
-  [`categories-${CHANNEL_ID}`],
+export const getTopCategories = unstable_cache(
+  async () => categoryService.listTopLevelSlim(CHANNEL_ID),
+  [`top-categories-${CHANNEL_ID}`],
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "categories"] }
 );
 
-export const getCategoryBySlug = unstable_cache(
-  async (slug: string) => categoryService.getBySlug(slug, CHANNEL_ID),
-  [`category-slug-${CHANNEL_ID}`],
-  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "categories"] }
-);
+export const getCategories = async () => categoryService.listVisibleSlim(CHANNEL_ID);
 
-export const getSubcategories = unstable_cache(
-  async (parentId: number) => categoryService.getChildren(parentId),
-  [`subcategories-${CHANNEL_ID}`],
+export const getCategoryBySlug = (slug: string) => unstable_cache(
+  async () => categoryService.getBySlug(slug, CHANNEL_ID),
+  [`category-slug-${CHANNEL_ID}-${slug}`],
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "categories"] }
-);
+)();
 
-export const getCategoryStats = unstable_cache(
-  async (categoryId: number) => categoryService.getCategoryStats(categoryId),
-  [`category-stats-${CHANNEL_ID}`],
+export const getSubcategories = (parentId: number) => unstable_cache(
+  async () => categoryService.listActiveChildrenSlim(parentId),
+  [`subcategories-${CHANNEL_ID}-${parentId}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "categories"] }
+)();
+
+export const getCategoryStats = (categoryId: number) => unstable_cache(
+  async () => categoryService.getCategoryStats(categoryId),
+  [`category-stats-${CHANNEL_ID}-${categoryId}`],
   { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "categories"] }
-);
+)();
 
-export const getCategoryBreadcrumbs = unstable_cache(
-  async (pathIds: number[]) => categoryService.getBreadcrumbs(pathIds),
-  [`category-breadcrumbs-${CHANNEL_ID}`],
+export const getCategoryBreadcrumbs = (pathIds: number[]) => unstable_cache(
+  async () => categoryService.getBreadcrumbs(pathIds),
+  [`category-breadcrumbs-${CHANNEL_ID}-${pathIds.join(",")}`],
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "categories"] }
-);
+)();
+
+export const getCategoryById = (categoryId: number) => unstable_cache(
+  async () => categoryService.getById(categoryId),
+  [`category-by-id-${CHANNEL_ID}-${categoryId}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "categories"] }
+)();
 
 // ============================================================================
 // Reviews (product-scoped)
 // ============================================================================
 
-export const getProductReviews = unstable_cache(
-  async (productId: number) => {
+export const getProductReviews = (productId: number) => unstable_cache(
+  async () => {
     const result = await reviewService.list({
       page: 1,
       limit: 50,
@@ -134,16 +145,16 @@ export const getProductReviews = unstable_cache(
     });
     return result.data;
   },
-  [`reviews-${CHANNEL_ID}`],
+  [`reviews-${CHANNEL_ID}-${productId}`],
   { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "reviews"] }
-);
+)();
 
 // ============================================================================
 // Attachments (product-scoped)
 // ============================================================================
 
-export const getProductAttachments = unstable_cache(
-  async (productId: number) => {
+export const getProductAttachments = (productId: number) => unstable_cache(
+  async () => {
     const result = await productAttachmentService.listForParent(productId, {
       page: 1,
       limit: 50,
@@ -152,16 +163,16 @@ export const getProductAttachments = unstable_cache(
     });
     return result.data;
   },
-  [`attachments-${CHANNEL_ID}`],
+  [`attachments-${CHANNEL_ID}-${productId}`],
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "attachments"] }
-);
+)();
 
 // ============================================================================
 // Related Products (same category)
 // ============================================================================
 
-export const getRelatedProducts = unstable_cache(
-  async (productId: number, categoryIds: number[]) => {
+export const getRelatedProducts = (productId: number, categoryIds: number[]) => unstable_cache(
+  async () => {
     if (categoryIds.length === 0) return [];
     // Try categories from most specific to broadest, pick the first
     // that returns enough results (at least 4 related products)
@@ -180,9 +191,9 @@ export const getRelatedProducts = unstable_cache(
     });
     return result.products.filter((p: { id: number }) => p.id !== productId).slice(0, 12);
   },
-  [`related-${CHANNEL_ID}`],
+  [`related-${CHANNEL_ID}-${productId}-${categoryIds.join(",")}`],
   { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "products"] }
-);
+)();
 
 // ============================================================================
 // Subscriptions (channel-scoped)

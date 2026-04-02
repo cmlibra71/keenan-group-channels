@@ -2,7 +2,7 @@ import { getProducts, getFeatureFlag, CHANNEL_ID } from "@/lib/store";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { SearchTypeahead } from "@/components/search/SearchTypeahead";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 
 export const metadata = {
   title: "Search",
@@ -158,6 +158,40 @@ export default async function SearchPage({
           </div>
         )}
 
+        {/* Active filter breadcrumbs */}
+        {results && results.products.length > 0 && (brand || category) && (
+          <nav className="flex flex-wrap items-center gap-1.5 text-sm text-text-muted mb-4">
+            <Link href={buildSearchUrl({ q: query })} className="hover:text-text-secondary transition-colors duration-300">
+              Search: &ldquo;{query}&rdquo;
+            </Link>
+            {category && (
+              <>
+                <ChevronRight className="h-3.5 w-3.5" />
+                {brand ? (
+                  <Link href={buildSearchUrl({ q: query, category })} className="hover:text-text-secondary transition-colors duration-300">
+                    {category}
+                  </Link>
+                ) : (
+                  <span className="text-text-body">{category}</span>
+                )}
+              </>
+            )}
+            {brand && (
+              <>
+                <ChevronRight className="h-3.5 w-3.5" />
+                <span className="text-text-body">{brand}</span>
+              </>
+            )}
+            <Link
+              href={buildSearchUrl({ q: query })}
+              className="ml-2 inline-flex items-center gap-1 text-xs text-text-muted hover:text-text-primary transition-colors duration-300"
+            >
+              <X className="h-3 w-3" />
+              Clear filters
+            </Link>
+          </nav>
+        )}
+
         {results && results.products.length > 0 && (
           <div className={hasFacets ? "flex gap-8" : ""}>
             {/* Facet Sidebar */}
@@ -175,7 +209,7 @@ export default async function SearchPage({
                           href={buildSearchUrl({ q: query, category })}
                           className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-surface-secondary text-text-body hover:bg-stone-200 transition-colors duration-300"
                         >
-                          {brand} &times;
+                          {brand} <X className="h-3 w-3" />
                         </Link>
                       )}
                       {category && (
@@ -183,7 +217,7 @@ export default async function SearchPage({
                           href={buildSearchUrl({ q: query, brand })}
                           className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-surface-secondary text-text-body hover:bg-stone-200 transition-colors duration-300"
                         >
-                          {category} &times;
+                          {category} <X className="h-3 w-3" />
                         </Link>
                       )}
                     </div>

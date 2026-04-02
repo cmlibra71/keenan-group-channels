@@ -7,25 +7,33 @@ import { ProductGrid } from "@/components/product/ProductGrid";
 import { RichContent } from "@/components/content/RichContent";
 import { Price } from "@/components/ui/Price";
 
+const PRODUCTS_PER_PAGE = 24;
+
 export default async function CategoryPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ page?: string }>;
 }) {
   const { slug } = await params;
+  const { page: pageParam } = await searchParams;
+  const currentPage = Math.max(1, parseInt(pageParam || "1", 10));
   const category = await getCategoryBySlug(slug);
 
   if (!category) {
     notFound();
   }
 
-  const [{ products }, subcategories, stats, breadcrumbs, memberPricingEnabled] = await Promise.all([
-    getProducts({ categoryId: category.id, limit: 24 }),
+  const [{ products, total }, subcategories, stats, breadcrumbs, memberPricingEnabled] = await Promise.all([
+    getProducts({ categoryId: category.id, limit: PRODUCTS_PER_PAGE, page: currentPage }),
     getSubcategories(category.id),
     getCategoryStats(category.id),
     getCategoryBreadcrumbs(category.pathIds || []),
     getFeatureFlag("member_pricing_enabled"),
   ]);
+
+  const totalPages = Math.ceil((total ?? products.length) / PRODUCTS_PER_PAGE);
 
   return (
     <div className="container-page section-padding">
@@ -140,6 +148,41 @@ export default async function CategoryPage({
           <p className="eyebrow mb-3">PRODUCTS</p>
           <h2 className="panel-title mb-4">Products</h2>
           <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} />
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <nav className="mt-10 flex items-center justify-center gap-2">
+              {currentPage > 1 && (
+                <Link
+                  href={`/categories/${slug}?page=${currentPage - 1}`}
+                  className="px-4 py-2 text-sm font-medium border border-border rounded hover:bg-surface-secondary transition-colors"
+                >
+                  Previous
+                </Link>
+              )}
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                <Link
+                  key={p}
+                  href={`/categories/${slug}?page=${p}`}
+                  className={`px-3.5 py-2 text-sm font-medium rounded transition-colors ${
+                    p === currentPage
+                      ? "bg-zinc-900 text-white"
+                      : "border border-border hover:bg-surface-secondary"
+                  }`}
+                >
+                  {p}
+                </Link>
+              ))}
+              {currentPage < totalPages && (
+                <Link
+                  href={`/categories/${slug}?page=${currentPage + 1}`}
+                  className="px-4 py-2 text-sm font-medium border border-border rounded hover:bg-surface-secondary transition-colors"
+                >
+                  Next
+                </Link>
+              )}
+            </nav>
+          )}
         </div>
       )}
 

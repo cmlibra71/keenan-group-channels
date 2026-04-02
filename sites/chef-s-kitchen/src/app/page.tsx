@@ -1,26 +1,20 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Crown, ArrowRight, ChevronRight } from "lucide-react";
-import { getProducts, getSiteConfig, getCategories, getFeatureFlag, getSubscriptionPlans, getUpcomingDraws, prizeService, CHANNEL_ID } from "@/lib/store";
+import { getProducts, getSiteConfig, getTopCategories, getFeatureFlag, getSubscriptionPlans, getUpcomingDraws, prizeService, CHANNEL_ID } from "@/lib/store";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { ValueBar } from "@/components/home/ValueBar";
 import { MembershipCTA } from "@/components/home/MembershipCTA";
 import { DrawSpotlight } from "@/components/home/DrawSpotlight";
 
 export default async function HomePage() {
-  const [{ channel }, { products: featuredProducts }, allCategories, memberPricingEnabled, subscriptionsEnabled] = await Promise.all([
+  const [{ channel }, { products: featuredProducts }, topCategories, memberPricingEnabled, subscriptionsEnabled] = await Promise.all([
     getSiteConfig(),
     getProducts({ featured: true, limit: 8 }),
-    getCategories(),
+    getTopCategories(),
     getFeatureFlag("member_pricing_enabled"),
     getFeatureFlag("subscriptions_enabled"),
   ]);
-
-  // Top-level categories, filling to 6 with depth-1 if needed
-  const depth0 = allCategories.filter((c) => c.depth === 0);
-  const topCategories = depth0.length >= 6
-    ? depth0.slice(0, 6)
-    : [...depth0, ...allCategories.filter((c) => c.depth === 1 && !depth0.some((d) => d.id === c.id))].slice(0, 6);
 
   // Fetch membership data if enabled
   let plan: { price: string; billingInterval: string; slug: string; benefits: unknown } | null = null;
@@ -80,10 +74,10 @@ export default async function HomePage() {
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                   <Link
-                    href="/products"
+                    href="/search"
                     className="inline-flex items-center justify-center gap-2 border border-white/30 bg-white/10 text-white px-7 py-3.5 rounded-[14px] font-semibold text-sm hover:bg-white/20 hover:border-white/50 transition-colors"
                   >
-                    Shop All Products
+                    Browse Equipment & Supplies
                   </Link>
                 </div>
               </div>

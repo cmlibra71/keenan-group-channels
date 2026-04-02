@@ -1,11 +1,12 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscription, customerService, CHANNEL_ID } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscription, customerService, CHANNEL_ID, getCategoryById, getCategoryBreadcrumbs } from "@/lib/store";
 import { getSession } from "@/lib/auth";
-import { ChevronLeft } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductTabs } from "@/components/product/ProductTabs";
 import { ProductGrid } from "@/components/product/ProductGrid";
+import { BackButton } from "@/components/ui/BackButton";
 
 export default async function ProductPage({
   params,
@@ -24,6 +25,20 @@ export default async function ProductPage({
     getProductAttachments(product.id),
     getRelatedProducts(product.id, product.categoryIds ?? []),
   ]);
+
+  // Get category breadcrumbs from the most specific category
+  let breadcrumbs: { id: number; name: string; slug: string }[] = [];
+  const categoryIds = product.categoryIds ?? [];
+  if (categoryIds.length > 0) {
+    try {
+      const category = await getCategoryById(categoryIds[0]) as { path_ids?: number[] } | null;
+      if (category?.path_ids && category.path_ids.length > 0) {
+        breadcrumbs = await getCategoryBreadcrumbs(category.path_ids) as { id: number; name: string; slug: string }[];
+      }
+    } catch {
+      // Category may not exist in this channel's tree
+    }
+  }
 
   // Fetch member pricing if feature is enabled
   let memberPrice: number | null = null;
@@ -80,10 +95,22 @@ export default async function ProductPage({
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-      <Link href="/products" className="inline-flex items-center text-sm text-zinc-500 hover:text-zinc-900 mb-6">
-        <ChevronLeft className="h-4 w-4 mr-1" />
-        Back to Products
-      </Link>
+      {/* Breadcrumbs */}
+      {breadcrumbs.length > 0 ? (
+        <nav className="flex flex-wrap items-center gap-1.5 text-sm text-text-muted mb-6">
+          <Link href="/products" className="hover:text-text-secondary transition-colors duration-300">Products</Link>
+          {breadcrumbs.map((crumb) => (
+            <span key={crumb.id} className="flex items-center gap-1.5">
+              <ChevronRight className="h-3.5 w-3.5" />
+              <Link href={`/categories/${crumb.slug}`} className="hover:text-text-secondary transition-colors duration-300">{crumb.name}</Link>
+            </span>
+          ))}
+          <ChevronRight className="h-3.5 w-3.5" />
+          <span className="text-text-body truncate max-w-[200px]">{product.name}</span>
+        </nav>
+      ) : (
+        <BackButton fallbackHref="/products" fallbackLabel="Back to Products" className="mb-6" />
+      )}
 
       <ProductPageClient
         product={{

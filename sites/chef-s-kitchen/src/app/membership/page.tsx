@@ -53,41 +53,42 @@ export default async function MembershipLandingPage() {
   return (
     <div>
       {/* Hero */}
-      <section className="section-dark">
-        <div className="absolute top-0 right-0 w-1/3 h-full bg-gradient-to-l from-accent/5 to-transparent pointer-events-none" />
-        <div className="relative container-page py-20 sm:py-28">
-          <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 border border-accent/30 text-accent text-sm font-medium px-4 py-1.5 mb-6">
+      <section className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/images/membership-hero.webp')" }} />
+        <div className="absolute inset-0 bg-gradient-to-r from-zinc-900/80 via-zinc-900/50 to-zinc-900/30" />
+        <div className="relative z-10 container-page py-20 sm:py-28">
+          <div className="backdrop-blur-xl bg-white/30 border border-white/25 rounded-[28px] p-10 shadow-[0_8px_40px_rgba(0,0,0,0.15)] max-w-2xl">
+            <div className="inline-flex items-center gap-2 border border-white/30 text-white/80 text-xs font-bold uppercase tracking-[0.18em] px-4 py-1.5 mb-5 rounded-full">
               <Crown className="h-3.5 w-3.5" />
               From ${planPrice.toFixed(2)}/{plan.billingInterval}
             </div>
-            <h1 className="heading-serif text-4xl sm:text-5xl text-white">
+            <h1 className="hero-title text-white leading-[1.08]">
               Professional Kitchen Equipment at Members-Only Prices
             </h1>
-            <p className="mt-5 text-lg text-slate-400 max-w-xl leading-relaxed font-light">
+            <p className="mt-5 text-base text-white/80 max-w-xl leading-relaxed">
               Join our membership and unlock exclusive pricing, monthly prize draws, and partner discounts.
             </p>
             {benefits.length > 0 && (
               <ul className="mt-6 space-y-2.5">
                 {benefits.slice(0, 4).map((benefit, i) => (
-                  <li key={i} className="flex items-center gap-3 text-slate-400">
-                    <span className="h-px w-4 bg-teal/60 shrink-0" />
+                  <li key={i} className="flex items-center gap-3 text-white/70">
+                    <span className="h-px w-4 bg-white/40 shrink-0" />
                     <span className="text-sm">{benefit}</span>
                   </li>
                 ))}
               </ul>
             )}
-            <div className="mt-10 flex flex-col sm:flex-row gap-4">
+            <div className="mt-9 flex flex-col sm:flex-row gap-3">
               <Link
-                href={`/account/membership/subscribe/${plan.slug}`}
-                className="btn-primary"
+                href="/account/register"
+                className="inline-flex items-center justify-center gap-2 bg-teal-700 text-white px-7 py-3.5 rounded-[14px] font-semibold text-sm hover:bg-teal-800 transition-colors shadow-sm"
               >
                 Start Your Membership
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <a
                 href="#savings"
-                className="btn-secondary-dark"
+                className="inline-flex items-center justify-center gap-2 border border-white/30 bg-white/10 text-white px-7 py-3.5 rounded-[14px] font-semibold text-sm hover:bg-white/20 hover:border-white/50 transition-colors"
               >
                 See What You&apos;ll Save
               </a>
@@ -192,7 +193,7 @@ export default async function MembershipLandingPage() {
               </ul>
             )}
             <Link
-              href={`/account/membership/subscribe/${plan.slug}`}
+              href="/account/register"
               className="btn-primary w-full"
             >
               Start Your Membership

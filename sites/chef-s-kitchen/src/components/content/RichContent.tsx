@@ -11,7 +11,7 @@ import { useState } from "react";
  * Usage in HTML content:
  *   {{code type="readmore" label="Read More"}}
  *   {{code type="divider"}}
- *   {{code type="callout" text="Free shipping on orders over $500"}}
+ *   {{code type="callout" text="Members-only pricing on all equipment"}}
  */
 
 type CommandProps = {
@@ -135,7 +135,7 @@ export function RichContent({
   className?: string;
   stripStyles?: boolean;
 }) {
-  const cleaned = stripStyles ? html.replace(/style="[^"]*"/gi, "") : html;
+  const cleaned = stripStyles ? html.replace(/\s*style="[^"]*"/gi, "") : html;
   const parts = splitByHandlebars(cleaned);
 
   // Check if there's a readmore command — need special handling

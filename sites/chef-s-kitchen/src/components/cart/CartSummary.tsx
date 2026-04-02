@@ -44,11 +44,7 @@ export function CartSummary({
         </div>
         <div className="flex justify-between text-sm">
           <span className="text-zinc-500">Shipping</span>
-          {isMember && total >= 500 ? (
-            <span className="font-medium text-green-600">FREE</span>
-          ) : (
-            <span className="font-medium text-zinc-400">Calculated at checkout</span>
-          )}
+          <span className="font-medium text-zinc-400">Calculated at checkout</span>
         </div>
       </div>
 

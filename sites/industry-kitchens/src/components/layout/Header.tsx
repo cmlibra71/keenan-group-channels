@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Search, Menu, Crown } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
@@ -6,7 +7,7 @@ import { getSession } from "@/lib/auth";
 import { getActiveSubscription, getFeatureFlag, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 
-export async function Header({ storeName }: { storeName: string }) {
+export async function Header({ storeName, logoUrl, logoAlt }: { storeName: string; logoUrl?: string | null; logoAlt?: string | null }) {
   const [cart, quote] = await Promise.all([getCart(), getQuote()]);
   const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   const quoteCount = quote?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
@@ -36,9 +37,15 @@ export async function Header({ storeName }: { storeName: string }) {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="text-xl font-bold text-zinc-900">
-            {storeName}
-          </Link>
+          {logoUrl ? (
+            <Link href="/">
+              <Image src={logoUrl} alt={logoAlt || storeName} height={40} width={160} className="object-contain" />
+            </Link>
+          ) : (
+            <Link href="/" className="text-xl font-bold text-zinc-900">
+              {storeName}
+            </Link>
+          )}
 
           {/* Navigation */}
           <nav className="hidden md:flex items-center gap-8">

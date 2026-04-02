@@ -55,11 +55,6 @@ export default async function CategoriesPage() {
               </div>
               <div className="p-4">
                 <h2 className="text-lg font-semibold text-text-primary">{category.name}</h2>
-                {category.description && (
-                  <p className="mt-1 text-sm text-text-secondary line-clamp-2">
-                    {stripHtml(category.description)}
-                  </p>
-                )}
               </div>
             </Link>
           ))}

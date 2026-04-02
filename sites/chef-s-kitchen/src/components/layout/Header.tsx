@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Menu, Crown, Search } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
@@ -7,7 +8,7 @@ import { getActiveSubscription, getFeatureFlag, drawEntryService, CHANNEL_ID } f
 import { HeaderClient } from "./HeaderClient";
 import { SearchTypeahead } from "../search/SearchTypeahead";
 
-export async function Header({ storeName }: { storeName: string }) {
+export async function Header({ storeName, logoUrl, logoAlt }: { storeName: string; logoUrl?: string | null; logoAlt?: string | null }) {
   const [cart, quote] = await Promise.all([getCart(), getQuote()]);
   const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   const quoteCount = quote?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
@@ -36,10 +37,16 @@ export async function Header({ storeName }: { storeName: string }) {
     <header className="bg-white/80 backdrop-blur-md border-b border-border sticky top-0 z-50">
       <div className="container-page">
         <div className="flex h-[4.5rem] items-center justify-between">
-          {/* Logo — serif wordmark */}
-          <Link href="/" className="heading-serif text-2xl text-text-primary hover:text-accent transition-colors duration-300">
-            {storeName}
-          </Link>
+          {/* Logo */}
+          {logoUrl ? (
+            <Link href="/">
+              <Image src={logoUrl} alt={logoAlt || storeName} height={40} width={160} className="object-contain" />
+            </Link>
+          ) : (
+            <Link href="/" className="heading-serif text-2xl text-text-primary hover:text-accent transition-colors duration-300">
+              {storeName}
+            </Link>
+          )}
 
           {/* Search bar — centered */}
           <div className="hidden md:flex flex-1 justify-center mx-8">

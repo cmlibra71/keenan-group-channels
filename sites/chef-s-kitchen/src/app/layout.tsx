@@ -11,6 +11,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: site?.metaTitle || channel?.name || "Store",
     description: site?.metaDescription || `Welcome to ${channel?.name || "our store"}`,
+    icons: site?.faviconUrl ? { icon: site.faviconUrl } : undefined,
   };
 }
 
@@ -24,11 +25,13 @@ export default async function RootLayout({
     getFeatureFlag("subscriptions_enabled"),
   ]);
   const storeName = site?.siteName || channel?.name || "Store";
+  const logoUrl = site?.logoUrl || null;
+  const logoAlt = site?.logoAlt || null;
 
   return (
     <html lang="en">
       <body className="min-h-screen flex flex-col bg-surface-primary text-text-body antialiased">
-        <Header storeName={storeName} />
+        <Header storeName={storeName} logoUrl={logoUrl} logoAlt={logoAlt} />
         <main className="flex-1">{children}</main>
         <Footer storeName={storeName} subscriptionsEnabled={subscriptionsEnabled} />
       </body>

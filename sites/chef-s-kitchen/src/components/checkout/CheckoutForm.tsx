@@ -172,11 +172,7 @@ export function CheckoutForm({
               </div>
               <div className="flex justify-between text-sm mt-2">
                 <span className="text-zinc-500">Shipping</span>
-                {isMember && subtotal >= 500 ? (
-                  <span className="font-medium text-green-600">FREE</span>
-                ) : (
-                  <span className="font-medium text-zinc-400">--</span>
-                )}
+                <span className="font-medium text-zinc-400">--</span>
               </div>
               <div className="flex justify-between text-base font-semibold mt-4 pt-4 border-t border-zinc-200">
                 <span>Total</span>
