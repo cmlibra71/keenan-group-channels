@@ -325,3 +325,8 @@ body {
   @apply text-sm text-text-secondary
          hover:text-text-primary transition-colors duration-300;
 }
+
+@keyframes shimmer {
+  0%, 100% { transform: translateX(-100%); }
+  50% { transform: translateX(100%); }
+}

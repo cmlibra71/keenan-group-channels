@@ -6,6 +6,7 @@ import { ProductGrid } from "@/components/product/ProductGrid";
 import { ValueBar } from "@/components/home/ValueBar";
 import { MembershipCTA } from "@/components/home/MembershipCTA";
 import { DrawSpotlight } from "@/components/home/DrawSpotlight";
+import { StatsBanner } from "@/components/home/StatsBanner";
 
 export default async function HomePage() {
   const [{ channel }, { products: featuredProducts }, topCategories, memberPricingEnabled, subscriptionsEnabled, productCount, brandCount] = await Promise.all([
@@ -52,6 +53,8 @@ export default async function HomePage() {
           {/* Background image with darkening gradient behind left card */}
           <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/images/hero-bg.webp')" }} />
           <div className="absolute inset-0 bg-gradient-to-r from-zinc-900/80 via-zinc-900/50 to-zinc-900/30" />
+
+          <StatsBanner productCount={productCount} brandCount={brandCount} />
 
           <div className="relative z-10 container-page py-20 sm:py-28 lg:py-32">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center">
@@ -144,6 +147,9 @@ export default async function HomePage() {
         <section className="relative overflow-hidden">
           <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/images/hero-bg.webp')" }} />
           <div className="absolute inset-0 bg-gradient-to-r from-zinc-900/80 via-zinc-900/50 to-zinc-900/30" />
+
+          <StatsBanner productCount={productCount} brandCount={brandCount} />
+
           <div className="relative z-10 container-page py-24 sm:py-32">
             <div className="backdrop-blur-xl bg-white/30 border border-white/25 rounded-[28px] p-10 shadow-[0_8px_40px_rgba(0,0,0,0.15)] max-w-2xl">
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/70 mb-5">
@@ -166,28 +172,6 @@ export default async function HomePage() {
           </div>
         </section>
       )}
-
-      {/* ═══ Stats Banner ═══ */}
-      <section className="bg-[#45854d] text-white">
-        <div className="container-page py-5">
-          <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-3 text-center">
-            <div className="flex items-center gap-3">
-              <span className="text-3xl font-bold">{productCount.toLocaleString()}+</span>
-              <span className="text-sm text-white/80 uppercase tracking-wider font-medium">Products</span>
-            </div>
-            <div className="h-8 w-px bg-white/20 hidden sm:block" />
-            <div className="flex items-center gap-3">
-              <span className="text-3xl font-bold">{brandCount.toLocaleString()}+</span>
-              <span className="text-sm text-white/80 uppercase tracking-wider font-medium">Exclusive Brands</span>
-            </div>
-            <div className="h-8 w-px bg-white/20 hidden sm:block" />
-            <div className="flex items-center gap-3">
-              <span className="text-3xl font-bold">{topCategories.length}+</span>
-              <span className="text-sm text-white/80 uppercase tracking-wider font-medium">Categories</span>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* ═══ Value Bar ═══ */}
       {subscriptionsEnabled && <ValueBar />}
