@@ -90,7 +90,7 @@ export function StatsBanner({
   const brands = useCountUp(brandCount, visible, 20000, 0.3);
 
   return (
-    <div className="absolute bottom-4 sm:bottom-6 right-3 sm:right-6 lg:right-10 z-20" ref={ref}>
+    <div className="absolute bottom-4 sm:bottom-6 inset-x-0 z-20 mx-auto max-w-7xl px-6 lg:px-8 flex justify-end" ref={ref}>
       <div
         className={`
           relative transition-all duration-700 ease-out
