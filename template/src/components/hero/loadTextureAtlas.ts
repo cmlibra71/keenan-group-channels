@@ -16,7 +16,7 @@ export function loadTextureAtlas(imageCount: number): Promise<AtlasResult> {
     const loader = new THREE.TextureLoader();
     loader.load(
       "/api/hero-atlas",
-      (texture) => {
+      (texture: any) => {
         texture.minFilter = THREE.LinearMipmapLinearFilter;
         texture.magFilter = THREE.LinearFilter;
         texture.generateMipmaps = true;
@@ -24,7 +24,7 @@ export function loadTextureAtlas(imageCount: number): Promise<AtlasResult> {
         resolve({ texture, imageCount });
       },
       undefined,
-      (err) => reject(err)
+      (err: any) => reject(err)
     );
   });
 }

@@ -82,7 +82,7 @@ export default async function CategoryPage({
           {/* Brand pills */}
           {stats.brands.length > 0 && (
             <div className="mt-4 flex flex-wrap gap-2">
-              {stats.brands.slice(0, 12).map((brand) => (
+              {stats.brands.slice(0, 12).map((brand: string) => (
                 <span
                   key={brand}
                   className="px-3 py-1 rounded-full bg-white text-xs font-medium text-zinc-600 border border-zinc-200"
@@ -103,7 +103,7 @@ export default async function CategoryPage({
         <div className="mb-10">
           <h2 className="text-lg font-semibold text-zinc-900 mb-4">Subcategories</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {subcategories.map((sub) => (
+            {subcategories.map((sub: { id: number; name: string; slug: string; imageUrl?: string | null }) => (
               <Link
                 key={sub.id}
                 href={`/categories/${sub.slug}`}
