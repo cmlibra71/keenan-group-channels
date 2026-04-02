@@ -118,8 +118,11 @@ export default async function HomePage() {
                           </p>
                         )}
                         {featuredDraw?.scheduledAt && (
-                          <p className="text-xs text-zinc-400 mt-2 tracking-wide font-medium">
-                            Draw: {new Date(featuredDraw.scheduledAt).toLocaleDateString("en-AU", { day: "numeric", month: "long" })}
+                          <p className="mt-3 inline-flex items-center gap-2 bg-amber-400/15 border border-amber-400/30 rounded-full px-3 py-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                            <span className="text-xs text-amber-300 font-semibold tracking-wide">
+                              Next Draw: {new Date(featuredDraw.scheduledAt).toLocaleDateString("en-AU", { day: "numeric", month: "long" })}
+                            </span>
                           </p>
                         )}
                       </div>
