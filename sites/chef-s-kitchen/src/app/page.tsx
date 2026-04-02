@@ -8,13 +8,14 @@ import { MembershipCTA } from "@/components/home/MembershipCTA";
 import { DrawSpotlight } from "@/components/home/DrawSpotlight";
 
 export default async function HomePage() {
-  const [{ channel }, { products: featuredProducts }, topCategories, memberPricingEnabled, subscriptionsEnabled, productCount] = await Promise.all([
+  const [{ channel }, { products: featuredProducts }, topCategories, memberPricingEnabled, subscriptionsEnabled, productCount, brandCount] = await Promise.all([
     getSiteConfig(),
     getProducts({ limit: 8, featured: true }),
     getTopCategories(),
     getFeatureFlag("member_pricing_enabled"),
     getFeatureFlag("subscriptions_enabled"),
     productChannelAssignmentService.countForChannel(CHANNEL_ID),
+    productChannelAssignmentService.countBrandsForChannel(CHANNEL_ID),
   ]);
 
   // Fetch membership data if enabled
@@ -176,7 +177,7 @@ export default async function HomePage() {
             </div>
             <div className="h-8 w-px bg-white/20 hidden sm:block" />
             <div className="flex items-center gap-3">
-              <span className="text-3xl font-bold">130+</span>
+              <span className="text-3xl font-bold">{brandCount.toLocaleString()}+</span>
               <span className="text-sm text-white/80 uppercase tracking-wider font-medium">Exclusive Brands</span>
             </div>
             <div className="h-8 w-px bg-white/20 hidden sm:block" />
