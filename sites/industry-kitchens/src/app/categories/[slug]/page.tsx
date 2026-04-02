@@ -32,7 +32,7 @@ export default async function CategoryPage({
       {/* Breadcrumbs */}
       <nav className="flex flex-wrap items-center gap-1.5 text-sm text-zinc-400 mb-6">
         <Link href="/categories" className="hover:text-zinc-600">Categories</Link>
-        {breadcrumbs.slice(0, -1).map((crumb) => (
+        {breadcrumbs.slice(0, -1).map((crumb: { id: number; name: string; slug: string }) => (
           <span key={crumb.id} className="flex items-center gap-1.5">
             <ChevronRight className="h-3.5 w-3.5" />
             <Link href={`/categories/${crumb.slug}`} className="hover:text-zinc-600">{crumb.name}</Link>

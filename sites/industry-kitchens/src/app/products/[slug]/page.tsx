@@ -98,7 +98,7 @@ export default async function ProductPage({
       {breadcrumbs.length > 0 ? (
         <nav className="flex flex-wrap items-center gap-1.5 text-sm text-zinc-400 mb-6">
           <Link href="/products" className="hover:text-zinc-600">Products</Link>
-          {breadcrumbs.map((crumb) => (
+          {breadcrumbs.map((crumb: { id: number; name: string; slug: string }) => (
             <span key={crumb.id} className="flex items-center gap-1.5">
               <ChevronRight className="h-3.5 w-3.5" />
               <Link href={`/categories/${crumb.slug}`} className="hover:text-zinc-600">{crumb.name}</Link>
