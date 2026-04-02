@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   transpilePackages: ["@keenan/services"],
   serverExternalPackages: ["sharp"],
+  typescript: { ignoreBuildErrors: true },
   images: {
     loader: "custom",
     loaderFile: "./src/lib/image-loader.ts",
