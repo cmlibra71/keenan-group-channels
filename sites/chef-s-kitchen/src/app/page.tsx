@@ -1,19 +1,20 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Crown, ArrowRight, ChevronRight } from "lucide-react";
-import { getProducts, getSiteConfig, getTopCategories, getFeatureFlag, getSubscriptionPlans, getUpcomingDraws, prizeService, CHANNEL_ID } from "@/lib/store";
+import { getProducts, getSiteConfig, getTopCategories, getFeatureFlag, getSubscriptionPlans, getUpcomingDraws, prizeService, productChannelAssignmentService, CHANNEL_ID } from "@/lib/store";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { ValueBar } from "@/components/home/ValueBar";
 import { MembershipCTA } from "@/components/home/MembershipCTA";
 import { DrawSpotlight } from "@/components/home/DrawSpotlight";
 
 export default async function HomePage() {
-  const [{ channel }, { products: featuredProducts }, topCategories, memberPricingEnabled, subscriptionsEnabled] = await Promise.all([
+  const [{ channel }, { products: featuredProducts }, topCategories, memberPricingEnabled, subscriptionsEnabled, productCount] = await Promise.all([
     getSiteConfig(),
-    getProducts({ featured: true, limit: 8 }),
+    getProducts({ limit: 8, featured: true }),
     getTopCategories(),
     getFeatureFlag("member_pricing_enabled"),
     getFeatureFlag("subscriptions_enabled"),
+    productChannelAssignmentService.countForChannel(CHANNEL_ID),
   ]);
 
   // Fetch membership data if enabled
@@ -164,6 +165,28 @@ export default async function HomePage() {
           </div>
         </section>
       )}
+
+      {/* ═══ Stats Banner ═══ */}
+      <section className="bg-[#45854d] text-white">
+        <div className="container-page py-5">
+          <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-3 text-center">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl font-bold">{productCount.toLocaleString()}+</span>
+              <span className="text-sm text-white/80 uppercase tracking-wider font-medium">Products</span>
+            </div>
+            <div className="h-8 w-px bg-white/20 hidden sm:block" />
+            <div className="flex items-center gap-3">
+              <span className="text-3xl font-bold">130+</span>
+              <span className="text-sm text-white/80 uppercase tracking-wider font-medium">Exclusive Brands</span>
+            </div>
+            <div className="h-8 w-px bg-white/20 hidden sm:block" />
+            <div className="flex items-center gap-3">
+              <span className="text-3xl font-bold">{topCategories.length}+</span>
+              <span className="text-sm text-white/80 uppercase tracking-wider font-medium">Categories</span>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* ═══ Value Bar ═══ */}
       {subscriptionsEnabled && <ValueBar />}

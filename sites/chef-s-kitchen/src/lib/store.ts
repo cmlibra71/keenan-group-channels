@@ -30,6 +30,7 @@ import {
   partnerOfferService,
   partnerDiscountCodeService,
   getEffectivePrice,
+  productChannelAssignmentService,
 } from "@keenan/services";
 import type { Channel, Site } from "@keenan/services";
 
@@ -276,5 +277,6 @@ export {
   partnerOfferService,
   partnerDiscountCodeService,
   getEffectivePrice,
+  productChannelAssignmentService,
   CHANNEL_ID,
 };
