@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Menu, Crown, Search } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
@@ -34,51 +34,38 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
   }
 
   return (
-    <header className="bg-white/80 backdrop-blur-md border-b border-border sticky top-0 z-50">
+    <header className="bg-[#45854d] border-b border-[#3a7341] sticky top-0 z-50">
       <div className="container-page">
-        <div className="flex h-[4.5rem] items-center justify-between">
+        <div className="flex h-20 items-center justify-between">
           {/* Logo */}
           {logoUrl ? (
-            <Link href="/">
-              <Image src={logoUrl} alt={logoAlt || storeName} height={40} width={160} className="object-contain" />
+            <Link href="/" className="shrink-0">
+              <Image src={logoUrl} alt={logoAlt || storeName} height={77} width={266} className="h-[4.85rem] w-auto object-contain" />
             </Link>
           ) : (
-            <Link href="/" className="heading-serif text-2xl text-text-primary hover:text-accent transition-colors duration-300">
+            <Link href="/" className="heading-serif text-2xl text-white hover:text-white/80 transition-colors duration-300">
               {storeName}
             </Link>
           )}
 
           {/* Search bar — centered */}
           <div className="hidden md:flex flex-1 justify-center mx-8">
-            <div className="w-full max-w-md">
+            <div className="w-full max-w-md [&_input]:bg-white/15 [&_input]:border-white/25 [&_input]:text-white [&_input]:placeholder-white/60 [&_input]:focus:border-white/50 [&_svg]:!text-white/60">
               <SearchTypeahead inline />
             </div>
           </div>
 
           {/* Actions */}
           <div className="flex items-center gap-5">
-            <Link href="/search" className="md:hidden text-text-secondary hover:text-text-primary transition-colors duration-300">
+            <Link href="/search" className="md:hidden text-white/80 hover:text-white transition-colors duration-300">
               <Search className="h-[1.125rem] w-[1.125rem]" strokeWidth={1.5} />
             </Link>
             <HeaderClient cartCount={cartCount} quoteCount={quoteCount} isMember={isMember} entryCount={entryCount} />
-            <button className="md:hidden text-text-secondary hover:text-text-primary transition-colors duration-300">
+            <button className="md:hidden text-white/80 hover:text-white transition-colors duration-300">
               <Menu className="h-5 w-5" strokeWidth={1.5} />
             </button>
           </div>
         </div>
-
-        {/* Sub-nav — centered menu items */}
-        {subscriptionsEnabled && !isMember && (
-          <nav className="hidden md:flex justify-center pb-2">
-            <Link
-              href="/membership"
-              className="inline-flex items-center gap-1.5 nav-link-accent"
-            >
-              <Crown className="h-3 w-3" />
-              Membership
-            </Link>
-          </nav>
-        )}
       </div>
     </header>
   );

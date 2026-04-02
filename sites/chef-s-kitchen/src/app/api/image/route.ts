@@ -5,7 +5,10 @@ import { getCacheKey } from "@keenan/services/utils";
 
 const S3_BUCKET = process.env.IMAGE_CACHE_S3_BUCKET || "keenan-group-images";
 const S3_REGION = process.env.IMAGE_CACHE_S3_REGION || "ap-southeast-2";
-const ALLOWED_ORIGIN = "keenan-group-images.s3.ap-southeast-2.amazonaws.com";
+const ALLOWED_ORIGINS = [
+  "keenan-group-images.s3.ap-southeast-2.amazonaws.com",
+  "keenan-portal-assets.s3.ap-southeast-2.amazonaws.com",
+];
 
 const s3 = new S3Client({ region: S3_REGION });
 
@@ -22,7 +25,7 @@ export async function GET(request: NextRequest) {
   // Only allow images from our S3 bucket
   try {
     const parsed = new URL(url);
-    if (parsed.hostname !== ALLOWED_ORIGIN) {
+    if (!ALLOWED_ORIGINS.includes(parsed.hostname)) {
       return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
     }
   } catch {

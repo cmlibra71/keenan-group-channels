@@ -59,7 +59,7 @@ export default async function HomePage() {
                   Members-Only Supply Partner
                 </p>
                 <h1 className="hero-title text-white leading-[1.08]">
-                  Professional Kitchen Equipment{"\u00A0"}at Prices Reserved for the Trade
+                  Professional Culinary Supplies{"\u00A0"}at Prices Reserved for the Trade
                 </h1>
                 <p className="mt-5 text-base text-white/80 max-w-lg leading-relaxed">
                   From ${planPrice!.toFixed(2)}/{plan.billingInterval} — access wholesale pricing,

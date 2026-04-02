@@ -31,12 +31,12 @@ export function HeaderClient({
       {/* Quote button */}
       <button
         onClick={() => setQuoteOpen(true)}
-        className="relative text-text-secondary hover:text-text-primary transition-colors duration-300"
+        className="relative text-white/80 hover:text-white transition-colors duration-300"
         aria-label="Open quote"
       >
         <FileText className="h-[1.125rem] w-[1.125rem]" strokeWidth={1.5} />
         {quoteCount > 0 && (
-          <span className="absolute -top-2 -right-2 bg-accent text-white text-[10px] font-medium rounded-full h-4 w-4 flex items-center justify-center">
+          <span className="absolute -top-2 -right-2 bg-white text-[#45854d] text-[10px] font-medium rounded-full h-4 w-4 flex items-center justify-center">
             {quoteCount > 99 ? "99+" : quoteCount}
           </span>
         )}
@@ -45,12 +45,12 @@ export function HeaderClient({
       {/* Cart button */}
       <button
         onClick={() => setCartOpen(true)}
-        className="relative text-text-secondary hover:text-text-primary transition-colors duration-300"
+        className="relative text-white/80 hover:text-white transition-colors duration-300"
         aria-label="Open cart"
       >
         <ShoppingCart className="h-[1.125rem] w-[1.125rem]" strokeWidth={1.5} />
         {cartCount > 0 && (
-          <span className="absolute -top-2 -right-2 bg-accent text-white text-[10px] font-medium rounded-full h-4 w-4 flex items-center justify-center">
+          <span className="absolute -top-2 -right-2 bg-white text-[#45854d] text-[10px] font-medium rounded-full h-4 w-4 flex items-center justify-center">
             {cartCount > 99 ? "99+" : cartCount}
           </span>
         )}
@@ -59,12 +59,12 @@ export function HeaderClient({
       {/* Account button */}
       <button
         onClick={() => setAccountOpen(true)}
-        className="hidden sm:flex items-center gap-1.5 nav-link"
+        className="hidden sm:flex items-center gap-1.5 text-white/80 hover:text-white text-sm font-medium transition-colors duration-300"
         aria-label="Open account"
       >
         {isMember && (
           <span className="relative">
-            <Crown className="h-3.5 w-3.5 text-accent" />
+            <Crown className="h-3.5 w-3.5 text-amber-300" />
             {entryCount != null && entryCount > 0 && (
               <span className="absolute -top-2 -right-3 bg-accent text-white text-[9px] font-medium rounded-full h-3.5 min-w-[14px] flex items-center justify-center px-0.5">
                 {entryCount > 99 ? "99+" : entryCount}

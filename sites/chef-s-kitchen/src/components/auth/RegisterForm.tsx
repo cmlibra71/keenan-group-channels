@@ -8,10 +8,7 @@ export function RegisterForm() {
   const [state, formAction, isPending] = useActionState(register, null);
 
   return (
-    <div className="card p-8">
-      <h2 className="panel-title text-center mb-6">
-        Create an Account
-      </h2>
+    <div className="rounded-2xl bg-white/90 backdrop-blur-sm p-8">
 
       {state?.error && (
         <div className="mb-4 alert-error">
