@@ -14,6 +14,7 @@ on:
           - scripts/seed-chefs-depot-membership.ts
           - scripts/auto-schedule-draws.ts
           - scripts/restructure-categories.ts
+          - scripts/induce-taxonomy.ts
       timeout:
         description: "Timeout in seconds"
         required: false

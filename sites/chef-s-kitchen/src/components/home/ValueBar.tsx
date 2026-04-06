@@ -12,7 +12,7 @@ export function ValueBar() {
     <section className="bg-zinc-900 border-y border-zinc-800">
       {/* Desktop: horizontal row */}
       <div className="hidden md:block container-page">
-        <div className="grid grid-cols-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4">
           {items.map((item, i) => (
             <div
               key={item.label}
