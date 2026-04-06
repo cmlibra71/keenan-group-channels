@@ -1,8 +1,8 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ChevronRight, Package } from "lucide-react";
-import { getCategoryBySlug, getProducts, getSubcategories, getCategoryStats, getCategoryBreadcrumbs, getFeatureFlag } from "@/lib/store";
+import { getCategoryBySlug, getProducts, getSubcategories, getCategoryStats, getCategoryBreadcrumbs, getFeatureFlag, getChannelSetting } from "@/lib/store";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { RichContent } from "@/components/content/RichContent";
 import { Price } from "@/components/ui/Price";
@@ -22,6 +22,14 @@ export default async function CategoryPage({
   const category = await getCategoryBySlug(slug);
 
   if (!category) {
+    // Check for redirect from old category structure
+    const redirects = await getChannelSetting("category_redirects");
+    if (redirects && typeof redirects === "object" && !Array.isArray(redirects)) {
+      const newSlug = (redirects as Record<string, string>)[slug];
+      if (newSlug) {
+        redirect(`/categories/${newSlug}`);
+      }
+    }
     notFound();
   }
 

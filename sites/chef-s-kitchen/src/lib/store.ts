@@ -243,6 +243,15 @@ export const getFeatureFlag = async (key: string): Promise<boolean> => {
   }
 };
 
+export const getChannelSetting = async (key: string): Promise<unknown> => {
+  try {
+    const setting = await channelSettingsService.getByKey(CHANNEL_ID, key);
+    return setting.setting_value;
+  } catch {
+    return null;
+  }
+};
+
 // ============================================================================
 // Re-export services for direct access
 // ============================================================================

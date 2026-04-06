@@ -192,7 +192,7 @@ export default async function HomePage() {
               <ChevronRight className="h-3 w-3" />
             </Link>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1">
             {topCategories.map((category) => (
               <Link
                 key={category.id}
