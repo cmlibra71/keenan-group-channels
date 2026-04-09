@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { RichContent } from "@/components/content/RichContent";
+import { WarrantyDirectory } from "./WarrantyDirectory";
 import { submitReview } from "@/lib/actions/reviews";
 import { Star, FileText, Download } from "lucide-react";
 
@@ -94,15 +95,18 @@ export function ProductTabs({
         )}
 
         {activeTab === "warranty" && (
-          warranty ? (
-            <RichContent
-              html={warranty}
-              stripStyles
-              className="prose prose-sm max-w-none text-zinc-600"
-            />
-          ) : (
-            <p className="text-sm text-zinc-500">No warranty information available.</p>
-          )
+          <div>
+            {warranty && (
+              <div className="mb-6">
+                <RichContent
+                  html={warranty}
+                  stripStyles
+                  className="prose prose-sm max-w-none text-zinc-600"
+                />
+              </div>
+            )}
+            <WarrantyDirectory />
+          </div>
         )}
 
         {activeTab === "downloads" && (
