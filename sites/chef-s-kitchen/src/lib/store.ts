@@ -31,6 +31,7 @@ import {
   partnerDiscountCodeService,
   customerAddressService,
   checkoutSettingsHelper,
+  productChannelAssignmentService,
   getEffectivePrice,
 } from "@keenan/services";
 import { googlePlacesService } from "@keenan/services/integrations";
@@ -296,6 +297,7 @@ export {
   partnerOfferService,
   partnerDiscountCodeService,
   googlePlacesService,
+  productChannelAssignmentService,
   getEffectivePrice,
   CHANNEL_ID,
 };
