@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { cartService, orderService, orderItemService, CHANNEL_ID, getEffectivePrice, productVariantService, channelSettingsService } from "@/lib/store";
+import { cartService, orderService, orderItemService, CHANNEL_ID, getEffectivePrice, productVariantService, channelSettingsService, getCheckoutSettings } from "@/lib/store";
 import { getFeatureFlag, getActiveSubscription } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
@@ -50,7 +50,8 @@ export async function placeOrder(
   const city = (formData.get("city") as string)?.trim();
   const state = (formData.get("state") as string)?.trim();
   const postalCode = (formData.get("postalCode") as string)?.trim();
-  const country = (formData.get("country") as string)?.trim() || "US";
+  const country = (formData.get("country") as string)?.trim() || "AU";
+  const paymentMethod = (formData.get("paymentMethod") as string)?.trim() || "";
 
   if (!email || !firstName || !lastName || !address1 || !city || !postalCode) {
     return { error: "Please fill in all required fields." };
@@ -122,14 +123,13 @@ export async function placeOrder(
   const totalItems = fullCart.items.reduce((sum, i) => sum + i.quantity, 0);
 
   // Shipping calculation
-  // Members get free delivery on orders $500+ (inc tax)
   let shippingIncTax = 0;
   let shippingExTax = 0;
   let shippingTax = 0;
+  const checkoutSettings = await getCheckoutSettings();
   const isMember = !!(session && await getActiveSubscription(session.customerId));
-  const FREE_DELIVERY_THRESHOLD = 500;
 
-  if (isMember && subtotalIncTax >= FREE_DELIVERY_THRESHOLD) {
+  if (checkoutSettings.freeShippingEnabled && isMember && subtotalIncTax >= checkoutSettings.freeShippingThreshold) {
     // Free delivery for members over threshold
     shippingIncTax = 0;
   } else {
@@ -151,6 +151,7 @@ export async function placeOrder(
     channelId: CHANNEL_ID,
     customerId: session?.customerId ?? null,
     status: "pending",
+    paymentMethod: paymentMethod || undefined,
     paymentStatus: "pending",
     currencyCode: cartWithItems.currencyCode,
     subtotalExTax: String(subtotalExTax),
@@ -196,5 +197,6 @@ export async function placeOrder(
   await cartService.markCompleted(cartWithItems.id);
   await clearCartUuid();
 
-  redirect(`/checkout/confirmation?order=${order.orderNumber}`);
+  const pmParam = paymentMethod ? `&pm=${encodeURIComponent(paymentMethod)}` : "";
+  redirect(`/checkout/confirmation?order=${order.orderNumber}${pmParam}`);
 }

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Crown, ArrowRight } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription, channelSettingsService, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription, getCheckoutSettings, customerAddressService, channelSettingsService, CHANNEL_ID } from "@/lib/store";
 import { CheckoutForm } from "@/components/checkout/CheckoutForm";
 
 export const metadata = {
@@ -17,7 +17,11 @@ export default async function CheckoutPage() {
     redirect("/cart");
   }
 
-  const session = await getSession();
+  const [session, checkoutSettings] = await Promise.all([
+    getSession(),
+    getCheckoutSettings(),
+  ]);
+
   const subtotal = parseFloat(cart.cartAmount ?? "0");
 
   // Check tax mode
@@ -29,6 +33,33 @@ export default async function CheckoutPage() {
   const gstAmount = pricesIncludeTax
     ? Math.round((subtotal / 1.1 * 0.1) * 100) / 100
     : Math.round(subtotal * 0.1 * 100) / 100;
+
+  // Load saved addresses for logged-in customers
+  let savedAddresses: { id: number; firstName: string; lastName: string; address1: string; address2?: string; city: string; stateOrProvince: string; postalCode: string; countryCode: string; isDefaultBilling: boolean }[] = [];
+  if (session) {
+    try {
+      const result = await customerAddressService.listForParent(session.customerId, {
+        page: 1,
+        limit: 20,
+        sort: "id",
+        direction: "desc",
+      });
+      savedAddresses = result.data.map((a: Record<string, unknown>) => ({
+        id: a.id as number,
+        firstName: (a.first_name || a.firstName || "") as string,
+        lastName: (a.last_name || a.lastName || "") as string,
+        address1: (a.address1 || "") as string,
+        address2: (a.address2 || "") as string,
+        city: (a.city || "") as string,
+        stateOrProvince: (a.state_or_province || a.stateOrProvince || "") as string,
+        postalCode: (a.postal_code || a.postalCode || "") as string,
+        countryCode: (a.country_code || a.countryCode || "AU") as string,
+        isDefaultBilling: !!(a.is_default_billing ?? a.isDefaultBilling),
+      }));
+    } catch {
+      // No saved addresses
+    }
+  }
 
   // Check membership status for checkout banners
   let showMemberBanner = false;
@@ -48,7 +79,7 @@ export default async function CheckoutPage() {
       const plans = await getSubscriptionPlans();
       if (plans.length > 0) {
         showMemberBanner = true;
-        estimatedSavings = Math.round(subtotal * 0.15 * 100) / 100;
+        estimatedSavings = Math.round(subtotal * (checkoutSettings.memberSavingsPercentage / 100) * 100) / 100;
       }
     }
   }
@@ -70,7 +101,7 @@ export default async function CheckoutPage() {
         <div className="mb-6 flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
           <div className="flex items-center gap-2 text-sm text-amber-800">
             <Crown className="h-4 w-4 text-amber-600 shrink-0" />
-            Members save ~${estimatedSavings.toFixed(2)} on this order.
+            Members save up to ${estimatedSavings.toFixed(2)} on this order.
           </div>
           <Link
             href="/membership"
@@ -89,6 +120,12 @@ export default async function CheckoutPage() {
         isMember={isMember}
         pricesIncludeTax={pricesIncludeTax}
         customerEmail={session?.email}
+        countries={checkoutSettings.supportedCountries}
+        paymentMethods={checkoutSettings.paymentMethods}
+        savedAddresses={savedAddresses}
+        googlePlacesEnabled={checkoutSettings.googlePlacesEnabled}
+        freeShippingEnabled={checkoutSettings.freeShippingEnabled}
+        freeShippingThreshold={checkoutSettings.freeShippingThreshold}
       />
     </div>
   );

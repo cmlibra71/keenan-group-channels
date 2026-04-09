@@ -5,12 +5,14 @@ export function MembershipCartUpsell({
   cartTotal,
   planPrice,
   billingInterval,
+  savingsPercentage = 15,
 }: {
   cartTotal: number;
   planPrice: number;
   billingInterval: string;
+  savingsPercentage?: number;
 }) {
-  const estimatedSavings = Math.round(cartTotal * 0.15 * 100) / 100;
+  const estimatedSavings = Math.round(cartTotal * (savingsPercentage / 100) * 100) / 100;
   const freeDeliveryEligible = cartTotal >= 500;
 
   return (
@@ -18,9 +20,9 @@ export function MembershipCartUpsell({
       <div className="flex items-start gap-3 mb-3">
         <Crown className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
         <div>
-          <h3 className="font-semibold text-zinc-900">Members save on this order</h3>
+          <h3 className="font-semibold text-zinc-900">Members save up to</h3>
           <p className="text-sm text-zinc-600 mt-1">
-            If you were a member, you&apos;d save approximately{" "}
+            Members save up to{" "}
             <span className="font-bold text-amber-700">${estimatedSavings.toFixed(2)}</span> on this order.
           </p>
         </div>

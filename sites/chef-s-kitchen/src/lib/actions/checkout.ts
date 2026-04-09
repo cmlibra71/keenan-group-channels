@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { cartService, orderService, orderItemService, CHANNEL_ID, getEffectivePrice, productVariantService, channelSettingsService } from "@/lib/store";
+import { cartService, orderService, orderItemService, CHANNEL_ID, getEffectivePrice, productVariantService, channelSettingsService, getCheckoutSettings } from "@/lib/store";
 import { getFeatureFlag, getActiveSubscription } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
@@ -50,7 +50,8 @@ export async function placeOrder(
   const city = (formData.get("city") as string)?.trim();
   const state = (formData.get("state") as string)?.trim();
   const postalCode = (formData.get("postalCode") as string)?.trim();
-  const country = (formData.get("country") as string)?.trim() || "US";
+  const country = (formData.get("country") as string)?.trim() || "AU";
+  const paymentMethod = (formData.get("paymentMethod") as string)?.trim() || "";
 
   if (!email || !firstName || !lastName || !address1 || !city || !postalCode) {
     return { error: "Please fill in all required fields." };
@@ -125,7 +126,17 @@ export async function placeOrder(
   let shippingIncTax = 0;
   let shippingExTax = 0;
   let shippingTax = 0;
-  // TODO: Calculate from shipping zones/methods when configured
+  const checkoutSettings = await getCheckoutSettings();
+  const isMember = !!(session && await getActiveSubscription(session.customerId));
+
+  if (checkoutSettings.freeShippingEnabled && isMember && subtotalIncTax >= checkoutSettings.freeShippingThreshold) {
+    // Free delivery for members over threshold
+    shippingIncTax = 0;
+  } else {
+    // Flat rate shipping — configurable per channel, default $0 until shipping rates set up
+    // TODO: Calculate from shipping zones/methods when configured
+    shippingIncTax = 0;
+  }
   // Shipping is always specified as inc-tax amount
   const shippingCalc = calcTax(shippingIncTax, true);
   shippingExTax = shippingCalc.exTax;
@@ -140,6 +151,7 @@ export async function placeOrder(
     channelId: CHANNEL_ID,
     customerId: session?.customerId ?? null,
     status: "pending",
+    paymentMethod: paymentMethod || undefined,
     paymentStatus: "pending",
     currencyCode: cartWithItems.currencyCode,
     subtotalExTax: String(subtotalExTax),
@@ -185,5 +197,6 @@ export async function placeOrder(
   await cartService.markCompleted(cartWithItems.id);
   await clearCartUuid();
 
-  redirect(`/checkout/confirmation?order=${order.orderNumber}`);
+  const pmParam = paymentMethod ? `&pm=${encodeURIComponent(paymentMethod)}` : "";
+  redirect(`/checkout/confirmation?order=${order.orderNumber}${pmParam}`);
 }
