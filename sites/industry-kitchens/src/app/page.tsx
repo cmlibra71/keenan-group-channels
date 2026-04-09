@@ -8,12 +8,13 @@ import { MembershipCTA } from "@/components/home/MembershipCTA";
 import { DrawSpotlight } from "@/components/home/DrawSpotlight";
 
 export default async function HomePage() {
-  const [{ channel }, { products: featuredProducts }, allCategories, memberPricingEnabled, subscriptionsEnabled] = await Promise.all([
+  const [{ channel }, { products: featuredProducts }, allCategories, memberPricingEnabled, subscriptionsEnabled, drawsEnabled] = await Promise.all([
     getSiteConfig(),
     getProducts({ featured: true, limit: 8 }),
     getCategories(),
     getFeatureFlag("member_pricing_enabled"),
     getFeatureFlag("subscriptions_enabled"),
+    getFeatureFlag("draws_enabled"),
   ]);
 
   // Top-level categories only
@@ -27,8 +28,8 @@ export default async function HomePage() {
   if (subscriptionsEnabled) {
     const [plans, upcomingDraws, activePrizes] = await Promise.all([
       getSubscriptionPlans(),
-      getUpcomingDraws(),
-      prizeService.listActiveForChannel(CHANNEL_ID),
+      drawsEnabled ? getUpcomingDraws() : Promise.resolve([]),
+      drawsEnabled ? prizeService.listActiveForChannel(CHANNEL_ID) : Promise.resolve([]),
     ]);
     plan = plans[0] ?? null;
     featuredDraw = upcomingDraws[0] ?? null;
@@ -213,7 +214,7 @@ export default async function HomePage() {
       </section>
 
       {/* Draw Spotlight */}
-      {subscriptionsEnabled && featuredPrize && (
+      {drawsEnabled && featuredPrize && (
         <DrawSpotlight prize={featuredPrize} draw={featuredDraw} />
       )}
     </div>

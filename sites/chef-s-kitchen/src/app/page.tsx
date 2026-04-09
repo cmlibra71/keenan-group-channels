@@ -9,12 +9,13 @@ import { DrawSpotlight } from "@/components/home/DrawSpotlight";
 import { StatsBanner } from "@/components/home/StatsBanner";
 
 export default async function HomePage() {
-  const [{ channel }, { products: featuredProducts }, topCategories, memberPricingEnabled, subscriptionsEnabled, productCount, brandCount] = await Promise.all([
+  const [{ channel }, { products: featuredProducts }, topCategories, memberPricingEnabled, subscriptionsEnabled, drawsEnabled, productCount, brandCount] = await Promise.all([
     getSiteConfig(),
     getProducts({ limit: 8, featured: true }),
     getTopCategories(),
     getFeatureFlag("member_pricing_enabled"),
     getFeatureFlag("subscriptions_enabled"),
+    getFeatureFlag("draws_enabled"),
     productChannelAssignmentService.countForChannel(CHANNEL_ID),
     productChannelAssignmentService.countBrandsForChannel(CHANNEL_ID),
   ]);
@@ -27,8 +28,8 @@ export default async function HomePage() {
   if (subscriptionsEnabled) {
     const [plans, upcomingDraws, activePrizes] = await Promise.all([
       getSubscriptionPlans(),
-      getUpcomingDraws(),
-      prizeService.listActiveForChannel(CHANNEL_ID),
+      drawsEnabled ? getUpcomingDraws() : Promise.resolve([]),
+      drawsEnabled ? prizeService.listActiveForChannel(CHANNEL_ID) : Promise.resolve([]),
     ]);
     plan = plans[0] ?? null;
     featuredDraw = upcomingDraws[0] ?? null;
@@ -68,7 +69,7 @@ export default async function HomePage() {
                 </h1>
                 <p className="mt-5 text-base text-white/80 max-w-lg leading-relaxed">
                   From ${planPrice!.toFixed(2)}/{plan.billingInterval} — access wholesale pricing,
-                  priority fulfilment, and member-exclusive draws across our full commercial range.
+                  priority fulfilment{drawsEnabled ? ", and member-exclusive draws" : ""} across our full commercial range.
                 </p>
                 <div className="mt-9 flex flex-col sm:flex-row gap-3">
                   <Link
@@ -254,7 +255,7 @@ export default async function HomePage() {
       </section>
 
       {/* ═══ Draw Spotlight ═══ */}
-      {subscriptionsEnabled && featuredPrize && (
+      {drawsEnabled && featuredPrize && (
         <DrawSpotlight prize={featuredPrize} draw={featuredDraw} />
       )}
     </div>
