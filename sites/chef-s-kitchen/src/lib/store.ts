@@ -236,6 +236,15 @@ export const getPartnerOffers = unstable_cache(
 // Feature Flags
 // ============================================================================
 
+export const getChannelSetting = async (key: string): Promise<unknown> => {
+  try {
+    const setting = await channelSettingsService.getByKey(CHANNEL_ID, key);
+    return setting.setting_value;
+  } catch {
+    return null;
+  }
+};
+
 export const getFeatureFlag = async (key: string): Promise<boolean> => {
   try {
     const setting = await channelSettingsService.getByKey(CHANNEL_ID, key);
