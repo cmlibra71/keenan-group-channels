@@ -29,9 +29,11 @@ import {
   drawWinnerService,
   partnerOfferService,
   partnerDiscountCodeService,
+  customerAddressService,
+  checkoutSettingsHelper,
   getEffectivePrice,
-  productChannelAssignmentService,
 } from "@keenan/services";
+import { googlePlacesService } from "@keenan/services/integrations";
 import type { Channel, Site } from "@keenan/services";
 
 // Auto-initialize DB connection on first import
@@ -243,18 +245,16 @@ export const getFeatureFlag = async (key: string): Promise<boolean> => {
   }
 };
 
-export const getChannelSetting = async (key: string): Promise<unknown> => {
-  try {
-    const setting = await channelSettingsService.getByKey(CHANNEL_ID, key);
-    return setting.setting_value;
-  } catch {
-    return null;
-  }
-};
-
 // ============================================================================
 // Re-export services for direct access
 // ============================================================================
+
+// ============================================================================
+// Checkout Settings
+// ============================================================================
+
+export const getCheckoutSettings = async () =>
+  checkoutSettingsHelper.getCheckoutSettings(CHANNEL_ID);
 
 export {
   channelService,
@@ -273,6 +273,7 @@ export {
   productVariantService,
   productAttachmentService,
   customerService,
+  customerAddressService,
   orderService,
   orderItemService,
   subscriptionPlanService,
@@ -285,7 +286,7 @@ export {
   drawWinnerService,
   partnerOfferService,
   partnerDiscountCodeService,
+  googlePlacesService,
   getEffectivePrice,
-  productChannelAssignmentService,
   CHANNEL_ID,
 };

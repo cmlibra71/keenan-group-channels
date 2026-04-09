@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription, channelSettingsService, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription, getCheckoutSettings, channelSettingsService, CHANNEL_ID } from "@/lib/store";
 import { CartItemsList } from "@/components/cart/CartItemsList";
 import { CartSummary } from "@/components/cart/CartSummary";
 import { MembershipCartUpsell } from "@/components/cart/MembershipCartUpsell";
@@ -49,8 +49,13 @@ export default async function CartPage() {
   let planPrice = 0;
   let billingInterval = "month";
   let isMember = false;
+  let savingsPercentage = 15;
 
-  const subscriptionsEnabled = await getFeatureFlag("subscriptions_enabled");
+  const [subscriptionsEnabled, checkoutSettings] = await Promise.all([
+    getFeatureFlag("subscriptions_enabled"),
+    getCheckoutSettings(),
+  ]);
+  savingsPercentage = checkoutSettings.memberSavingsPercentage;
   if (subscriptionsEnabled) {
     const session = await getSession();
     if (session) {
@@ -82,6 +87,7 @@ export default async function CartPage() {
               cartTotal={total}
               planPrice={planPrice}
               billingInterval={billingInterval}
+              savingsPercentage={savingsPercentage}
             />
           )}
         </div>
