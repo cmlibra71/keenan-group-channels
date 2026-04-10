@@ -44,7 +44,11 @@ export default async function HomePage() {
   }
 
   const planPrice = plan ? parseFloat(plan.price) : null;
-  const planBenefits = plan ? ((plan.benefits as string[]) || []) : [];
+  const planBenefits = plan
+    ? ((plan.benefits as string[]) || []).filter(
+        (b) => drawsEnabled || !/draw|raffle|prize/i.test(b)
+      )
+    : [];
 
   return (
     <div>

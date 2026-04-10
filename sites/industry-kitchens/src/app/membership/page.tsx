@@ -39,7 +39,9 @@ export default async function MembershipLandingPage() {
   if (!plan) redirect("/");
 
   const planPrice = parseFloat(plan.price);
-  const benefits = (plan.benefits as string[]) || [];
+  const benefits = ((plan.benefits as string[]) || []).filter(
+    (b) => drawsEnabled || !/draw|raffle|prize/i.test(b)
+  );
 
   // Find highest-value prize
   const featuredPrize = activePrizes.length > 0
