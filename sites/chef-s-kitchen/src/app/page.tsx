@@ -178,7 +178,7 @@ export default async function HomePage() {
       )}
 
       {/* ═══ Value Bar ═══ */}
-      {subscriptionsEnabled && <ValueBar />}
+      {subscriptionsEnabled && <ValueBar drawsEnabled={drawsEnabled} />}
 
       {/* ═══ Categories — editorial grid ═══ */}
       {topCategories.length > 0 && (

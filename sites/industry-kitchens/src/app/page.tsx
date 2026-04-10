@@ -154,7 +154,7 @@ export default async function HomePage() {
       )}
 
       {/* Value Bar */}
-      {subscriptionsEnabled && <ValueBar />}
+      {subscriptionsEnabled && <ValueBar drawsEnabled={drawsEnabled} />}
 
       {/* Categories */}
       {topCategories.length > 0 && (

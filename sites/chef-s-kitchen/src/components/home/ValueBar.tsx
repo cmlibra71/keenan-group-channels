@@ -1,13 +1,14 @@
 import { Crown, Truck, Trophy, Gift } from "lucide-react";
 
-const items = [
-  { icon: Crown, label: "Members-Only Pricing", accent: "from-amber-500 to-amber-600" },
-  { icon: Truck, label: "Australia-Wide Delivery", accent: "from-teal-500 to-teal-600" },
-  { icon: Trophy, label: "Exclusive Prize Draws", accent: "from-violet-500 to-violet-600" },
-  { icon: Gift, label: "Partner Discounts", accent: "from-rose-500 to-rose-600" },
+const allItems = [
+  { icon: Crown, label: "Members-Only Pricing", accent: "from-amber-500 to-amber-600", key: "pricing" },
+  { icon: Truck, label: "Australia-Wide Delivery", accent: "from-teal-500 to-teal-600", key: "delivery" },
+  { icon: Trophy, label: "Exclusive Prize Draws", accent: "from-violet-500 to-violet-600", key: "draws" },
+  { icon: Gift, label: "Partner Discounts", accent: "from-rose-500 to-rose-600", key: "partners" },
 ];
 
-export function ValueBar() {
+export function ValueBar({ drawsEnabled = true }: { drawsEnabled?: boolean }) {
+  const items = drawsEnabled ? allItems : allItems.filter((i) => i.key !== "draws");
   return (
     <section className="bg-zinc-900 border-y border-zinc-800">
       {/* Desktop: horizontal row */}

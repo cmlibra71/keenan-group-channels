@@ -22,14 +22,17 @@ export const metadata = {
 };
 
 export default async function MembershipLandingPage() {
-  const enabled = await getFeatureFlag("subscriptions_enabled");
+  const [enabled, drawsEnabled] = await Promise.all([
+    getFeatureFlag("subscriptions_enabled"),
+    getFeatureFlag("draws_enabled"),
+  ]);
   if (!enabled) redirect("/");
 
   const [plans, upcomingDraws, partnerOffers, activePrizes] = await Promise.all([
     getSubscriptionPlans(),
-    getUpcomingDraws(),
+    drawsEnabled ? getUpcomingDraws() : Promise.resolve([]),
     getPartnerOffers(),
-    prizeService.listActiveForChannel(CHANNEL_ID),
+    drawsEnabled ? prizeService.listActiveForChannel(CHANNEL_ID) : Promise.resolve([]),
   ]);
 
   const plan = plans[0]; // Primary plan
@@ -64,7 +67,7 @@ export default async function MembershipLandingPage() {
               Professional Kitchen Equipment at Members-Only Prices
             </h1>
             <p className="mt-4 text-lg text-zinc-300 max-w-xl">
-              Join our membership and unlock exclusive pricing, free delivery, monthly prize draws, and partner discounts.
+              Join our membership and unlock exclusive pricing, free delivery{drawsEnabled ? ", monthly prize draws," : ", and"} partner discounts.
             </p>
             {benefits.length > 0 && (
               <ul className="mt-6 space-y-2">
@@ -112,11 +115,13 @@ export default async function MembershipLandingPage() {
             title="Free Delivery $500+"
             description="Free shipping on orders over $500. No code needed, automatically applied at checkout."
           />
-          <BenefitCard
-            icon="draws"
-            title="Prize Draws"
-            description="Automatic entry into monthly, quarterly, and grand prize draws. Entries accumulate the longer you stay."
-          />
+          {drawsEnabled && (
+            <BenefitCard
+              icon="draws"
+              title="Prize Draws"
+              description="Automatic entry into monthly, quarterly, and grand prize draws. Entries accumulate the longer you stay."
+            />
+          )}
           <BenefitCard
             icon="partners"
             title="Partner Discounts"
@@ -126,22 +131,24 @@ export default async function MembershipLandingPage() {
       </section>
 
       {/* Featured Prize Showcase */}
-      {featuredPrize && (
+      {drawsEnabled && featuredPrize && (
         <PrizeShowcase prize={featuredPrize} draw={featuredDraw} />
       )}
 
       {/* Entry Accumulation */}
-      <section id="draws" className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
-        <div className="max-w-2xl mx-auto">
-          <div className="text-center mb-10">
-            <h2 className="text-3xl font-bold text-zinc-900">The Longer You Stay, The Better Your Odds</h2>
-            <p className="mt-2 text-zinc-600">
-              Each month you&apos;re a member, you earn more entries. They accumulate and never reset (unless you cancel).
-            </p>
+      {drawsEnabled && (
+        <section id="draws" className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
+          <div className="max-w-2xl mx-auto">
+            <div className="text-center mb-10">
+              <h2 className="text-3xl font-bold text-zinc-900">The Longer You Stay, The Better Your Odds</h2>
+              <p className="mt-2 text-zinc-600">
+                Each month you&apos;re a member, you earn more entries. They accumulate and never reset (unless you cancel).
+              </p>
+            </div>
+            <EntryAccumulationChart />
           </div>
-          <EntryAccumulationChart />
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* Savings Calculator */}
       <section id="savings" className="bg-zinc-50 border-y border-zinc-200">
@@ -159,7 +166,7 @@ export default async function MembershipLandingPage() {
       </section>
 
       {/* Winner Spotlight / Upcoming Draws */}
-      <WinnerSpotlight upcomingDraws={upcomingDraws} />
+      {drawsEnabled && <WinnerSpotlight upcomingDraws={upcomingDraws} />}
 
       {/* Partner Logos */}
       <PartnerLogos offers={partnerOffers} />
