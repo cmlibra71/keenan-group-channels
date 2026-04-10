@@ -12,7 +12,7 @@ export function ValueBar({ drawsEnabled = true }: { drawsEnabled?: boolean }) {
   return (
     <section className="bg-green-50 border-y border-green-100">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-4">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-6">
+        <div className={`grid grid-cols-2 ${items.length === 3 ? "lg:grid-cols-3" : "lg:grid-cols-4"} gap-3 lg:gap-6`}>
           {items.map((item) => (
             <div key={item.label} className="flex items-center gap-2">
               <item.icon className="h-4 w-4 text-green-700 shrink-0" />
