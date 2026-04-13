@@ -133,9 +133,17 @@ export async function placeOrder(
     // Free delivery for members over threshold
     shippingIncTax = 0;
   } else {
-    // Flat rate shipping — configurable per channel, default $0 until shipping rates set up
-    // TODO: Calculate from shipping zones/methods when configured
-    shippingIncTax = 0;
+    // Calculate from shipping rate cards (zone-based flat-rate)
+    try {
+      const { calculateShipping } = await import("@/lib/store");
+      const shippingResult = await calculateShipping(postalCode, subtotalIncTax);
+      if (shippingResult.success) {
+        shippingIncTax = shippingResult.cost;
+      }
+    } catch {
+      // Default to $0 if rate card not configured
+      shippingIncTax = 0;
+    }
   }
   // Shipping is always specified as inc-tax amount
   const shippingCalc = calcTax(shippingIncTax, true);
