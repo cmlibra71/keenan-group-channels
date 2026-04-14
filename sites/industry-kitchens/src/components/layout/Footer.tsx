@@ -16,6 +16,8 @@ export function Footer({ storeName, subscriptionsEnabled }: { storeName: string;
             <ul className="mt-2 space-y-2">
               <li><Link href="/products" className="text-sm text-zinc-500 hover:text-zinc-900">All Products</Link></li>
               <li><Link href="/categories" className="text-sm text-zinc-500 hover:text-zinc-900">Categories</Link></li>
+              <li><Link href="/brands" className="text-sm text-zinc-500 hover:text-zinc-900">Brands</Link></li>
+              <li><Link href="/clearance" className="text-sm text-zinc-500 hover:text-zinc-900">Clearance</Link></li>
             </ul>
           </div>
           {subscriptionsEnabled && (

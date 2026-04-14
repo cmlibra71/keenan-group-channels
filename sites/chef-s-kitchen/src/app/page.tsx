@@ -185,7 +185,14 @@ export default async function HomePage() {
       {subscriptionsEnabled && <ValueBar drawsEnabled={drawsEnabled} />}
 
       {/* ═══ Categories — editorial grid ═══ */}
-      {topCategories.length > 0 && (
+      {topCategories.length > 0 && (() => {
+        // Append Brands and Clearance as special entries linked to their dedicated pages
+        const allDepartments = [
+          ...topCategories,
+          { id: -1, name: "Brands", slug: "brands", depth: 0, imageUrl: null, parentId: null },
+          { id: -2, name: "Clearance & Specials", slug: "clearance-specials", depth: 0, imageUrl: null, parentId: null },
+        ];
+        return (
         <section className="container-page section-padding">
           <div className="flex items-end justify-between mb-10">
             <div>
@@ -198,10 +205,14 @@ export default async function HomePage() {
             </Link>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1">
-            {topCategories.map((category) => (
+            {allDepartments.map((category) => {
+              const href = category.slug === "brands" ? "/brands"
+                : category.slug === "clearance-specials" || category.slug === "clearance-and-specials" ? "/clearance"
+                : `/categories/${category.slug}`;
+              return (
               <Link
                 key={category.id}
-                href={`/categories/${category.slug}`}
+                href={href}
                 className="group relative overflow-hidden bg-surface-secondary aspect-[4/3]"
               >
                 <div className="absolute inset-0 overflow-hidden">
@@ -229,10 +240,12 @@ export default async function HomePage() {
                   </span>
                 </div>
               </Link>
-            ))}
+              );
+            })}
           </div>
         </section>
-      )}
+        );
+      })()}
 
       {/* ═══ Membership CTA ═══ */}
       {subscriptionsEnabled && plan && (

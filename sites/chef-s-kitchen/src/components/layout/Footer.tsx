@@ -21,6 +21,8 @@ export function Footer({ storeName, subscriptionsEnabled }: { storeName: string;
                 <ul className="space-y-2.5">
                   <li><Link href="/products" className="footer-link">All Products</Link></li>
                   <li><Link href="/categories" className="footer-link">Categories</Link></li>
+                  <li><Link href="/brands" className="footer-link">Brands</Link></li>
+                  <li><Link href="/clearance" className="footer-link">Clearance</Link></li>
                 </ul>
               </div>
               {subscriptionsEnabled && (

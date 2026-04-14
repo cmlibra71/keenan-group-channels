@@ -70,6 +70,7 @@ export const getProducts = (options?: {
   page?: number;
   limit?: number;
   categoryId?: number;
+  brandId?: number;
   featured?: boolean;
   onSale?: boolean;
   search?: string;
@@ -128,6 +129,29 @@ export const getCategoryById = (categoryId: number) => unstable_cache(
   async () => categoryService.getById(categoryId),
   [`category-by-id-${CHANNEL_ID}-${categoryId}`],
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "categories"] }
+)();
+
+// ============================================================================
+// Brands (channel-scoped via products)
+// ============================================================================
+
+export const getBrandsForChannel = unstable_cache(
+  async () => {
+    const brandIds = await productService.getBrandIdsForChannel(CHANNEL_ID);
+    if (brandIds.length === 0) return [];
+    const brands = await brandService.getByIds(brandIds);
+    return brands.sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
+      (a.name as string).localeCompare(b.name as string)
+    );
+  },
+  [`brands-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "brands"] }
+);
+
+export const getBrandBySlug = (slug: string) => unstable_cache(
+  async () => brandService.getBySlug(slug),
+  [`brand-slug-${CHANNEL_ID}-${slug}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "brands"] }
 )();
 
 // ============================================================================
