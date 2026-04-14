@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState, useRef, useCallback } from "react";
+import { useActionState, useState, useRef, useCallback, useEffect } from "react";
 import { placeOrder } from "@/lib/actions/checkout";
 import { Price } from "@/components/ui/Price";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
@@ -49,6 +49,7 @@ export function CheckoutForm({
   googlePlacesEnabled = false,
   freeShippingEnabled = false,
   freeShippingThreshold = 500,
+  shippingEnabled = false,
 }: {
   items: CartItem[];
   subtotal: number;
@@ -62,6 +63,7 @@ export function CheckoutForm({
   googlePlacesEnabled?: boolean;
   freeShippingEnabled?: boolean;
   freeShippingThreshold?: number;
+  shippingEnabled?: boolean;
 }) {
   const [state, formAction, isPending] = useActionState(placeOrder, null);
   const [selectedAddressId, setSelectedAddressId] = useState<number | "new">(
@@ -75,6 +77,64 @@ export function CheckoutForm({
   const postalCodeRef = useRef<HTMLInputElement>(null);
   const countryRef = useRef<HTMLSelectElement>(null);
 
+  // Shipping calculation state
+  const [shippingCost, setShippingCost] = useState<number | null>(null);
+  const [shippingLoading, setShippingLoading] = useState(false);
+  const [shippingError, setShippingError] = useState<string | null>(null);
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const calculateShippingCost = useCallback(
+    async (postcode: string) => {
+      if (!shippingEnabled || !postcode || postcode.length < 3) {
+        setShippingCost(null);
+        setShippingError(null);
+        return;
+      }
+
+      // Don't calculate if free shipping applies
+      if (freeShippingEnabled && isMember && subtotal >= freeShippingThreshold) {
+        setShippingCost(0);
+        return;
+      }
+
+      setShippingLoading(true);
+      setShippingError(null);
+
+      try {
+        const response = await fetch("/api/shipping/calculate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ postcode, subtotal }),
+        });
+        const result = await response.json();
+
+        if (result.success) {
+          setShippingCost(result.cost);
+          setShippingError(null);
+        } else {
+          setShippingCost(null);
+          setShippingError(result.error || "Could not calculate shipping");
+        }
+      } catch {
+        setShippingError("Failed to calculate shipping");
+        setShippingCost(null);
+      } finally {
+        setShippingLoading(false);
+      }
+    },
+    [shippingEnabled, subtotal, freeShippingEnabled, isMember, freeShippingThreshold]
+  );
+
+  const handlePostcodeChange = useCallback(
+    (postcode: string) => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      debounceTimer.current = setTimeout(() => {
+        calculateShippingCost(postcode);
+      }, 600);
+    },
+    [calculateShippingCost]
+  );
+
   const handlePlaceSelect = useCallback(
     (place: { address1: string; city: string; state: string; postalCode: string; countryCode: string }) => {
       if (address1Ref.current) address1Ref.current.value = place.address1;
@@ -82,11 +142,22 @@ export function CheckoutForm({
       if (stateRef.current) stateRef.current.value = place.state;
       if (postalCodeRef.current) postalCodeRef.current.value = place.postalCode;
       if (countryRef.current) countryRef.current.value = place.countryCode;
+      // Trigger shipping calculation when address is autocompleted
+      if (place.postalCode) {
+        calculateShippingCost(place.postalCode);
+      }
     },
-    []
+    [calculateShippingCost]
   );
 
   const selectedAddress = savedAddresses.find((a) => a.id === selectedAddressId);
+
+  // Recalculate shipping when a saved address is selected
+  useEffect(() => {
+    if (selectedAddress && shippingEnabled) {
+      calculateShippingCost(selectedAddress.postalCode);
+    }
+  }, [selectedAddressId, selectedAddress, shippingEnabled, calculateShippingCost]);
 
   return (
     <form action={formAction}>
@@ -248,6 +319,7 @@ export function CheckoutForm({
                     type="text"
                     name="postalCode"
                     required
+                    onChange={(e) => handlePostcodeChange(e.target.value)}
                     className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
                   />
                 </div>
@@ -356,13 +428,24 @@ export function CheckoutForm({
                 <span className="text-zinc-500">Shipping</span>
                 {freeShippingEnabled && isMember && subtotal >= freeShippingThreshold ? (
                   <span className="font-medium text-green-600">FREE</span>
+                ) : shippingLoading ? (
+                  <span className="font-medium text-zinc-400 animate-pulse">Calculating...</span>
+                ) : shippingCost !== null && shippingCost > 0 ? (
+                  <Price amount={shippingCost} className="font-medium" />
+                ) : shippingCost === 0 ? (
+                  <span className="font-medium text-green-600">FREE</span>
+                ) : shippingError ? (
+                  <span className="font-medium text-amber-500 text-xs">{shippingError}</span>
+                ) : shippingEnabled ? (
+                  <span className="font-medium text-zinc-400">Enter postcode</span>
                 ) : (
                   <span className="font-medium text-zinc-400">--</span>
                 )}
               </div>
+              <input type="hidden" name="shippingCost" value={shippingCost ?? "0"} />
               <div className="flex justify-between text-base font-semibold mt-4 pt-4 border-t border-zinc-200">
                 <span>Total</span>
-                <span><Price amount={pricesIncludeTax ? subtotal : subtotal + gstAmount} /></span>
+                <span><Price amount={(pricesIncludeTax ? subtotal : subtotal + gstAmount) + (shippingCost ?? 0)} /></span>
               </div>
             </div>
 

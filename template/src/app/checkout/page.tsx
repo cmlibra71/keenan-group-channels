@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Crown, ArrowRight } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription, getCheckoutSettings, customerAddressService, channelSettingsService, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription, getCheckoutSettings, customerAddressService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
 import { CheckoutForm } from "@/components/checkout/CheckoutForm";
 
 export const metadata = {
@@ -60,6 +60,13 @@ export default async function CheckoutPage() {
       // No saved addresses
     }
   }
+
+  // Check if shipping rate calculation is available
+  let shippingEnabled = false;
+  try {
+    const activeCard = await shippingRateCardService.getActiveForChannel(CHANNEL_ID);
+    shippingEnabled = !!activeCard;
+  } catch {}
 
   // Check membership status for checkout banners
   let showMemberBanner = false;
@@ -126,6 +133,7 @@ export default async function CheckoutPage() {
         googlePlacesEnabled={checkoutSettings.googlePlacesEnabled}
         freeShippingEnabled={checkoutSettings.freeShippingEnabled}
         freeShippingThreshold={checkoutSettings.freeShippingThreshold}
+        shippingEnabled={shippingEnabled}
       />
     </div>
   );

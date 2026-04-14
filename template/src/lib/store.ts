@@ -32,6 +32,8 @@ import {
   customerAddressService,
   checkoutSettingsHelper,
   getEffectivePrice,
+  shippingRateCalculator,
+  shippingRateCardService,
 } from "@keenan/services";
 import { googlePlacesService } from "@keenan/services/integrations";
 import type { Channel, Site } from "@keenan/services";
@@ -312,5 +314,14 @@ export {
   partnerDiscountCodeService,
   googlePlacesService,
   getEffectivePrice,
+  shippingRateCalculator,
+  shippingRateCardService,
   CHANNEL_ID,
 };
+
+// ============================================================================
+// Shipping Rate Calculation (channel-scoped)
+// ============================================================================
+
+export const calculateShipping = async (postcode: string, subtotal: number) =>
+  shippingRateCalculator.calculate(CHANNEL_ID, postcode, subtotal);
