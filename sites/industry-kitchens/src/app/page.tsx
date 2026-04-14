@@ -161,14 +161,24 @@ export default async function HomePage() {
       {subscriptionsEnabled && <ValueBar drawsEnabled={drawsEnabled} />}
 
       {/* Categories */}
-      {topCategories.length > 0 && (
+      {topCategories.length > 0 && (() => {
+        const allDepartments = [
+          ...topCategories,
+          { id: -1, name: "Brands", slug: "brands", depth: 0, imageUrl: null, parentId: null },
+          { id: -2, name: "Clearance & Specials", slug: "clearance-specials", depth: 0, imageUrl: null, parentId: null },
+        ];
+        return (
         <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16">
           <h2 className="text-2xl font-bold text-zinc-900">Shop by Category</h2>
           <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-            {topCategories.map((category) => (
+            {allDepartments.map((category) => {
+              const href = category.slug === "brands" ? "/brands"
+                : category.slug === "clearance-specials" || category.slug === "clearance-and-specials" ? "/clearance"
+                : `/categories/${category.slug}`;
+              return (
               <Link
                 key={category.id}
-                href={`/categories/${category.slug}`}
+                href={href}
                 className="group block rounded-xl overflow-hidden bg-white shadow-md hover:shadow-xl transition-shadow duration-300"
               >
                 <div className="relative aspect-square overflow-hidden bg-zinc-100">
@@ -192,10 +202,12 @@ export default async function HomePage() {
                   </span>
                 </div>
               </Link>
-            ))}
+              );
+            })}
           </div>
         </section>
-      )}
+        );
+      })()}
 
       {/* Membership CTA Banner */}
       {subscriptionsEnabled && plan && (
