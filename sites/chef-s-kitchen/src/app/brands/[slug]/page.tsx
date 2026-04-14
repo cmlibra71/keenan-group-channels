@@ -33,10 +33,10 @@ export default async function BrandPage({
 
       {/* Hero section */}
       <div className="mb-10 flex flex-col lg:flex-row gap-8 items-start bg-zinc-50 rounded-2xl overflow-hidden">
-        {brand.imageUrl && (
+        {brand.image_url && (
           <div className="lg:w-2/5 flex-shrink-0 bg-white rounded-2xl m-3 p-6 relative min-h-[200px]">
             <Image
-              src={brand.imageUrl as string}
+              src={brand.image_url as string}
               alt={brand.name as string}
               fill
               sizes="(max-width: 1024px) 100vw, 40vw"
@@ -44,7 +44,7 @@ export default async function BrandPage({
             />
           </div>
         )}
-        <div className={`flex-1 py-8 pr-8 text-left ${brand.imageUrl ? "" : "pl-8"}`}>
+        <div className={`flex-1 py-8 pr-8 text-left ${brand.image_url ? "" : "pl-8"}`}>
           <h1 className="text-3xl font-bold text-zinc-900">{brand.name as string}</h1>
           <p className="mt-3 text-sm text-zinc-500">
             {total} {total === 1 ? "product" : "products"}

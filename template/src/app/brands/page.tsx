@@ -18,16 +18,16 @@ export default async function BrandsPage() {
         <p className="text-zinc-500">No brands found.</p>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {brands.map((brand: { id: number; name: string; slug: string; imageUrl?: string | null }) => (
+          {brands.map((brand: { id: number; name: string; slug: string; image_url?: string | null }) => (
             <Link
               key={brand.id}
               href={`/brands/${brand.slug}`}
               className="group block rounded-lg border border-zinc-200 overflow-hidden hover:border-zinc-400 hover:shadow-sm transition-all"
             >
               <div className="relative aspect-[4/3] bg-zinc-100 overflow-hidden">
-                {brand.imageUrl ? (
+                {brand.image_url ? (
                   <Image
-                    src={brand.imageUrl}
+                    src={brand.image_url}
                     alt={brand.name}
                     fill
                     sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
