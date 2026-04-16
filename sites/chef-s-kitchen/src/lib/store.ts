@@ -4,6 +4,8 @@ import {
   channelService,
   siteService,
   channelSettingsService,
+  storeSettingsService,
+  paymentService,
   brandService,
   categoryService,
   categoryTreeService,
@@ -33,6 +35,8 @@ import {
   checkoutSettingsHelper,
   productChannelAssignmentService,
   getEffectivePrice,
+  shippingRateCalculator,
+  shippingRateCardService,
 } from "@keenan/services";
 import { googlePlacesService } from "@keenan/services/integrations";
 import type { Channel, Site } from "@keenan/services";
@@ -294,6 +298,8 @@ export {
   channelService,
   siteService,
   channelSettingsService,
+  storeSettingsService,
+  paymentService,
   brandService,
   categoryService,
   categoryTreeService,
@@ -323,5 +329,13 @@ export {
   googlePlacesService,
   productChannelAssignmentService,
   getEffectivePrice,
+  shippingRateCardService,
   CHANNEL_ID,
 };
+
+// ============================================================================
+// Shipping Rate Calculation (channel-scoped)
+// ============================================================================
+
+export const calculateShipping = async (postcode: string, subtotal: number) =>
+  shippingRateCalculator.calculate(CHANNEL_ID, postcode, subtotal);

@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { cartService, orderService, orderItemService, CHANNEL_ID, getEffectivePrice, productVariantService, channelSettingsService, getCheckoutSettings } from "@/lib/store";
+import { cartService, orderService, orderItemService, CHANNEL_ID, getEffectivePrice, productVariantService, channelSettingsService, getCheckoutSettings, paymentService } from "@/lib/store";
 import { getFeatureFlag, getActiveSubscription } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
@@ -26,10 +26,15 @@ function calcTax(
   return { exTax: price, tax, incTax };
 }
 
+type PlaceOrderResult = {
+  error?: string;
+  stripe?: { clientSecret: string; orderNumber: string };
+};
+
 export async function placeOrder(
-  _prev: { error?: string } | null,
+  _prev: PlaceOrderResult | null,
   formData: FormData
-): Promise<{ error?: string }> {
+): Promise<PlaceOrderResult> {
   const session = await getSession();
 
   // Get cart
@@ -154,13 +159,23 @@ export async function placeOrder(
   const totalExTax = subtotalExTax + shippingExTax;
   const totalTax = subtotalTax + shippingTax;
 
+  // Determine payment status based on payment method
+  let paymentStatus = "pending";
+  if (paymentMethod === "stripe") {
+    paymentStatus = "awaiting_payment";
+  } else if (paymentMethod === "bank_transfer") {
+    paymentStatus = "pending_payment";
+  } else if (paymentMethod === "net_terms") {
+    paymentStatus = "net_terms";
+  }
+
   // Create order
   const order = await orderService.create({
     channelId: CHANNEL_ID,
     customerId: session?.customerId ?? null,
     status: "pending",
     paymentMethod: paymentMethod || undefined,
-    paymentStatus: "pending",
+    paymentStatus,
     currencyCode: cartWithItems.currencyCode,
     subtotalExTax: String(subtotalExTax),
     subtotalIncTax: String(subtotalIncTax),
@@ -201,10 +216,55 @@ export async function placeOrder(
 
   await orderItemService.createManyForParent(order.id, orderItemsData);
 
+  // For Stripe: create PaymentIntent and return client secret for browser confirmation.
+  // Uses the global paymentService — credentials live in store_settings.payment_gateways
+  // (configured at /dashboard/settings/payments in the portal). Channel segmentation
+  // happens via metadata stamped by paymentService.
+  if (paymentMethod === "stripe") {
+    try {
+      const { clientSecret } = await paymentService.createStripePaymentIntent(order.id, {
+        amount: String(totalIncTax),
+        description: `Order ${order.orderNumber}`,
+        customer_email: email,
+      });
+
+      // Mark cart as completed
+      await cartService.markCompleted(cartWithItems.id);
+      await clearCartUuid();
+
+      return { stripe: { clientSecret, orderNumber: order.orderNumber } };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Failed to create payment." };
+    }
+  }
+
   // Mark cart as completed
   await cartService.markCompleted(cartWithItems.id);
   await clearCartUuid();
 
   const pmParam = paymentMethod ? `&pm=${encodeURIComponent(paymentMethod)}` : "";
   redirect(`/checkout/confirmation?order=${order.orderNumber}${pmParam}`);
+}
+
+/**
+ * Optimistic confirmation called from the client after stripe.confirmCardPayment()
+ * resolves. The portal Stripe webhook is the source of truth for final payment
+ * status — this is just a fast-path UI update so the confirmation page can show
+ * "paid" without waiting for webhook delivery.
+ */
+export async function confirmStripePayment(
+  orderNumber: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const orders = await orderService.list({
+      page: 1, limit: 1, sort: "id", direction: "desc",
+      filters: { order_number: { type: "eq", value: orderNumber } },
+    });
+    if (orders.data.length > 0) {
+      await orderService.update(orders.data[0].id as number, { paymentStatus: "paid" });
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Failed to confirm payment" };
+  }
 }

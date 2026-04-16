@@ -1,9 +1,31 @@
 "use client";
 
 import { useActionState, useState, useRef, useCallback, useEffect } from "react";
-import { placeOrder } from "@/lib/actions/checkout";
+import { useRouter } from "next/navigation";
+import { placeOrder, confirmStripePayment } from "@/lib/actions/checkout";
 import { Price } from "@/components/ui/Price";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
+
+declare global {
+  interface Window {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    Stripe?: (key: string) => any;
+  }
+}
+
+function loadStripeScript(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (window.Stripe) {
+      resolve();
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://js.stripe.com/v3/";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Failed to load Stripe.js"));
+    document.head.appendChild(script);
+  });
+}
 
 type CartItem = {
   productName: string;
@@ -17,10 +39,20 @@ type Country = {
   name: string;
 };
 
+type BankDetails = {
+  bankName: string;
+  accountName: string;
+  bsb: string;
+  accountNumber: string;
+  reference?: string;
+};
+
 type PaymentMethod = {
   id: string;
   name: string;
   description: string;
+  bankDetails?: BankDetails;
+  netTermsDays?: number;
 };
 
 type SavedAddress = {
@@ -50,6 +82,7 @@ export function CheckoutForm({
   freeShippingEnabled = false,
   freeShippingThreshold = 500,
   shippingEnabled = false,
+  stripePublishableKey,
 }: {
   items: CartItem[];
   subtotal: number;
@@ -64,11 +97,116 @@ export function CheckoutForm({
   freeShippingEnabled?: boolean;
   freeShippingThreshold?: number;
   shippingEnabled?: boolean;
+  stripePublishableKey?: string;
 }) {
+  const router = useRouter();
   const [state, formAction, isPending] = useActionState(placeOrder, null);
   const [selectedAddressId, setSelectedAddressId] = useState<number | "new">(
     () => savedAddresses.find((a) => a.isDefaultBilling)?.id ?? "new"
   );
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>(
+    () => paymentMethods[0]?.id ?? ""
+  );
+  const [stripeError, setStripeError] = useState<string | null>(null);
+  const [stripeProcessing, setStripeProcessing] = useState(false);
+  const [cardReady, setCardReady] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const stripeRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cardElementRef = useRef<any>(null);
+  const cardContainerRef = useRef<HTMLDivElement>(null);
+
+  // Initialize Stripe when the stripe payment method is selected
+  useEffect(() => {
+    if (selectedPaymentMethod !== "stripe" || !stripePublishableKey) return;
+
+    let mounted = true;
+
+    async function initStripe() {
+      try {
+        await loadStripeScript();
+        if (!mounted || !window.Stripe) return;
+
+        const stripe = window.Stripe(stripePublishableKey!);
+        stripeRef.current = stripe;
+
+        const elements = stripe.elements();
+        const card = elements.create("card", {
+          style: {
+            base: {
+              fontSize: "16px",
+              color: "#18181b",
+              fontFamily: "system-ui, -apple-system, sans-serif",
+              "::placeholder": { color: "#a1a1aa" },
+            },
+            invalid: { color: "#dc2626" },
+          },
+        });
+
+        if (cardContainerRef.current) {
+          card.mount(cardContainerRef.current);
+          cardElementRef.current = card;
+
+          card.on("ready", () => {
+            if (mounted) setCardReady(true);
+          });
+
+          card.on("change", (event: { error?: { message: string } }) => {
+            if (mounted) setStripeError(event.error ? event.error.message : null);
+          });
+        }
+      } catch {
+        if (mounted) setStripeError("Failed to load payment form");
+      }
+    }
+
+    initStripe();
+
+    return () => {
+      mounted = false;
+      cardElementRef.current?.destroy();
+      cardElementRef.current = null;
+      setCardReady(false);
+    };
+  }, [selectedPaymentMethod, stripePublishableKey]);
+
+  // Handle Stripe payment response from server action
+  useEffect(() => {
+    if (!state?.stripe || stripeProcessing) return;
+
+    const { clientSecret, orderNumber } = state.stripe;
+
+    async function confirmPayment() {
+      if (!stripeRef.current || !cardElementRef.current) return;
+
+      setStripeProcessing(true);
+      setStripeError(null);
+
+      try {
+        const { error: stripeErr } = await stripeRef.current.confirmCardPayment(
+          clientSecret,
+          { payment_method: { card: cardElementRef.current } }
+        );
+
+        if (stripeErr) {
+          setStripeError(stripeErr.message || "Payment failed");
+          setStripeProcessing(false);
+          return;
+        }
+
+        // Optimistic server-side status update; portal webhook is the source of truth.
+        await confirmStripePayment(orderNumber);
+
+        // Redirect to confirmation
+        router.push(`/checkout/confirmation?order=${orderNumber}&pm=stripe`);
+      } catch (err) {
+        setStripeError(err instanceof Error ? err.message : "Payment failed");
+        setStripeProcessing(false);
+      }
+    }
+
+    confirmPayment();
+  }, [state?.stripe, stripeProcessing, router]);
 
   // Refs for address autocomplete
   const address1Ref = useRef<HTMLInputElement>(null);
@@ -363,23 +501,78 @@ export function CheckoutForm({
             <h2 className="text-lg font-semibold text-zinc-900 mb-4">Payment Method</h2>
             {paymentMethods.length > 0 ? (
               <div className="space-y-3">
-                {paymentMethods.map((method, i) => (
-                  <label
-                    key={method.id}
-                    className="flex items-start gap-3 p-3 border border-zinc-200 rounded-lg cursor-pointer has-[:checked]:border-zinc-900 has-[:checked]:bg-zinc-50"
-                  >
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value={method.id}
-                      defaultChecked={i === 0}
-                      className="mt-0.5"
-                    />
-                    <div>
-                      <span className="text-sm font-medium text-zinc-900">{method.name}</span>
-                      <p className="text-xs text-zinc-500 mt-0.5">{method.description}</p>
-                    </div>
-                  </label>
+                {paymentMethods.map((method) => (
+                  <div key={method.id}>
+                    <label
+                      className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+                        selectedPaymentMethod === method.id
+                          ? "border-zinc-900 bg-zinc-50"
+                          : "border-zinc-200 hover:border-zinc-300"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        value={method.id}
+                        checked={selectedPaymentMethod === method.id}
+                        onChange={() => setSelectedPaymentMethod(method.id)}
+                        className="mt-0.5"
+                      />
+                      <div>
+                        <span className="text-sm font-medium text-zinc-900">{method.name}</span>
+                        <p className="text-xs text-zinc-500 mt-0.5">{method.description}</p>
+                      </div>
+                    </label>
+
+                    {/* Bank Transfer details panel */}
+                    {method.id === "bank_transfer" && selectedPaymentMethod === "bank_transfer" && method.bankDetails && (
+                      <div className="mt-2 ml-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-sm text-blue-800 mb-3">
+                          Please transfer the total amount to the account below. Your order will be processed once payment is confirmed.
+                        </p>
+                        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                          <dt className="text-blue-600 font-medium">Bank</dt>
+                          <dd className="text-blue-900">{method.bankDetails.bankName}</dd>
+                          <dt className="text-blue-600 font-medium">Account Name</dt>
+                          <dd className="text-blue-900">{method.bankDetails.accountName}</dd>
+                          <dt className="text-blue-600 font-medium">BSB</dt>
+                          <dd className="text-blue-900">{method.bankDetails.bsb}</dd>
+                          <dt className="text-blue-600 font-medium">Account No.</dt>
+                          <dd className="text-blue-900">{method.bankDetails.accountNumber}</dd>
+                        </dl>
+                        {method.bankDetails.reference && (
+                          <p className="text-xs text-blue-600 mt-2">
+                            Reference: {method.bankDetails.reference}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Net Terms info panel */}
+                    {method.id === "net_terms" && selectedPaymentMethod === "net_terms" && (
+                      <div className="mt-2 ml-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-sm text-amber-800">
+                          Your order will be placed immediately. An invoice with Net {method.netTermsDays ?? 30} payment terms will be sent to your email.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Stripe card element */}
+                    {method.id === "stripe" && selectedPaymentMethod === "stripe" && stripePublishableKey && (
+                      <div className="mt-2 ml-6 p-4 bg-zinc-50 border border-zinc-200 rounded-lg">
+                        <label className="block text-sm font-medium text-zinc-700 mb-2">
+                          Card details
+                        </label>
+                        <div
+                          ref={cardContainerRef}
+                          className="border border-zinc-300 rounded-lg px-4 py-3 bg-white focus-within:ring-2 focus-within:ring-zinc-900 focus-within:border-zinc-900 transition-shadow"
+                        />
+                        {stripeError && (
+                          <p className="text-sm text-red-600 mt-2">{stripeError}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             ) : (
@@ -449,18 +642,18 @@ export function CheckoutForm({
               </div>
             </div>
 
-            {state?.error && (
+            {(state?.error || stripeError) && (
               <div className="mt-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg">
-                {state.error}
+                {state?.error || stripeError}
               </div>
             )}
 
             <button
               type="submit"
-              disabled={isPending}
+              disabled={isPending || stripeProcessing || (selectedPaymentMethod === "stripe" && !cardReady)}
               className="mt-6 w-full bg-zinc-900 text-white py-3 px-6 rounded-lg font-semibold hover:bg-zinc-800 transition-colors disabled:bg-zinc-300"
             >
-              {isPending ? "Placing order..." : "Place Order"}
+              {isPending || stripeProcessing ? "Processing..." : selectedPaymentMethod === "stripe" ? "Pay Now" : "Place Order"}
             </button>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CheckCircle, Building2, FileText } from "lucide-react";
+import { CheckCircle, Building2, FileText, CreditCard } from "lucide-react";
 
 export const metadata = {
   title: "Order Confirmed",
@@ -31,6 +31,18 @@ export default async function ConfirmationPage({
       </p>
 
       {/* Payment-specific instructions */}
+      {pm === "stripe" && (
+        <div className="mt-6 text-left bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <CreditCard className="h-4 w-4 text-green-600" />
+            <h3 className="text-sm font-semibold text-green-900">Payment Successful</h3>
+          </div>
+          <p className="text-sm text-green-800">
+            Your card payment has been processed successfully. A receipt will be sent to your email.
+          </p>
+        </div>
+      )}
+
       {pm === "bank_transfer" && (
         <div className="mt-6 text-left bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">

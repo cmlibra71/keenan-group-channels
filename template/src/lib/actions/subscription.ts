@@ -7,16 +7,16 @@ import {
   subscriptionPlanService,
   subscriptionService,
   customerService,
-  channelSettingsService,
+  storeSettingsService,
 } from "@/lib/store";
 import { StripeSubscriptionProvider } from "@keenan/services";
 
 async function getStripeProvider(): Promise<StripeSubscriptionProvider> {
-  const settings = await channelSettingsService.getByKey(CHANNEL_ID, "payment_gateways");
-  const gateways = (settings.setting_value as { provider: string; credentials: Record<string, string> }[]) || [];
-  const stripe = gateways.find((g) => g.provider === "stripe");
+  const settings = await storeSettingsService.getByKey("payment_gateways");
+  const gateways = (settings.setting_value as { provider: string; credentials: Record<string, string>; enabled?: boolean }[]) || [];
+  const stripe = gateways.find((g) => g.provider === "stripe" && g.enabled !== false);
   if (!stripe?.credentials?.secret_key) {
-    throw new Error("Stripe is not configured for this channel.");
+    throw new Error("Stripe is not configured. Set up the global Stripe gateway in the portal under Settings > Payments.");
   }
   return new StripeSubscriptionProvider(stripe.credentials.secret_key);
 }

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Crown, ArrowRight } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription, getCheckoutSettings, customerAddressService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription, getCheckoutSettings, customerAddressService, channelSettingsService, storeSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
 import { CheckoutForm } from "@/components/checkout/CheckoutForm";
 
 export const metadata = {
@@ -60,6 +60,18 @@ export default async function CheckoutPage() {
       // No saved addresses
     }
   }
+
+  // Load Stripe publishable key from the global portal payment_gateways setting.
+  // All channels share one Stripe account; segmentation happens via metadata.
+  let stripePublishableKey: string | undefined;
+  try {
+    const gatewaysSetting = await storeSettingsService.getByKey("payment_gateways");
+    const gateways = (gatewaysSetting.setting_value as { provider: string; credentials: Record<string, string>; enabled?: boolean }[]) || [];
+    const stripeGateway = gateways.find((g) => g.provider === "stripe" && g.enabled !== false);
+    if (stripeGateway?.credentials?.publishable_key) {
+      stripePublishableKey = stripeGateway.credentials.publishable_key;
+    }
+  } catch {}
 
   // Check if shipping rate calculation is available
   let shippingEnabled = false;
@@ -134,6 +146,7 @@ export default async function CheckoutPage() {
         freeShippingEnabled={checkoutSettings.freeShippingEnabled}
         freeShippingThreshold={checkoutSettings.freeShippingThreshold}
         shippingEnabled={shippingEnabled}
+        stripePublishableKey={stripePublishableKey}
       />
     </div>
   );
