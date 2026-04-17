@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getProducts, getFeatureFlag, getSubcategories, getCategoryById } from "@/lib/store";
+import { getProducts, getFeatureFlag, getSubcategories } from "@/lib/store";
 import { ProductGrid } from "@/components/product/ProductGrid";
 
 const CLEARANCE_ROOT_ID = 233;
@@ -20,15 +20,10 @@ export default async function ClearancePage({
   const { page: pageParam, type } = await searchParams;
   const currentPage = Math.max(1, parseInt(pageParam || "1", 10));
 
-  const [parent, children] = await Promise.all([
-    getCategoryById(CLEARANCE_ROOT_ID),
-    getSubcategories(CLEARANCE_ROOT_ID),
-  ]);
-
-  const filterOptions: FilterOption[] = [
-    ...(parent ? [{ id: CLEARANCE_ROOT_ID, name: (parent.name as string) ?? "Clearance Sale", slug: (parent.slug as string) ?? "clearance" }] : []),
-    ...(children as FilterOption[]),
-  ];
+  // Only show the 3 subtypes (Warehouse Clearance, Special Offer, Scratch & Dent).
+  // The parent "Clearance Sale" category is effectively an umbrella applied to
+  // every clearance item, so listing it alongside "All Clearance" would be redundant.
+  const filterOptions = (await getSubcategories(CLEARANCE_ROOT_ID)) as FilterOption[];
 
   const activeFilter = filterOptions.find((f) => f.slug === type) ?? null;
 
