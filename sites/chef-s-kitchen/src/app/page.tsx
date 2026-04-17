@@ -1,24 +1,34 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Crown, ArrowRight, ChevronRight } from "lucide-react";
-import { getProducts, getSiteConfig, getTopCategories, getFeatureFlag, getSubscriptionPlans, getUpcomingDraws, prizeService, productChannelAssignmentService, CHANNEL_ID } from "@/lib/store";
+import { getProducts, getSiteConfig, getTopCategories, getFeatureFlag, getSubscriptionPlans, getUpcomingDraws, getBrandsForChannel, prizeService, productChannelAssignmentService, CHANNEL_ID } from "@/lib/store";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { ValueBar } from "@/components/home/ValueBar";
 import { MembershipCTA } from "@/components/home/MembershipCTA";
 import { DrawSpotlight } from "@/components/home/DrawSpotlight";
 import { StatsBanner } from "@/components/home/StatsBanner";
+import { BrandShowcase } from "@/components/home/BrandShowcase";
+import { ClearanceSpotlight } from "@/components/home/ClearanceSpotlight";
 
 export default async function HomePage() {
-  const [{ channel }, { products: featuredProducts }, topCategories, memberPricingEnabled, subscriptionsEnabled, drawsEnabled, productCount, brandCount] = await Promise.all([
+  const [{ channel }, { products: featuredProducts }, { products: clearanceProducts }, topCategories, allBrands, memberPricingEnabled, subscriptionsEnabled, drawsEnabled, productCount, brandCount] = await Promise.all([
     getSiteConfig(),
     getProducts({ limit: 8, featured: true }),
+    getProducts({ limit: 9, onSale: true }),
     getTopCategories(),
+    getBrandsForChannel(),
     getFeatureFlag("member_pricing_enabled"),
     getFeatureFlag("subscriptions_enabled"),
     getFeatureFlag("draws_enabled"),
     productChannelAssignmentService.countForChannel(CHANNEL_ID),
     productChannelAssignmentService.countBrandsForChannel(CHANNEL_ID),
   ]);
+
+  // Prioritize brands with logos — otherwise they render as text which looks inconsistent
+  const featuredBrands = [
+    ...allBrands.filter((b: { image_url?: string | null }) => b.image_url),
+    ...allBrands.filter((b: { image_url?: string | null }) => !b.image_url),
+  ].slice(0, 9);
 
   // Fetch membership data if enabled
   let plan: { price: string; billingInterval: string; slug: string; benefits: unknown } | null = null;
@@ -185,14 +195,7 @@ export default async function HomePage() {
       {subscriptionsEnabled && <ValueBar drawsEnabled={drawsEnabled} />}
 
       {/* ═══ Categories — editorial grid ═══ */}
-      {topCategories.length > 0 && (() => {
-        // Append Brands and Clearance as special entries linked to their dedicated pages
-        const allDepartments = [
-          ...topCategories,
-          { id: -1, name: "Brands", slug: "brands", depth: 0, imageUrl: null, parentId: null },
-          { id: -2, name: "Clearance & Specials", slug: "clearance-specials", depth: 0, imageUrl: null, parentId: null },
-        ];
-        return (
+      {topCategories.length > 0 && (
         <section className="container-page section-padding">
           <div className="flex items-end justify-between mb-10">
             <div>
@@ -205,14 +208,10 @@ export default async function HomePage() {
             </Link>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1">
-            {allDepartments.map((category) => {
-              const href = category.slug === "brands" ? "/brands"
-                : category.slug === "clearance-specials" || category.slug === "clearance-and-specials" ? "/clearance"
-                : `/categories/${category.slug}`;
-              return (
+            {topCategories.map((category: { id: number; name: string; slug: string; imageUrl?: string | null }) => (
               <Link
                 key={category.id}
-                href={href}
+                href={`/categories/${category.slug}`}
                 className="group relative overflow-hidden bg-surface-secondary aspect-[4/3]"
               >
                 <div className="absolute inset-0 overflow-hidden">
@@ -227,7 +226,6 @@ export default async function HomePage() {
                   ) : (
                     <div className="h-full w-full bg-gradient-to-br from-stone to-stone-warm" />
                   )}
-                  {/* Dark overlay for text legibility */}
                   <div className="absolute inset-0 bg-gradient-to-t from-surface-dark/70 via-surface-dark/20 to-transparent" />
                 </div>
                 <div className="relative h-full flex flex-col justify-end p-5 sm:p-6">
@@ -240,12 +238,16 @@ export default async function HomePage() {
                   </span>
                 </div>
               </Link>
-              );
-            })}
+            ))}
           </div>
         </section>
-        );
-      })()}
+      )}
+
+      {/* ═══ Brand Showcase ═══ */}
+      <BrandShowcase brands={featuredBrands} />
+
+      {/* ═══ Clearance Spotlight ═══ */}
+      <ClearanceSpotlight products={clearanceProducts} />
 
       {/* ═══ Membership CTA ═══ */}
       {subscriptionsEnabled && plan && (
