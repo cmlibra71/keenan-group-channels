@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Crown, ArrowRight } from "lucide-react";
-import { getProducts, getSiteConfig, getCategories, getFeatureFlag, getSubscriptionPlans, getUpcomingDraws, getBrandsForChannel, prizeService, CHANNEL_ID } from "@/lib/store";
+import { Crown, ArrowRight, ChevronRight } from "lucide-react";
+import { getProducts, getSiteConfig, getTopCategories, getFeatureFlag, getSubscriptionPlans, getUpcomingDraws, getBrandsForChannel, prizeService, CHANNEL_ID } from "@/lib/store";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { ValueBar } from "@/components/home/ValueBar";
 import { MembershipCTA } from "@/components/home/MembershipCTA";
@@ -10,19 +10,16 @@ import { BrandShowcase } from "@/components/home/BrandShowcase";
 import { ClearanceSpotlight } from "@/components/home/ClearanceSpotlight";
 
 export default async function HomePage() {
-  const [{ channel }, { products: featuredProducts }, { products: clearanceProducts }, allCategories, allBrands, memberPricingEnabled, subscriptionsEnabled, drawsEnabled] = await Promise.all([
+  const [{ channel }, { products: featuredProducts }, { products: clearanceProducts }, topCategories, allBrands, memberPricingEnabled, subscriptionsEnabled, drawsEnabled] = await Promise.all([
     getSiteConfig(),
     getProducts({ featured: true, limit: 8 }),
     getProducts({ onSale: true, limit: 9 }),
-    getCategories(),
+    getTopCategories(),
     getBrandsForChannel(),
     getFeatureFlag("member_pricing_enabled"),
     getFeatureFlag("subscriptions_enabled"),
     getFeatureFlag("draws_enabled"),
   ]);
-
-  // Top-level categories only
-  const topCategories = allCategories.filter((c) => c.depth === 0).slice(0, 6);
 
   // Prioritize brands with logos — otherwise they render as text which looks inconsistent
   const featuredBrands = [
@@ -173,32 +170,47 @@ export default async function HomePage() {
       {/* Categories */}
       {topCategories.length > 0 && (
         <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16">
-          <h2 className="text-2xl font-bold text-zinc-900">Shop by Category</h2>
-          <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-            {topCategories.map((category) => (
+          <div className="flex items-end justify-between mb-8">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500 mb-3">Departments</p>
+              <h2 className="text-2xl sm:text-3xl font-bold text-zinc-900">Shop by Category</h2>
+            </div>
+            <Link href="/categories" className="hidden sm:inline-flex items-center gap-1.5 text-sm font-medium text-zinc-600 hover:text-zinc-900 transition-colors">
+              View All
+              <ChevronRight className="h-3 w-3" />
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+            {topCategories.map((category: { id: number; name: string; slug: string; imageUrl?: string | null }) => (
               <Link
                 key={category.id}
                 href={`/categories/${category.slug}`}
-                className="group block rounded-xl overflow-hidden bg-white shadow-md hover:shadow-xl transition-shadow duration-300"
+                className="group relative overflow-hidden rounded-2xl bg-zinc-200 aspect-[4/5] ring-1 ring-transparent hover:ring-amber-400/30 transition-all duration-500"
               >
-                <div className="relative aspect-square overflow-hidden bg-zinc-100">
+                <div className="absolute inset-0 overflow-hidden">
                   {category.imageUrl ? (
                     <Image
                       src={category.imageUrl}
                       alt={category.name}
                       fill
-                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 16vw"
-                      className="object-cover group-hover:scale-105 transition-transform duration-300"
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                      className="object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
                     />
                   ) : (
-                    <div className="h-full w-full flex items-center justify-center text-4xl">
+                    <div className="h-full w-full bg-gradient-to-br from-zinc-200 to-zinc-100 flex items-center justify-center text-4xl">
                       📦
                     </div>
                   )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-zinc-900/85 via-zinc-900/35 to-zinc-900/5 group-hover:from-zinc-900/90 transition-colors duration-500" />
                 </div>
-                <div className="px-3 py-3">
-                  <span className="text-sm font-semibold text-zinc-900 group-hover:text-zinc-600 transition-colors line-clamp-2">
+                <div className="relative h-full flex flex-col justify-end p-5 sm:p-6">
+                  <span className="text-lg sm:text-xl lg:text-2xl font-semibold text-white drop-shadow-sm transform translate-y-1 group-hover:translate-y-0 transition-transform duration-500 ease-out">
                     {category.name}
+                  </span>
+                  <span className="block h-px w-0 group-hover:w-10 bg-amber-400 mt-2 transition-all duration-500 ease-out" />
+                  <span className="mt-3 inline-flex items-center text-[11px] uppercase tracking-[0.18em] text-white/70 group-hover:text-white transition-colors duration-300">
+                    Explore
+                    <ChevronRight className="h-3 w-3 ml-1 transform translate-x-0 group-hover:translate-x-1 transition-transform duration-300" />
                   </span>
                 </div>
               </Link>

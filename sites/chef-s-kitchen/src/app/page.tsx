@@ -207,12 +207,12 @@ export default async function HomePage() {
               <ChevronRight className="h-3 w-3" />
             </Link>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
             {topCategories.map((category: { id: number; name: string; slug: string; imageUrl?: string | null }) => (
               <Link
                 key={category.id}
                 href={`/categories/${category.slug}`}
-                className="group relative overflow-hidden bg-surface-secondary aspect-[4/3]"
+                className="group relative overflow-hidden rounded-2xl bg-surface-secondary aspect-[4/5] ring-1 ring-transparent hover:ring-white/20 transition-all duration-500"
               >
                 <div className="absolute inset-0 overflow-hidden">
                   {category.imageUrl ? (
@@ -220,21 +220,22 @@ export default async function HomePage() {
                       src={category.imageUrl}
                       alt={category.name}
                       fill
-                      sizes="(max-width: 640px) 50vw, 33vw"
-                      className="object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                      className="object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
                     />
                   ) : (
                     <div className="h-full w-full bg-gradient-to-br from-stone to-stone-warm" />
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-surface-dark/70 via-surface-dark/20 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-surface-dark/80 via-surface-dark/30 to-surface-dark/5 group-hover:from-surface-dark/85 transition-colors duration-500" />
                 </div>
                 <div className="relative h-full flex flex-col justify-end p-5 sm:p-6">
-                  <span className="heading-serif text-lg sm:text-xl text-white drop-shadow-sm">
+                  <span className="heading-serif text-lg sm:text-xl lg:text-2xl text-white drop-shadow-sm transform translate-y-1 group-hover:translate-y-0 transition-transform duration-500 ease-out">
                     {category.name}
                   </span>
-                  <span className="heading-sans text-white/60 mt-1 group-hover:text-white/80 transition-colors duration-300">
+                  <span className="block h-px w-0 group-hover:w-10 bg-accent mt-2 transition-all duration-500 ease-out" />
+                  <span className="mt-3 inline-flex items-center text-[11px] uppercase tracking-[0.18em] text-white/70 group-hover:text-white transition-colors duration-300">
                     Explore
-                    <ChevronRight className="inline h-2.5 w-2.5 ml-1" />
+                    <ChevronRight className="h-3 w-3 ml-1 transform translate-x-0 group-hover:translate-x-1 transition-transform duration-300" />
                   </span>
                 </div>
               </Link>
