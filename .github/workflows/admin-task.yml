@@ -22,6 +22,11 @@ on:
         required: false
         default: "600"
         type: string
+      args:
+        description: "Extra CLI args appended after the script path (e.g. '--dry-run')"
+        required: false
+        default: ""
+        type: string
 
 env:
   EC2_INSTANCE: i-07fb3cc6aeea2eb49
@@ -87,7 +92,7 @@ jobs:
             --parameters "commands=[
               \"echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin\",
               \"docker pull ${{ env.IMAGE }}\",
-              \"docker run --rm --network ${{ env.DOCKER_NETWORK }} -e COMMERCE_DATABASE_URL=${{ secrets.COMMERCE_DATABASE_URL }} -e MEILI_URL=http://keenan-search:7700 -e MEILI_API_KEY=${{ secrets.MEILI_MASTER_KEY }} -e GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} -e ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }} -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} -e AWS_REGION=${{ env.AWS_REGION }} ${{ env.IMAGE }}\",
+              \"docker run --rm --network ${{ env.DOCKER_NETWORK }} -e COMMERCE_DATABASE_URL=${{ secrets.COMMERCE_DATABASE_URL }} -e MEILI_URL=http://keenan-search:7700 -e MEILI_API_KEY=${{ secrets.MEILI_MASTER_KEY }} -e GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} -e ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }} -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} -e AWS_REGION=${{ env.AWS_REGION }} ${{ env.IMAGE }} npx tsx ${{ inputs.script }} ${{ inputs.args }}\",
               \"docker image rm ${{ env.IMAGE }} || true\"
             ]" \
             --output json \
