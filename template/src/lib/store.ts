@@ -186,11 +186,8 @@ export const getProductReviews = (productId: number) => unstable_cache(
 
 export const getProductAttachments = (productId: number) => unstable_cache(
   async () => {
-    const result = await productAttachmentService.listForParent(productId, {
-      page: 1,
+    const result = await productAttachmentService.listForChannel(productId, CHANNEL_ID, {
       limit: 50,
-      sort: "sort_order",
-      direction: "asc",
     });
     return result.data;
   },
