@@ -342,6 +342,34 @@ export const getValueBarItems = unstable_cache(
 );
 
 // ============================================================================
+// Header (data-driven nav + utility config) and homepage category tiles.
+// These back the industrykitchens.com.au-matching layout — see
+// scripts/ik-homepage-match.mjs for how the settings are seeded from the DB.
+// ============================================================================
+
+export type HeaderNavItem = { label: string; href: string };
+export type HeaderConfig = { search_placeholder?: string; phone?: string; gst_label?: string };
+export type CategoryTile = { label: string; href: string; image_url?: string; span?: number };
+
+export const getHeaderNav = unstable_cache(
+  async () => getJsonSetting<HeaderNavItem[]>("header_nav", []),
+  [`header-nav-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
+export const getHeaderConfig = unstable_cache(
+  async () => getJsonSetting<HeaderConfig>("header", {}),
+  [`header-config-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
+export const getHomepageCategoryTiles = unstable_cache(
+  async () => getJsonSetting<CategoryTile[]>("homepage_category_tiles", []),
+  [`home-cat-tiles-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
+// ============================================================================
 // Homepage spotlights (curated product carousels backed by categories whose
 // metafields.is_homepage_spotlight = true).
 // ============================================================================
