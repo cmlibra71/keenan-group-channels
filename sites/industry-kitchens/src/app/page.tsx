@@ -115,7 +115,7 @@ export default async function HomePage() {
 
       {/* Homepage banners (e.g. Custom Stainless Steel / Low Velocity Canopy) */}
       {banners.map((b, i) => (
-        <BannerBlock key={`banner-${i}`} {...b} />
+        <BannerBlock key={`banner-${i}`} {...b} flip={i % 2 === 1} />
       ))}
 
       {/* Curated homepage spotlights (e.g. Speed Ovens carousel) */}
