@@ -1,55 +1,136 @@
 import Link from "next/link";
 
-export function Footer({ storeName, subscriptionsEnabled }: { storeName: string; subscriptionsEnabled?: boolean }) {
+export type FooterColumn = { heading: string; links: { label: string; href: string }[] };
+export type FooterContact = { phone?: string; email?: string; address?: string };
+export type FooterSocial = { platform: string; href: string };
+export type FooterPaymentBadge = { name: string; image_url?: string | null };
+export type FooterConfig = {
+  tagline?: string;
+  columns?: FooterColumn[];
+  contact?: FooterContact;
+  social?: FooterSocial[];
+  payment_badges?: FooterPaymentBadge[];
+  legal?: string;
+};
+
+const DEFAULT_COLUMNS: FooterColumn[] = [
+  {
+    heading: "Shop",
+    links: [
+      { label: "All Products", href: "/products" },
+      { label: "Categories", href: "/categories" },
+      { label: "Brands", href: "/brands" },
+      { label: "Clearance", href: "/clearance" },
+    ],
+  },
+  {
+    heading: "Account",
+    links: [
+      { label: "My Account", href: "/account" },
+      { label: "Order History", href: "/account/orders" },
+      { label: "Cart", href: "/cart" },
+    ],
+  },
+];
+
+export function Footer({
+  storeName,
+  config,
+}: {
+  storeName: string;
+  config?: FooterConfig;
+}) {
+  const columns = config?.columns?.length ? config.columns : DEFAULT_COLUMNS;
+  const colCount = Math.min(columns.length + 1, 6);
   return (
     <footer className="border-t border-zinc-200 bg-zinc-50 mt-16">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12">
-        <div className={`grid grid-cols-1 gap-8 ${subscriptionsEnabled ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
+        <div
+          className={`grid grid-cols-1 gap-8 md:grid-cols-${colCount}`}
+          style={{ gridTemplateColumns: `repeat(auto-fit, minmax(160px, 1fr))` }}
+        >
           <div>
             <h3 className="font-bold text-zinc-900">{storeName}</h3>
-            <p className="mt-2 text-sm text-zinc-500">
-              Quality products for your needs.
-            </p>
+            {config?.tagline && (
+              <p className="mt-2 text-sm text-zinc-500">{config.tagline}</p>
+            )}
+            {config?.contact && (
+              <div className="mt-4 space-y-1 text-sm text-zinc-500">
+                {config.contact.phone && (
+                  <div>
+                    <a href={`tel:${config.contact.phone}`} className="hover:text-zinc-900">
+                      {config.contact.phone}
+                    </a>
+                  </div>
+                )}
+                {config.contact.email && (
+                  <div>
+                    <a href={`mailto:${config.contact.email}`} className="hover:text-zinc-900">
+                      {config.contact.email}
+                    </a>
+                  </div>
+                )}
+                {config.contact.address && (
+                  <div className="text-xs">{config.contact.address}</div>
+                )}
+              </div>
+            )}
           </div>
-          <div>
-            <h4 className="text-sm font-semibold text-zinc-900">Shop</h4>
-            <ul className="mt-2 space-y-2">
-              <li><Link href="/products" className="text-sm text-zinc-500 hover:text-zinc-900">All Products</Link></li>
-              <li><Link href="/categories" className="text-sm text-zinc-500 hover:text-zinc-900">Categories</Link></li>
-              <li><Link href="/brands" className="text-sm text-zinc-500 hover:text-zinc-900">Brands</Link></li>
-              <li><Link href="/clearance" className="text-sm text-zinc-500 hover:text-zinc-900">Clearance</Link></li>
-            </ul>
-          </div>
-          {subscriptionsEnabled && (
-            <div>
-              <h4 className="text-sm font-semibold text-zinc-900">Membership</h4>
+          {columns.map((col) => (
+            <div key={col.heading}>
+              <h4 className="text-sm font-semibold text-zinc-900">{col.heading}</h4>
               <ul className="mt-2 space-y-2">
-                <li><Link href="/membership" className="text-sm text-zinc-500 hover:text-zinc-900">Join</Link></li>
-                <li><Link href="/membership#savings" className="text-sm text-zinc-500 hover:text-zinc-900">Member Benefits</Link></li>
-                <li><Link href="/membership#draws" className="text-sm text-zinc-500 hover:text-zinc-900">Prize Draws</Link></li>
-                <li><Link href="/account/partner-offers" className="text-sm text-zinc-500 hover:text-zinc-900">Partner Offers</Link></li>
+                {col.links.map((l) => (
+                  <li key={l.href + l.label}>
+                    <Link href={l.href} className="text-sm text-zinc-500 hover:text-zinc-900">
+                      {l.label}
+                    </Link>
+                  </li>
+                ))}
               </ul>
             </div>
-          )}
-          <div>
-            <h4 className="text-sm font-semibold text-zinc-900">Account</h4>
-            <ul className="mt-2 space-y-2">
-              <li><Link href="/account" className="text-sm text-zinc-500 hover:text-zinc-900">My Account</Link></li>
-              <li><Link href="/account/orders" className="text-sm text-zinc-500 hover:text-zinc-900">Order History</Link></li>
-              <li><Link href="/cart" className="text-sm text-zinc-500 hover:text-zinc-900">Cart</Link></li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="text-sm font-semibold text-zinc-900">Support</h4>
-            <ul className="mt-2 space-y-2">
-              <li><Link href="/contact" className="text-sm text-zinc-500 hover:text-zinc-900">Contact Us</Link></li>
-              <li><Link href="/shipping" className="text-sm text-zinc-500 hover:text-zinc-900">Shipping Info</Link></li>
-              <li><Link href="/returns" className="text-sm text-zinc-500 hover:text-zinc-900">Returns</Link></li>
-            </ul>
-          </div>
+          ))}
         </div>
+        {(config?.payment_badges?.length || config?.social?.length) && (
+          <div className="mt-8 border-t border-zinc-200 pt-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            {config?.payment_badges && config.payment_badges.length > 0 && (
+              <div className="flex flex-wrap items-center gap-3">
+                {config.payment_badges.map((b) =>
+                  b.image_url ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      key={b.name}
+                      src={b.image_url}
+                      alt={b.name}
+                      className="h-6 w-auto object-contain"
+                    />
+                  ) : (
+                    <span key={b.name} className="text-xs text-zinc-400">
+                      {b.name}
+                    </span>
+                  )
+                )}
+              </div>
+            )}
+            {config?.social && config.social.length > 0 && (
+              <div className="flex items-center gap-3">
+                {config.social.map((s) => (
+                  <a
+                    key={s.platform}
+                    href={s.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs uppercase tracking-wide text-zinc-500 hover:text-zinc-900"
+                  >
+                    {s.platform}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <div className="mt-8 border-t border-zinc-200 pt-8 text-center text-sm text-zinc-400">
-          &copy; {new Date().getFullYear()} {storeName}. All rights reserved.
+          {config?.legal ?? `© ${new Date().getFullYear()} ${storeName}. All rights reserved.`}
         </div>
       </div>
     </footer>

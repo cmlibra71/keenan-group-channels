@@ -4,6 +4,18 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { getBrandBySlug, getProducts, getFeatureFlag } from "@/lib/store";
 import { ProductGrid } from "@/components/product/ProductGrid";
+import { BrandIntro } from "@/components/brand/BrandIntro";
+import { BrandProductLines } from "@/components/brand/BrandProductLines";
+import { BrandIndustryUses } from "@/components/brand/BrandIndustryUses";
+import { BrandFaq } from "@/components/brand/BrandFaq";
+
+type BrandMetafields = {
+  intro_html?: string;
+  product_lines?: { name: string; slug?: string; href?: string; image_url?: string }[];
+  industry_uses?: { name: string; image_url?: string; href?: string }[];
+  faq?: { q: string; a: string }[];
+  featured_product_sku?: string;
+};
 
 export default async function BrandPage({
   params,
@@ -21,6 +33,9 @@ export default async function BrandPage({
     getProducts({ brandId: brand.id as number, limit: 48 }),
     getFeatureFlag("member_pricing_enabled"),
   ]);
+
+  const meta = ((brand.metafields as BrandMetafields | null) ?? {}) as BrandMetafields;
+  const pageTitle = (brand.page_title as string | null) || (brand.name as string);
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
@@ -45,22 +60,39 @@ export default async function BrandPage({
           </div>
         )}
         <div className={`flex-1 py-8 pr-8 text-left ${brand.image_url ? "" : "pl-8"}`}>
-          <h1 className="text-3xl font-bold text-zinc-900">{brand.name as string}</h1>
+          <h1 className="text-3xl font-bold text-zinc-900">{pageTitle}</h1>
+          {brand.meta_description != null && (
+            <p className="mt-3 text-base text-zinc-600 leading-relaxed">
+              {brand.meta_description as string}
+            </p>
+          )}
           <p className="mt-3 text-sm text-zinc-500">
             {total} {total === 1 ? "product" : "products"}
           </p>
         </div>
       </div>
 
+      {/* Brand-specific intro (conditional — only renders if metafields.intro_html present) */}
+      <BrandIntro html={meta.intro_html} />
+
+      {/* Brand product lines (e.g. Rational iCombi Pro / Classic / Vario) */}
+      <BrandProductLines heading="Product Lines" lines={meta.product_lines} />
+
       {/* Products */}
       {products.length > 0 ? (
-        <div>
+        <div className="mt-12">
           <h2 className="text-lg font-semibold text-zinc-900 mb-4">Products</h2>
           <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} />
         </div>
       ) : (
         <p className="text-zinc-500 text-center py-12">No products from this brand yet.</p>
       )}
+
+      {/* Industry-use tiles (e.g. Cafés / Restaurants / Hotels) */}
+      <BrandIndustryUses heading="Top Use Cases" items={meta.industry_uses} />
+
+      {/* Brand FAQ accordion */}
+      <BrandFaq items={meta.faq} />
     </div>
   );
 }

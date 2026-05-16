@@ -7,7 +7,19 @@ import { getSession } from "@/lib/auth";
 import { getActiveSubscription, getFeatureFlag, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 
-export async function Header({ storeName, logoUrl, logoAlt }: { storeName: string; logoUrl?: string | null; logoAlt?: string | null }) {
+type NavCategory = { id: number; name: string; slug: string };
+
+export async function Header({
+  storeName,
+  logoUrl,
+  logoAlt,
+  navCategories = [],
+}: {
+  storeName: string;
+  logoUrl?: string | null;
+  logoAlt?: string | null;
+  navCategories?: NavCategory[];
+}) {
   const [cart, quote] = await Promise.all([getCart(), getQuote()]);
   const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   const quoteCount = quote?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
@@ -47,13 +59,30 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
             </Link>
           )}
 
-          {/* Navigation */}
-          <nav className="hidden md:flex items-center gap-8">
-            <Link href="/products" className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
-              Products
-            </Link>
-            <Link href="/categories" className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
-              Categories
+          {/* Navigation (data-driven from channel categories) */}
+          <nav className="hidden md:flex items-center gap-6 lg:gap-8">
+            {navCategories.length > 0 ? (
+              navCategories.map((cat) => (
+                <Link
+                  key={cat.id}
+                  href={`/categories/${cat.slug}`}
+                  className="text-sm font-medium text-zinc-600 hover:text-zinc-900 whitespace-nowrap"
+                >
+                  {cat.name}
+                </Link>
+              ))
+            ) : (
+              <>
+                <Link href="/products" className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
+                  Products
+                </Link>
+                <Link href="/categories" className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
+                  Categories
+                </Link>
+              </>
+            )}
+            <Link href="/brands" className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
+              Brands
             </Link>
             {subscriptionsEnabled && !isMember && (
               <Link

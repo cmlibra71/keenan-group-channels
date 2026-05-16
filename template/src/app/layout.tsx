@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { getSiteConfig, getFeatureFlag } from "@/lib/store";
+import { getSiteConfig, getFeatureFlag, getFooterConfig, getTopCategories } from "@/lib/store";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import "./globals.css";
@@ -27,9 +27,11 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [{ site, channel }, subscriptionsEnabled] = await Promise.all([
+  const [{ site, channel }, subscriptionsEnabled, footerConfig, topCategories] = await Promise.all([
     getSiteConfig(),
     getFeatureFlag("subscriptions_enabled"),
+    getFooterConfig(),
+    getTopCategories(),
   ]);
   const storeName = site?.siteName || channel?.name || "Store";
   const logoUrl = site?.logoUrl || null;
@@ -38,9 +40,14 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen flex flex-col bg-white text-zinc-900 antialiased">
-        <Header storeName={storeName} logoUrl={logoUrl} logoAlt={logoAlt} />
+        <Header
+          storeName={storeName}
+          logoUrl={logoUrl}
+          logoAlt={logoAlt}
+          navCategories={topCategories.slice(0, 6)}
+        />
         <main className="flex-1">{children}</main>
-        <Footer storeName={storeName} subscriptionsEnabled={subscriptionsEnabled} />
+        <Footer storeName={storeName} config={footerConfig} />
       </body>
     </html>
   );

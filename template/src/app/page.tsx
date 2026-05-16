@@ -1,16 +1,22 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Crown, ArrowRight, ChevronRight } from "lucide-react";
-import { getProducts, getSiteConfig, getTopCategories, getFeatureFlag, getSubscriptionPlans, getUpcomingDraws, getBrandsForChannel, prizeService, CHANNEL_ID } from "@/lib/store";
+import { getProducts, getSiteConfig, getTopCategories, getFeatureFlag, getSubscriptionPlans, getUpcomingDraws, getBrandsForChannel, getHomepageCopy, getValueBarItems, getHomepageSpotlights, getBannerBlocks, getWhyShop, getCustomerLogos, getKnowledgeHubLinks, getSpecialistCta, prizeService, CHANNEL_ID } from "@/lib/store";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { ValueBar } from "@/components/home/ValueBar";
 import { MembershipCTA } from "@/components/home/MembershipCTA";
 import { DrawSpotlight } from "@/components/home/DrawSpotlight";
 import { BrandShowcase } from "@/components/home/BrandShowcase";
 import { ClearanceSpotlight } from "@/components/home/ClearanceSpotlight";
+import { HomepageSpotlight } from "@/components/home/HomepageSpotlight";
+import { BannerBlock } from "@/components/home/BannerBlock";
+import { WhyShop } from "@/components/home/WhyShop";
+import { CustomerLogos } from "@/components/home/CustomerLogos";
+import { KnowledgeHub } from "@/components/home/KnowledgeHub";
+import { SpecialistCta } from "@/components/home/SpecialistCta";
 
 export default async function HomePage() {
-  const [{ channel }, { products: featuredProducts }, { products: clearanceProducts }, topCategories, allBrands, memberPricingEnabled, subscriptionsEnabled, drawsEnabled] = await Promise.all([
+  const [{ channel }, { products: featuredProducts }, { products: clearanceProducts }, topCategories, allBrands, memberPricingEnabled, subscriptionsEnabled, drawsEnabled, copy, valueBarItems, spotlights, banners, whyShop, customerLogos, knowledgeHub, specialistCta] = await Promise.all([
     getSiteConfig(),
     getProducts({ featured: true, limit: 8 }),
     getProducts({ onSale: true, limit: 9 }),
@@ -19,6 +25,14 @@ export default async function HomePage() {
     getFeatureFlag("member_pricing_enabled"),
     getFeatureFlag("subscriptions_enabled"),
     getFeatureFlag("draws_enabled"),
+    getHomepageCopy(),
+    getValueBarItems(),
+    getHomepageSpotlights(),
+    getBannerBlocks(),
+    getWhyShop(),
+    getCustomerLogos(),
+    getKnowledgeHubLinks(),
+    getSpecialistCta(),
   ]);
 
   // Prioritize brands with logos — otherwise they render as text which looks inconsistent
@@ -149,31 +163,38 @@ export default async function HomePage() {
         <section className="bg-zinc-900 text-white">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-24">
             <h1 className="text-4xl sm:text-5xl font-bold tracking-tight">
-              Welcome to {channel?.name || "our store"}
+              {copy.hero?.headline ?? `Welcome to ${channel?.name || "our store"}`}
             </h1>
-            <p className="mt-4 text-lg text-zinc-300 max-w-xl">
-              Discover our curated collection of quality products.
-            </p>
+            {(copy.tagline || copy.hero?.subheadline) && (
+              <p className="mt-4 text-lg text-zinc-300 max-w-xl">
+                {copy.hero?.subheadline ?? copy.tagline}
+              </p>
+            )}
             <Link
-              href="/products"
+              href={copy.hero?.cta_href ?? "/products"}
               className="mt-8 inline-block bg-white text-zinc-900 px-6 py-3 rounded-lg font-semibold hover:bg-zinc-100 transition-colors"
             >
-              Shop All Products
+              {copy.hero?.cta_text ?? "Shop All Products"}
             </Link>
           </div>
         </section>
       )}
 
-      {/* Value Bar */}
-      {subscriptionsEnabled && <ValueBar drawsEnabled={drawsEnabled} />}
+      {/* Value Bar (4-icon trust row) */}
+      {valueBarItems.length > 0 && <ValueBar items={valueBarItems} />}
+
+      {/* Homepage banners (e.g. Custom Stainless Steel / Low Velocity Canopy) */}
+      {banners.map((b, i) => (
+        <BannerBlock key={`banner-${i}`} {...b} />
+      ))}
 
       {/* Categories */}
       {topCategories.length > 0 && (
         <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16">
           <div className="flex items-end justify-between mb-8">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500 mb-3">Departments</p>
-              <h2 className="text-2xl sm:text-3xl font-bold text-zinc-900">Shop by Category</h2>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500 mb-3">{copy.categories_eyebrow ?? "Departments"}</p>
+              <h2 className="text-2xl sm:text-3xl font-bold text-zinc-900">{copy.categories_heading ?? "Shop by Category"}</h2>
             </div>
             <Link href="/categories" className="hidden sm:inline-flex items-center gap-1.5 text-sm font-medium text-zinc-600 hover:text-zinc-900 transition-colors">
               View All
@@ -219,11 +240,22 @@ export default async function HomePage() {
         </section>
       )}
 
+      {/* Curated homepage spotlights (e.g. Speed Ovens carousel) */}
+      {spotlights.map((s) => (
+        <HomepageSpotlight
+          key={s.id}
+          heading={s.heading}
+          ctaHref={s.cta_href}
+          products={s.products}
+          memberPricingAvailable={memberPricingEnabled}
+        />
+      ))}
+
       {/* Brand Showcase */}
-      <BrandShowcase brands={featuredBrands} />
+      <BrandShowcase brands={featuredBrands} heading={copy.brands_heading} eyebrow={copy.brands_eyebrow} />
 
       {/* Clearance Spotlight */}
-      <ClearanceSpotlight products={clearanceProducts} />
+      <ClearanceSpotlight products={clearanceProducts} heading={copy.clearance_heading} eyebrow={copy.clearance_eyebrow} />
 
       {/* Membership CTA Banner */}
       {subscriptionsEnabled && plan && (
@@ -237,7 +269,7 @@ export default async function HomePage() {
       {/* Featured Products */}
       <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-zinc-900">Featured Products</h2>
+          <h2 className="text-2xl font-bold text-zinc-900">{copy.featured_heading ?? "Featured Products"}</h2>
           <Link href="/products?filter=featured" className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
             View all &rarr;
           </Link>
@@ -249,6 +281,18 @@ export default async function HomePage() {
       {drawsEnabled && featuredPrize && (
         <DrawSpotlight prize={featuredPrize} draw={featuredDraw} />
       )}
+
+      {/* Why Shop */}
+      <WhyShop heading={whyShop.heading} items={whyShop.items} />
+
+      {/* Customer logos (Who We Supply) */}
+      <CustomerLogos heading={customerLogos.heading} logos={customerLogos.logos} />
+
+      {/* Knowledge Hub */}
+      <KnowledgeHub heading={knowledgeHub.heading} links={knowledgeHub.links} />
+
+      {/* Talk to a Specialist */}
+      <SpecialistCta {...specialistCta} />
     </div>
   );
 }

@@ -1,12 +1,20 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscription, customerService, CHANNEL_ID, getCategoryById, getCategoryBreadcrumbs } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscription, customerService, brandService, CHANNEL_ID, getCategoryById, getCategoryBreadcrumbs } from "@/lib/store";
 import { getSession } from "@/lib/auth";
 import { ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductTabs } from "@/components/product/ProductTabs";
 import { ProductGrid } from "@/components/product/ProductGrid";
+import { BrandWarrantyNotes } from "@/components/product/BrandWarrantyNotes";
+
+type ProductBrandMetafields = {
+  intro_html?: string;
+  warranty_text?: string;
+  extended_warranty?: { name: string; body: string; link?: string };
+  installation_notes?: string[];
+};
 
 export default async function ProductPage({
   params,
@@ -20,11 +28,15 @@ export default async function ProductPage({
     notFound();
   }
 
-  const [reviewsRaw, attachmentsRaw, relatedProducts] = await Promise.all([
+  const [reviewsRaw, attachmentsRaw, relatedProducts, brandRow] = await Promise.all([
     getProductReviews(product.id),
     getProductAttachments(product.id),
     getRelatedProducts(product.id, product.categoryIds ?? []),
+    product.brandId != null
+      ? (brandService.getById(product.brandId) as Promise<{ metafields: ProductBrandMetafields | null } | null>)
+      : Promise.resolve(null),
   ]);
+  const brandMeta = (brandRow?.metafields ?? {}) as ProductBrandMetafields;
 
   // Get category breadcrumbs from the most specific category
   let breadcrumbs: { id: number; name: string; slug: string }[] = [];
@@ -132,6 +144,13 @@ export default async function ProductPage({
         memberPrice={memberPrice}
         memberPriceMap={memberPriceMap}
         isMember={isMember}
+      />
+
+      {/* Brand-specific warranty / installation notes (conditional) */}
+      <BrandWarrantyNotes
+        warranty_text={brandMeta.warranty_text}
+        extended_warranty={brandMeta.extended_warranty}
+        installation_notes={brandMeta.installation_notes}
       />
 
       {/* Tabbed content section */}

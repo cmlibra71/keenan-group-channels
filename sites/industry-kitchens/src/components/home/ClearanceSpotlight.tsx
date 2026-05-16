@@ -19,7 +19,15 @@ function discountPct(price: string, salePrice: string | null | undefined): numbe
   return Math.round(((p - sp) / p) * 100);
 }
 
-export function ClearanceSpotlight({ products }: { products: ClearanceProduct[] }) {
+export function ClearanceSpotlight({
+  products,
+  heading = "Clearance Specials",
+  eyebrow = "Limited-Time Deals",
+}: {
+  products: ClearanceProduct[];
+  heading?: string;
+  eyebrow?: string;
+}) {
   if (products.length === 0) return null;
 
   const maxDiscount = products.reduce<number>((max, p) => {
@@ -38,9 +46,9 @@ export function ClearanceSpotlight({ products }: { products: ClearanceProduct[] 
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] mb-3 flex items-center gap-2 text-amber-400">
               <Tag className="h-3 w-3" />
-              Limited-Time Deals
+              {eyebrow}
             </p>
-            <h2 className="text-2xl sm:text-3xl font-bold text-white">Clearance Specials</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold text-white">{heading}</h2>
             {maxDiscount > 0 && (
               <p className="mt-3 text-lg text-slate-300">
                 Save up to <span className="text-amber-400 font-semibold">{maxDiscount}%</span> on commercial kitchen equipment

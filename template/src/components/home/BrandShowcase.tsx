@@ -9,7 +9,15 @@ type Brand = {
   image_url?: string | null;
 };
 
-export function BrandShowcase({ brands }: { brands: Brand[] }) {
+export function BrandShowcase({
+  brands,
+  heading = "Shop by Brand",
+  eyebrow = "Premium Partners",
+}: {
+  brands: Brand[];
+  heading?: string;
+  eyebrow?: string;
+}) {
   if (brands.length === 0) return null;
 
   return (
@@ -18,9 +26,9 @@ export function BrandShowcase({ brands }: { brands: Brand[] }) {
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500 mb-3 flex items-center gap-2">
             <Award className="h-3 w-3" />
-            Premium Partners
+            {eyebrow}
           </p>
-          <h2 className="text-2xl sm:text-3xl font-bold text-zinc-900">Shop by Brand</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold text-zinc-900">{heading}</h2>
         </div>
         <Link href="/brands" className="hidden sm:inline-flex items-center gap-1.5 text-sm font-medium text-zinc-600 hover:text-zinc-900 transition-colors">
           All Brands
