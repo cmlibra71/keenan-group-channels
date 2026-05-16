@@ -369,6 +369,69 @@ export const getHomepageCategoryTiles = unstable_cache(
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
 );
 
+// ----------------------------------------------------------------------------
+// Ordered homepage section list — the full data-driven page layout. Mirrors the
+// section order of the original industrykitchens.com.au homepage. Seeded by
+// scripts/ik-homepage-sections.mjs.
+// ----------------------------------------------------------------------------
+
+export type HomeImage = {
+  image_url: string;
+  width?: number;
+  height?: number;
+  href?: string;
+  alt?: string;
+};
+export type HomeSection =
+  | { type: "category_tiles" }
+  | { type: "value_bar" }
+  | { type: "customer_logos" }
+  | ({ type: "image_banner" } & HomeImage)
+  | { type: "banner_carousel"; slides: HomeImage[] }
+  | { type: "logo_strip"; heading?: string; logos: HomeImage[] }
+  | {
+      type: "promo_tiles";
+      tiles: ({ label: string; href: string } & HomeImage)[];
+    }
+  | {
+      type: "split_promos";
+      items: {
+        heading: string;
+        subheading?: string;
+        image_url?: string;
+        cta_text?: string;
+        cta_href?: string;
+      }[];
+    }
+  | {
+      type: "product_carousel";
+      heading: string;
+      subheading?: string;
+      cta_text?: string;
+      cta_href?: string;
+      category_slug: string;
+      variant?: "clearance" | "default";
+    }
+  | { type: "rich_text"; heading?: string; body: string; cta_text?: string; cta_href?: string }
+  | {
+      type: "testimonials";
+      heading?: string;
+      items: { name: string; rating: number; date: string; text: string }[];
+    }
+  | {
+      type: "category_buttons";
+      heading?: string;
+      subheading?: string;
+      buttons: ({ label: string; href: string } & Partial<HomeImage>)[];
+    }
+  | { type: "tagline"; text: string };
+
+export const getHomepageSections = unstable_cache(
+  async () => getJsonSetting<HomeSection[]>("homepage_sections", []),
+  [`home-sections-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
 // ============================================================================
 // Homepage spotlights (curated product carousels backed by categories whose
 // metafields.is_homepage_spotlight = true).
