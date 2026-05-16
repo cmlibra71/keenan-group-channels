@@ -63,16 +63,18 @@ function LogoStrip({ heading, logos }: { heading?: string; logos: HomeImage[] })
           {heading}
         </h2>
       )}
-      <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6 sm:gap-x-16">
+      <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-6 sm:gap-x-14">
         {logos.map((logo, i) => {
           const inner = (
-            <Image
-              src={logo.image_url}
-              alt={logo.alt || ""}
-              width={logo.width || 220}
-              height={logo.height || 90}
-              className="h-10 sm:h-14 w-auto object-contain opacity-90 transition-opacity hover:opacity-100"
-            />
+            <span className="flex h-12 w-32 sm:h-16 sm:w-44 items-center justify-center">
+              <Image
+                src={logo.image_url}
+                alt={logo.alt || ""}
+                width={logo.width || 220}
+                height={logo.height || 90}
+                className="max-h-full max-w-full w-auto h-auto object-contain opacity-90 transition-opacity hover:opacity-100"
+              />
+            </span>
           );
           return logo.href ? (
             <Link key={i} href={logo.href} aria-label={logo.alt}>
