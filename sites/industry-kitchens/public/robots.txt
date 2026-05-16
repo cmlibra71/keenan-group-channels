@@ -1,0 +1,3 @@
+# Build / test site — not for indexing.
+User-agent: *
+Disallow: /

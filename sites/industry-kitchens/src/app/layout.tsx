@@ -19,6 +19,8 @@ export async function generateMetadata(): Promise<Metadata> {
     title: site?.metaTitle || channel?.name || "Store",
     description: site?.metaDescription || `Welcome to ${channel?.name || "our store"}`,
     icons: site?.faviconUrl ? { icon: site.faviconUrl } : undefined,
+    // Build/test site — keep it out of search engines until it goes live.
+    robots: { index: false, follow: false },
   };
 }
 
