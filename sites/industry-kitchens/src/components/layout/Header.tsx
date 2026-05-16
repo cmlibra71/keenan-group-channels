@@ -1,12 +1,13 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Search, Phone, Mail, ChevronDown } from "lucide-react";
+import { Phone, Mail, ChevronDown } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
 import { getActiveSubscription, getFeatureFlag, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import type { HeaderNavItem, HeaderConfig } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
+import { HeaderSearch } from "./HeaderSearch";
 import { MobileNav } from "./MobileNav";
 
 export async function Header({
@@ -74,23 +75,8 @@ export async function Header({
               )}
             </Link>
 
-            {/* Search */}
-            <form action="/search" className="hidden md:flex flex-1 max-w-2xl">
-              <input
-                type="search"
-                name="q"
-                placeholder={config.search_placeholder || `Search ${storeName}`}
-                aria-label="Search"
-                className="min-w-0 flex-1 rounded-l-md border border-r-0 border-zinc-300 px-4 py-2.5 text-sm text-zinc-800 placeholder:text-zinc-400 focus:outline-none focus:border-[#D94B2B]"
-              />
-              <button
-                type="submit"
-                aria-label="Search"
-                className="flex items-center justify-center rounded-r-md bg-[#D94B2B] px-4 text-white hover:bg-[#C73629] transition-colors"
-              >
-                <Search className="h-4 w-4" />
-              </button>
-            </form>
+            {/* Search with live suggestions */}
+            <HeaderSearch placeholder={config.search_placeholder || `Search ${storeName}`} />
 
             {/* Account / GST / Quote / Cart */}
             <div className="hidden lg:flex items-center gap-4 shrink-0">
