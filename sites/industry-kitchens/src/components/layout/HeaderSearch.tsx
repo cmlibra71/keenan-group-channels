@@ -29,7 +29,13 @@ function formatPrice(price: number): string {
 // Header search with a live product-suggestion dropdown, matching the
 // industrykitchens.com.au search-as-you-type behaviour. Falls back to a plain
 // /search navigation on submit.
-export function HeaderSearch({ placeholder = "Search" }: { placeholder?: string }) {
+export function HeaderSearch({
+  placeholder = "Search",
+  className = "hidden md:block flex-1 max-w-3xl",
+}: {
+  placeholder?: string;
+  className?: string;
+}) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResponse | null>(null);
@@ -126,7 +132,7 @@ export function HeaderSearch({ placeholder = "Search" }: { placeholder?: string 
   }
 
   return (
-    <div ref={wrapRef} className="relative hidden md:block flex-1 max-w-3xl">
+    <div ref={wrapRef} className={`relative ${className}`}>
       <form
         onSubmit={(e) => {
           e.preventDefault();

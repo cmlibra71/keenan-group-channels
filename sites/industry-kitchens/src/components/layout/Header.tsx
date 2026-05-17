@@ -53,9 +53,17 @@ export async function Header({
   const phone = config.phone;
   const phoneHref = phone ? `tel:+61${phone.replace(/\D/g, "").replace(/^0/, "")}` : undefined;
 
+  const searchPlaceholder = config.search_placeholder || `Search ${storeName}`;
+  const gstToggle = config.gst_label ? (
+    <span className="inline-flex items-center gap-1 text-xs font-medium text-zinc-500 whitespace-nowrap">
+      {config.gst_label}
+      <ChevronDown className="h-3 w-3" />
+    </span>
+  ) : null;
+
   return (
     <header className="bg-white sticky top-0 z-50 shadow-[0_1px_0_rgba(0,0,0,0.06)]">
-      {/* Utility row — logo, search, account/quote/cart, contact buttons */}
+      {/* Utility row — logo, search (xl), account cluster (xl), compact icons (sub-xl) */}
       <div className="border-b border-zinc-200">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3 lg:gap-6 py-3">
@@ -75,17 +83,15 @@ export async function Header({
               )}
             </Link>
 
-            {/* Search with live suggestions */}
-            <HeaderSearch placeholder={config.search_placeholder || `Search ${storeName}`} />
+            {/* Search — inline on desktop */}
+            <HeaderSearch
+              placeholder={searchPlaceholder}
+              className="hidden xl:block flex-1 max-w-3xl"
+            />
 
-            {/* Account / GST / Quote / Cart */}
+            {/* Account / GST / Quote / Cart — desktop */}
             <div className="hidden xl:flex items-center gap-4 shrink-0">
-              {config.gst_label && (
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-zinc-500 whitespace-nowrap">
-                  {config.gst_label}
-                  <ChevronDown className="h-3 w-3" />
-                </span>
-              )}
+              {gstToggle}
               <HeaderClient
                 cartCount={cartCount}
                 quoteCount={quoteCount}
@@ -94,7 +100,7 @@ export async function Header({
               />
             </div>
 
-            {/* Compact (sub-desktop): phone + cart + menu */}
+            {/* Compact (sub-desktop): phone + quote/cart + menu */}
             <div className="flex xl:hidden items-center gap-0.5 ml-auto shrink-0">
               {phoneHref && (
                 <a href={phoneHref} aria-label="Call us" className="p-2 text-[#D94B2B]">
@@ -106,10 +112,33 @@ export async function Header({
                 quoteCount={quoteCount}
                 isMember={isMember}
                 entryCount={entryCount}
-                compact
+                variant="compact"
               />
-              <MobileNav nav={nav} searchPlaceholder={config.search_placeholder} />
+              <MobileNav nav={nav} />
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Sub-desktop search row */}
+      <div className="xl:hidden border-b border-zinc-200">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-2.5">
+          <HeaderSearch placeholder={searchPlaceholder} className="block w-full" />
+        </div>
+      </div>
+
+      {/* Sub-desktop GST + sign-in row */}
+      <div className="xl:hidden border-b border-zinc-200 bg-zinc-50">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between py-1.5">
+            {gstToggle ?? <span />}
+            <HeaderClient
+              cartCount={cartCount}
+              quoteCount={quoteCount}
+              isMember={isMember}
+              entryCount={entryCount}
+              variant="account"
+            />
           </div>
         </div>
       </div>
