@@ -94,29 +94,13 @@ export async function Header({
               />
             </div>
 
-            {/* Contact buttons */}
-            <div className="hidden sm:flex items-center gap-2 shrink-0">
-              <Link
-                href="/pages/contact"
-                className="inline-flex items-center gap-1.5 rounded-md bg-[#D94B2B] px-3.5 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#C73629] transition-colors"
-              >
-                <Mail className="h-3.5 w-3.5" />
-                Contact Us
-              </Link>
+            {/* Mobile: phone + cart + menu */}
+            <div className="flex lg:hidden items-center gap-0.5 ml-auto shrink-0">
               {phoneHref && (
-                <a
-                  href={phoneHref}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-[#D94B2B] px-3.5 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#C73629] transition-colors"
-                >
-                  <Phone className="h-3.5 w-3.5" />
-                  <span className="hidden xl:inline">{phone}</span>
-                  <span className="xl:hidden">Phone</span>
+                <a href={phoneHref} aria-label="Call us" className="p-2 text-[#D94B2B]">
+                  <Phone className="h-5 w-5" />
                 </a>
               )}
-            </div>
-
-            {/* Mobile: cart + menu */}
-            <div className="flex lg:hidden items-center gap-1 ml-auto shrink-0">
               <HeaderClient
                 cartCount={cartCount}
                 quoteCount={quoteCount}
@@ -130,11 +114,35 @@ export async function Header({
         </div>
       </div>
 
+      {/* Contact row — sits under the search row so the search bar runs wide */}
+      <div className="hidden lg:block border-b border-zinc-100 bg-zinc-50">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-end gap-2 py-1.5">
+            <Link
+              href="/pages/contact"
+              className="inline-flex items-center gap-1.5 rounded-md bg-[#D94B2B] px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#C73629] transition-colors"
+            >
+              <Mail className="h-3.5 w-3.5" />
+              Contact Us
+            </Link>
+            {phoneHref && (
+              <a
+                href={phoneHref}
+                className="inline-flex items-center gap-1.5 rounded-md bg-[#D94B2B] px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#C73629] transition-colors"
+              >
+                <Phone className="h-3.5 w-3.5" />
+                {phone}
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Primary navigation row */}
       {nav.length > 0 && (
         <div className="hidden lg:block border-b border-zinc-200">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <nav className="flex items-center gap-6 xl:gap-8 py-2.5">
+            <nav className="flex items-center gap-5 xl:gap-7 py-2.5">
               {nav.map((item) => (
                 <Link
                   key={item.href + item.label}

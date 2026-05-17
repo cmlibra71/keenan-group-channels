@@ -285,24 +285,24 @@ function Testimonials({ heading, images }: { heading?: string; images: HomeImage
   if (!images?.length) return null;
   return (
     <section className="bg-zinc-50 border-y border-zinc-200">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-14">
+      <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-14">
         {heading && (
           <h2 className="mb-8 text-center text-2xl sm:text-3xl font-bold text-zinc-900">
             {heading}
           </h2>
         )}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="flex flex-col gap-5">
           {images.map((img, i) => (
             <div
               key={i}
-              className="rounded-lg border border-zinc-200 bg-white p-3 sm:p-4 shadow-sm"
+              className="rounded-lg border border-zinc-200 bg-white p-4 sm:p-6 shadow-sm"
             >
               <Image
                 src={img.image_url}
                 alt={img.alt || "Customer review"}
                 width={img.width || 1140}
                 height={img.height || 200}
-                sizes="(max-width: 768px) 100vw, 560px"
+                sizes="(max-width: 1024px) 100vw, 960px"
                 className="w-full h-auto"
               />
             </div>

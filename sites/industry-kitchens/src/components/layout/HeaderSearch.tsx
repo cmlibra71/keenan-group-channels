@@ -126,7 +126,7 @@ export function HeaderSearch({ placeholder = "Search" }: { placeholder?: string 
   }
 
   return (
-    <div ref={wrapRef} className="relative hidden md:block flex-1 max-w-2xl">
+    <div ref={wrapRef} className="relative hidden md:block flex-1 max-w-3xl">
       <form
         onSubmit={(e) => {
           e.preventDefault();
