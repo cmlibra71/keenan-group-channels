@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Phone, Mail, ChevronDown } from "lucide-react";
+import { Phone, Mail } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
@@ -8,6 +8,7 @@ import { getActiveSubscription, getFeatureFlag, drawEntryService, CHANNEL_ID } f
 import type { HeaderNavItem, HeaderConfig } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 import { HeaderSearch } from "./HeaderSearch";
+import { GstToggle } from "./GstToggle";
 import { MobileNav } from "./MobileNav";
 
 export async function Header({
@@ -54,12 +55,6 @@ export async function Header({
   const phoneHref = phone ? `tel:+61${phone.replace(/\D/g, "").replace(/^0/, "")}` : undefined;
 
   const searchPlaceholder = config.search_placeholder || `Search ${storeName}`;
-  const gstToggle = config.gst_label ? (
-    <span className="inline-flex items-center gap-1 text-xs font-medium text-zinc-500 whitespace-nowrap">
-      {config.gst_label}
-      <ChevronDown className="h-3 w-3" />
-    </span>
-  ) : null;
 
   return (
     <header className="bg-white sticky top-0 z-50 shadow-[0_1px_0_rgba(0,0,0,0.06)]">
@@ -91,7 +86,7 @@ export async function Header({
 
             {/* Account / GST / Quote / Cart — desktop */}
             <div className="hidden xl:flex items-center gap-4 shrink-0">
-              {gstToggle}
+              <GstToggle />
               <HeaderClient
                 cartCount={cartCount}
                 quoteCount={quoteCount}
@@ -131,7 +126,7 @@ export async function Header({
       <div className="xl:hidden border-b border-zinc-200 bg-zinc-50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between py-1.5">
-            {gstToggle ?? <span />}
+            <GstToggle />
             <HeaderClient
               cartCount={cartCount}
               quoteCount={quoteCount}

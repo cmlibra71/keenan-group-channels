@@ -194,13 +194,13 @@ export function ProductDetail({
           <span className="text-2xl font-bold text-zinc-900">Call for Price</span>
         ) : displaySalePrice ? (
           <>
-            <Price amount={displaySalePrice} className="text-3xl font-bold text-red-600" />
+            <Price amount={displaySalePrice} gst className="text-3xl font-bold text-red-600" />
             <span className="text-xl text-zinc-400 line-through">
-              <Price amount={displayPrice} />
+              <Price amount={displayPrice} gst />
             </span>
           </>
         ) : (
-          <Price amount={displayPrice} className="text-3xl font-bold text-zinc-900" />
+          <Price amount={displayPrice} gst className="text-3xl font-bold text-zinc-900" />
         )}
       </div>
 
@@ -209,7 +209,7 @@ export function ProductDetail({
         isMember ? (
           <div className="mt-2 inline-flex items-center gap-1.5 bg-green-50 border border-green-200 text-green-800 text-sm font-medium px-3 py-1.5 rounded-full">
             <span>Member Price:</span>
-            <Price amount={memberPrice} className="font-bold" />
+            <Price amount={memberPrice} gst className="font-bold" />
           </div>
         ) : (
           <Link
@@ -217,8 +217,8 @@ export function ProductDetail({
             className="mt-3 block rounded-lg border border-emerald-200 bg-emerald-50 p-3 hover:bg-emerald-100 transition-colors"
           >
             <div className="flex items-center gap-2 text-emerald-800">
-              <span className="text-sm font-semibold">Member Price: <Price amount={memberPrice} className="font-bold" /></span>
-              <span className="text-xs text-emerald-600">(Save <Price amount={(displaySalePrice ?? displayPrice) - memberPrice} />)</span>
+              <span className="text-sm font-semibold">Member Price: <Price amount={memberPrice} gst className="font-bold" /></span>
+              <span className="text-xs text-emerald-600">(Save <Price amount={(displaySalePrice ?? displayPrice) - memberPrice} gst />)</span>
             </div>
             <p className="text-xs text-emerald-600 mt-1">
               Plus: Prize draw entries, free delivery $500+, partner discounts
@@ -254,7 +254,7 @@ export function ProductDetail({
                           : `${rule.quantityMin}+`}
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <Price amount={tierPrice} />
+                        <Price amount={tierPrice} gst />
                       </td>
                     </tr>
                   );

@@ -105,13 +105,13 @@ export function ClearanceSpotlight({
                       <span className="text-sm text-zinc-500">Call for Price</span>
                     ) : salePrice ? (
                       <>
-                        <Price amount={salePrice} className="text-base font-bold text-[#D94B2B]" />
+                        <Price amount={salePrice} gst className="text-base font-bold text-[#D94B2B]" />
                         <span className="text-xs text-zinc-400 line-through">
-                          <Price amount={price} />
+                          <Price amount={price} gst />
                         </span>
                       </>
                     ) : (
-                      <Price amount={price} className="text-base font-semibold text-zinc-900" />
+                      <Price amount={price} gst className="text-base font-semibold text-zinc-900" />
                     )}
                   </div>
                 </div>

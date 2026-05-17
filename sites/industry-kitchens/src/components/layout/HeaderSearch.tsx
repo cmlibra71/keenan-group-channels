@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Loader2 } from "lucide-react";
+import { useGst, adjustForGst } from "@/lib/gst";
 
 interface SearchHit {
   id: number;
@@ -37,6 +38,8 @@ export function HeaderSearch({
   className?: string;
 }) {
   const router = useRouter();
+  const { inclusive, pricesIncludeTax } = useGst();
+  const gstAdjust = (n: number) => adjustForGst(n, inclusive, pricesIncludeTax);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResponse | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -220,15 +223,15 @@ export function HeaderSearch({
                           {sale ? (
                             <>
                               <p className="text-sm font-bold text-[#D94B2B]">
-                                {formatPrice(hit.salePrice!)}
+                                {formatPrice(gstAdjust(hit.salePrice!))}
                               </p>
                               <p className="text-xs text-zinc-400 line-through">
-                                {formatPrice(hit.price)}
+                                {formatPrice(gstAdjust(hit.price))}
                               </p>
                             </>
                           ) : (
                             <p className="text-sm font-semibold text-zinc-900">
-                              {formatPrice(hit.price)}
+                              {formatPrice(gstAdjust(hit.price))}
                             </p>
                           )}
                         </div>

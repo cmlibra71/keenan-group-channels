@@ -71,7 +71,7 @@ export default async function CategoryPage({
             <span>{stats.productCount} {stats.productCount === 1 ? "product" : "products"}</span>
             {stats.minPrice > 0 && stats.maxPrice > 0 && (
               <span>
-                <Price amount={stats.minPrice} /> &ndash; <Price amount={stats.maxPrice} />
+                <Price amount={stats.minPrice} gst /> &ndash; <Price amount={stats.maxPrice} gst />
               </span>
             )}
             {stats.brands.length > 0 && (

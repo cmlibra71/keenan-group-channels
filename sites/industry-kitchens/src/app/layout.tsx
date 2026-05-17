@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import { getSiteConfig, getFeatureFlag, getFooterConfig, getHeaderNav, getHeaderConfig } from "@/lib/store";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { GstProvider } from "@/lib/gst";
 import "./globals.css";
 
 export const dynamic = "force-dynamic";
@@ -29,30 +31,42 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [{ site, channel }, subscriptionsEnabled, footerConfig, headerNav, headerConfig] =
-    await Promise.all([
-      getSiteConfig(),
-      getFeatureFlag("subscriptions_enabled"),
-      getFooterConfig(),
-      getHeaderNav(),
-      getHeaderConfig(),
-    ]);
+  const [
+    { site, channel },
+    subscriptionsEnabled,
+    footerConfig,
+    headerNav,
+    headerConfig,
+    pricesIncludeTax,
+    cookieStore,
+  ] = await Promise.all([
+    getSiteConfig(),
+    getFeatureFlag("subscriptions_enabled"),
+    getFooterConfig(),
+    getHeaderNav(),
+    getHeaderConfig(),
+    getFeatureFlag("prices_include_tax"),
+    cookies(),
+  ]);
   const storeName = site?.siteName || channel?.name || "Store";
   const logoUrl = site?.logoUrl || null;
   const logoAlt = site?.logoAlt || null;
+  const gstInclusive = cookieStore.get("gst_inclusive")?.value === "true";
 
   return (
     <html lang="en">
       <body className="min-h-screen flex flex-col bg-white text-zinc-900 antialiased">
-        <Header
-          storeName={storeName}
-          logoUrl={logoUrl}
-          logoAlt={logoAlt}
-          nav={headerNav}
-          config={headerConfig}
-        />
-        <main className="flex-1">{children}</main>
-        <Footer storeName={storeName} config={footerConfig} />
+        <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
+          <Header
+            storeName={storeName}
+            logoUrl={logoUrl}
+            logoAlt={logoAlt}
+            nav={headerNav}
+            config={headerConfig}
+          />
+          <main className="flex-1">{children}</main>
+          <Footer storeName={storeName} config={footerConfig} />
+        </GstProvider>
       </body>
     </html>
   );

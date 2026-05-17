@@ -46,13 +46,13 @@ export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName,
             <span className="text-sm font-semibold text-zinc-900">Call for Price</span>
           ) : displaySalePrice ? (
             <>
-              <Price amount={displaySalePrice} className="text-sm font-semibold text-red-600" />
+              <Price amount={displaySalePrice} gst className="text-sm font-semibold text-red-600" />
               <span className="text-sm text-zinc-400 line-through">
-                <Price amount={displayPrice} />
+                <Price amount={displayPrice} gst />
               </span>
             </>
           ) : (
-            <Price amount={displayPrice} className="text-sm font-semibold text-zinc-900" />
+            <Price amount={displayPrice} gst className="text-sm font-semibold text-zinc-900" />
           )}
         </div>
         {memberPricingAvailable && displayPrice > 0 && (
