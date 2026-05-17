@@ -4,3 +4,13 @@
 html, body {
   overflow-x: hidden;
 }
+
+/* Continuous logo marquee (customer-logo carousel). The track holds two copies
+   of the logo list, so translating it by -50% loops seamlessly. */
+@keyframes ik-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.ik-marquee {
+  animation: ik-marquee 45s linear infinite;
+}

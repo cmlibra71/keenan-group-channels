@@ -327,7 +327,7 @@ export type HomepageCopy = {
   featured_heading?: string;
 };
 
-export type ValueBarItem = { icon: string; label: string };
+export type ValueBarItem = { icon: string; title: string; description?: string };
 
 export const getHomepageCopy = unstable_cache(
   async () => getJsonSetting<HomepageCopy>("homepage_copy", {}),
@@ -386,8 +386,8 @@ export type HomeSection =
   | { type: "category_tiles" }
   | { type: "value_bar" }
   | { type: "customer_logos" }
-  | ({ type: "image_banner" } & HomeImage)
-  | { type: "banner_carousel"; slides: HomeImage[] }
+  | ({ type: "image_banner"; hover_image_url?: string; hover_width?: number; hover_height?: number } & HomeImage)
+  | { type: "banner_carousel"; slides: HomeImage[]; variant?: "banner" | "logo" }
   | { type: "logo_strip"; heading?: string; logos: HomeImage[] }
   | {
       type: "promo_tiles";
@@ -411,12 +411,13 @@ export type HomeSection =
       cta_href?: string;
       category_slug: string;
       variant?: "clearance" | "default";
+      hero?: HomeImage;
     }
   | { type: "rich_text"; heading?: string; body: string; cta_text?: string; cta_href?: string }
   | {
       type: "testimonials";
       heading?: string;
-      items: { name: string; rating: number; date: string; text: string }[];
+      images: HomeImage[];
     }
   | {
       type: "category_buttons";

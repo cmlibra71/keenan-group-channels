@@ -11,6 +11,7 @@ import {
   Headset,
   type LucideIcon,
 } from "lucide-react";
+import type { ValueBarItem } from "@/lib/store";
 
 const ICON_MAP: Record<string, LucideIcon> = {
   crown: Crown,
@@ -25,21 +26,37 @@ const ICON_MAP: Record<string, LucideIcon> = {
   headset: Headset,
 };
 
-export type ValueBarItem = { icon: string; label: string };
-
+// Trust-badge row: icon + title + description per item, matching the original
+// industrykitchens.com.au info banner.
 export function ValueBar({ items }: { items: ValueBarItem[] }) {
   if (items.length === 0) return null;
-  const cols = items.length === 3 ? "lg:grid-cols-3" : items.length === 2 ? "lg:grid-cols-2" : "lg:grid-cols-4";
+  const cols =
+    items.length === 3
+      ? "sm:grid-cols-3"
+      : items.length === 2
+        ? "sm:grid-cols-2"
+        : "sm:grid-cols-2 lg:grid-cols-4";
   return (
-    <section className="bg-green-50 border-y border-green-100">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-4">
-        <div className={`grid grid-cols-2 ${cols} gap-3 lg:gap-6`}>
+    <section className="bg-zinc-50 border-y border-zinc-200">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div
+          className={`grid grid-cols-1 ${cols} divide-y sm:divide-y-0 sm:divide-x divide-zinc-200`}
+        >
           {items.map((item) => {
             const Icon = ICON_MAP[item.icon] ?? Package;
             return (
-              <div key={item.label} className="flex items-center gap-2">
-                <Icon className="h-4 w-4 text-green-700 shrink-0" />
-                <span className="text-xs sm:text-sm font-medium text-green-800">{item.label}</span>
+              <div key={item.title} className="flex items-start gap-3 py-6 sm:px-6">
+                <Icon className="h-8 w-8 shrink-0 text-zinc-700" strokeWidth={1.4} />
+                <div>
+                  <p className="text-sm font-bold uppercase tracking-wide text-zinc-900">
+                    {item.title}
+                  </p>
+                  {item.description && (
+                    <p className="mt-0.5 text-xs leading-snug text-zinc-500">
+                      {item.description}
+                    </p>
+                  )}
+                </div>
               </div>
             );
           })}

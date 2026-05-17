@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronRight, Star } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import type { HomeSection, HomeImage, CategoryTile, ValueBarItem, CustomerLogo } from "@/lib/store";
 import { CategoryTileGrid } from "./CategoryTileGrid";
 import { ValueBar } from "./ValueBar";
@@ -25,8 +25,15 @@ export type HomeSectionsProps = {
 
 // ---- inline section pieces -------------------------------------------------
 
-function ImageBanner({ image_url, width, height, href, alt }: HomeImage) {
-  const img =
+function ImageBanner({
+  image_url,
+  width,
+  height,
+  href,
+  alt,
+  hover_image_url,
+}: HomeImage & { hover_image_url?: string }) {
+  const base =
     width && height ? (
       <Image
         src={image_url}
@@ -34,21 +41,39 @@ function ImageBanner({ image_url, width, height, href, alt }: HomeImage) {
         width={width}
         height={height}
         sizes="(max-width: 1280px) 100vw, 1280px"
-        className="w-full h-auto rounded-lg border border-zinc-200"
+        className="w-full h-auto"
       />
     ) : (
-      <div className="relative w-full aspect-[3/1] overflow-hidden rounded-lg border border-zinc-200">
+      <div className="relative w-full aspect-[3/1]">
         <Image src={image_url} alt={alt || ""} fill sizes="100vw" className="object-contain" />
       </div>
     );
+  const content = (
+    <div className="group relative overflow-hidden rounded-lg border border-zinc-200 bg-white">
+      <div className={hover_image_url ? "transition-opacity duration-300 group-hover:opacity-0" : ""}>
+        {base}
+      </div>
+      {hover_image_url && (
+        <div className="absolute inset-0 flex items-center justify-center bg-white p-6 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+          <Image
+            src={hover_image_url}
+            alt={alt || ""}
+            fill
+            sizes="(max-width: 1280px) 100vw, 1280px"
+            className="object-contain p-6"
+          />
+        </div>
+      )}
+    </div>
+  );
   return (
     <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
       {href ? (
         <Link href={href} className="block">
-          {img}
+          {content}
         </Link>
       ) : (
-        img
+        content
       )}
     </section>
   );
@@ -256,14 +281,8 @@ function RichText({
   );
 }
 
-function Testimonials({
-  heading,
-  items,
-}: {
-  heading?: string;
-  items: { name: string; rating: number; date: string; text: string }[];
-}) {
-  if (!items?.length) return null;
+function Testimonials({ heading, images }: { heading?: string; images: HomeImage[] }) {
+  if (!images?.length) return null;
   return (
     <section className="bg-zinc-50 border-y border-zinc-200">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-14">
@@ -272,37 +291,21 @@ function Testimonials({
             {heading}
           </h2>
         )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {items.map((item, i) => (
-            <figure
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {images.map((img, i) => (
+            <div
               key={i}
-              className="flex flex-col rounded-lg border border-zinc-200 bg-white p-5"
+              className="rounded-lg border border-zinc-200 bg-white p-3 sm:p-4 shadow-sm"
             >
-              <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#D94B2B]/10 text-sm font-bold text-[#D94B2B]">
-                  {item.name.charAt(0).toUpperCase()}
-                </span>
-                <div>
-                  <figcaption className="text-sm font-semibold text-zinc-900">
-                    {item.name}
-                  </figcaption>
-                  <p className="text-xs text-zinc-500">{item.date}</p>
-                </div>
-              </div>
-              <div className="mt-3 flex gap-0.5">
-                {Array.from({ length: 5 }).map((_, s) => (
-                  <Star
-                    key={s}
-                    className={`h-4 w-4 ${
-                      s < item.rating ? "fill-amber-400 text-amber-400" : "text-zinc-300"
-                    }`}
-                  />
-                ))}
-              </div>
-              <blockquote className="mt-3 text-sm leading-relaxed text-zinc-700">
-                {item.text}
-              </blockquote>
-            </figure>
+              <Image
+                src={img.image_url}
+                alt={img.alt || "Customer review"}
+                width={img.width || 1140}
+                height={img.height || 200}
+                sizes="(max-width: 768px) 100vw, 560px"
+                className="w-full h-auto"
+              />
+            </div>
           ))}
         </div>
       </div>
@@ -352,7 +355,9 @@ export function HomeSections({
           case "image_banner":
             return <ImageBanner key={i} {...section} />;
           case "banner_carousel":
-            return <BannerCarousel key={i} slides={section.slides} />;
+            return (
+              <BannerCarousel key={i} slides={section.slides} variant={section.variant} />
+            );
           case "logo_strip":
             return <LogoStrip key={i} heading={section.heading} logos={section.logos} />;
           case "promo_tiles":
@@ -379,7 +384,7 @@ export function HomeSections({
               />
             );
           case "testimonials":
-            return <Testimonials key={i} heading={section.heading} items={section.items} />;
+            return <Testimonials key={i} heading={section.heading} images={section.images} />;
           case "tagline":
             return <Tagline key={i} text={section.text} />;
           case "product_carousel": {
@@ -399,7 +404,10 @@ export function HomeSections({
               <HomepageSpotlight
                 key={i}
                 heading={section.heading}
+                subheading={section.subheading}
                 ctaHref={section.cta_href ?? null}
+                ctaLabel={section.cta_text}
+                hero={section.hero}
                 products={data.products}
                 memberPricingAvailable={memberPricingAvailable}
               />

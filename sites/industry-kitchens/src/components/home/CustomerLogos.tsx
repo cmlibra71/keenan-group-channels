@@ -1,44 +1,53 @@
-import Link from "next/link";
 import Image from "next/image";
+import type { CustomerLogo } from "@/lib/store";
 
-export type CustomerLogo = { name: string; image_url?: string; href?: string };
+export type { CustomerLogo };
 
-export function CustomerLogos({ heading, logos }: { heading?: string; logos?: CustomerLogo[] }) {
+// Auto-scrolling colour logo marquee — the "Some of our valued customers" wall.
+// The track holds two copies of the list so the CSS marquee loops seamlessly.
+export function CustomerLogos({
+  heading,
+  logos,
+}: {
+  heading?: string;
+  logos?: CustomerLogo[];
+}) {
   if (!logos || logos.length === 0) return null;
+  const loop = [...logos, ...logos];
   return (
-    <section className="border-y border-zinc-200">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-14">
+    <section className="border-y border-zinc-200 bg-white">
+      <div className="py-12">
         {heading && (
-          <h2 className="text-sm uppercase tracking-[0.18em] font-semibold text-zinc-500 text-center mb-10">
+          <h2 className="mb-9 text-center text-sm font-semibold uppercase tracking-[0.18em] text-zinc-500">
             {heading}
           </h2>
         )}
-        <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6 sm:gap-x-12 lg:gap-x-16">
-          {logos.map((logo) => {
-            const inner = logo.image_url ? (
-              <div className="relative h-10 w-28 sm:h-12 sm:w-32">
-                <Image
-                  src={logo.image_url}
-                  alt={logo.name}
-                  fill
-                  sizes="128px"
-                  className="object-contain grayscale opacity-70 hover:opacity-100 hover:grayscale-0 transition-all"
-                />
+        <div className="group relative overflow-hidden">
+          {/* edge fades */}
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-white to-transparent" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-white to-transparent" />
+          <div className="ik-marquee flex w-max items-center gap-10 sm:gap-14 group-hover:[animation-play-state:paused]">
+            {loop.map((logo, i) => (
+              <div
+                key={i}
+                className="flex h-20 w-44 shrink-0 items-center justify-center sm:h-24 sm:w-52"
+              >
+                {logo.image_url ? (
+                  <Image
+                    src={logo.image_url}
+                    alt={logo.name}
+                    width={240}
+                    height={120}
+                    className="max-h-full max-w-full w-auto h-auto object-contain"
+                  />
+                ) : (
+                  <span className="whitespace-nowrap text-lg font-semibold text-zinc-400">
+                    {logo.name}
+                  </span>
+                )}
               </div>
-            ) : (
-              <span className="text-base sm:text-lg font-semibold text-zinc-400 hover:text-zinc-700 transition-colors tracking-wide whitespace-nowrap">
-                {logo.name}
-              </span>
-            );
-            const key = logo.name + (logo.image_url ?? "");
-            return logo.href ? (
-              <Link key={key} href={logo.href} className="block">
-                {inner}
-              </Link>
-            ) : (
-              <div key={key}>{inner}</div>
-            );
-          })}
+            ))}
+          </div>
         </div>
       </div>
     </section>

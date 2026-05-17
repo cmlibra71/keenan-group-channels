@@ -5,11 +5,19 @@ import Image from "next/image";
 import Link from "next/link";
 import type { HomeImage } from "@/lib/store";
 
-// Auto-rotating banner carousel — recreates the original homepage's rotating
-// brand banner (Doregrill / Tournus / Capic / Adventys slides).
-export function BannerCarousel({ slides }: { slides: HomeImage[] }) {
+// Auto-rotating carousel. The "banner" variant shows full-bleed banner images
+// (Doregrill / Tournus / Capic / Adventys); the "logo" variant shows brand logos
+// contained on white at a capped height (the Purell / StellarChem / BioPak strip).
+export function BannerCarousel({
+  slides,
+  variant = "banner",
+}: {
+  slides: HomeImage[];
+  variant?: "banner" | "logo";
+}) {
   const [index, setIndex] = useState(0);
   const count = slides.length;
+  const isLogo = variant === "logo";
 
   const go = useCallback((i: number) => setIndex(((i % count) + count) % count), [count]);
 
@@ -29,7 +37,19 @@ export function BannerCarousel({ slides }: { slides: HomeImage[] }) {
           style={{ transform: `translateX(-${index * 100}%)` }}
         >
           {slides.map((slide, i) => {
-            const img = (
+            const img = isLogo ? (
+              <div className="flex h-28 items-center justify-center px-8 py-4 sm:h-36">
+                <Image
+                  src={slide.image_url}
+                  alt={slide.alt || ""}
+                  width={slide.width || 320}
+                  height={slide.height || 160}
+                  sizes="(max-width: 768px) 80vw, 480px"
+                  className="max-h-full w-auto object-contain"
+                  priority={i === 0}
+                />
+              </div>
+            ) : (
               <Image
                 src={slide.image_url}
                 alt={slide.alt || ""}
