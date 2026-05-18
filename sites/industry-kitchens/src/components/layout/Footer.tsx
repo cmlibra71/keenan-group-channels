@@ -64,6 +64,53 @@ const SOCIAL_ICONS: Record<string, LucideIcon | ((p: { className?: string }) => 
   pinterest: PinterestIcon,
 };
 
+// Brand colours so the social icons render in full colour like the original.
+const SOCIAL_COLORS: Record<string, string> = {
+  facebook: "#1877F2",
+  instagram: "#E4405F",
+  twitter: "#1DA1F2",
+  x: "#1DA1F2",
+  youtube: "#FF0000",
+  linkedin: "#0A66C2",
+  tiktok: "#111111",
+  pinterest: "#BD081C",
+};
+
+// Official-style payment card marks.
+const cardWrap = "flex h-7 w-11 items-center justify-center rounded-[3px] border border-zinc-200";
+const PAYMENT_LOGOS: Record<string, React.ReactElement> = {
+  visa: (
+    <span className={`${cardWrap} bg-white`}>
+      <span className="text-[11px] font-extrabold italic tracking-tight text-[#1434CB]">VISA</span>
+    </span>
+  ),
+  mastercard: (
+    <span className={`${cardWrap} bg-white`}>
+      <svg viewBox="0 0 36 22" className="h-4 w-auto" aria-hidden>
+        <circle cx="14" cy="11" r="9" fill="#EB001B" />
+        <circle cx="22" cy="11" r="9" fill="#F79E1B" />
+        <path
+          d="M18 4.3a8.98 8.98 0 0 1 0 13.4 8.98 8.98 0 0 1 0-13.4z"
+          fill="#FF5F00"
+        />
+      </svg>
+    </span>
+  ),
+  amex: (
+    <span className={`${cardWrap} border-[#1F72CD] bg-[#1F72CD]`}>
+      <span className="text-[9px] font-extrabold tracking-tight text-white">AMEX</span>
+    </span>
+  ),
+  paypal: (
+    <span className={`${cardWrap} bg-white`}>
+      <span className="text-[10px] font-extrabold italic">
+        <span className="text-[#003087]">Pay</span>
+        <span className="text-[#009CDE]">Pal</span>
+      </span>
+    </span>
+  ),
+};
+
 function SmartLink({ href, className, children }: { href: string; className?: string; children: React.ReactNode }) {
   if (/^https?:\/\//.test(href)) {
     return (
@@ -130,11 +177,12 @@ export function Footer({
 
         {/* Socials + partner / payment badges */}
         {(social.length > 0 || partners.length > 0 || paymentBadges.length > 0) && (
-          <div className="mt-10 flex flex-col gap-6 border-t border-zinc-200 pt-8 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-10 flex flex-col gap-8 border-t border-zinc-200 pt-8 lg:flex-row lg:items-center lg:justify-between">
             {social.length > 0 && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 {social.map((s) => {
-                  const Icon = SOCIAL_ICONS[s.platform.toLowerCase()];
+                  const key = s.platform.toLowerCase();
+                  const Icon = SOCIAL_ICONS[key];
                   return (
                     <a
                       key={s.platform}
@@ -142,40 +190,60 @@ export function Footer({
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label={s.platform}
-                      className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-zinc-600 ring-1 ring-zinc-200 transition-colors hover:bg-[#D94B2B] hover:text-white hover:ring-[#D94B2B]"
+                      style={{ backgroundColor: SOCIAL_COLORS[key] ?? "#71717a" }}
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-white transition-transform hover:scale-110"
                     >
                       {Icon ? (
                         <Icon className="h-4 w-4" />
                       ) : (
-                        <span className="text-xs">{s.platform.charAt(0)}</span>
+                        <span className="text-xs font-bold">{s.platform.charAt(0)}</span>
                       )}
                     </a>
                   );
                 })}
               </div>
             )}
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-              {partners.map((p) =>
-                p.image_url ? (
-                  <SmartLink key={p.name} href={p.href || "#"} className="block">
-                    <Image
-                      src={p.image_url}
-                      alt={p.name}
-                      width={120}
-                      height={48}
-                      className="h-9 w-auto object-contain"
-                    />
-                  </SmartLink>
-                ) : null
+
+            <div className="flex flex-wrap items-center gap-x-8 gap-y-5">
+              {partners.length > 0 && (
+                <div className="flex items-center gap-6">
+                  {partners.map((p) =>
+                    p.image_url ? (
+                      <SmartLink key={p.name} href={p.href || "#"} className="block">
+                        <Image
+                          src={p.image_url}
+                          alt={p.name}
+                          width={180}
+                          height={72}
+                          className="h-12 w-auto object-contain"
+                        />
+                      </SmartLink>
+                    ) : null
+                  )}
+                </div>
               )}
-              {paymentBadges.map((b) => (
-                <span
-                  key={b.name}
-                  className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-500"
-                >
-                  {b.name}
-                </span>
-              ))}
+
+              {paymentBadges.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+                    Secure Shopping
+                  </p>
+                  <div className="flex items-center gap-2">
+                    {paymentBadges.map((b) => {
+                      const logo = PAYMENT_LOGOS[b.name.toLowerCase()];
+                      return (
+                        <span key={b.name} title={b.name}>
+                          {logo ?? (
+                            <span className={`${cardWrap} bg-white text-[10px] font-semibold text-zinc-500`}>
+                              {b.name}
+                            </span>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

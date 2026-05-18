@@ -37,7 +37,7 @@ export default async function ContentPage({
       <RichContent
         html={page.body_html}
         stripStyles
-        className="prose prose-zinc max-w-none text-zinc-700 leading-relaxed"
+        className="ik-prose"
       />
       {page.updated && (
         <p className="mt-12 text-xs text-zinc-400">Last updated: {page.updated}</p>

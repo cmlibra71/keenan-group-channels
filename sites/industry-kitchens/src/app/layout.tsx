@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { getSiteConfig, getFeatureFlag, getFooterConfig, getHeaderNav, getHeaderConfig } from "@/lib/store";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { SpecialistButton } from "@/components/layout/SpecialistButton";
 import { GstProvider } from "@/lib/gst";
 import "./globals.css";
 
@@ -67,6 +68,7 @@ export default async function RootLayout({
           />
           <main className="flex-1">{children}</main>
           <Footer storeName={storeName} config={footerConfig} />
+          <SpecialistButton phone={headerConfig.phone} />
         </GstProvider>
       </body>
     </html>
