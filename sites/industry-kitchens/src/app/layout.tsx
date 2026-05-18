@@ -20,7 +20,8 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: site?.metaTitle || channel?.name || "Store",
     description: site?.metaDescription || `Welcome to ${channel?.name || "our store"}`,
-    icons: site?.faviconUrl ? { icon: site.faviconUrl } : undefined,
+    // Favicon is provided by app/icon.tsx — it uses faviconUrl when set,
+    // otherwise generates one from the logo.
     // Build/test site — keep it out of search engines until it goes live.
     robots: { index: false, follow: false },
   };
