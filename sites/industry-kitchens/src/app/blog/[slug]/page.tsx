@@ -64,7 +64,7 @@ export default async function BlogPostPage({
               <Link
                 key={t}
                 href={`/blog?tag=${encodeURIComponent(t)}`}
-                className="text-xs font-medium uppercase tracking-wide text-amber-700 hover:text-amber-800"
+                className="text-xs font-bold uppercase tracking-wide text-[#D94B2B] hover:text-[#C73629]"
               >
                 {t}
               </Link>
@@ -100,13 +100,11 @@ export default async function BlogPostPage({
 
       {post.hero_image_url && (
         <div className="relative aspect-[16/9] rounded-xl overflow-hidden bg-zinc-100 mb-8">
-          <Image
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
             src={post.hero_image_url}
             alt={post.hero_image_alt || post.title}
-            fill
-            sizes="(max-width: 1024px) 100vw, 768px"
-            className="object-cover"
-            priority
+            className="absolute inset-0 h-full w-full object-cover"
           />
         </div>
       )}
@@ -115,11 +113,7 @@ export default async function BlogPostPage({
         <p className="text-lg text-zinc-700 leading-relaxed mb-8 font-medium">{post.excerpt}</p>
       )}
 
-      <RichContent
-        html={post.body_html}
-        stripStyles
-        className="prose prose-zinc max-w-none text-zinc-700 leading-relaxed"
-      />
+      <RichContent html={post.body_html} stripStyles className="ik-article" />
     </article>
   );
 }
