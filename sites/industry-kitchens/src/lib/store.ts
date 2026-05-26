@@ -128,8 +128,18 @@ export const getCategoryStats = (categoryId: number) => unstable_cache(
 )();
 
 export const getCategoryBreadcrumbs = (pathIds: number[]) => unstable_cache(
-  async () => categoryService.getBreadcrumbs(pathIds),
+  async () => categoryService.getBreadcrumbs(pathIds, CHANNEL_ID),
   [`category-breadcrumbs-${CHANNEL_ID}-${pathIds.join(",")}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "categories"] }
+)();
+
+// Channel-scoped breadcrumb trail for a product. A product's category
+// assignments can span several channels' trees; this resolves only the
+// categories in THIS channel's tree, so every crumb links to a category page
+// that actually exists on this storefront.
+export const getProductBreadcrumbs = (productId: number) => unstable_cache(
+  async () => categoryService.getProductBreadcrumbs(productId, CHANNEL_ID),
+  [`product-breadcrumbs-${CHANNEL_ID}-${productId}`],
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "categories"] }
 )();
 

@@ -7,3 +7,7 @@ dist/
 *.tsbuildinfo
 orchestrator/.ip-allocations.json
 .claude/
+
+# Scraper state (Phase 0–2)
+.scraper-profile/
+scripts/.work/

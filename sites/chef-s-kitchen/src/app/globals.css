@@ -335,3 +335,76 @@ body {
   0%, 100% { transform: translateX(-100%); }
   50% { transform: translateX(100%); }
 }
+
+/* ══════════════════════════════════════════════════════
+   CONTENT PROSE
+   Styles for data-driven content pages (/pages/[slug]).
+   Tailwind v4 preflight resets headings/lists, so restore
+   readable typography here using the theme tokens.
+   ══════════════════════════════════════════════════════ */
+
+.content-prose {
+  color: var(--color-text-body);
+  line-height: 1.75;
+  font-size: 1rem;
+}
+.content-prose > div + div { margin-top: 1.1rem; }
+.content-prose h2 {
+  font-family: var(--font-serif);
+  color: var(--color-text-primary);
+  font-size: 1.6rem;
+  line-height: 1.25;
+  margin: 2rem 0 0.75rem;
+}
+.content-prose h3 {
+  font-family: var(--font-serif);
+  color: var(--color-text-primary);
+  font-size: 1.3rem;
+  line-height: 1.3;
+  margin: 1.75rem 0 0.6rem;
+}
+.content-prose h4 {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  font-size: 1.05rem;
+  margin: 1.5rem 0 0.5rem;
+}
+.content-prose p { margin: 0.9rem 0; }
+.content-prose a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.content-prose a:hover { color: var(--color-accent-dark); }
+.content-prose strong { color: var(--color-text-primary); font-weight: 600; }
+.content-prose ul,
+.content-prose ol { margin: 0.9rem 0; padding-left: 1.5rem; }
+.content-prose ul { list-style: disc; }
+.content-prose ol { list-style: decimal; }
+.content-prose li { margin: 0.4rem 0; }
+.content-prose li::marker { color: var(--color-text-muted); }
+.content-prose blockquote {
+  border-left: 3px solid var(--color-accent);
+  padding-left: 1rem;
+  margin: 1.25rem 0;
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+.content-prose hr { margin: 2rem 0; border-color: var(--color-border); }
+.content-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.25rem 0;
+  font-size: 0.95rem;
+}
+.content-prose th,
+.content-prose td {
+  border: 1px solid var(--color-border);
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+}
+.content-prose th {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}

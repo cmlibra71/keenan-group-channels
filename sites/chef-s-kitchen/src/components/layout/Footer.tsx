@@ -47,9 +47,9 @@ export function Footer({ storeName, subscriptionsEnabled }: { storeName: string;
               <div>
                 <h4 className="heading-sans text-text-body tracking-widest mb-4">Support</h4>
                 <ul className="space-y-2.5">
-                  <li><Link href="/contact" className="footer-link">Contact Us</Link></li>
-                  <li><Link href="/shipping" className="footer-link">Shipping Info</Link></li>
-                  <li><Link href="/returns" className="footer-link">Returns</Link></li>
+                  <li><Link href="/pages/contact" className="footer-link">Contact Us</Link></li>
+                  <li><Link href="/pages/shipping" className="footer-link">Shipping Info</Link></li>
+                  <li><Link href="/pages/returns" className="footer-link">Returns</Link></li>
                 </ul>
               </div>
             </div>

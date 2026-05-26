@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscription, customerService, brandService, CHANNEL_ID, getCategoryById, getCategoryBreadcrumbs } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscription, customerService, brandService, CHANNEL_ID, getProductBreadcrumbs } from "@/lib/store";
 import { getSession } from "@/lib/auth";
 import { ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
@@ -38,19 +38,14 @@ export default async function ProductPage({
   ]);
   const brandMeta = (brandRow?.metafields ?? {}) as ProductBrandMetafields;
 
-  // Get category breadcrumbs from the most specific category
-  let breadcrumbs: { id: number; name: string; slug: string }[] = [];
-  const categoryIds = product.categoryIds ?? [];
-  if (categoryIds.length > 0) {
-    try {
-      const category = await getCategoryById(categoryIds[0]) as { path_ids?: number[] } | null;
-      if (category?.path_ids && category.path_ids.length > 0) {
-        breadcrumbs = await getCategoryBreadcrumbs(category.path_ids) as { id: number; name: string; slug: string }[];
-      }
-    } catch {
-      // Category may not exist in this channel's tree
-    }
-  }
+  // Breadcrumb trail scoped to this channel's own category tree. A product's
+  // category assignments can span other channels' trees, so resolving through
+  // the channel guarantees every crumb links to a category page that exists here.
+  const breadcrumbs = (await getProductBreadcrumbs(product.id)) as {
+    id: number;
+    name: string;
+    slug: string;
+  }[];
 
   // Fetch member pricing if feature is enabled
   let memberPrice: number | null = null;

@@ -125,8 +125,18 @@ export const getCategoryStats = (categoryId: number) => unstable_cache(
 )();
 
 export const getCategoryBreadcrumbs = (pathIds: number[]) => unstable_cache(
-  async () => categoryService.getBreadcrumbs(pathIds),
+  async () => categoryService.getBreadcrumbs(pathIds, CHANNEL_ID),
   [`category-breadcrumbs-${CHANNEL_ID}-${pathIds.join(",")}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "categories"] }
+)();
+
+// Channel-scoped breadcrumb trail for a product. A product's category
+// assignments can span several channels' trees; this resolves only the
+// categories in THIS channel's tree, so every crumb links to a category page
+// that actually exists on this storefront.
+export const getProductBreadcrumbs = (productId: number) => unstable_cache(
+  async () => categoryService.getProductBreadcrumbs(productId, CHANNEL_ID),
+  [`product-breadcrumbs-${CHANNEL_ID}-${productId}`],
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "categories"] }
 )();
 
@@ -336,3 +346,37 @@ export {
 
 export const calculateShipping = async (postcode: string, subtotal: number) =>
   shippingRateCalculator.calculate(CHANNEL_ID, postcode, subtotal);
+
+// ============================================================================
+// Content Pages (channel-scoped, data-driven via the `content_pages` setting)
+// ============================================================================
+
+const getJsonSetting = async <T,>(key: string, fallback: T): Promise<T> => {
+  try {
+    const setting = await channelSettingsService.getByKey(CHANNEL_ID, key);
+    return (setting.setting_value as T) ?? fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+export type ContentPage = {
+  title: string;
+  heading?: string;
+  summary?: string;
+  body_html: string;
+  meta_title?: string;
+  meta_description?: string;
+  updated?: string;
+};
+
+export const getContentPages = unstable_cache(
+  async () => getJsonSetting<Record<string, ContentPage>>("content_pages", {}),
+  [`content-pages-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
+export const getContentPage = async (slug: string): Promise<ContentPage | null> => {
+  const pages = await getContentPages();
+  return pages[slug] ?? null;
+};
