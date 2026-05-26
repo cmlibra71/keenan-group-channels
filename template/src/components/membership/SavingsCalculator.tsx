@@ -20,11 +20,11 @@ export function SavingsCalculator({
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="text-center">
         <label className="block text-sm font-medium text-zinc-700 mb-3">
           What do you spend per month on kitchen equipment?
         </label>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 justify-center">
           {presets.map((amount) => (
             <button
               key={amount}
