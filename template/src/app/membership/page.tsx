@@ -106,7 +106,7 @@ export default async function MembershipLandingPage() {
           <h2 className="text-3xl font-bold text-zinc-900">Why Members Love It</h2>
           <p className="mt-2 text-zinc-600">Everything you get with your membership</p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 ${drawsEnabled ? "lg:grid-cols-4" : "lg:grid-cols-3"} gap-6`}>
           <BenefitCard
             icon="pricing"
             title="Members-Only Pricing"
