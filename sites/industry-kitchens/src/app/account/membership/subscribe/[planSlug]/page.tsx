@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getActiveSubscription, subscriptionPlanService, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getActiveSubscription, subscriptionPlanService, storeSettingsService, CHANNEL_ID } from "@/lib/store";
 import { SubscribeForm } from "./SubscribeForm";
 
 export const metadata = {
@@ -28,7 +28,17 @@ export default async function SubscribePage({
   if (!plan) notFound();
 
   const metafields = plan.metafields as Record<string, string> | null;
-  const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+
+  // Read publishable_key from the portal-wide payment_gateways setting (same
+  // place the cart checkout reads it from). Comment in checkout/page.tsx:
+  // "All channels share one Stripe account; segmentation happens via metadata."
+  let stripePublishableKey: string | undefined;
+  try {
+    const gatewaysSetting = await storeSettingsService.getByKey("payment_gateways");
+    const gateways = (gatewaysSetting.setting_value as { provider: string; credentials: Record<string, string>; enabled?: boolean }[]) || [];
+    const stripeGateway = gateways.find((g) => g.provider === "stripe" && g.enabled !== false);
+    stripePublishableKey = stripeGateway?.credentials?.publishable_key;
+  } catch {}
 
   if (!stripePublishableKey || !metafields?.stripe_price_id) {
     return (
