@@ -6,9 +6,11 @@ import {
   getUpcomingDraws,
   getPartnerOffers,
   getFeatureFlag,
+  getActiveSubscription,
   prizeService,
   CHANNEL_ID,
 } from "@/lib/store";
+import { getSession } from "@/lib/auth";
 import { BenefitCard } from "@/components/membership/BenefitCard";
 import { PrizeShowcase } from "@/components/membership/PrizeShowcase";
 import { EntryAccumulationChart } from "@/components/membership/EntryAccumulationChart";
@@ -37,6 +39,18 @@ export default async function MembershipLandingPage() {
 
   const plan = plans[0]; // Primary plan
   if (!plan) redirect("/");
+
+  // Route the join CTA based on session + subscription state. Without this,
+  // logged-in users land in a /account/register → /account redirect loop
+  // because the register page bounces anyone with an active session.
+  const session = await getSession();
+  const activeSub = session ? await getActiveSubscription(session.customerId) : null;
+  const joinHref = !session
+    ? "/account/register"
+    : activeSub
+      ? "/account/membership"
+      : `/account/membership/subscribe/${plan.slug}`;
+  const joinLabel = activeSub ? "Manage Membership" : "Start Your Membership";
 
   const planPrice = parseFloat(plan.price);
   const benefits = ((plan.benefits as string[]) || []).filter(
@@ -85,10 +99,10 @@ export default async function MembershipLandingPage() {
             )}
             <div className="mt-9 flex flex-col sm:flex-row gap-3">
               <Link
-                href="/account/register"
+                href={joinHref}
                 className="inline-flex items-center justify-center gap-2 bg-teal-700 text-white px-7 py-3.5 rounded-[14px] font-semibold text-sm hover:bg-teal-800 transition-colors shadow-sm"
               >
-                Start Your Membership
+                {joinLabel}
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <a
@@ -202,10 +216,10 @@ export default async function MembershipLandingPage() {
               </ul>
             )}
             <Link
-              href="/account/register"
+              href={joinHref}
               className="btn-primary w-full"
             >
-              Start Your Membership
+              {joinLabel}
             </Link>
           </div>
         </div>

@@ -6,9 +6,11 @@ import {
   getUpcomingDraws,
   getPartnerOffers,
   getFeatureFlag,
+  getActiveSubscription,
   prizeService,
   CHANNEL_ID,
 } from "@/lib/store";
+import { getSession } from "@/lib/auth";
 import { BenefitCard } from "@/components/membership/BenefitCard";
 import { PrizeShowcase } from "@/components/membership/PrizeShowcase";
 import { EntryAccumulationChart } from "@/components/membership/EntryAccumulationChart";
@@ -37,6 +39,18 @@ export default async function MembershipLandingPage() {
 
   const plan = plans[0]; // Primary plan
   if (!plan) redirect("/");
+
+  // Route the join CTA based on session + subscription state. Anonymous users
+  // need /account/register (otherwise the subscribe page bounces them to /account
+  // with no context); already-subscribed users get a "Manage Membership" link.
+  const session = await getSession();
+  const activeSub = session ? await getActiveSubscription(session.customerId) : null;
+  const joinHref = !session
+    ? "/account/register"
+    : activeSub
+      ? "/account/membership"
+      : `/account/membership/subscribe/${plan.slug}`;
+  const joinLabel = activeSub ? "Manage Membership" : "Start Your Membership";
 
   const planPrice = parseFloat(plan.price);
   const benefits = ((plan.benefits as string[]) || []).filter(
@@ -83,10 +97,10 @@ export default async function MembershipLandingPage() {
             )}
             <div className="mt-8 flex flex-col sm:flex-row gap-3">
               <Link
-                href={`/account/membership/subscribe/${plan.slug}`}
+                href={joinHref}
                 className="inline-flex items-center justify-center gap-2 bg-amber-500 text-zinc-900 px-6 py-3 rounded-lg font-semibold hover:bg-amber-400 transition-colors"
               >
-                Start Your Membership
+                {joinLabel}
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <a
@@ -197,10 +211,10 @@ export default async function MembershipLandingPage() {
               </ul>
             )}
             <Link
-              href={`/account/membership/subscribe/${plan.slug}`}
+              href={joinHref}
               className="block w-full text-center bg-amber-500 text-zinc-900 py-3 px-6 rounded-lg font-semibold hover:bg-amber-400 transition-colors"
             >
-              Start Your Membership
+              {joinLabel}
             </Link>
           </div>
         </div>
