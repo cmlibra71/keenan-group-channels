@@ -66,8 +66,11 @@ export default async function CheckoutPage() {
   let stripePublishableKey: string | undefined;
   try {
     const gatewaysSetting = await storeSettingsService.getByKey("payment_gateways");
-    const gateways = (gatewaysSetting.setting_value as { provider: string; credentials: Record<string, string>; enabled?: boolean }[]) || [];
-    const stripeGateway = gateways.find((g) => g.provider === "stripe" && g.enabled !== false);
+    const gateways = (gatewaysSetting.setting_value as { provider: string; credentials: Record<string, string>; enabled?: boolean; testMode?: boolean }[]) || [];
+    // Match the gateway entry tagged for the current environment: testMode=true
+    // in dev, testMode=false in prod. Lets both modes coexist in the DB row.
+    const wantTestMode = process.env.NODE_ENV !== "production";
+    const stripeGateway = gateways.find((g) => g.provider === "stripe" && g.enabled !== false && Boolean(g.testMode) === wantTestMode) ?? gateways.find((g) => g.provider === "stripe" && g.enabled !== false);
     if (stripeGateway?.credentials?.publishable_key) {
       stripePublishableKey = stripeGateway.credentials.publishable_key;
     }
