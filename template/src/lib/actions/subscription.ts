@@ -17,7 +17,7 @@ async function getStripeProvider(): Promise<StripeSubscriptionProvider> {
   // Match the gateway entry tagged for the current environment: testMode=true
     // in dev, testMode=false in prod. Lets both modes coexist in the DB row.
     const wantTestMode = process.env.NODE_ENV !== "production";
-  const stripe = gateways.find((g) => g.provider === "stripe" && g.enabled !== false && Boolean(g.testMode) === wantTestMode) ?? gateways.find((g) => g.provider === "stripe" && g.enabled !== false);
+  const stripe = gateways.find((g) => g.provider === "stripe" && g.enabled !== false && Boolean(g.testMode) === wantTestMode) ?? (wantTestMode ? gateways.find((g) => g.provider === "stripe" && g.enabled !== false) : undefined);
   if (!stripe?.credentials?.secret_key) {
     throw new Error("Stripe is not configured. Set up the global Stripe gateway in the portal under Settings > Payments.");
   }
