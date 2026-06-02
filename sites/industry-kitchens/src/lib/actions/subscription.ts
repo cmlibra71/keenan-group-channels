@@ -83,7 +83,13 @@ export async function createSubscription(planId: number): Promise<{
 
     // Get Stripe price ID from plan metafields
     const metafields = plan.metafields as Record<string, string> | null;
-    const stripePriceId = metafields?.stripe_price_id;
+    // Pick the price id tagged for the current environment: the test price in
+    // dev (stripe_price_id_test), the live price in prod (stripe_price_id).
+    // A test price with a live key (or vice versa) hard-fails at Stripe, so
+    // there is no cross-mode fallback here (unlike the gateway selector).
+    const stripePriceId = process.env.NODE_ENV !== "production"
+      ? metafields?.stripe_price_id_test
+      : metafields?.stripe_price_id;
     if (!stripePriceId) {
       return { success: false, error: "Plan is not properly configured" };
     }

@@ -28,6 +28,11 @@ export default async function SubscribePage({
   if (!plan) notFound();
 
   const metafields = plan.metafields as Record<string, string> | null;
+  // Env-tagged price id: test in dev, live in prod (matches subscription.ts).
+  const stripePriceId =
+    process.env.NODE_ENV !== "production"
+      ? metafields?.stripe_price_id_test
+      : metafields?.stripe_price_id;
 
   // Read publishable_key from the portal-wide payment_gateways setting (same
   // place the cart checkout reads it from). Comment in checkout/page.tsx:
@@ -43,7 +48,7 @@ export default async function SubscribePage({
     stripePublishableKey = stripeGateway?.credentials?.publishable_key;
   } catch {}
 
-  if (!stripePublishableKey || !metafields?.stripe_price_id) {
+  if (!stripePublishableKey || !stripePriceId) {
     return (
       <div className="mx-auto max-w-lg px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="text-2xl font-bold text-zinc-900 mb-4">Subscribe</h1>
