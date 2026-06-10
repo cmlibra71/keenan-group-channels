@@ -51,8 +51,8 @@ export async function addToCart(productId: number, variantId?: number | null) {
           const pricingVariantId = variantId || (variantResult?.data[0] as { id: number } | undefined)?.id;
           if (pricingVariantId) {
             const pricing = await getEffectivePrice(pricingVariantId, CHANNEL_ID, customer.customerGroupId);
-            if (pricing.memberPrice) {
-              salePrice = pricing.memberPrice;
+            if (pricing.salePrice) {
+              salePrice = pricing.salePrice;
             }
           }
         }

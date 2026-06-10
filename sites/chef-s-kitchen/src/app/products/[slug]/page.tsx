@@ -52,21 +52,25 @@ export default async function ProductPage({
         isMember = true;
       }
     }
-    // Fetch member prices for ALL variants so client can update on variant change
-    const variants = product.variants ?? [];
-    const pricingResults = await Promise.all(
-      variants.map((v) => getEffectivePrice(v.id, CHANNEL_ID, customerGroupId))
-    );
-    for (let i = 0; i < variants.length; i++) {
-      const pricing = pricingResults[i];
-      if (pricing.memberPrice) {
-        memberPriceMap[variants[i].id] = parseFloat(pricing.memberPrice);
+    // Fetch member prices for ALL variants (only for actual members — the
+    // customer's group is what unlocks member pricing) so the client can update
+    // the displayed price on variant change.
+    if (customerGroupId) {
+      const variants = product.variants ?? [];
+      const pricingResults = await Promise.all(
+        variants.map((v) => getEffectivePrice(v.id, CHANNEL_ID, customerGroupId))
+      );
+      for (let i = 0; i < variants.length; i++) {
+        const pricing = pricingResults[i];
+        if (pricing.salePrice) {
+          memberPriceMap[variants[i].id] = parseFloat(pricing.salePrice);
+        }
       }
-    }
-    // Set default member price from first variant for initial render
-    const defaultVariant = variants[0];
-    if (defaultVariant && memberPriceMap[defaultVariant.id] != null) {
-      memberPrice = memberPriceMap[defaultVariant.id];
+      // Set default member price from first variant for initial render
+      const defaultVariant = variants[0];
+      if (defaultVariant && memberPriceMap[defaultVariant.id] != null) {
+        memberPrice = memberPriceMap[defaultVariant.id];
+      }
     }
   }
 
