@@ -1,4 +1,5 @@
-import { getProducts, getFeatureFlag, CHANNEL_ID } from "@/lib/store";
+import { getProducts, getFeatureFlag, CHANNEL_ID, shouldSuppressCatalogSalePrice } from "@/lib/store";
+import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { SearchTypeahead } from "@/components/search/SearchTypeahead";
 import Link from "next/link";
@@ -34,13 +35,15 @@ async function searchWithMeilisearch(
       facets: ["brandName", "categoryNames"],
     });
 
-    // Map Meilisearch hits to ProductWithImage shape for ProductGrid
+    // Map Meilisearch hits to ProductWithImage shape for ProductGrid.
+    // Member-only pricing channels suppress the shared catalog sale price.
+    const suppressSale = await shouldSuppressCatalogSalePrice();
     const products = result.hits.map((hit) => ({
       id: hit.id,
       name: hit.name,
       urlPath: hit.urlPath,
       price: String(hit.price),
-      salePrice: hit.salePrice ? String(hit.salePrice) : null,
+      salePrice: !suppressSale && hit.salePrice ? String(hit.salePrice) : null,
       thumbnailImage: hit.thumbnailUrl
         ? { urlStandard: hit.thumbnailUrl, urlThumbnail: hit.thumbnailUrl }
         : null,
@@ -262,7 +265,7 @@ export default async function SearchPage({
                   <span className="ml-1">(page {page} of {totalPages})</span>
                 )}
               </p>
-              <ProductGrid products={results.products} memberPricingAvailable={memberPricingEnabled} />
+              <ProductGrid products={results.products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(results.products)} />
 
               {/* Pagination */}
               {totalPages > 1 && (

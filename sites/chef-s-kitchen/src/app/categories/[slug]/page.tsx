@@ -3,6 +3,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ChevronRight, Package } from "lucide-react";
 import { getCategoryBySlug, getProducts, getSubcategories, getCategoryStats, getCategoryBreadcrumbs, getFeatureFlag, getChannelSetting } from "@/lib/store";
+import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { RichContent } from "@/components/content/RichContent";
 import { Price } from "@/components/ui/Price";
@@ -155,7 +156,7 @@ export default async function CategoryPage({
         <div>
           <p className="eyebrow mb-3">PRODUCTS</p>
           <h2 className="panel-title mb-4">Products</h2>
-          <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} />
+          <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(products)} />
 
           {/* Pagination */}
           {totalPages > 1 && (

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchProducts } from "@keenan/services/search";
+import { shouldSuppressCatalogSalePrice } from "@/lib/store";
 
 const CHANNEL_ID = parseInt(process.env.CHANNEL_ID || "1", 10);
 
@@ -24,6 +25,14 @@ export async function GET(request: NextRequest) {
       sort,
       facets,
     });
+
+    // Member-only pricing channels never expose the shared catalog sale price
+    // (it's another channel's public price) — not even in search results.
+    if (await shouldSuppressCatalogSalePrice()) {
+      result.hits = result.hits.map((hit) =>
+        "salePrice" in hit ? { ...hit, salePrice: null } : hit
+      ) as typeof result.hits;
+    }
 
     return NextResponse.json(result);
   } catch {

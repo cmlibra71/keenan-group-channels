@@ -6,14 +6,19 @@ export function MembershipCartUpsell({
   planPrice,
   billingInterval,
   savingsPercentage = 15,
+  freeShippingEnabled = false,
+  freeShippingThreshold = 500,
 }: {
   cartTotal: number;
   planPrice: number;
   billingInterval: string;
   savingsPercentage?: number;
+  /** Free-delivery messaging only renders on channels that actually offer it. */
+  freeShippingEnabled?: boolean;
+  freeShippingThreshold?: number;
 }) {
   const estimatedSavings = Math.round(cartTotal * (savingsPercentage / 100) * 100) / 100;
-  const freeDeliveryEligible = cartTotal >= 500;
+  const freeDeliveryEligible = freeShippingEnabled && cartTotal >= freeShippingThreshold;
 
   return (
     <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-5">

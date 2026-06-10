@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { cartService, cartItemService, productService, productVariantService, customerService, getEffectivePrice, CHANNEL_ID } from "@/lib/store";
-import { getFeatureFlag, getActiveSubscription } from "@/lib/store";
+import { getFeatureFlag, getActiveSubscription, shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { getCartUuid, setCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 
@@ -37,7 +37,15 @@ export async function addToCart(productId: number, variantId?: number | null) {
     if (variant?.salePrice) salePrice = variant.salePrice;
   }
 
-  // Apply member pricing if enabled and user has an active subscription
+  // Channels with member-only cost-plus pricing suppress the shared catalog
+  // sale price (it's another channel's public price) — list price stays RRP.
+  if (await shouldSuppressCatalogSalePrice()) {
+    salePrice = null;
+  }
+
+  // Apply member pricing if enabled and user has an active subscription.
+  // Best price wins: a genuine channel sale never gets beaten by a higher
+  // member price, and vice versa.
   const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
   if (memberPricingEnabled) {
     const session = await getSession();
@@ -52,7 +60,9 @@ export async function addToCart(productId: number, variantId?: number | null) {
           if (pricingVariantId) {
             const pricing = await getEffectivePrice(pricingVariantId, CHANNEL_ID, customer.customerGroupId);
             if (pricing.salePrice) {
-              salePrice = pricing.salePrice;
+              salePrice = salePrice && parseFloat(salePrice) < parseFloat(pricing.salePrice)
+                ? salePrice
+                : pricing.salePrice;
             }
           }
         }

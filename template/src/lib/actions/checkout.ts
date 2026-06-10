@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { cartService, orderService, orderItemService, CHANNEL_ID, getEffectivePrice, productVariantService, channelSettingsService, getCheckoutSettings, paymentService } from "@/lib/store";
-import { getFeatureFlag, getActiveSubscription } from "@/lib/store";
+import { getFeatureFlag, getActiveSubscription, shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 
@@ -81,18 +81,25 @@ export async function placeOrder(
     const activeSub = await getActiveSubscription(session.customerId);
     if (!activeSub) {
       // Subscription expired — recalculate any member-priced items at standard price
+      const suppressCatalogSale = await shouldSuppressCatalogSalePrice();
       let pricesChanged = false;
       for (const item of fullCart.items) {
         if (item.salePrice && item.listPrice) {
-          const variantId = item.variantId;
-          const pricingVariantId = variantId || (await productVariantService.listForParent(item.productId, { page: 1, limit: 1, sort: "id", direction: "asc" }))?.data[0]?.id;
-          if (pricingVariantId) {
-            const pricing = await getEffectivePrice(pricingVariantId as number, CHANNEL_ID, null);
-            const oldPrice = item.salePrice;
-            item.salePrice = pricing.salePrice || null;
-            if (item.salePrice !== oldPrice) {
-              pricesChanged = true;
+          const oldPrice = item.salePrice;
+          if (suppressCatalogSale) {
+            // Member-only pricing channel: without a membership the standard
+            // (RRP) price applies — never the shared catalog sale price.
+            item.salePrice = null;
+          } else {
+            const variantId = item.variantId;
+            const pricingVariantId = variantId || (await productVariantService.listForParent(item.productId, { page: 1, limit: 1, sort: "id", direction: "asc" }))?.data[0]?.id;
+            if (pricingVariantId) {
+              const pricing = await getEffectivePrice(pricingVariantId as number, CHANNEL_ID, null);
+              item.salePrice = pricing.salePrice || null;
             }
+          }
+          if (item.salePrice !== oldPrice) {
+            pricesChanged = true;
           }
         }
       }

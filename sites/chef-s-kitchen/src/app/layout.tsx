@@ -1,8 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
+import { cookies } from "next/headers";
 import { getSiteConfig, getFeatureFlag } from "@/lib/store";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { GstProvider } from "@/lib/gst";
 import "./globals.css";
 
 export const dynamic = "force-dynamic";
@@ -31,13 +33,16 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [{ site, channel }, subscriptionsEnabled] = await Promise.all([
+  const [{ site, channel }, subscriptionsEnabled, pricesIncludeTax, cookieStore] = await Promise.all([
     getSiteConfig(),
     getFeatureFlag("subscriptions_enabled"),
+    getFeatureFlag("prices_include_tax"),
+    cookies(),
   ]);
   const storeName = site?.siteName || channel?.name || "Store";
   const logoUrl = site?.logoUrl || null;
   const logoAlt = site?.logoAlt || null;
+  const gstInclusive = cookieStore.get("gst_inclusive")?.value === "true";
 
   return (
     <html lang="en">
@@ -63,9 +68,11 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
             style={{ display: "none", visibility: "hidden" }}
           />
         </noscript>
-        <Header storeName={storeName} logoUrl={logoUrl} logoAlt={logoAlt} />
-        <main className="flex-1">{children}</main>
-        <Footer storeName={storeName} subscriptionsEnabled={subscriptionsEnabled} />
+        <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
+          <Header storeName={storeName} logoUrl={logoUrl} logoAlt={logoAlt} />
+          <main className="flex-1">{children}</main>
+          <Footer storeName={storeName} subscriptionsEnabled={subscriptionsEnabled} />
+        </GstProvider>
       </body>
     </html>
   );

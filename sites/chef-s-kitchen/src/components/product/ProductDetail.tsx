@@ -64,6 +64,7 @@ export function ProductDetail({
   onVariantChange,
   memberPrice,
   isMember,
+  membershipTeaser,
 }: {
   productId: number;
   price: string;
@@ -79,6 +80,8 @@ export function ProductDetail({
   onVariantChange?: (variantId: number | null) => void;
   memberPrice?: number | null;
   isMember?: boolean;
+  /** Generic membership pitch for non-members — never carries the exact member price. */
+  membershipTeaser?: { fromPrice: string | null } | null;
 }) {
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
   const [selectedOptions, setSelectedOptions] = useState<Record<number, number>>({});
@@ -189,43 +192,54 @@ export function ProductDetail({
   return (
     <div>
       {/* Price */}
-      <div className="mt-4 flex items-center gap-3">
-        {displayPrice === 0 ? (
-          <span className="text-2xl font-bold text-text-primary">Call for Price</span>
-        ) : displaySalePrice ? (
-          <>
-            <Price amount={displaySalePrice} className="text-3xl font-bold text-red-600" showExGst />
+      {isMember && memberPrice != null && displayPrice > 0 && memberPrice < (displaySalePrice ?? displayPrice) ? (
+        /* Member view: standard struck through, member price prominent with savings */
+        <div className="mt-4">
+          <div className="flex items-baseline gap-2">
             <span className="text-xl text-text-muted line-through">
-              <Price amount={displayPrice} />
+              <Price amount={displaySalePrice ?? displayPrice} gst />
             </span>
-          </>
-        ) : (
-          <Price amount={displayPrice} className="text-3xl font-bold text-text-primary" showExGst />
-        )}
-      </div>
-
-      {/* Member Pricing */}
-      {memberPrice != null && displayPrice > 0 && memberPrice !== (displaySalePrice ?? displayPrice) && (
-        isMember ? (
-          <div className="mt-2 inline-flex items-center gap-1.5 bg-accent-subtle border border-accent/30 text-accent-dark text-sm font-medium px-3 py-1.5 rounded-full">
-            <span>Member Price:</span>
-            <Price amount={memberPrice} className="font-bold" />
+            <span className="text-sm text-text-muted">(Standard)</span>
           </div>
-        ) : (
-          <Link
-            href="/membership"
-            className="mt-3 block border border-accent/30 bg-accent/5 p-3 hover:bg-accent-subtle transition-colors"
-          >
-            <div className="flex items-center gap-2 text-accent-dark">
-              <span className="text-sm font-semibold">Member Price: <Price amount={memberPrice} className="font-bold" /></span>
-              <span className="text-xs text-accent">(Save <Price amount={(displaySalePrice ?? displayPrice) - memberPrice} />)</span>
-            </div>
-            <p className="text-xs text-accent mt-1">
-              Plus: Prize draw entries, partner discounts
-            </p>
-            <span className="text-xs font-semibold text-accent-dark mt-1 inline-block">Join now &rarr;</span>
-          </Link>
-        )
+          <div className="mt-1 flex flex-wrap items-baseline gap-2">
+            <Price amount={memberPrice} gst className="text-3xl font-bold text-accent-dark" />
+            <span className="text-sm font-semibold text-accent-dark">
+              (Member Price, Save <Price amount={(displaySalePrice ?? displayPrice) - memberPrice} gst />)
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-4 flex items-center gap-3">
+          {displayPrice === 0 ? (
+            <span className="text-2xl font-bold text-text-primary">Call for Price</span>
+          ) : displaySalePrice ? (
+            <>
+              <Price amount={displaySalePrice} className="text-3xl font-bold text-red-600" gst showGstLabel />
+              <span className="text-xl text-text-muted line-through">
+                <Price amount={displayPrice} gst />
+              </span>
+            </>
+          ) : (
+            <Price amount={displayPrice} className="text-3xl font-bold text-text-primary" gst showGstLabel />
+          )}
+        </div>
+      )}
+
+      {/* Membership teaser — generic pitch only; the exact member price is
+          reserved for active subscribers. */}
+      {!isMember && membershipTeaser && displayPrice > 0 && (
+        <Link
+          href="/membership"
+          className="mt-3 block border border-accent/30 bg-accent/5 p-3 hover:bg-accent-subtle transition-colors"
+        >
+          <p className="text-sm font-semibold text-accent-dark">Members save 10&ndash;25% off retail</p>
+          <p className="text-xs text-accent mt-1">
+            Plus prize draw entries, exclusive partner discounts &amp; priority support
+          </p>
+          <span className="text-xs font-semibold text-accent-dark mt-1 inline-block">
+            {membershipTeaser.fromPrice ? <>Join from ${membershipTeaser.fromPrice}/month &rarr;</> : <>Join now &rarr;</>}
+          </span>
+        </Link>
       )}
 
       {/* Bulk Pricing Tiers */}
@@ -254,7 +268,7 @@ export function ProductDetail({
                           : `${rule.quantityMin}+`}
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <Price amount={tierPrice} />
+                        <Price amount={tierPrice} gst />
                       </td>
                     </tr>
                   );

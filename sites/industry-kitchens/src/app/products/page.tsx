@@ -1,4 +1,5 @@
 import { getProducts, getFeatureFlag } from "@/lib/store";
+import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import Link from "next/link";
 
@@ -46,6 +47,7 @@ export default async function ProductsPage({
     getFeatureFlag("member_pricing_enabled"),
   ]);
   const totalPages = Math.ceil(total / 24);
+  const memberPriceMap = await getListingMemberPrices(products);
 
   const filterParam = activeFilter !== "all" ? `&filter=${activeFilter}` : "";
   const pageTitle = filters.find((f) => f.key === activeFilter)?.label || "All Products";
@@ -74,7 +76,7 @@ export default async function ProductsPage({
       {products.length === 0 ? (
         <p className="text-zinc-500 text-center py-16">No products found.</p>
       ) : (
-        <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} />
+        <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={memberPriceMap} />
       )}
 
       {/* Pagination */}

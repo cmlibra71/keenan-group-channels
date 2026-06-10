@@ -6,6 +6,7 @@ import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
 import { getActiveSubscription, getFeatureFlag, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
+import { GstToggle } from "./GstToggle";
 import { SearchTypeahead } from "../search/SearchTypeahead";
 
 export async function Header({ storeName, logoUrl, logoAlt }: { storeName: string; logoUrl?: string | null; logoAlt?: string | null }) {
@@ -57,6 +58,7 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
 
           {/* Actions */}
           <div className="flex items-center gap-5">
+            <GstToggle className="hidden md:inline-flex" />
             <Link href="/search" className="md:hidden text-white/80 hover:text-white transition-colors duration-300">
               <Search className="h-[1.125rem] w-[1.125rem]" strokeWidth={1.5} />
             </Link>

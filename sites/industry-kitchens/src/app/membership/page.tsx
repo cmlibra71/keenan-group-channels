@@ -7,6 +7,7 @@ import {
   getPartnerOffers,
   getFeatureFlag,
   getActiveSubscription,
+  getCheckoutSettings,
   prizeService,
   CHANNEL_ID,
 } from "@/lib/store";
@@ -30,12 +31,15 @@ export default async function MembershipLandingPage() {
   ]);
   if (!enabled) redirect("/");
 
-  const [plans, upcomingDraws, partnerOffers, activePrizes] = await Promise.all([
+  const [plans, upcomingDraws, partnerOffers, activePrizes, checkoutSettings] = await Promise.all([
     getSubscriptionPlans(),
     drawsEnabled ? getUpcomingDraws() : Promise.resolve([]),
     getPartnerOffers(),
     drawsEnabled ? prizeService.listActiveForChannel(CHANNEL_ID) : Promise.resolve([]),
+    getCheckoutSettings(),
   ]);
+  // Free-delivery messaging only renders on channels that actually offer it.
+  const freeShippingEnabled = checkoutSettings.freeShippingEnabled;
 
   const plan = plans[0]; // Primary plan
   if (!plan) redirect("/");
@@ -83,7 +87,7 @@ export default async function MembershipLandingPage() {
               Professional Kitchen Equipment at Members-Only Prices
             </h1>
             <p className="mt-4 text-lg text-zinc-300 max-w-xl">
-              Join our membership and unlock exclusive pricing, free delivery{drawsEnabled ? ", monthly prize draws," : ", and"} partner discounts.
+              Join our membership and unlock exclusive pricing{freeShippingEnabled ? ", free delivery" : ""}{drawsEnabled ? ", monthly prize draws," : ", and"} partner discounts.
             </p>
             {benefits.length > 0 && (
               <ul className="mt-6 space-y-2">
@@ -120,17 +124,25 @@ export default async function MembershipLandingPage() {
           <h2 className="text-3xl font-bold text-zinc-900">Why Members Love It</h2>
           <p className="mt-2 text-zinc-600">Everything you get with your membership</p>
         </div>
-        <div className={`grid grid-cols-1 sm:grid-cols-2 ${drawsEnabled ? "lg:grid-cols-4" : "lg:grid-cols-3"} gap-6`}>
+        <div className={`grid grid-cols-1 sm:grid-cols-2 ${
+          2 + (drawsEnabled ? 1 : 0) + (freeShippingEnabled ? 1 : 0) >= 4
+            ? "lg:grid-cols-4"
+            : 2 + (drawsEnabled ? 1 : 0) + (freeShippingEnabled ? 1 : 0) === 3
+              ? "lg:grid-cols-3"
+              : "lg:grid-cols-2"
+        } gap-6`}>
           <BenefitCard
             icon="pricing"
             title="Members-Only Pricing"
             description="Save 10-25% off retail on all kitchen equipment. The more you buy, the more you save."
           />
-          <BenefitCard
-            icon="delivery"
-            title="Free Delivery $500+"
-            description="Free shipping on orders over $500. No code needed, automatically applied at checkout."
-          />
+          {freeShippingEnabled && (
+            <BenefitCard
+              icon="delivery"
+              title="Free Delivery $500+"
+              description="Free shipping on orders over $500. No code needed, automatically applied at checkout."
+            />
+          )}
           {drawsEnabled && (
             <BenefitCard
               icon="draws"

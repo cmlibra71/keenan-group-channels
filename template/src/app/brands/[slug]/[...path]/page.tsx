@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { getBrandBySlug, getCategoryBySlug, getProducts, getFeatureFlag } from "@/lib/store";
+import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 
 // Brand + category combo page: renders the brand's products filtered to a
@@ -82,7 +83,7 @@ export default async function BrandCategoryPage({
       </div>
 
       {products.length > 0 ? (
-        <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} />
+        <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(products)} />
       ) : (
         <p className="text-zinc-500 text-center py-12">
           {category

@@ -1,13 +1,17 @@
 import Link from "next/link";
 import { getProducts, getFeatureFlag, getSubcategories } from "@/lib/store";
+import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 
 const CLEARANCE_ROOT_ID = 233;
 const PRODUCTS_PER_PAGE = 24;
 
+// CD has no public sale prices (member-only pricing) — this page lists the
+// last-units/clearance stock at standard pricing, so the copy avoids any
+// "% off / sale" framing.
 export const metadata = {
-  title: "Clearance",
-  description: "Shop our clearance items at reduced prices.",
+  title: "Last Units",
+  description: "Last units and end-of-line stock — secure yours while they last.",
 };
 
 type FilterOption = { id: number; name: string; slug: string };
@@ -43,7 +47,7 @@ export default async function ClearancePage({
   ]);
 
   const totalPages = Math.ceil(total / PRODUCTS_PER_PAGE);
-  const heading = activeFilter?.name ?? "Clearance";
+  const heading = activeFilter?.name ?? "Last Units";
   const typeParam = type ? `type=${encodeURIComponent(type)}&` : "";
 
   return (
@@ -68,7 +72,7 @@ export default async function ClearancePage({
                     : "text-zinc-600 hover:bg-zinc-100"
                 }`}
               >
-                All Clearance
+                All Last Units
               </Link>
             </li>
             {filterOptions.map((opt) => (
@@ -95,7 +99,7 @@ export default async function ClearancePage({
             </p>
           ) : (
             <>
-              <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} />
+              <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(products)} />
 
               {totalPages > 1 && (
                 <nav className="mt-10 flex flex-wrap items-center justify-center gap-2">

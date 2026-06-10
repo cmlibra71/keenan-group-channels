@@ -33,9 +33,16 @@ export default async function CartPage() {
     );
   }
 
-  const subtotal = parseFloat(cart!.baseAmount ?? "0");
-  const discount = parseFloat(cart!.discountAmount ?? "0");
+  // Member savings flow through item salePrice (cart.discountAmount stays 0),
+  // so compute the discount from the items: full list value minus what's
+  // actually charged. Subtotal shows the undiscounted (RRP) value.
+  const typedItems = items as { listPrice: string | null; salePrice: string | null; quantity: number }[];
+  const subtotal = typedItems.reduce(
+    (sum, i) => sum + (i.listPrice ? parseFloat(i.listPrice) : 0) * i.quantity,
+    0
+  );
   const total = parseFloat(cart!.cartAmount ?? "0");
+  const discount = Math.max(0, Math.round((subtotal - total) * 100) / 100);
 
   // Check tax mode
   let pricesIncludeTax = false;
@@ -81,13 +88,23 @@ export default async function CartPage() {
           <CartItemsList items={items} />
         </div>
         <div className="space-y-4">
-          <CartSummary subtotal={subtotal} discount={discount} total={total} isMember={isMember} pricesIncludeTax={pricesIncludeTax} />
+          <CartSummary
+            subtotal={subtotal}
+            discount={discount}
+            total={total}
+            isMember={isMember}
+            pricesIncludeTax={pricesIncludeTax}
+            freeShippingEnabled={checkoutSettings.freeShippingEnabled}
+            freeShippingThreshold={checkoutSettings.freeShippingThreshold}
+          />
           {showUpsell && (
             <MembershipCartUpsell
               cartTotal={total}
               planPrice={planPrice}
               billingInterval={billingInterval}
               savingsPercentage={savingsPercentage}
+              freeShippingEnabled={checkoutSettings.freeShippingEnabled}
+              freeShippingThreshold={checkoutSettings.freeShippingThreshold}
             />
           )}
         </div>

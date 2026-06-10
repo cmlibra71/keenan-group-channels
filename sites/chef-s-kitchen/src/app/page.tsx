@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Crown, ArrowRight, ChevronRight } from "lucide-react";
 import { getProducts, getSiteConfig, getTopCategories, getFeatureFlag, getSubscriptionPlans, getUpcomingDraws, getBrandsForChannel, prizeService, productChannelAssignmentService, CHANNEL_ID } from "@/lib/store";
+import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { ValueBar } from "@/components/home/ValueBar";
 import { MembershipCTA } from "@/components/home/MembershipCTA";
@@ -248,7 +249,7 @@ export default async function HomePage() {
       <BrandShowcase brands={featuredBrands} />
 
       {/* ═══ Clearance Spotlight ═══ */}
-      <ClearanceSpotlight products={clearanceProducts} />
+      <ClearanceSpotlight products={clearanceProducts} heading="Last Units" eyebrow="While Stocks Last" />
 
       {/* ═══ Membership CTA ═══ */}
       {subscriptionsEnabled && plan && (
@@ -271,7 +272,7 @@ export default async function HomePage() {
             <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
-        <ProductGrid products={featuredProducts} memberPricingAvailable={memberPricingEnabled} />
+        <ProductGrid products={featuredProducts} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(featuredProducts)} />
       </section>
 
       {/* ═══ Draw Spotlight ═══ */}

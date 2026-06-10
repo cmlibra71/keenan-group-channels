@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscription, customerService, brandService, CHANNEL_ID, getProductBreadcrumbs } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscription, getSubscriptionPlans, customerService, brandService, CHANNEL_ID, getProductBreadcrumbs } from "@/lib/store";
 import { getSession } from "@/lib/auth";
 import { ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
@@ -50,6 +50,7 @@ export default async function ProductPage({
   // Fetch member pricing if feature is enabled
   let memberPrice: number | null = null;
   let isMember = false;
+  let membershipTeaser: { fromPrice: string | null } | null = null;
   const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
 
   let memberPriceMap: Record<number, number> = {};
@@ -64,6 +65,16 @@ export default async function ProductPage({
         isMember = true;
       }
     }
+    // Non-members get a generic membership pitch (never the exact member price).
+    if (!isMember) {
+      const plans = (await getSubscriptionPlans()) as { price: string | null }[];
+      const cheapest = plans
+        .map((p) => (p.price != null ? parseFloat(p.price) : NaN))
+        .filter((p) => Number.isFinite(p))
+        .sort((a, b) => a - b)[0];
+      membershipTeaser = { fromPrice: cheapest != null && Number.isFinite(cheapest) ? cheapest.toFixed(2) : null };
+    }
+
     // Fetch member prices for ALL variants (only for actual members — the
     // customer's group is what unlocks member pricing) so the client can update
     // the displayed price on variant change.
@@ -143,6 +154,7 @@ export default async function ProductPage({
         memberPrice={memberPrice}
         memberPriceMap={memberPriceMap}
         isMember={isMember}
+        membershipTeaser={membershipTeaser}
       />
 
       {/* Brand-specific warranty / installation notes (conditional) */}

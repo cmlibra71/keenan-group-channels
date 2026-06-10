@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Search, X, Loader2 } from "lucide-react";
+import { useGst, adjustForGst } from "@/lib/gst";
 
 interface SearchHit {
   id: number;
@@ -31,6 +32,7 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const { inclusive, pricesIncludeTax } = useGst();
 
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -153,7 +155,7 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
   }
 
   function formatPrice(price: number): string {
-    return `$${price.toFixed(2)}`;
+    return `$${adjustForGst(price, inclusive, pricesIncludeTax).toFixed(2)}`;
   }
 
   return (

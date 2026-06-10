@@ -96,7 +96,13 @@ export default async function CheckoutPage() {
       isMember = !!activeSub;
     }
     if (isMember) {
-      memberSavings = parseFloat(cart.discountAmount ?? "0");
+      // Member savings flow through item salePrice (cart.discountAmount stays
+      // 0): the saving is full list value minus what's actually charged.
+      const listValue = (cart.items as { listPrice: string | null; quantity: number }[]).reduce(
+        (sum, i) => sum + (i.listPrice ? parseFloat(i.listPrice) : 0) * i.quantity,
+        0
+      );
+      memberSavings = Math.max(0, Math.round((listValue - subtotal) * 100) / 100);
     } else {
       const plans = await getSubscriptionPlans();
       if (plans.length > 0) {

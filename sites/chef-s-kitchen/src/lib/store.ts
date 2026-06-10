@@ -35,6 +35,8 @@ import {
   checkoutSettingsHelper,
   productChannelAssignmentService,
   getEffectivePrice,
+  getEffectivePrices,
+  getEffectivePricesForProducts,
   shippingRateCalculator,
   shippingRateCardService,
 } from "@keenan/services";
@@ -68,6 +70,46 @@ export const getSiteConfig = unstable_cache(
 );
 
 // ============================================================================
+// Catalog sale-price suppression (channel-flagged)
+//
+// products.sale_price is shared across channels and carries Industry Kitchens'
+// public Zoey price. Channels that sell at RRP with member-only cost-plus
+// pricing (Chef's Depot) set `suppress_catalog_sale_price` so the imported
+// sale price never reaches display, cart, quote, or checkout paths. The data
+// itself is never mutated — this is a read-time filter.
+// ============================================================================
+
+let suppressFlagCache: { value: boolean; expires: number } | null = null;
+
+export const shouldSuppressCatalogSalePrice = async (): Promise<boolean> => {
+  if (suppressFlagCache && suppressFlagCache.expires > Date.now()) return suppressFlagCache.value;
+  const value = await getFeatureFlag("suppress_catalog_sale_price");
+  suppressFlagCache = { value, expires: Date.now() + 60_000 };
+  return value;
+};
+
+const stripRowSalePrice = <T,>(row: T): T => {
+  if (row && typeof row === "object" && "salePrice" in (row as Record<string, unknown>)) {
+    return { ...(row as Record<string, unknown>), salePrice: null } as T;
+  }
+  return row;
+};
+
+/** Null salePrice on a list of product rows when the channel suppresses it. */
+export const sanitizeCatalogProducts = async <T,>(rows: T[]): Promise<T[]> =>
+  (await shouldSuppressCatalogSalePrice()) ? rows.map(stripRowSalePrice) : rows;
+
+/** Null salePrice on a single product (and its variants) when suppressed. */
+export const sanitizeCatalogProduct = async <T,>(row: T): Promise<T> => {
+  if (!row || !(await shouldSuppressCatalogSalePrice())) return row;
+  const cleaned = stripRowSalePrice(row) as Record<string, unknown>;
+  if (Array.isArray(cleaned.variants)) {
+    cleaned.variants = cleaned.variants.map(stripRowSalePrice);
+  }
+  return cleaned as T;
+};
+
+// ============================================================================
 // Products (channel-scoped)
 // ============================================================================
 
@@ -82,14 +124,17 @@ export const getProducts = (options?: {
 }) => {
   const key = `products-${CHANNEL_ID}-${JSON.stringify(options || {})}`;
   return unstable_cache(
-    async () => productService.listForChannel(CHANNEL_ID, options),
+    async () => {
+      const result = await productService.listForChannel(CHANNEL_ID, options);
+      return { ...result, products: await sanitizeCatalogProducts(result.products) };
+    },
     [key],
     { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "products"] }
   )();
 };
 
 export const getProductBySlug = (slug: string) => unstable_cache(
-  async () => productService.getBySlug(slug, CHANNEL_ID),
+  async () => sanitizeCatalogProduct(await productService.getBySlug(slug, CHANNEL_ID)),
   [`product-slug-${CHANNEL_ID}-${slug}`],
   { revalidate: 120, tags: [`channel-${CHANNEL_ID}`, "products"] }
 )();
@@ -221,14 +266,16 @@ export const getRelatedProducts = (productId: number, categoryIds: number[]) => 
         limit: 13,
       });
       const related = result.products.filter((p: { id: number }) => p.id !== productId).slice(0, 12);
-      if (related.length >= 4) return related;
+      if (related.length >= 4) return sanitizeCatalogProducts(related);
     }
     // Fallback: use the broadest category if nothing had enough
     const result = await productService.listForChannel(CHANNEL_ID, {
       categoryId: categoryIds[categoryIds.length - 1],
       limit: 13,
     });
-    return result.products.filter((p: { id: number }) => p.id !== productId).slice(0, 12);
+    return sanitizeCatalogProducts(
+      result.products.filter((p: { id: number }) => p.id !== productId).slice(0, 12)
+    );
   },
   [`related-${CHANNEL_ID}-${productId}-${categoryIds.join(",")}`],
   { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "products"] }
@@ -246,6 +293,29 @@ export const getSubscriptionPlans = unstable_cache(
 
 export const getActiveSubscription = async (customerId: number) => {
   return subscriptionService.getActiveForCustomer(customerId, CHANNEL_ID);
+};
+
+/**
+ * Member prices for listing cards, keyed by product id. Only meaningful for
+ * an active member's customer group — pass null to get an empty map. The
+ * price is included only when it actually undercuts the regular price.
+ */
+export const getMemberPriceMap = async (
+  productIds: number[],
+  customerGroupId: number | null
+): Promise<Record<number, number>> => {
+  if (!customerGroupId || productIds.length === 0) return {};
+  const prices = await getEffectivePricesForProducts(productIds, CHANNEL_ID, customerGroupId);
+  const map: Record<number, number> = {};
+  for (const [productId, price] of prices) {
+    if (!price.salePrice) continue;
+    const sale = parseFloat(price.salePrice);
+    const regular = price.price != null ? parseFloat(price.price) : NaN;
+    if (Number.isFinite(sale) && (!Number.isFinite(regular) || sale < regular)) {
+      map[productId] = sale;
+    }
+  }
+  return map;
 };
 
 // ============================================================================
@@ -336,6 +406,8 @@ export {
   googlePlacesService,
   productChannelAssignmentService,
   getEffectivePrice,
+  getEffectivePrices,
+  getEffectivePricesForProducts,
   shippingRateCardService,
   CHANNEL_ID,
 };

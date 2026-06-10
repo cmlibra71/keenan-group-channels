@@ -100,6 +100,9 @@ The workflow builds a temporary Docker image from `@keenan/services` with the sc
 |--------|---------|
 | `scripts/backfill-meilisearch.ts` | Reindex all products into Meilisearch (run after search config changes or data imports) |
 | `scripts/backfill-embeddings.ts` | Generate vector embeddings for semantic search |
+| `scripts/seed-cd-member-groups.ts` | Seed CD tier customer groups + `member_pricing_rules` (cost-plus) and wire the membership plan |
+| `scripts/report-missing-cost-prices.ts` | Read-only: CD products with no cost price (no member price possible) |
+| `scripts/validate-cost-plus-vs-zoey.ts` | Read-only: computed cost-plus vs legacy Zoey price lists match-rate report |
 
 ### Adding new admin scripts
 

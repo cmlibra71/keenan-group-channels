@@ -17,6 +17,9 @@ on:
           - scripts/induce-taxonomy.ts
           - scripts/inspect-pdf-sample.ts
           - scripts/restamp-pdfs-chef-depot.ts
+          - scripts/seed-cd-member-groups.ts
+          - scripts/report-missing-cost-prices.ts
+          - scripts/validate-cost-plus-vs-zoey.ts
       timeout:
         description: "Timeout in seconds"
         required: false

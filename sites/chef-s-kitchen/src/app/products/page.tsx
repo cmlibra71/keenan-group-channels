@@ -1,4 +1,5 @@
 import { getProducts, getFeatureFlag } from "@/lib/store";
+import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import Link from "next/link";
 
@@ -75,7 +76,7 @@ export default async function ProductsPage({
       {products.length === 0 ? (
         <p className="text-text-secondary text-center section-padding">No products found.</p>
       ) : (
-        <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} />
+        <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(products)} />
       )}
 
       {/* Pagination */}

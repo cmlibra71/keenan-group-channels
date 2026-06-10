@@ -7,12 +7,16 @@ export function CartSummary({
   total,
   isMember,
   pricesIncludeTax,
+  freeShippingEnabled,
+  freeShippingThreshold = 500,
 }: {
   subtotal: number;
   discount: number;
   total: number;
   isMember?: boolean;
   pricesIncludeTax?: boolean;
+  freeShippingEnabled?: boolean;
+  freeShippingThreshold?: number;
 }) {
   const gstAmount = pricesIncludeTax
     ? Math.round((total / 1.1 * 0.1) * 100) / 100
@@ -44,7 +48,11 @@ export function CartSummary({
         </div>
         <div className="flex justify-between text-sm">
           <span className="text-zinc-500">Shipping</span>
-          <span className="font-medium text-zinc-400">Calculated at checkout</span>
+          {freeShippingEnabled && isMember && total >= freeShippingThreshold ? (
+            <span className="font-medium text-green-600">FREE</span>
+          ) : (
+            <span className="font-medium text-zinc-400">Calculated at checkout</span>
+          )}
         </div>
       </div>
 

@@ -52,6 +52,7 @@ export function ProductPageClient({
   memberPrice,
   memberPriceMap,
   isMember,
+  membershipTeaser,
 }: {
   product: {
     id: number;
@@ -73,6 +74,7 @@ export function ProductPageClient({
   memberPrice?: number | null;
   memberPriceMap?: Record<number, number>;
   isMember?: boolean;
+  membershipTeaser?: { fromPrice: string | null } | null;
 }) {
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
 
@@ -126,6 +128,7 @@ export function ProductPageClient({
           onVariantChange={setSelectedVariantId}
           memberPrice={activeMemberPrice}
           isMember={isMember}
+          membershipTeaser={membershipTeaser}
         />
       </div>
     </div>

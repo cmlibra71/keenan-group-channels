@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { quoteService, quoteItemService, productService, productVariantService, CHANNEL_ID } from "@/lib/store";
+import { quoteService, quoteItemService, productService, productVariantService, CHANNEL_ID, shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
 import { getSession } from "@/lib/auth";
 
@@ -32,6 +32,12 @@ export async function addToQuote(productId: number, variantId?: number | null) {
     const variant = await productVariantService.getById(variantId) as { price: string | null; salePrice: string | null } | null;
     if (variant?.price) listPrice = variant.price;
     if (variant?.salePrice) salePrice = variant.salePrice;
+  }
+
+  // Member-only pricing channels quote at RRP — the shared catalog sale price
+  // is another channel's public price. Staff apply tier pricing on review.
+  if (await shouldSuppressCatalogSalePrice()) {
+    salePrice = null;
   }
 
   const quote = await getOrCreateQuote();

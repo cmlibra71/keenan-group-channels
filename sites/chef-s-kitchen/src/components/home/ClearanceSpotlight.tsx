@@ -51,7 +51,7 @@ export function ClearanceSpotlight({ products }: { products: ClearanceProduct[] 
             href="/clearance"
             className="inline-flex items-center gap-2 bg-amber-500 text-zinc-900 px-5 py-3 rounded-[14px] font-semibold text-sm hover:bg-amber-400 transition-colors shadow-sm w-fit"
           >
-            Shop All Clearance
+            Shop Last Units
             <ChevronRight className="h-4 w-4" />
           </Link>
         </div>

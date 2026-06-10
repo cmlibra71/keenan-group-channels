@@ -6,6 +6,7 @@ import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
 import { getActiveSubscription, getFeatureFlag, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
+import { GstToggle } from "./GstToggle";
 
 type NavCategory = { id: number; name: string; slug: string };
 
@@ -97,6 +98,7 @@ export async function Header({
 
           {/* Actions */}
           <div className="flex items-center gap-4">
+            <GstToggle className="hidden md:inline-flex" />
             <Link href="/search" className="text-zinc-600 hover:text-zinc-900">
               <Search className="h-5 w-5" />
             </Link>
