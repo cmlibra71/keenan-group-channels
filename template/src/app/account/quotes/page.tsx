@@ -3,14 +3,18 @@ import Link from "next/link";
 import { FileText } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { quoteService, CHANNEL_ID } from "@/lib/store";
+import { getQuoteUuid } from "@/lib/quote";
 import { Price } from "@/components/ui/Price";
 
 // QuoteService returns snake_case rows (transformRow convention).
 interface QuoteRecord {
   id: number;
+  uuid: string;
   status: string | null;
+  customer_id: number | null;
   quote_number: string | null;
   quote_amount: string | null;
+  attributes: Record<string, unknown> | null;
   created_at: Date | string | null;
 }
 
@@ -55,10 +59,27 @@ export default async function QuotesPage() {
   const session = await getSession();
   if (!session) redirect("/account");
 
-  const customerQuotes = await quoteService.listForCustomer(
-    session.customerId,
-    CHANNEL_ID
-  ) as unknown as QuoteRecord[];
+  // listForCustomer hides quote_pending entirely, but a SUBMITTED request is
+  // also quote_pending (Zoey lifecycle) — the customer should still see it as
+  // "awaiting review". Fetch all of the customer's quotes and hide only the
+  // in-progress draft (the one the quote panel cookie points at).
+  const currentDraftUuid = await getQuoteUuid();
+  const result = await quoteService.list({
+    page: 1,
+    limit: 100,
+    sort: "created_at",
+    direction: "desc",
+    filters: {
+      customer_id: { type: "eq", value: session.customerId },
+      channel_id: { type: "eq", value: CHANNEL_ID },
+    },
+  });
+  const customerQuotes = (result.data as unknown as QuoteRecord[]).filter(
+    (q) =>
+      q.status !== "quote_pending" ||
+      Boolean(q.attributes?.submitted_at) ||
+      q.uuid !== currentDraftUuid
+  );
 
   if (customerQuotes.length === 0) {
     return (
@@ -121,7 +142,11 @@ export default async function QuotesPage() {
                   }`}>
                     {statusLabels[status] || status}
                   </span>
-                  <Price amount={quote.quote_amount || "0"} className="font-semibold text-zinc-900" />
+                  {parseFloat(quote.quote_amount || "0") > 0 ? (
+                    <Price amount={quote.quote_amount || "0"} className="font-semibold text-zinc-900" />
+                  ) : (
+                    <span className="text-sm font-medium text-zinc-500">To be quoted</span>
+                  )}
                 </div>
               </div>
               <p className="text-sm text-zinc-500">

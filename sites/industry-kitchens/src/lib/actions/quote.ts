@@ -121,11 +121,15 @@ export async function submitQuote(notes?: string) {
 
   // Attach customer identity + notes. The quote stays in `quote_pending`
   // (Zoey lifecycle): the sales team reviews it in the portal and sends
-  // pricing back via markSent → quote_available.
+  // pricing back via markSent → quote_available. The submitted_at attribute
+  // distinguishes a customer-submitted request from an in-progress draft
+  // (both share the quote_pending status).
+  const existingAttributes = (quote.attributes ?? {}) as Record<string, unknown>;
   await quoteService.update(quote.id, {
     customerId: session.customerId,
     email: session.email,
     customerNotes: notes || null,
+    attributes: { ...existingAttributes, submitted_at: new Date().toISOString() },
   });
   await clearQuoteUuid();
 
