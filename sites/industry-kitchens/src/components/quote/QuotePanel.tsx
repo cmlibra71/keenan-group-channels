@@ -51,6 +51,13 @@ export function QuotePanel() {
 
   const items = (quote?.items ?? []) as unknown as QuoteItemRow[];
   const subtotal = parseFloat(((quote as Record<string, unknown> | null)?.base_amount as string | undefined) ?? "0");
+  // Lines without a price are quoted by the sales team — reflect that in the
+  // footer instead of implying they cost $0.
+  const poaCount = items.filter((i) => {
+    const unit = parseFloat(i.sale_price ?? i.list_price ?? "");
+    return !Number.isFinite(unit) || unit <= 0;
+  }).length;
+  const allPoa = items.length > 0 && poaCount === items.length;
 
   function doSubmit() {
     setIsSubmitting(true);
@@ -175,8 +182,22 @@ export function QuotePanel() {
       <div className="border-t border-zinc-200 px-6 py-4 space-y-3">
         <div className="flex items-center justify-between text-sm">
           <span className="font-medium text-zinc-600">Estimated Total</span>
-          <Price amount={subtotal} className="font-semibold text-zinc-900" />
+          {allPoa ? (
+            <span className="font-semibold text-zinc-900">To be quoted</span>
+          ) : (
+            <Price amount={subtotal} className="font-semibold text-zinc-900" />
+          )}
         </div>
+        {poaCount > 0 && !allPoa && (
+          <p className="text-xs text-zinc-500">
+            + {poaCount} item{poaCount !== 1 ? "s" : ""} to be quoted by our sales team
+          </p>
+        )}
+        {allPoa && (
+          <p className="text-xs text-zinc-500">
+            Our sales team will price {poaCount !== 1 ? "these items" : "this item"} and get back to you.
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <button
             onClick={close}

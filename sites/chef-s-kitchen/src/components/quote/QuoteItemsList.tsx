@@ -72,7 +72,9 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
         <p className="text-xs text-text-muted mt-0.5">
           SKU: {item.variant_sku || item.product_sku || "N/A"}
         </p>
-        <p className="text-sm text-text-secondary mt-1">{isPoa ? "Price on request" : <><Price amount={unitPrice} /> each</>}</p>
+        <p className="text-sm text-text-secondary mt-1">{isPoa ? (
+            <span className="inline-block bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded text-xs font-medium">Requires quote</span>
+          ) : <><Price amount={unitPrice} /> each</>}</p>
       </div>
 
       {/* Quantity controls */}
