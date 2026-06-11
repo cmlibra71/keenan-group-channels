@@ -1,8 +1,10 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
+import Image from "next/image";
+import { Package } from "lucide-react";
 import { getSession } from "@/lib/auth";
-import { quoteService, CHANNEL_ID } from "@/lib/store";
+import { quoteService, productImageService, CHANNEL_ID } from "@/lib/store";
 import { Price } from "@/components/ui/Price";
 
 // QuoteService returns snake_case rows (transformRow convention).
@@ -24,6 +26,7 @@ interface QuoteDetail {
 
 interface QuoteDetailItem {
   id: number;
+  product_id: number;
   quantity: number;
   list_price: string | null;
   sale_price: string | null;
@@ -78,6 +81,17 @@ export default async function QuoteDetailPage({
     notFound();
   }
 
+  // Item thumbnails (quote items don't carry images themselves).
+  const productIds = [...new Set(quote.items.map((i) => i.product_id))];
+  const thumbs = (await productImageService.getThumbnailsForProducts(productIds)) as {
+    productId: number;
+    urlThumbnail: string | null;
+    urlStandard: string | null;
+  }[];
+  const thumbByProduct = new Map(
+    thumbs.map((t) => [t.productId, t.urlThumbnail || t.urlStandard])
+  );
+
   const status = quote.status || "quote_pending";
   // Zoey rule: prices are hidden from the customer while the sales team is
   // still preparing them (quote_pending / open_change_request).
@@ -127,6 +141,21 @@ export default async function QuoteDetailPage({
           const hasPrice = Number.isFinite(unitPrice) && unitPrice > 0;
           return (
             <div key={item.id} className="p-4 flex items-center gap-4">
+              <div className="relative h-16 w-16 flex-shrink-0 border border-border bg-white overflow-hidden">
+                {thumbByProduct.get(item.product_id) ? (
+                  <Image
+                    src={thumbByProduct.get(item.product_id)!}
+                    alt={item.product_name}
+                    fill
+                    sizes="64px"
+                    className="object-contain p-1"
+                  />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center text-text-muted">
+                    <Package className="h-6 w-6" />
+                  </div>
+                )}
+              </div>
               <div className="flex-1 min-w-0">
                 <a
                   href={item.product_slug ? `/products/${item.product_slug}` : "#"}

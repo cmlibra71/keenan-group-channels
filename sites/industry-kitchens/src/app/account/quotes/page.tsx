@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { FileText } from "lucide-react";
+import { FileText, ChevronRight } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { quoteService, CHANNEL_ID } from "@/lib/store";
 import { getQuoteUuid } from "@/lib/quote";
@@ -153,6 +153,10 @@ export default async function QuotesPage() {
                 {itemNames ? `: ${itemNames}` : ""}
                 {itemsList.length > 3 ? "..." : ""}
               </p>
+              <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-zinc-700">
+                View quote
+                <ChevronRight className="h-3.5 w-3.5" />
+              </span>
             </Link>
           );
         })}
