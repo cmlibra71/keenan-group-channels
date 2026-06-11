@@ -126,7 +126,7 @@ export default async function QuotesPage() {
           const status = quote.status || "quote_pending";
 
           return (
-            <div key={quote.id} className="border border-zinc-200 rounded-lg p-6">
+            <Link key={quote.id} href={`/account/quotes/${quote.id}`} className="block border border-zinc-200 rounded-lg p-6 hover:border-zinc-400 hover:shadow-sm transition-all">
               <div className="flex items-center justify-between mb-2">
                 <div>
                   <span className="font-semibold text-zinc-900">
@@ -154,7 +154,7 @@ export default async function QuotesPage() {
                 {itemNames ? `: ${itemNames}` : ""}
                 {itemsList.length > 3 ? "..." : ""}
               </p>
-            </div>
+            </Link>
           );
         })}
       </div>

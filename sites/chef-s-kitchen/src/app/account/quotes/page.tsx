@@ -129,7 +129,7 @@ export default async function QuotesPage() {
           const status = quote.status || "quote_pending";
 
           return (
-            <div key={quote.id} className="card-padded">
+            <Link key={quote.id} href={`/account/quotes/${quote.id}`} className="card-padded block hover:border-accent transition-colors">
               <div className="flex items-center justify-between mb-2">
                 <div>
                   <span className="font-semibold text-text-primary">
@@ -157,7 +157,7 @@ export default async function QuotesPage() {
                 {itemNames ? `: ${itemNames}` : ""}
                 {itemsList.length > 3 ? "..." : ""}
               </p>
-            </div>
+            </Link>
           );
         })}
       </div>
