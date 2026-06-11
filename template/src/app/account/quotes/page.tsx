@@ -5,16 +5,18 @@ import { getSession } from "@/lib/auth";
 import { quoteService, CHANNEL_ID } from "@/lib/store";
 import { Price } from "@/components/ui/Price";
 
+// QuoteService returns snake_case rows (transformRow convention).
 interface QuoteRecord {
   id: number;
   status: string | null;
-  quoteAmount: string | null;
-  createdAt: Date | null;
+  quote_number: string | null;
+  quote_amount: string | null;
+  created_at: Date | string | null;
 }
 
 interface QuoteItemRecord {
   id: number;
-  productName: string;
+  product_name: string;
   quantity: number;
 }
 
@@ -22,13 +24,27 @@ interface QuoteWithItems extends QuoteRecord {
   items: QuoteItemRecord[];
 }
 
+// Zoey-aligned lifecycle statuses (QuoteService QUOTE_STATUSES).
 const statusStyles: Record<string, string> = {
-  submitted: "bg-yellow-100 text-yellow-700",
-  reviewed: "bg-blue-100 text-blue-700",
-  accepted: "bg-green-100 text-green-700",
-  rejected: "bg-red-100 text-red-700",
-  converted: "bg-green-100 text-green-700",
-  expired: "bg-zinc-100 text-zinc-600",
+  quote_pending: "bg-yellow-100 text-yellow-700",
+  quote_available: "bg-blue-100 text-blue-700",
+  open_change_request: "bg-blue-100 text-blue-700",
+  quote_accepted: "bg-green-100 text-green-700",
+  quote_on_hold: "bg-zinc-100 text-zinc-600",
+  converted_to_order: "bg-green-100 text-green-700",
+  quote_expired: "bg-zinc-100 text-zinc-600",
+  quote_cancelled: "bg-red-100 text-red-700",
+};
+
+const statusLabels: Record<string, string> = {
+  quote_pending: "awaiting review",
+  quote_available: "quote ready",
+  open_change_request: "change requested",
+  quote_accepted: "accepted",
+  quote_on_hold: "on hold",
+  converted_to_order: "ordered",
+  quote_expired: "expired",
+  quote_cancelled: "cancelled",
 };
 
 export const metadata = {
@@ -42,7 +58,7 @@ export default async function QuotesPage() {
   const customerQuotes = await quoteService.listForCustomer(
     session.customerId,
     CHANNEL_ID
-  ) as QuoteRecord[];
+  ) as unknown as QuoteRecord[];
 
   if (customerQuotes.length === 0) {
     return (
@@ -84,28 +100,28 @@ export default async function QuotesPage() {
           const totalItems = itemsList.reduce((sum, i) => sum + i.quantity, 0);
           const itemNames = itemsList
             .slice(0, 3)
-            .map((i) => i.productName)
+            .map((i) => i.product_name)
             .join(", ");
-          const status = quote.status || "submitted";
+          const status = quote.status || "quote_pending";
 
           return (
             <div key={quote.id} className="border border-zinc-200 rounded-lg p-6">
               <div className="flex items-center justify-between mb-2">
                 <div>
                   <span className="font-semibold text-zinc-900">
-                    Quote #{quote.id}
+                    Quote #{quote.quote_number || quote.id}
                   </span>
                   <span className="ml-3 text-sm text-zinc-500">
-                    {quote.createdAt ? new Date(quote.createdAt).toLocaleDateString() : ""}
+                    {quote.created_at ? new Date(quote.created_at).toLocaleDateString() : ""}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className={`text-xs font-medium px-2 py-1 rounded-full ${
                     statusStyles[status] || "bg-zinc-100 text-zinc-600"
                   }`}>
-                    {status}
+                    {statusLabels[status] || status}
                   </span>
-                  <Price amount={quote.quoteAmount || "0"} className="font-semibold text-zinc-900" />
+                  <Price amount={quote.quote_amount || "0"} className="font-semibold text-zinc-900" />
                 </div>
               </div>
               <p className="text-sm text-zinc-500">

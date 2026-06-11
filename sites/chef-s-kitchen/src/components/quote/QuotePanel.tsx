@@ -7,7 +7,7 @@ import { getQuote, submitQuote } from "@/lib/actions/quote";
 import { loginFromPanel, registerFromPanel } from "@/lib/actions/account-panel";
 import { GoogleSignInButton } from "@/components/account/GoogleSignInButton";
 import { Price } from "@/components/ui/Price";
-import { QuoteItemsList } from "./QuoteItemsList";
+import { QuoteItemsList, type QuoteItemRow } from "./QuoteItemsList";
 import { usePanelContext } from "@/components/ui/PanelContext";
 
 type QuoteData = Awaited<ReturnType<typeof getQuote>>;
@@ -49,8 +49,8 @@ export function QuotePanel() {
     });
   }, []);
 
-  const items = quote?.items ?? [];
-  const subtotal = parseFloat(quote?.baseAmount ?? "0");
+  const items = (quote?.items ?? []) as unknown as QuoteItemRow[];
+  const subtotal = parseFloat(((quote as Record<string, unknown> | null)?.base_amount as string | undefined) ?? "0");
 
   function doSubmit() {
     setIsSubmitting(true);

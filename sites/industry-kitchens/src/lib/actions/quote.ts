@@ -5,17 +5,20 @@ import { quoteService, quoteItemService, productService, productVariantService, 
 import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
 import { getSession } from "@/lib/auth";
 
+// QuoteService returns snake_case rows (transformRow convention).
+type QuoteRow = { id: number; uuid: string; customer_id?: number | null; [key: string]: unknown };
+
 async function getOrCreateQuote() {
   const uuid = await getQuoteUuid();
 
   if (uuid) {
-    const quote = await quoteService.getByUuid(uuid);
+    const quote = (await quoteService.getByUuid(uuid)) as QuoteRow | null;
     if (quote) return quote;
   }
 
   const quote = await quoteService.create({
     channelId: CHANNEL_ID,
-  }) as { id: number; uuid: string; [key: string]: unknown };
+  }) as QuoteRow;
 
   await setQuoteUuid(quote.uuid);
   return quote;
@@ -44,7 +47,7 @@ export async function addToQuote(productId: number, variantId?: number | null) {
 
   // Pre-link quote to customer if logged in
   const session = await getSession();
-  if (session && !quote.customerId) {
+  if (session && !quote.customer_id) {
     await quoteService.update(quote.id, {
       customerId: session.customerId,
       email: session.email,
@@ -79,7 +82,7 @@ export async function updateQuoteItem(itemId: number, quantity: number) {
   const uuid = await getQuoteUuid();
   if (!uuid) return { error: "No quote" };
 
-  const quote = await quoteService.getByUuid(uuid);
+  const quote = (await quoteService.getByUuid(uuid)) as QuoteRow | null;
   if (!quote) return { error: "Quote not found" };
 
   if (quantity <= 0) {
@@ -100,7 +103,7 @@ export async function getQuote() {
   const uuid = await getQuoteUuid();
   if (!uuid) return null;
 
-  const quote = await quoteService.getByUuid(uuid);
+  const quote = (await quoteService.getByUuid(uuid)) as QuoteRow | null;
   if (!quote) return null;
 
   return quoteService.getWithItems(quote.id);
@@ -110,19 +113,20 @@ export async function submitQuote(notes?: string) {
   const uuid = await getQuoteUuid();
   if (!uuid) return { error: "No quote" };
 
-  const quote = await quoteService.getByUuid(uuid);
+  const quote = (await quoteService.getByUuid(uuid)) as QuoteRow | null;
   if (!quote) return { error: "Quote not found" };
 
   const session = await getSession();
   if (!session) return { error: "login_required" };
 
-  // Attach customer identity to quote
+  // Attach customer identity + notes. The quote stays in `quote_pending`
+  // (Zoey lifecycle): the sales team reviews it in the portal and sends
+  // pricing back via markSent → quote_available.
   await quoteService.update(quote.id, {
     customerId: session.customerId,
     email: session.email,
+    customerNotes: notes || null,
   });
-
-  await quoteService.markSubmitted(quote.id, notes);
   await clearQuoteUuid();
 
   revalidatePath("/", "layout");

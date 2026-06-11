@@ -5,21 +5,22 @@ import { updateQuoteItem, removeQuoteItem } from "@/lib/actions/quote";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { Price } from "@/components/ui/Price";
 
-type QuoteItemRow = {
+// QuoteService returns snake_case rows (transformRow convention).
+export type QuoteItemRow = {
   id: number;
-  productId: number;
-  variantId: number | null;
+  product_id: number;
+  variant_id: number | null;
   quantity: number;
-  listPrice: string;
-  salePrice: string | null;
-  extendedListPrice: string | null;
-  extendedSalePrice: string | null;
-  customerNotes: string | null;
-  productName: string;
-  productSlug: string | null;
-  productSku: string | null;
-  variantSku: string | null;
-  variantOptionName: string | null;
+  list_price: string | null;
+  sale_price: string | null;
+  extended_list_price: string | null;
+  extended_sale_price: string | null;
+  customer_notes: string | null;
+  product_name: string;
+  product_slug: string | null;
+  product_sku: string | null;
+  variant_sku: string | null;
+  variant_option_name: string | null;
 };
 
 export function QuoteItemsList({ items, onMutate }: { items: QuoteItemRow[]; onMutate?: () => void }) {
@@ -35,10 +36,12 @@ export function QuoteItemsList({ items, onMutate }: { items: QuoteItemRow[]; onM
 function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () => void }) {
   const [isPending, startTransition] = useTransition();
 
-  const unitPrice = item.salePrice
-    ? parseFloat(item.salePrice)
-    : parseFloat(item.listPrice);
+  const unitPrice = item.sale_price
+    ? parseFloat(item.sale_price)
+    : parseFloat(item.list_price ?? "");
   const lineTotal = unitPrice * item.quantity;
+  // Zero-priced lines are price-on-application — the sales team quotes them.
+  const isPoa = !Number.isFinite(unitPrice) || unitPrice <= 0;
 
   function handleQuantity(newQty: number) {
     startTransition(async () => {
@@ -58,18 +61,18 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
     <div className={`py-4 flex items-center gap-4 ${isPending ? "opacity-50" : ""}`}>
       <div className="flex-1 min-w-0">
         <a
-          href={item.productSlug ? `/products/${item.productSlug}` : "#"}
+          href={item.product_slug ? `/products/${item.product_slug}` : "#"}
           className="text-sm font-medium text-text-primary hover:underline truncate block"
         >
-          {item.productName}
+          {item.product_name}
         </a>
-        {item.variantOptionName && (
-          <p className="text-xs text-text-secondary mt-0.5">{item.variantOptionName}</p>
+        {item.variant_option_name && (
+          <p className="text-xs text-text-secondary mt-0.5">{item.variant_option_name}</p>
         )}
         <p className="text-xs text-text-muted mt-0.5">
-          SKU: {item.variantSku || item.productSku || "N/A"}
+          SKU: {item.variant_sku || item.product_sku || "N/A"}
         </p>
-        <p className="text-sm text-text-secondary mt-1"><Price amount={unitPrice} /> each</p>
+        <p className="text-sm text-text-secondary mt-1">{isPoa ? "Price on request" : <><Price amount={unitPrice} /> each</>}</p>
       </div>
 
       {/* Quantity controls */}
@@ -93,7 +96,7 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
 
       {/* Line total */}
       <div className="w-24 text-right">
-        <Price amount={lineTotal} className="text-sm font-semibold text-text-primary" />
+        {isPoa ? <span className="text-sm font-semibold text-text-primary">&mdash;</span> : <Price amount={lineTotal} className="text-sm font-semibold text-text-primary" />}
       </div>
 
       {/* Remove */}
