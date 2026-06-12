@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { ShoppingCart, FileText, Crown } from "lucide-react";
+import { ShoppingCart, FileText, Crown, User } from "lucide-react";
 import { SlidePanel } from "@/components/ui/SlidePanel";
 import { CartPanel } from "@/components/cart/CartPanel";
 import { QuotePanel } from "@/components/quote/QuotePanel";
@@ -31,12 +31,12 @@ export function HeaderClient({
       {/* Quote button */}
       <button
         onClick={() => setQuoteOpen(true)}
-        className="relative text-white/80 hover:text-white transition-colors duration-300"
+        className="relative text-white transition-colors duration-200 hover:text-white/80"
         aria-label="Open quote"
       >
-        <FileText className="h-[1.125rem] w-[1.125rem]" strokeWidth={1.5} />
+        <FileText className="h-[22px] w-[22px]" strokeWidth={1.7} />
         {quoteCount > 0 && (
-          <span className="absolute -top-2 -right-2 bg-white text-brand text-[10px] font-medium rounded-full h-4 w-4 flex items-center justify-center">
+          <span className="absolute -top-[7px] -right-[9px] grid h-[17px] min-w-[17px] place-items-center rounded-full bg-member px-0.5 text-[10px] font-bold text-ink-900">
             {quoteCount > 99 ? "99+" : quoteCount}
           </span>
         )}
@@ -45,12 +45,12 @@ export function HeaderClient({
       {/* Cart button */}
       <button
         onClick={() => setCartOpen(true)}
-        className="relative text-white/80 hover:text-white transition-colors duration-300"
+        className="relative text-white transition-colors duration-200 hover:text-white/80"
         aria-label="Open cart"
       >
-        <ShoppingCart className="h-[1.125rem] w-[1.125rem]" strokeWidth={1.5} />
+        <ShoppingCart className="h-[22px] w-[22px]" strokeWidth={1.7} />
         {cartCount > 0 && (
-          <span className="absolute -top-2 -right-2 bg-white text-brand text-[10px] font-medium rounded-full h-4 w-4 flex items-center justify-center">
+          <span className="absolute -top-[7px] -right-[9px] grid h-[17px] min-w-[17px] place-items-center rounded-full bg-member px-0.5 text-[10px] font-bold text-ink-900">
             {cartCount > 99 ? "99+" : cartCount}
           </span>
         )}
@@ -59,9 +59,10 @@ export function HeaderClient({
       {/* Account button */}
       <button
         onClick={() => setAccountOpen(true)}
-        className="hidden sm:flex items-center gap-1.5 text-white/80 hover:text-white text-sm font-medium transition-colors duration-300"
+        className="hidden sm:flex items-center gap-[7px] text-white text-sm font-medium transition-colors duration-200 hover:text-white/80"
         aria-label="Open account"
       >
+        <User className="h-[22px] w-[22px]" strokeWidth={1.7} />
         {isMember && (
           <span className="relative">
             <Crown className="h-3.5 w-3.5 text-member-bright" />

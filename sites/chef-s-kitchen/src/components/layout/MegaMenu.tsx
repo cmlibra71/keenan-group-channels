@@ -10,6 +10,16 @@ import type { MegaMenuNode, MegaMenuFeatured } from "@/lib/store";
  * keyboard operable without JS. Hidden below lg (the MobileNavDrawer takes
  * over).
  */
+/** Design nav uses short department labels ("Cooking", "Food Prep") so the
+ *  bar stays single-line. */
+function shortNavLabel(name: string): string {
+  return name
+    .replace(/\s+Equipment$/i, "")
+    .replace(/\s*&\s*Chemicals$/i, "")
+    .replace(/Preparation$/i, "Prep")
+    .trim();
+}
+
 export function MegaMenu({
   departments,
   featured,
@@ -24,7 +34,7 @@ export function MegaMenu({
           <li>
             <Link
               href="/categories"
-              className="flex h-full items-center gap-2 bg-member px-4 py-[13px] text-[13.5px] font-bold text-ink-900 transition-colors duration-200 hover:bg-member-bright"
+              className="flex h-full items-center gap-2 whitespace-nowrap bg-member px-4 py-[13px] text-[13.5px] font-bold text-ink-900 transition-colors duration-200 hover:bg-member-bright"
             >
               <Menu className="h-4 w-4" strokeWidth={2.2} />
               All Departments
@@ -35,9 +45,9 @@ export function MegaMenu({
             <li key={dept.id} className="group/nav">
               <Link
                 href={`/categories/${dept.slug}`}
-                className="flex h-full items-center gap-1.5 px-4 py-[13px] text-[13.5px] font-semibold text-[#EAF2EC] transition-colors duration-200 group-hover/nav:bg-black/20 group-hover/nav:text-white group-focus-within/nav:bg-black/20"
+                className="flex h-full items-center gap-1.5 whitespace-nowrap px-4 py-[13px] text-[13.5px] font-semibold text-[#EAF2EC] transition-colors duration-200 group-hover/nav:bg-black/20 group-hover/nav:text-white group-focus-within/nav:bg-black/20"
               >
-                {dept.name}
+                {shortNavLabel(dept.name)}
                 {dept.children.length > 0 && (
                   <ChevronDown className="h-3 w-3 opacity-70" strokeWidth={2.5} />
                 )}
@@ -53,7 +63,7 @@ export function MegaMenu({
           <li>
             <Link
               href="/clearance"
-              className="flex h-full items-center gap-1.5 px-3 py-[13px] text-[13px] font-bold text-member-bright transition-colors duration-200 hover:text-member"
+              className="flex h-full items-center gap-1.5 whitespace-nowrap px-3 py-[13px] text-[13px] font-bold text-member-bright transition-colors duration-200 hover:text-member"
             >
               <Star className="h-3.5 w-3.5 fill-current" />
               Last Units
