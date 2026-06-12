@@ -192,7 +192,7 @@ function StarRating({ rating, size = 16 }: { rating: number; size?: number }) {
         <Star
           key={i}
           size={size}
-          className={i <= rating ? "fill-yellow-400 text-yellow-400" : "text-text-muted"}
+          className={i <= rating ? "fill-member text-member" : "text-text-muted"}
         />
       ))}
     </div>
@@ -223,7 +223,7 @@ function StarPicker({
             size={24}
             className={
               i <= (hover || rating)
-                ? "fill-yellow-400 text-yellow-400"
+                ? "fill-member text-member"
                 : "text-text-muted"
             }
           />

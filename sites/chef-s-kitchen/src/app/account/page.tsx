@@ -183,7 +183,7 @@ export default async function AccountPage() {
             href="/account/partner-offers"
             className="flex items-center gap-4 card-interactive"
           >
-            <Gift className="h-8 w-8 text-blue-500" />
+            <Gift className="h-8 w-8 text-accent" />
             <div>
               <h3 className="font-semibold text-text-primary">Partner Offers</h3>
               <p className="text-sm text-text-secondary">Exclusive discounts</p>
@@ -228,7 +228,7 @@ export default async function AccountPage() {
             href="/account/partner-offers"
             className="flex items-center gap-4 card-interactive"
           >
-            <Gift className="h-8 w-8 text-blue-500" />
+            <Gift className="h-8 w-8 text-accent" />
             <div>
               <h3 className="font-semibold text-text-primary">Partner Offers</h3>
               <p className="text-sm text-text-secondary">Exclusive discounts</p>

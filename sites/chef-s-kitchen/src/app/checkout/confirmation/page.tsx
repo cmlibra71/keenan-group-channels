@@ -35,7 +35,7 @@ export default async function ConfirmationPage({
         <div className="mt-6 text-left bg-brand-tint border border-brand-light/40 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <CreditCard className="h-4 w-4 text-brand" />
-            <h3 className="text-sm font-semibold text-green-900">Payment Successful</h3>
+            <h3 className="text-sm font-semibold text-brand-deep">Payment Successful</h3>
           </div>
           <p className="text-sm text-brand-deep">
             Your card payment has been processed successfully. A receipt will be sent to your email.
@@ -44,10 +44,10 @@ export default async function ConfirmationPage({
       )}
 
       {pm === "bank_transfer" && (
-        <div className="mt-6 text-left bg-accent-subtle border border-blue-200 rounded-lg p-4">
+        <div className="mt-6 text-left bg-accent-subtle border border-accent/30 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <Building2 className="h-4 w-4 text-accent" />
-            <h3 className="text-sm font-semibold text-blue-900">Bank Transfer Details</h3>
+            <h3 className="text-sm font-semibold text-accent-dark">Bank Transfer Details</h3>
           </div>
           <p className="text-sm text-accent-dark">
             Please transfer the order total to our bank account. Use your order number <strong>{order}</strong> as the payment reference.

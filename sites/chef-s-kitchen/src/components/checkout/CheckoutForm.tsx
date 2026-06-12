@@ -526,19 +526,19 @@ export function CheckoutForm({
 
                     {/* Bank Transfer details panel */}
                     {method.id === "bank_transfer" && selectedPaymentMethod === "bank_transfer" && method.bankDetails && (
-                      <div className="mt-2 ml-6 p-4 bg-accent-subtle border border-blue-200 rounded-lg">
+                      <div className="mt-2 ml-6 p-4 bg-accent-subtle border border-accent/30 rounded-lg">
                         <p className="text-sm text-accent-dark mb-3">
                           Please transfer the total amount to the account below. Your order will be processed once payment is confirmed.
                         </p>
                         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                           <dt className="text-accent font-medium">Bank</dt>
-                          <dd className="text-blue-900">{method.bankDetails.bankName}</dd>
+                          <dd className="text-accent-dark">{method.bankDetails.bankName}</dd>
                           <dt className="text-accent font-medium">Account Name</dt>
-                          <dd className="text-blue-900">{method.bankDetails.accountName}</dd>
+                          <dd className="text-accent-dark">{method.bankDetails.accountName}</dd>
                           <dt className="text-accent font-medium">BSB</dt>
-                          <dd className="text-blue-900">{method.bankDetails.bsb}</dd>
+                          <dd className="text-accent-dark">{method.bankDetails.bsb}</dd>
                           <dt className="text-accent font-medium">Account No.</dt>
-                          <dd className="text-blue-900">{method.bankDetails.accountNumber}</dd>
+                          <dd className="text-accent-dark">{method.bankDetails.accountNumber}</dd>
                         </dl>
                         {method.bankDetails.reference && (
                           <p className="text-xs text-accent mt-2">

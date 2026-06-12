@@ -126,7 +126,7 @@ export default async function QuoteDetailPage({
       </p>
 
       {hidePrices && (
-        <div className="mb-6 rounded-lg border border-yellow-200 bg-warning-bg px-4 py-3 text-sm text-warning">
+        <div className="mb-6 rounded-lg border border-warning/30 bg-warning-bg px-4 py-3 text-sm text-warning">
           Our sales team is preparing pricing for this quote. We&apos;ll let you
           know as soon as it&apos;s ready.
         </div>
