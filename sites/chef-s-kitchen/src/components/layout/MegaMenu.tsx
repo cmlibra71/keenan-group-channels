@@ -41,7 +41,7 @@ export function MegaMenu({
             </Link>
           </li>
 
-          {departments.slice(0, 7).map((dept) => (
+          {departments.slice(0, 6).map((dept) => (
             <li key={dept.id} className="group/nav">
               <Link
                 href={`/categories/${dept.slug}`}
@@ -49,7 +49,7 @@ export function MegaMenu({
               >
                 {shortNavLabel(dept.name)}
                 {dept.children.length > 0 && (
-                  <ChevronDown className="h-3 w-3 opacity-70" strokeWidth={2.5} />
+                  <ChevronDown className="h-[11px] w-[11px] opacity-70" strokeWidth={2} />
                 )}
               </Link>
 
@@ -66,7 +66,7 @@ export function MegaMenu({
               className="flex h-full items-center gap-1.5 whitespace-nowrap px-3 py-[13px] text-[13px] font-bold text-member-bright transition-colors duration-200 hover:text-member"
             >
               <Star className="h-3.5 w-3.5 fill-current" />
-              Last Units
+              Clearance
             </Link>
           </li>
         </ul>

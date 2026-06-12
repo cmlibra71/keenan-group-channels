@@ -61,10 +61,10 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
               />
             </Link>
 
-            {/* Search — centred glass pill (design .cd-search: 44px, white/16, blur) */}
+            {/* Search — centred glass pill (design .cd-search) */}
             <div className="hidden flex-1 justify-center md:flex">
-              <div className="w-full max-w-[560px] [&_input]:h-11 [&_input]:rounded-full [&_input]:border-white/30 [&_input]:bg-white/15 [&_input]:backdrop-blur-[4px] [&_input]:pl-11 [&_input]:text-sm [&_input]:text-white [&_input]:placeholder-white/80 [&_input]:focus:border-white/60 [&_input]:focus:ring-white/40 [&_svg]:!text-white/85 [&_svg]:left-4">
-                <SearchTypeahead inline />
+              <div className="w-full max-w-[560px]">
+                <SearchTypeahead inline variant="masthead" />
               </div>
             </div>
 

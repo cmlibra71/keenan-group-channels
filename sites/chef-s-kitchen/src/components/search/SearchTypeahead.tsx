@@ -25,7 +25,7 @@ interface SearchResponse {
   estimatedTotalHits: number;
 }
 
-export function SearchTypeahead({ defaultValue, inline }: { defaultValue?: string; inline?: boolean }) {
+export function SearchTypeahead({ defaultValue, inline, variant }: { defaultValue?: string; inline?: boolean; variant?: "masthead" }) {
   const router = useRouter();
   const [query, setQuery] = useState(defaultValue || "");
   const [results, setResults] = useState<SearchResponse | null>(null);
@@ -163,9 +163,22 @@ export function SearchTypeahead({ defaultValue, inline }: { defaultValue?: strin
       {/* Search Input */}
       <div className="relative">
         {isLoading ? (
-          <Loader2 className={`absolute left-3 top-1/2 -translate-y-1/2 text-text-muted animate-spin ${inline ? "h-4 w-4" : "h-5 w-5"}`} />
+          <Loader2
+            className={`absolute top-1/2 -translate-y-1/2 animate-spin ${
+              variant === "masthead"
+                ? "left-4 z-10 h-[17px] w-[17px] text-white/85"
+                : `left-3 text-text-muted ${inline ? "h-4 w-4" : "h-5 w-5"}`
+            }`}
+          />
         ) : (
-          <Search className={`absolute left-3 top-1/2 -translate-y-1/2 text-text-muted ${inline ? "h-4 w-4" : "h-5 w-5"}`} strokeWidth={1.5} />
+          <Search
+            className={`absolute top-1/2 -translate-y-1/2 ${
+              variant === "masthead"
+                ? "left-4 z-10 h-[17px] w-[17px] text-white/85"
+                : `left-3 text-text-muted ${inline ? "h-4 w-4" : "h-5 w-5"}`
+            }`}
+            strokeWidth={variant === "masthead" ? 2 : 1.5}
+          />
         )}
         <input
           ref={inputRef}
@@ -180,7 +193,13 @@ export function SearchTypeahead({ defaultValue, inline }: { defaultValue?: strin
           }}
           onKeyDown={handleKeyDown}
           placeholder="Search products..."
-          className={inline ? "w-full pl-10 pr-10 py-2 text-sm border border-border focus:border-text-primary focus:outline-none" : "w-full pl-10 pr-10 py-3 input-search"}
+          className={
+            variant === "masthead"
+              ? "h-11 w-full rounded-full border border-white/[0.32] bg-white/[0.16] pl-11 pr-10 text-sm text-white placeholder-white/80 backdrop-blur-[4px] focus:border-white/60 focus:outline-none"
+              : inline
+                ? "w-full pl-10 pr-10 py-2 text-sm border border-border focus:border-text-primary focus:outline-none"
+                : "w-full pl-10 pr-10 py-3 input-search"
+          }
           autoFocus={!inline}
           autoComplete="off"
         />
@@ -193,7 +212,7 @@ export function SearchTypeahead({ defaultValue, inline }: { defaultValue?: strin
               setIsOpen(false);
               inputRef.current?.focus();
             }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary"
+            className={`absolute right-3 top-1/2 -translate-y-1/2 ${variant === "masthead" ? "text-white/70 hover:text-white" : "text-text-muted hover:text-text-secondary"}`}
           >
             <X className="h-4 w-4" strokeWidth={1.5} />
           </button>
