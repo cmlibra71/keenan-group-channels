@@ -76,3 +76,19 @@ export async function getListingMemberPrices(
   if (!customerGroupId) return {};
   return getMemberPriceMap(products.map((p) => p.id), customerGroupId);
 }
+
+export interface ListingPricing {
+  memberPriceMap: Record<number, number>;
+  isMember: boolean;
+  planPrice: string | null;
+}
+
+/** One-call pricing bundle for grid pages: map + member state + plan price. */
+export async function getListingPricing(products: { id: number }[]): Promise<ListingPricing> {
+  const ctx = await getMemberContext();
+  const memberPriceMap =
+    ctx.customerGroupId && products.length > 0
+      ? await getMemberPriceMap(products.map((p) => p.id), ctx.customerGroupId)
+      : {};
+  return { memberPriceMap, isMember: ctx.isMember, planPrice: ctx.planPrice };
+}

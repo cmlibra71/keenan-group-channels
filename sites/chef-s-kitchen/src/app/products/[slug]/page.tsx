@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, CHANNEL_ID, getProductBreadcrumbs } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, brandService, CHANNEL_ID, getProductBreadcrumbs } from "@/lib/store";
 import { getMemberContext } from "@/lib/member";
 import { ChevronRight } from "lucide-react";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
@@ -20,10 +20,13 @@ export default async function ProductPage({
     notFound();
   }
 
-  const [reviewsRaw, attachmentsRaw, relatedProducts] = await Promise.all([
+  const [reviewsRaw, attachmentsRaw, relatedProducts, brandRow] = await Promise.all([
     getProductReviews(product.id),
     getProductAttachments(product.id),
     getRelatedProducts(product.id, product.categoryIds ?? []),
+    product.brandId != null
+      ? (brandService.getById(product.brandId) as Promise<{ name?: string | null; slug?: string | null } | null>)
+      : Promise.resolve(null),
   ]);
 
   // Breadcrumb trail scoped to this channel's own category tree. A product's
@@ -75,6 +78,61 @@ export default async function ProductPage({
     created_at: string | Date | null;
   }[];
 
+  const reviewSummary =
+    reviews.length > 0
+      ? {
+          avg: reviews.reduce((s, r) => s + (r.rating ?? 0), 0) / reviews.length,
+          count: reviews.length,
+        }
+      : null;
+
+  // Product + Offer + BreadcrumbList structured data. The Offer price is the
+  // visitor's state (member or RRP) expressed INC GST for Google Shopping.
+  const offerExPrice = isMember && memberPrice != null ? memberPrice : parseFloat(product.price);
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Product",
+        name: product.name,
+        sku: product.sku ?? undefined,
+        brand: brandRow?.name ? { "@type": "Brand", name: brandRow.name } : undefined,
+        image: product.images?.[0]?.urlStandard ?? undefined,
+        offers:
+          Number.isFinite(offerExPrice) && offerExPrice > 0
+            ? {
+                "@type": "Offer",
+                priceCurrency: "AUD",
+                price: (offerExPrice * 1.1).toFixed(2),
+                availability:
+                  (product.availability ?? "available") === "available"
+                    ? "https://schema.org/InStock"
+                    : "https://schema.org/OutOfStock",
+                url: `https://chefsdepot.com.au/products/${product.urlPath}`,
+              }
+            : undefined,
+        ...(reviewSummary
+          ? {
+              aggregateRating: {
+                "@type": "AggregateRating",
+                ratingValue: reviewSummary.avg.toFixed(1),
+                reviewCount: reviewSummary.count,
+              },
+            }
+          : {}),
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: breadcrumbs.map((b, i) => ({
+          "@type": "ListItem",
+          position: i + 1,
+          name: b.name,
+          item: `https://chefsdepot.com.au/categories/${b.slug}`,
+        })),
+      },
+    ],
+  };
+
   const attachments = attachmentsRaw as {
     id: number;
     fileName: string;
@@ -86,6 +144,10 @@ export default async function ProductPage({
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       {/* Breadcrumbs */}
       {breadcrumbs.length > 0 ? (
         <nav className="flex flex-wrap items-center gap-1.5 text-sm text-text-muted mb-6">
@@ -125,7 +187,26 @@ export default async function ProductPage({
         memberPriceMap={memberPriceMap}
         isMember={isMember}
         membershipTeaser={membershipTeaser}
+        brandName={brandRow?.name ?? null}
+        reviewSummary={reviewSummary}
       />
+
+      {/* Brand / category cross-links (design system) */}
+      <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2">
+        {brandRow?.name && brandRow?.slug && (
+          <Link href={`/brands/${brandRow.slug}`} className="btn-ghost text-[13px]">
+            See all {brandRow.name} products →
+          </Link>
+        )}
+        {breadcrumbs.length > 0 && (
+          <Link
+            href={`/categories/${breadcrumbs[breadcrumbs.length - 1].slug}`}
+            className="btn-ghost text-[13px]"
+          >
+            More {breadcrumbs[breadcrumbs.length - 1].name} →
+          </Link>
+        )}
+      </div>
 
       {/* Tabbed content section */}
       <ProductTabs

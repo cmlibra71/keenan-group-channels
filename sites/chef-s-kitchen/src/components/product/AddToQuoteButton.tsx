@@ -7,10 +7,14 @@ export function AddToQuoteButton({
   productId,
   variantId,
   disabled,
+  size,
+  label,
 }: {
   productId: number;
   variantId?: number | null;
   disabled?: boolean;
+  size?: "sm";
+  label?: string;
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -24,9 +28,9 @@ export function AddToQuoteButton({
     <button
       onClick={handleClick}
       disabled={disabled || isPending}
-      className="btn-secondary w-full"
+      className={`btn-secondary w-full ${size === "sm" ? "btn-sm" : ""}`}
     >
-      {isPending ? "Adding..." : "Add to Quote"}
+      {isPending ? "Adding..." : label ?? "Add to Quote"}
     </button>
   );
 }

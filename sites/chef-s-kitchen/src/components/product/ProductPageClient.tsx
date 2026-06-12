@@ -53,6 +53,8 @@ export function ProductPageClient({
   memberPriceMap,
   isMember,
   membershipTeaser,
+  brandName,
+  reviewSummary,
 }: {
   product: {
     id: number;
@@ -75,6 +77,8 @@ export function ProductPageClient({
   memberPriceMap?: Record<number, number>;
   isMember?: boolean;
   membershipTeaser?: { fromPrice: string | null } | null;
+  brandName?: string | null;
+  reviewSummary?: { avg: number; count: number } | null;
 }) {
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
 
@@ -95,13 +99,25 @@ export function ProductPageClient({
         variantImageUrl={variantImageUrl}
       />
 
-      {/* Details */}
-      <div>
-        <h1 className="text-3xl font-bold text-zinc-900">{product.name}</h1>
-
-        {product.sku && (
-          <p className="mt-1 text-sm text-zinc-500">SKU: {product.sku}</p>
+      {/* Details — sticky buy box on desktop (design system) */}
+      <div className="lg:sticky lg:top-[150px] lg:self-start">
+        {brandName && (
+          <p className="mb-1 text-[12px] font-bold uppercase tracking-[0.1em] text-accent-dark">{brandName}</p>
         )}
+        <h1 className="heading-serif text-[26px] leading-tight text-text-primary sm:text-3xl">{product.name}</h1>
+
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+          {product.sku && <p className="spec-mono">SKU: {product.sku}</p>}
+          {reviewSummary && reviewSummary.count > 0 && (
+            <p className="flex items-center gap-1 text-[13px] text-text-secondary">
+              <span className="text-member" aria-hidden>
+                {"★".repeat(Math.round(reviewSummary.avg))}
+                <span className="text-steel-300">{"★".repeat(5 - Math.round(reviewSummary.avg))}</span>
+              </span>
+              {reviewSummary.avg.toFixed(1)} · {reviewSummary.count} review{reviewSummary.count === 1 ? "" : "s"}
+            </p>
+          )}
+        </div>
 
         {product.descriptionShort && (
           <div className="mt-4">

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getProducts, getFeatureFlag, getSubcategories } from "@/lib/store";
-import { getListingMemberPrices } from "@/lib/member";
+import { getListingPricing } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 
 const CLEARANCE_ROOT_ID = 233;
@@ -99,7 +99,7 @@ export default async function ClearancePage({
             </p>
           ) : (
             <>
-              <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(products)} />
+              <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} {...(await getListingPricing(products))} clearance />
 
               {totalPages > 1 && (
                 <nav className="mt-10 flex flex-wrap items-center justify-center gap-2">

@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { getBrandBySlug, getProducts, getFeatureFlag } from "@/lib/store";
-import { getListingMemberPrices } from "@/lib/member";
+import { getListingPricing } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 
 export default async function BrandPage({
@@ -57,7 +57,7 @@ export default async function BrandPage({
       {products.length > 0 ? (
         <div>
           <h2 className="text-lg font-semibold text-zinc-900 mb-4">Products</h2>
-          <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(products)} />
+          <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} {...(await getListingPricing(products))} />
         </div>
       ) : (
         <p className="text-zinc-500 text-center py-12">No products from this brand yet.</p>

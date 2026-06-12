@@ -1,5 +1,5 @@
 import { getProducts, getFeatureFlag, CHANNEL_ID, shouldSuppressCatalogSalePrice } from "@/lib/store";
-import { getListingMemberPrices } from "@/lib/member";
+import { getListingPricing } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { SearchTypeahead } from "@/components/search/SearchTypeahead";
 import Link from "next/link";
@@ -300,7 +300,7 @@ export default async function SearchPage({
                   <span className="ml-1">(page {page} of {totalPages})</span>
                 )}
               </p>
-              <ProductGrid products={results.products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(results.products)} />
+              <ProductGrid products={results.products} memberPricingAvailable={memberPricingEnabled} {...(await getListingPricing(results.products))} />
 
               {/* Pagination */}
               {totalPages > 1 && (

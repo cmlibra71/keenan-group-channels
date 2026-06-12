@@ -206,6 +206,16 @@ export const getMegaMenu = unstable_cache(
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "categories", "channel-settings"] }
 );
 
+/** Faceted category listing (design-system category page). Not cached — the
+ *  filter-combination space is huge and the queries are index-friendly. */
+export const getCategoryListing = async (
+  categoryId: number,
+  opts?: Parameters<typeof productService.listCategoryFaceted>[2]
+) => {
+  const result = await productService.listCategoryFaceted(CHANNEL_ID, categoryId, opts);
+  return { ...result, products: await sanitizeCatalogProducts(result.products) };
+};
+
 export const getCategoryBySlug = (slug: string) => unstable_cache(
   async () => categoryService.getBySlug(slug, CHANNEL_ID),
   [`category-slug-${CHANNEL_ID}-${slug}`],

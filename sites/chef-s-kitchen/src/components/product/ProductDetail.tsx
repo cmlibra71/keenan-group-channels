@@ -6,6 +6,8 @@ import { AddToCartButton } from "./AddToCartButton";
 import { AddToQuoteButton } from "./AddToQuoteButton";
 import { OptionSelector } from "./OptionSelector";
 import { Price } from "@/components/ui/Price";
+import { PriceBlock } from "@/components/ui/PriceBlock";
+import { Minus, Plus, Truck, ShieldCheck, PackageCheck } from "lucide-react";
 
 type Variant = {
   id: number;
@@ -84,6 +86,7 @@ export function ProductDetail({
   membershipTeaser?: { fromPrice: string | null } | null;
 }) {
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
+  const [quantity, setQuantity] = useState(1);
   const [selectedOptions, setSelectedOptions] = useState<Record<number, number>>({});
 
   const useGroupedMode = options.length > 0 && variantOptionMappings.length > 0;
@@ -191,62 +194,31 @@ export function ProductDetail({
 
   return (
     <div>
-      {/* Price */}
-      {isMember && memberPrice != null && displayPrice > 0 && memberPrice < (displaySalePrice ?? displayPrice) ? (
-        /* Member view: standard struck through, member price prominent with savings */
-        <div className="mt-4">
-          <div className="flex items-baseline gap-2">
-            <span className="text-xl text-text-muted line-through">
-              <Price amount={displaySalePrice ?? displayPrice} gst />
-            </span>
-            <span className="text-sm text-text-muted">(Standard)</span>
+      {/* ═══ Pricing card — gold member border ties price to membership ═══ */}
+      <div className="mt-5 rounded-[12px] border border-border border-l-4 border-l-member bg-steel-50 p-5">
+        {displayPrice === 0 ? (
+          <div>
+            <p className="text-2xl font-bold text-text-primary">Call for Price</p>
+            <p className="mt-1 text-[13px] text-text-secondary">
+              Add this item to a quote and our sales team will price it for you.
+            </p>
           </div>
-          <div className="mt-1 flex flex-wrap items-baseline gap-2">
-            <Price amount={memberPrice} gst className="text-3xl font-bold text-accent-dark" />
-            <span className="text-sm font-semibold text-accent-dark">
-              (Member Price, Save <Price amount={(displaySalePrice ?? displayPrice) - memberPrice} gst />)
-            </span>
-          </div>
-        </div>
-      ) : (
-        <div className="mt-4 flex items-center gap-3">
-          {displayPrice === 0 ? (
-            <span className="text-2xl font-bold text-text-primary">Call for Price</span>
-          ) : displaySalePrice ? (
-            <>
-              <Price amount={displaySalePrice} className="text-3xl font-bold text-red-600" gst showGstLabel />
-              <span className="text-xl text-text-muted line-through">
-                <Price amount={displayPrice} gst />
-              </span>
-            </>
-          ) : (
-            <Price amount={displayPrice} className="text-3xl font-bold text-text-primary" gst showGstLabel />
-          )}
-        </div>
-      )}
-
-      {/* Membership teaser — generic pitch only; the exact member price is
-          reserved for active subscribers. */}
-      {!isMember && membershipTeaser && displayPrice > 0 && (
-        <Link
-          href="/membership"
-          className="mt-3 block border border-accent/30 bg-accent/5 p-3 hover:bg-accent-subtle transition-colors"
-        >
-          <p className="text-sm font-semibold text-accent-dark">Members save 10&ndash;25% off retail</p>
-          <p className="text-xs text-accent mt-1">
-            Plus prize draw entries, exclusive partner discounts &amp; priority support
-          </p>
-          <span className="text-xs font-semibold text-accent-dark mt-1 inline-block">
-            {membershipTeaser.fromPrice ? <>Join from ${membershipTeaser.fromPrice}/month &rarr;</> : <>Join now &rarr;</>}
-          </span>
-        </Link>
-      )}
+        ) : (
+          <PriceBlock
+            rrp={displaySalePrice ?? displayPrice}
+            memberPrice={memberPrice}
+            isMember={isMember}
+            planPrice={membershipTeaser?.fromPrice}
+            size="pdp"
+          />
+        )}
+      </div>
 
       {/* Bulk Pricing Tiers */}
       {bulkPricing.length > 0 && displayPrice > 0 && (
         <div className="mt-4">
           <h3 className="text-sm font-semibold text-text-body mb-2">Bulk Pricing</h3>
-          <div className="border border-border overflow-hidden">
+          <div className="overflow-hidden rounded-[12px] border border-border">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-surface-primary text-text-secondary">
@@ -281,7 +253,7 @@ export function ProductDetail({
 
       {/* Grouped Option Selectors */}
       {useGroupedMode && (
-        <div className="mt-6 border border-border bg-surface-primary p-5">
+        <div className="mt-6 rounded-[12px] border border-border bg-surface-primary p-5">
           <h3 className="text-sm font-semibold text-text-primary mb-4">Configure</h3>
           <div className="space-y-5">
             {options.map((option) => (
@@ -298,19 +270,94 @@ export function ProductDetail({
         </div>
       )}
 
-      {/* Add to Cart / Quote */}
-      <div className="mt-8 space-y-3">
-        <AddToCartButton
-          productId={productId}
-          variantId={useGroupedMode ? (matchedVariant?.id ?? null) : selectedVariantId}
-          disabled={!inStock || purchasingDisabled || !allOptionsSelected || displayPrice === 0}
-        />
-        <AddToQuoteButton
-          productId={productId}
-          variantId={useGroupedMode ? (matchedVariant?.id ?? null) : selectedVariantId}
-          disabled={useGroupedMode && !allOptionsSelected}
-        />
+      {/* ═══ Qty + dual CTAs (design buy row) ═══ */}
+      <div className="mt-6 flex flex-wrap items-stretch gap-3">
+        {displayPrice > 0 && (
+          <div className="flex items-center rounded-btn border border-border-strong bg-white">
+            <button
+              type="button"
+              onClick={() => setQuantity(Math.max(1, quantity - 1))}
+              aria-label="Decrease quantity"
+              className="px-3 py-3 text-text-secondary transition-colors hover:text-text-primary"
+            >
+              <Minus className="h-3.5 w-3.5" />
+            </button>
+            <span className="w-8 text-center text-sm font-semibold">{quantity}</span>
+            <button
+              type="button"
+              onClick={() => setQuantity(quantity + 1)}
+              aria-label="Increase quantity"
+              className="px-3 py-3 text-text-secondary transition-colors hover:text-text-primary"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row">
+          {displayPrice > 0 ? (
+            <>
+              <AddToCartButton
+                productId={productId}
+                variantId={useGroupedMode ? (matchedVariant?.id ?? null) : selectedVariantId}
+                quantity={quantity}
+                disabled={!inStock || purchasingDisabled || !allOptionsSelected}
+              />
+              <AddToQuoteButton
+                productId={productId}
+                variantId={useGroupedMode ? (matchedVariant?.id ?? null) : selectedVariantId}
+                disabled={useGroupedMode && !allOptionsSelected}
+              />
+            </>
+          ) : (
+            <AddToQuoteButton
+              productId={productId}
+              variantId={useGroupedMode ? (matchedVariant?.id ?? null) : selectedVariantId}
+              disabled={useGroupedMode && !allOptionsSelected}
+              label="Add to Quote — request pricing"
+            />
+          )}
+        </div>
       </div>
+      {!inStock && displayPrice > 0 && (
+        <p className="mt-2 text-[13px] font-semibold text-sale">Out of stock — add to a quote and we'll confirm availability.</p>
+      )}
+
+      {/* ═══ Delivery / warranty / stock trust row ═══ */}
+      <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-4 text-[13px] text-text-secondary">
+        <span className="flex items-center gap-1.5">
+          <Truck className="h-4 w-4 text-accent" strokeWidth={1.7} />
+          Australia-wide delivery
+        </span>
+        <span className="flex items-center gap-1.5">
+          <ShieldCheck className="h-4 w-4 text-accent" strokeWidth={1.7} />
+          Manufacturer warranty
+        </span>
+        <span className="flex items-center gap-1.5">
+          <PackageCheck className={`h-4 w-4 ${inStock ? "text-brand" : "text-steel-400"}`} strokeWidth={1.7} />
+          {inStock ? "In stock" : "Check availability"}
+        </span>
+      </div>
+
+      {/* ═══ Mobile sticky buy bar ═══ */}
+      {displayPrice > 0 && (
+        <div className="fixed inset-x-0 bottom-0 z-[90] flex items-center justify-between gap-3 border-t border-border bg-white px-4 py-3 shadow-lg lg:hidden">
+          <div className="min-w-0">
+            <Price
+              amount={isMember && memberPrice != null && memberPrice < displayPrice ? memberPrice : (displaySalePrice ?? displayPrice)}
+              gst
+              className="text-lg font-bold text-text-primary"
+            />
+            <span className="ml-1 text-[10px] font-semibold text-steel-400">{isMember && memberPrice != null ? "member" : "ex GST"}</span>
+          </div>
+          <AddToCartButton
+            productId={productId}
+            variantId={useGroupedMode ? (matchedVariant?.id ?? null) : selectedVariantId}
+            quantity={quantity}
+            size="sm"
+            disabled={!inStock || purchasingDisabled || !allOptionsSelected}
+          />
+        </div>
+      )}
     </div>
   );
 }

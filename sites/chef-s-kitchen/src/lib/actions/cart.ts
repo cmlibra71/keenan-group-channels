@@ -22,7 +22,7 @@ async function getOrCreateCart() {
   return cart;
 }
 
-export async function addToCart(productId: number, variantId?: number | null) {
+export async function addToCart(productId: number, variantId?: number | null, quantity: number = 1) {
   // Look up the product price
   const product = await productService.getById(productId) as { price: string; salePrice: string | null } | null;
   if (!product) return { error: "Product not found" };
@@ -79,7 +79,7 @@ export async function addToCart(productId: number, variantId?: number | null) {
   } | null;
 
   if (existing) {
-    const newQty = existing.quantity + 1;
+    const newQty = existing.quantity + Math.max(1, quantity);
     await cartItemService.updateForParent(cart.id, existing.id, {
       quantity: newQty,
     });
@@ -87,7 +87,7 @@ export async function addToCart(productId: number, variantId?: number | null) {
     await cartItemService.createForParent(cart.id, {
       productId,
       variantId: variantId || null,
-      quantity: 1,
+      quantity: Math.max(1, quantity),
       listPrice,
       salePrice,
     });

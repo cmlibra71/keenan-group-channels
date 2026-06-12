@@ -7,16 +7,22 @@ export function AddToCartButton({
   productId,
   variantId,
   disabled,
+  size,
+  label,
+  quantity,
 }: {
   productId: number;
   variantId?: number | null;
   disabled?: boolean;
+  size?: "sm";
+  label?: string;
+  quantity?: number;
 }) {
   const [isPending, startTransition] = useTransition();
 
   function handleClick() {
     startTransition(async () => {
-      await addToCart(productId, variantId);
+      await addToCart(productId, variantId, quantity ?? 1);
     });
   }
 
@@ -24,9 +30,9 @@ export function AddToCartButton({
     <button
       onClick={handleClick}
       disabled={disabled || isPending}
-      className="btn-primary w-full"
+      className={`btn-primary w-full ${size === "sm" ? "btn-sm" : ""}`}
     >
-      {isPending ? "Adding..." : "Add to Cart"}
+      {isPending ? "Adding..." : label ?? "Add to Cart"}
     </button>
   );
 }

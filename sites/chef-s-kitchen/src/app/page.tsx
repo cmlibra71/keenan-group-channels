@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Crown, ArrowRight, ChevronRight } from "lucide-react";
 import { getProducts, getSiteConfig, getTopCategories, getFeatureFlag, getSubscriptionPlans, getUpcomingDraws, getBrandsForChannel, prizeService, productChannelAssignmentService, CHANNEL_ID } from "@/lib/store";
-import { getListingMemberPrices } from "@/lib/member";
+import { getListingPricing } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { TrustBar } from "@/components/home/TrustBar";
 import { MembershipCTA } from "@/components/home/MembershipCTA";
@@ -266,7 +266,7 @@ export default async function HomePage() {
             <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
-        <ProductGrid products={featuredProducts} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(featuredProducts)} />
+        <ProductGrid products={featuredProducts} memberPricingAvailable={memberPricingEnabled} {...(await getListingPricing(featuredProducts))} />
       </section>
 
       {/* ═══ Draw Spotlight ═══ */}

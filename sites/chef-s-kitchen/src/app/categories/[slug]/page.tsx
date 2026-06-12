@@ -1,25 +1,47 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronRight, Package } from "lucide-react";
-import { getCategoryBySlug, getProducts, getSubcategories, getCategoryStats, getCategoryBreadcrumbs, getFeatureFlag, getChannelSetting } from "@/lib/store";
-import { getListingMemberPrices } from "@/lib/member";
+import { ChevronRight } from "lucide-react";
+import {
+  getCategoryBySlug,
+  getCategoryListing,
+  getCategoryBreadcrumbs,
+  getFeatureFlag,
+  getChannelSetting,
+} from "@/lib/store";
+import { getListingPricing } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
+import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
 import { RichContent } from "@/components/content/RichContent";
-import { Price } from "@/components/ui/Price";
 
-const PRODUCTS_PER_PAGE = 24;
+const PER_PAGE = 24;
+const MAX_PAGES = 8; // "Load more" renders cumulatively; hard cap keeps queries sane.
 
+type SearchParams = {
+  sub?: string;
+  brand?: string;
+  price?: string;
+  stock?: string;
+  sort?: string;
+  page?: string;
+};
+
+const parseIds = (v?: string) =>
+  v?.split(",").map((x) => parseInt(x, 10)).filter((n) => Number.isFinite(n)) ?? [];
+
+/**
+ * Design-system category (collection) page: branded banner, sticky faceted
+ * filter rail, sort/result toolbar, 3-up grid beside the rail, and
+ * SEO-friendly "Load more" pagination (cumulative ?page=N).
+ */
 export default async function CategoryPage({
   params,
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<SearchParams>;
 }) {
-  const { slug } = await params;
-  const { page: pageParam } = await searchParams;
-  const currentPage = Math.max(1, parseInt(pageParam || "1", 10));
+  const [{ slug }, sp] = await Promise.all([params, searchParams]);
   const category = await getCategoryBySlug(slug);
 
   if (!category) {
@@ -34,170 +56,132 @@ export default async function CategoryPage({
     notFound();
   }
 
-  const [{ products, total }, subcategories, stats, breadcrumbs, memberPricingEnabled] = await Promise.all([
-    getProducts({ categoryId: category.id, limit: PRODUCTS_PER_PAGE, page: currentPage }),
-    getSubcategories(category.id),
-    getCategoryStats(category.id),
+  const page = Math.min(MAX_PAGES, Math.max(1, parseInt(sp.page || "1", 10)));
+  const sort = (["price_asc", "price_desc", "saving", "newest"] as const).includes(
+    sp.sort as never
+  )
+    ? (sp.sort as "price_asc" | "price_desc" | "saving" | "newest")
+    : "relevance";
+
+  const priceBands = (sp.price?.split(",").filter(Boolean) ?? []).filter((b) =>
+    ["lt1000", "1000to3000", "gt3000"].includes(b)
+  ) as ("lt1000" | "1000to3000" | "gt3000")[];
+  const availability = (sp.stock?.split(",").filter(Boolean) ?? []).filter((a) =>
+    ["in_stock", "clearance"].includes(a)
+  ) as ("in_stock" | "clearance")[];
+
+  const [listing, breadcrumbs, memberPricingEnabled] = await Promise.all([
+    getCategoryListing(category.id, {
+      page: 1,
+      limit: PER_PAGE * page, // cumulative for Load more
+      subcategoryIds: parseIds(sp.sub),
+      brandIds: parseIds(sp.brand),
+      priceBands,
+      availability,
+      sort,
+    }),
     getCategoryBreadcrumbs(category.pathIds || []),
     getFeatureFlag("member_pricing_enabled"),
   ]);
 
-  const totalPages = Math.ceil((total ?? products.length) / PRODUCTS_PER_PAGE);
+  const { products, total, facets } = listing;
+  const pricing = await getListingPricing(products);
+  const shown = products.length;
+  const hasMore = shown < total && page < MAX_PAGES;
+
+  const nextPageHref = (() => {
+    const next = new URLSearchParams();
+    if (sp.sub) next.set("sub", sp.sub);
+    if (sp.brand) next.set("brand", sp.brand);
+    if (sp.price) next.set("price", sp.price);
+    if (sp.stock) next.set("stock", sp.stock);
+    if (sp.sort) next.set("sort", sp.sort);
+    next.set("page", String(page + 1));
+    return `/categories/${slug}?${next.toString()}`;
+  })();
 
   return (
-    <div className="container-page section-padding">
-      {/* Breadcrumbs */}
-      <nav className="flex flex-wrap items-center gap-1.5 text-sm text-text-muted mb-6">
-        <Link href="/categories" className="hover:text-text-secondary transition-colors duration-300">Categories</Link>
-        {breadcrumbs.slice(0, -1).map((crumb: { id: number; name: string; slug: string }) => (
-          <span key={crumb.id} className="flex items-center gap-1.5">
-            <ChevronRight className="h-3.5 w-3.5" />
-            <Link href={`/categories/${crumb.slug}`} className="hover:text-text-secondary transition-colors duration-300">{crumb.name}</Link>
-          </span>
-        ))}
-        <ChevronRight className="h-3.5 w-3.5" />
-        <span className="text-text-body">{category.name}</span>
-      </nav>
-
-      {/* Hero section */}
-      <div className="mb-10 flex flex-col lg:flex-row gap-8 items-start bg-surface-primary overflow-hidden">
+    <div>
+      {/* ═══ Branded banner ═══ */}
+      <section className="relative overflow-hidden bg-gradient-to-br from-brand-mid to-brand-deep">
         {category.imageUrl && (
-          <div className="lg:w-2/5 flex-shrink-0 bg-white m-3 p-6 relative min-h-[200px]">
+          <>
             <Image
               src={category.imageUrl}
-              alt={category.name}
+              alt=""
               fill
-              sizes="(max-width: 1024px) 100vw, 40vw"
-              className="object-contain p-6"
+              sizes="100vw"
+              className="object-cover opacity-30"
             />
-          </div>
+            <div className="absolute inset-0 bg-gradient-to-r from-brand-deep/80 to-brand-deep/40" />
+          </>
         )}
-        <div className={`flex-1 py-8 pr-8 text-left ${category.imageUrl ? "" : "pl-8"}`}>
-          <h1 className="text-3xl heading-serif text-text-primary">{category.name}</h1>
+        <div className="container-page relative py-10 lg:py-12">
+          {/* Breadcrumb */}
+          <nav className="mb-3 flex flex-wrap items-center gap-1.5 text-[13px] text-white/70">
+            <Link href="/" className="transition-colors hover:text-white">Home</Link>
+            {breadcrumbs.slice(0, -1).map((crumb: { id: number; name: string; slug: string }) => (
+              <span key={crumb.id} className="flex items-center gap-1.5">
+                <ChevronRight className="h-3 w-3" />
+                <Link href={`/categories/${crumb.slug}`} className="transition-colors hover:text-white">
+                  {crumb.name}
+                </Link>
+              </span>
+            ))}
+            <ChevronRight className="h-3 w-3" />
+            <span className="text-white">{category.name}</span>
+          </nav>
 
+          <h1 className="heading-serif text-3xl text-white sm:text-4xl">{category.name}</h1>
           {category.description && (
             <RichContent
               html={category.description}
               stripStyles
-              className="mt-3 text-text-secondary leading-relaxed prose prose-sm prose-zinc"
+              className="mt-2 max-w-[70ch] text-[15px] leading-relaxed text-white/85"
             />
           )}
+          <p className="mt-3 text-[13px] font-semibold uppercase tracking-[0.1em] text-member-bright">
+            {total} product{total === 1 ? "" : "s"}
+          </p>
+        </div>
+      </section>
 
-          {/* Stats */}
-          <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-text-secondary">
-            <span>{stats.productCount} {stats.productCount === 1 ? "product" : "products"}</span>
-            {stats.minPrice > 0 && stats.maxPrice > 0 && (
-              <span>
-                <Price amount={stats.minPrice} /> &ndash; <Price amount={stats.maxPrice} />
-              </span>
-            )}
-            {stats.brands.length > 0 && (
-              <span>{stats.brands.length} {stats.brands.length === 1 ? "brand" : "brands"}</span>
+      {/* ═══ Rail + grid ═══ */}
+      <div className="container-page py-8">
+        <div className="flex gap-6">
+          <FilterRail facets={facets} />
+
+          <div className="min-w-0 flex-1">
+            {/* Toolbar */}
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-[13px] text-text-secondary">
+                  Showing <b className="text-text-primary">1–{shown}</b> of <b className="text-text-primary">{total}</b>
+                </p>
+                <FilterChips facets={facets} />
+              </div>
+              <SortSelect />
+            </div>
+
+            <ProductGrid
+              products={products}
+              memberPricingAvailable={memberPricingEnabled}
+              {...pricing}
+              eyebrow={category.name}
+              narrow
+            />
+
+            {/* Load more */}
+            {hasMore && (
+              <div className="mt-10 text-center">
+                <Link href={nextPageHref} scroll={false} className="btn-secondary">
+                  Load more ({total - shown} remaining)
+                </Link>
+              </div>
             )}
           </div>
-
-          {/* Brand pills */}
-          {stats.brands.length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {stats.brands.slice(0, 12).map((brand: string) => (
-                <span
-                  key={brand}
-                  className="px-3 py-1 rounded-full bg-white text-xs font-medium text-text-secondary border border-border"
-                >
-                  {brand}
-                </span>
-              ))}
-              {stats.brands.length > 12 && (
-                <span className="px-3 py-1 text-xs text-text-muted">+{stats.brands.length - 12} more</span>
-              )}
-            </div>
-          )}
         </div>
       </div>
-
-      {/* Subcategories */}
-      {subcategories.length > 0 && (
-        <div className="mb-10">
-          <p className="eyebrow mb-3">EXPLORE</p>
-          <h2 className="panel-title mb-4">Subcategories</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {subcategories.map((sub: { id: number; name: string; slug: string; imageUrl?: string | null }) => (
-              <Link
-                key={sub.id}
-                href={`/categories/${sub.slug}`}
-                className="group flex items-center gap-3 border border-border p-3 hover:border-text-primary/30 hover:shadow-sm transition-all duration-300"
-              >
-                {sub.imageUrl ? (
-                  <div className="relative h-12 w-12 flex-shrink-0">
-                    <Image
-                      src={sub.imageUrl}
-                      alt={sub.name}
-                      fill
-                      sizes="48px"
-                      className="object-cover"
-                    />
-                  </div>
-                ) : (
-                  <div className="h-12 w-12 bg-surface-secondary flex items-center justify-center flex-shrink-0">
-                    <Package className="h-5 w-5 text-text-muted" />
-                  </div>
-                )}
-                <span className="text-sm font-medium text-text-body group-hover:text-text-primary line-clamp-2 transition-colors duration-300">
-                  {sub.name}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Products */}
-      {products.length > 0 && (
-        <div>
-          <p className="eyebrow mb-3">PRODUCTS</p>
-          <h2 className="panel-title mb-4">Products</h2>
-          <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(products)} />
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <nav className="mt-10 flex items-center justify-center gap-2">
-              {currentPage > 1 && (
-                <Link
-                  href={`/categories/${slug}?page=${currentPage - 1}`}
-                  className="px-4 py-2 text-sm font-medium border border-border rounded hover:bg-surface-secondary transition-colors"
-                >
-                  Previous
-                </Link>
-              )}
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                <Link
-                  key={p}
-                  href={`/categories/${slug}?page=${p}`}
-                  className={`px-3.5 py-2 text-sm font-medium rounded transition-colors ${
-                    p === currentPage
-                      ? "bg-zinc-900 text-white"
-                      : "border border-border hover:bg-surface-secondary"
-                  }`}
-                >
-                  {p}
-                </Link>
-              ))}
-              {currentPage < totalPages && (
-                <Link
-                  href={`/categories/${slug}?page=${currentPage + 1}`}
-                  className="px-4 py-2 text-sm font-medium border border-border rounded hover:bg-surface-secondary transition-colors"
-                >
-                  Next
-                </Link>
-              )}
-            </nav>
-          )}
-        </div>
-      )}
-
-      {products.length === 0 && subcategories.length === 0 && (
-        <p className="text-text-secondary text-center py-12">No products in this category yet.</p>
-      )}
     </div>
   );
 }
