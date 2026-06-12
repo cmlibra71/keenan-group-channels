@@ -65,7 +65,7 @@ export default async function ProductsPage({
             className={`px-4 py-2 rounded-full text-sm font-medium transition-colors duration-300 ${
               activeFilter === f.key
                 ? "bg-surface-dark text-white"
-                : "bg-surface-secondary text-text-secondary hover:bg-stone-200"
+                : "bg-surface-secondary text-text-secondary hover:bg-steel-200"
             }`}
           >
             {f.label}
@@ -83,7 +83,7 @@ export default async function ProductsPage({
       {totalPages > 1 && (
         <div className="mt-12 flex items-center justify-center gap-2">
           {page > 1 && (
-            <a href={`/products?page=${page - 1}${filterParam}`} className="px-3 py-2 text-sm font-medium bg-surface-secondary text-text-secondary hover:bg-stone-200 transition-colors duration-300">
+            <a href={`/products?page=${page - 1}${filterParam}`} className="px-3 py-2 text-sm font-medium bg-surface-secondary text-text-secondary hover:bg-steel-200 transition-colors duration-300">
               Previous
             </a>
           )}
@@ -98,7 +98,7 @@ export default async function ProductsPage({
                 className={`px-4 py-2 text-sm font-medium transition-colors duration-300 ${
                   p === page
                     ? "bg-surface-dark text-white"
-                    : "bg-surface-secondary text-text-secondary hover:bg-stone-200"
+                    : "bg-surface-secondary text-text-secondary hover:bg-steel-200"
                 }`}
               >
                 {p}
@@ -107,7 +107,7 @@ export default async function ProductsPage({
           )}
 
           {page < totalPages && (
-            <a href={`/products?page=${page + 1}${filterParam}`} className="px-3 py-2 text-sm font-medium bg-surface-secondary text-text-secondary hover:bg-stone-200 transition-colors duration-300">
+            <a href={`/products?page=${page + 1}${filterParam}`} className="px-3 py-2 text-sm font-medium bg-surface-secondary text-text-secondary hover:bg-steel-200 transition-colors duration-300">
               Next
             </a>
           )}

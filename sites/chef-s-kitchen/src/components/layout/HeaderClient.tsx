@@ -36,7 +36,7 @@ export function HeaderClient({
       >
         <FileText className="h-[1.125rem] w-[1.125rem]" strokeWidth={1.5} />
         {quoteCount > 0 && (
-          <span className="absolute -top-2 -right-2 bg-white text-[#45854d] text-[10px] font-medium rounded-full h-4 w-4 flex items-center justify-center">
+          <span className="absolute -top-2 -right-2 bg-white text-brand text-[10px] font-medium rounded-full h-4 w-4 flex items-center justify-center">
             {quoteCount > 99 ? "99+" : quoteCount}
           </span>
         )}
@@ -50,7 +50,7 @@ export function HeaderClient({
       >
         <ShoppingCart className="h-[1.125rem] w-[1.125rem]" strokeWidth={1.5} />
         {cartCount > 0 && (
-          <span className="absolute -top-2 -right-2 bg-white text-[#45854d] text-[10px] font-medium rounded-full h-4 w-4 flex items-center justify-center">
+          <span className="absolute -top-2 -right-2 bg-white text-brand text-[10px] font-medium rounded-full h-4 w-4 flex items-center justify-center">
             {cartCount > 99 ? "99+" : cartCount}
           </span>
         )}
@@ -64,7 +64,7 @@ export function HeaderClient({
       >
         {isMember && (
           <span className="relative">
-            <Crown className="h-3.5 w-3.5 text-amber-300" />
+            <Crown className="h-3.5 w-3.5 text-member-bright" />
             {entryCount != null && entryCount > 0 && (
               <span className="absolute -top-2 -right-3 bg-accent text-white text-[9px] font-medium rounded-full h-3.5 min-w-[14px] flex items-center justify-center px-0.5">
                 {entryCount > 99 ? "99+" : entryCount}

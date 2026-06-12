@@ -220,8 +220,8 @@ export default async function ProductPage({
 
       {/* Related Products */}
       {relatedProducts.length > 0 && (
-        <div className="mt-12 border-t border-zinc-200 pt-8">
-          <h2 className="text-2xl font-bold text-zinc-900 mb-6">Related Products</h2>
+        <div className="mt-12 border-t border-steel-200 pt-8">
+          <h2 className="text-2xl font-bold text-ink-900 mb-6">Related Products</h2>
           <ProductGrid products={relatedProducts} memberPricingAvailable={memberPricingEnabled} />
         </div>
       )}

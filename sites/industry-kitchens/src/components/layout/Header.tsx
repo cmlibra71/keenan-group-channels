@@ -4,12 +4,14 @@ import { Phone, Mail } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
-import { getActiveSubscription, getFeatureFlag, drawEntryService, CHANNEL_ID } from "@/lib/store";
+import { getActiveSubscription, getFeatureFlag, getMegaMenu, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import type { HeaderNavItem, HeaderConfig } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 import { HeaderSearch } from "./HeaderSearch";
 import { GstToggle } from "./GstToggle";
 import { MobileNav } from "./MobileNav";
+import { MegaMenu } from "./MegaMenu";
+import { MobileNavDrawer } from "./MobileNavDrawer";
 
 export async function Header({
   storeName,
@@ -24,7 +26,7 @@ export async function Header({
   nav?: HeaderNavItem[];
   config?: HeaderConfig;
 }) {
-  const [cart, quote] = await Promise.all([getCart(), getQuote()]);
+  const [cart, quote, megaMenu] = await Promise.all([getCart(), getQuote(), getMegaMenu()]);
   const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   const quoteCount = quote?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
 
@@ -109,6 +111,9 @@ export async function Header({
                 entryCount={entryCount}
                 variant="compact"
               />
+              <span className="p-2 text-zinc-700 xl:hidden">
+                <MobileNavDrawer departments={megaMenu.departments} />
+              </span>
               <MobileNav nav={nav} />
             </div>
           </div>
@@ -174,6 +179,9 @@ export async function Header({
           </div>
         </div>
       </div>
+
+      {/* Department nav + mega panels — dark bar below the nav row */}
+      <MegaMenu departments={megaMenu.departments} featured={megaMenu.featured} />
     </header>
   );
 }

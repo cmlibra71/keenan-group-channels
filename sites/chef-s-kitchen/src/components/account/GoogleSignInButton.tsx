@@ -102,7 +102,7 @@ export function GoogleSignInButton({
         <p className="text-center text-sm text-text-secondary mt-2">Signing in...</p>
       )}
       {error && (
-        <p className="text-center text-sm text-red-600 mt-2">{error}</p>
+        <p className="text-center text-sm text-sale mt-2">{error}</p>
       )}
     </div>
   );

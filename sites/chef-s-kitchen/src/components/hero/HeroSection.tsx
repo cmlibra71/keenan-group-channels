@@ -24,7 +24,7 @@ export function HeroSection({
   const planBenefits = plan ? ((plan.benefits as string[]) || []) : [];
 
   return (
-    <section className="relative bg-zinc-900 text-white overflow-hidden" style={{ minHeight: "500px" }}>
+    <section className="relative bg-ink-900 text-white overflow-hidden" style={{ minHeight: "500px" }}>
       {heroImageCount > 0 && (
         <HeroWaveBackground imageCount={heroImageCount} />
       )}
@@ -37,20 +37,20 @@ export function HeroSection({
               <h1 className="text-4xl sm:text-5xl font-bold tracking-tight leading-tight">
                 Professional Kitchen Equipment at Members-Only Prices
               </h1>
-              <p className="mt-4 text-lg text-zinc-300">
+              <p className="mt-4 text-lg text-steel-300">
                 From ${planPrice!.toFixed(2)}/{plan.billingInterval} — unlock exclusive member pricing on everything.
               </p>
               <div className="mt-8 flex flex-col sm:flex-row gap-3">
                 <Link
                   href="/membership"
-                  className="inline-flex items-center justify-center gap-2 bg-amber-500 text-zinc-900 px-6 py-3 rounded-lg font-semibold hover:bg-amber-400 transition-colors"
+                  className="inline-flex items-center justify-center gap-2 bg-member text-ink-900 px-6 py-3 rounded-lg font-semibold hover:bg-member-bright transition-colors"
                 >
                   Join & Save
                   <ArrowRight className="h-4 w-4" />
                 </Link>
                 <Link
                   href="/products"
-                  className="inline-flex items-center justify-center gap-2 border border-zinc-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-zinc-800 transition-colors"
+                  className="inline-flex items-center justify-center gap-2 border border-steel-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-ink-800 transition-colors"
                 >
                   Shop All Products
                 </Link>
@@ -60,12 +60,12 @@ export function HeroSection({
             {/* Right — featured prize or membership card */}
             <div>
               {featuredPrize ? (
-                <Link href="/membership#draws" className="block backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-6 hover:border-amber-500/30 transition-colors shadow-2xl">
-                  <p className="text-amber-400 font-semibold text-sm uppercase tracking-wider mb-3">
+                <Link href="/membership#draws" className="block backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-6 hover:border-member/30 transition-colors shadow-2xl">
+                  <p className="text-member-bright font-semibold text-sm uppercase tracking-wider mb-3">
                     Members-Only Prize Draw
                   </p>
                   <div className="flex items-center gap-4">
-                    <div className="relative h-24 w-24 rounded-lg bg-zinc-700 overflow-hidden shrink-0">
+                    <div className="relative h-24 w-24 rounded-lg bg-ink-700 overflow-hidden shrink-0">
                       {featuredPrize.imageUrl ? (
                         <Image
                           src={featuredPrize.imageUrl}
@@ -76,19 +76,19 @@ export function HeroSection({
                         />
                       ) : (
                         <div className="h-full w-full flex items-center justify-center">
-                          <Crown className="h-8 w-8 text-amber-400/30" />
+                          <Crown className="h-8 w-8 text-member-bright/30" />
                         </div>
                       )}
                     </div>
                     <div>
                       <h3 className="font-semibold text-white">{featuredPrize.name}</h3>
                       {featuredPrize.value && parseFloat(featuredPrize.value) > 0 && (
-                        <p className="text-lg font-bold text-amber-400">
+                        <p className="text-lg font-bold text-member-bright">
                           Valued at ${parseFloat(featuredPrize.value).toLocaleString("en-AU", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                         </p>
                       )}
                       {featuredDraw?.scheduledAt && (
-                        <p className="text-xs text-zinc-400 mt-1">
+                        <p className="text-xs text-steel-400 mt-1">
                           Draw: {new Date(featuredDraw.scheduledAt).toLocaleDateString("en-AU", { day: "numeric", month: "long" })}
                         </p>
                       )}
@@ -97,12 +97,12 @@ export function HeroSection({
                 </Link>
               ) : (
                 <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-6 shadow-2xl">
-                  <Crown className="h-8 w-8 text-amber-400 mb-3" />
+                  <Crown className="h-8 w-8 text-member-bright mb-3" />
                   <h3 className="text-lg font-bold text-white mb-2">Member Benefits</h3>
                   <ul className="space-y-2">
                     {planBenefits.slice(0, 4).map((b, i) => (
-                      <li key={i} className="text-sm text-zinc-300 flex items-center gap-2">
-                        <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" />
+                      <li key={i} className="text-sm text-steel-300 flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-member-bright shrink-0" />
                         {b}
                       </li>
                     ))}
@@ -116,12 +116,12 @@ export function HeroSection({
             <h1 className="text-4xl sm:text-5xl font-bold tracking-tight">
               Welcome to {channel?.name || "our store"}
             </h1>
-            <p className="mt-4 text-lg text-zinc-300 max-w-xl">
+            <p className="mt-4 text-lg text-steel-300 max-w-xl">
               Discover our curated collection of quality products.
             </p>
             <Link
               href="/products"
-              className="mt-8 inline-block bg-white text-zinc-900 px-6 py-3 rounded-lg font-semibold hover:bg-zinc-100 transition-colors"
+              className="mt-8 inline-block bg-white text-ink-900 px-6 py-3 rounded-lg font-semibold hover:bg-steel-100 transition-colors"
             >
               Shop All Products
             </Link>

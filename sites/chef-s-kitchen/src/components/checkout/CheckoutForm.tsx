@@ -302,29 +302,29 @@ export function CheckoutForm({
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
         <div className="lg:col-span-3 space-y-6">
           {/* Contact */}
-          <div className="border border-zinc-200 rounded-lg p-6">
-            <h2 className="text-lg font-semibold text-zinc-900 mb-4">Contact</h2>
+          <div className="border border-steel-200 rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-ink-900 mb-4">Contact</h2>
             <div>
-              <label className="block text-sm font-medium text-zinc-700">Email</label>
+              <label className="block text-sm font-medium text-ink-700">Email</label>
               <input
                 type="email"
                 name="email"
                 required
                 defaultValue={customerEmail}
-                className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+                className="mt-1 block w-full rounded-lg border border-steel-300 px-3 py-2 text-sm focus:border-steel-500 focus:outline-none"
                 placeholder="your@email.com"
               />
             </div>
           </div>
 
           {/* Billing Address */}
-          <div className="border border-zinc-200 rounded-lg p-6">
-            <h2 className="text-lg font-semibold text-zinc-900 mb-4">Billing Address</h2>
+          <div className="border border-steel-200 rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-ink-900 mb-4">Billing Address</h2>
 
             {/* Saved address selector */}
             {savedAddresses.length > 0 && (
               <div className="mb-4">
-                <label className="block text-sm font-medium text-zinc-700 mb-2">
+                <label className="block text-sm font-medium text-ink-700 mb-2">
                   Select an address
                 </label>
                 <div className="space-y-2">
@@ -333,8 +333,8 @@ export function CheckoutForm({
                       key={addr.id}
                       className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
                         selectedAddressId === addr.id
-                          ? "border-zinc-900 bg-zinc-50"
-                          : "border-zinc-200 hover:border-zinc-300"
+                          ? "border-ink-900 bg-steel-50"
+                          : "border-steel-200 hover:border-steel-300"
                       }`}
                     >
                       <input
@@ -346,14 +346,14 @@ export function CheckoutForm({
                         className="mt-0.5"
                       />
                       <div className="text-sm">
-                        <span className="font-medium text-zinc-900">
+                        <span className="font-medium text-ink-900">
                           {addr.firstName} {addr.lastName}
                         </span>
-                        <span className="text-zinc-500 ml-2">
+                        <span className="text-steel-500 ml-2">
                           {addr.address1}, {addr.city} {addr.stateOrProvince} {addr.postalCode}
                         </span>
                         {addr.isDefaultBilling && (
-                          <span className="ml-2 text-xs bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded">
+                          <span className="ml-2 text-xs bg-steel-100 text-steel-500 px-1.5 py-0.5 rounded">
                             Default
                           </span>
                         )}
@@ -363,8 +363,8 @@ export function CheckoutForm({
                   <label
                     className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
                       selectedAddressId === "new"
-                        ? "border-zinc-900 bg-zinc-50"
-                        : "border-zinc-200 hover:border-zinc-300"
+                        ? "border-ink-900 bg-steel-50"
+                        : "border-steel-200 hover:border-steel-300"
                     }`}
                   >
                     <input
@@ -375,7 +375,7 @@ export function CheckoutForm({
                       onChange={() => setSelectedAddressId("new")}
                       className="mt-0.5"
                     />
-                    <span className="text-sm font-medium text-zinc-900">
+                    <span className="text-sm font-medium text-ink-900">
                       Enter a new address
                     </span>
                   </label>
@@ -387,32 +387,32 @@ export function CheckoutForm({
             {(selectedAddressId === "new" || savedAddresses.length === 0) && (
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-zinc-700">First Name</label>
+                  <label className="block text-sm font-medium text-ink-700">First Name</label>
                   <input
                     type="text"
                     name="firstName"
                     required
-                    className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+                    className="mt-1 block w-full rounded-lg border border-steel-300 px-3 py-2 text-sm focus:border-steel-500 focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-zinc-700">Last Name</label>
+                  <label className="block text-sm font-medium text-ink-700">Last Name</label>
                   <input
                     type="text"
                     name="lastName"
                     required
-                    className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+                    className="mt-1 block w-full rounded-lg border border-steel-300 px-3 py-2 text-sm focus:border-steel-500 focus:outline-none"
                   />
                 </div>
                 <div className="col-span-2 relative">
-                  <label className="block text-sm font-medium text-zinc-700">Address</label>
+                  <label className="block text-sm font-medium text-ink-700">Address</label>
                   <input
                     ref={address1Ref}
                     type="text"
                     name="address1"
                     required
                     autoComplete="off"
-                    className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+                    className="mt-1 block w-full rounded-lg border border-steel-300 px-3 py-2 text-sm focus:border-steel-500 focus:outline-none"
                   />
                   {googlePlacesEnabled && (
                     <AddressAutocomplete
@@ -422,53 +422,53 @@ export function CheckoutForm({
                   )}
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-zinc-700">
+                  <label className="block text-sm font-medium text-ink-700">
                     Apartment, suite, etc. (optional)
                   </label>
                   <input
                     type="text"
                     name="address2"
-                    className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+                    className="mt-1 block w-full rounded-lg border border-steel-300 px-3 py-2 text-sm focus:border-steel-500 focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-zinc-700">City</label>
+                  <label className="block text-sm font-medium text-ink-700">City</label>
                   <input
                     ref={cityRef}
                     type="text"
                     name="city"
                     required
-                    className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+                    className="mt-1 block w-full rounded-lg border border-steel-300 px-3 py-2 text-sm focus:border-steel-500 focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-zinc-700">State / Province</label>
+                  <label className="block text-sm font-medium text-ink-700">State / Province</label>
                   <input
                     ref={stateRef}
                     type="text"
                     name="state"
-                    className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+                    className="mt-1 block w-full rounded-lg border border-steel-300 px-3 py-2 text-sm focus:border-steel-500 focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-zinc-700">Postal Code</label>
+                  <label className="block text-sm font-medium text-ink-700">Postal Code</label>
                   <input
                     ref={postalCodeRef}
                     type="text"
                     name="postalCode"
                     required
                     onChange={(e) => handlePostcodeChange(e.target.value)}
-                    className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+                    className="mt-1 block w-full rounded-lg border border-steel-300 px-3 py-2 text-sm focus:border-steel-500 focus:outline-none"
                   />
                 </div>
                 {countries.length > 0 && (
                   <div>
-                    <label className="block text-sm font-medium text-zinc-700">Country</label>
+                    <label className="block text-sm font-medium text-ink-700">Country</label>
                     <select
                       ref={countryRef}
                       name="country"
                       defaultValue={countries[0]?.code || "AU"}
-                      className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none bg-white"
+                      className="mt-1 block w-full rounded-lg border border-steel-300 px-3 py-2 text-sm focus:border-steel-500 focus:outline-none bg-white"
                     >
                       {countries.map((c) => (
                         <option key={c.code} value={c.code}>
@@ -497,8 +497,8 @@ export function CheckoutForm({
           </div>
 
           {/* Payment Method */}
-          <div className="border border-zinc-200 rounded-lg p-6">
-            <h2 className="text-lg font-semibold text-zinc-900 mb-4">Payment Method</h2>
+          <div className="border border-steel-200 rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-ink-900 mb-4">Payment Method</h2>
             {paymentMethods.length > 0 ? (
               <div className="space-y-3">
                 {paymentMethods.map((method) => (
@@ -506,8 +506,8 @@ export function CheckoutForm({
                     <label
                       className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
                         selectedPaymentMethod === method.id
-                          ? "border-zinc-900 bg-zinc-50"
-                          : "border-zinc-200 hover:border-zinc-300"
+                          ? "border-ink-900 bg-steel-50"
+                          : "border-steel-200 hover:border-steel-300"
                       }`}
                     >
                       <input
@@ -519,29 +519,29 @@ export function CheckoutForm({
                         className="mt-0.5"
                       />
                       <div>
-                        <span className="text-sm font-medium text-zinc-900">{method.name}</span>
-                        <p className="text-xs text-zinc-500 mt-0.5">{method.description}</p>
+                        <span className="text-sm font-medium text-ink-900">{method.name}</span>
+                        <p className="text-xs text-steel-500 mt-0.5">{method.description}</p>
                       </div>
                     </label>
 
                     {/* Bank Transfer details panel */}
                     {method.id === "bank_transfer" && selectedPaymentMethod === "bank_transfer" && method.bankDetails && (
-                      <div className="mt-2 ml-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                        <p className="text-sm text-blue-800 mb-3">
+                      <div className="mt-2 ml-6 p-4 bg-accent-subtle border border-blue-200 rounded-lg">
+                        <p className="text-sm text-accent-dark mb-3">
                           Please transfer the total amount to the account below. Your order will be processed once payment is confirmed.
                         </p>
                         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                          <dt className="text-blue-600 font-medium">Bank</dt>
+                          <dt className="text-accent font-medium">Bank</dt>
                           <dd className="text-blue-900">{method.bankDetails.bankName}</dd>
-                          <dt className="text-blue-600 font-medium">Account Name</dt>
+                          <dt className="text-accent font-medium">Account Name</dt>
                           <dd className="text-blue-900">{method.bankDetails.accountName}</dd>
-                          <dt className="text-blue-600 font-medium">BSB</dt>
+                          <dt className="text-accent font-medium">BSB</dt>
                           <dd className="text-blue-900">{method.bankDetails.bsb}</dd>
-                          <dt className="text-blue-600 font-medium">Account No.</dt>
+                          <dt className="text-accent font-medium">Account No.</dt>
                           <dd className="text-blue-900">{method.bankDetails.accountNumber}</dd>
                         </dl>
                         {method.bankDetails.reference && (
-                          <p className="text-xs text-blue-600 mt-2">
+                          <p className="text-xs text-accent mt-2">
                             Reference: {method.bankDetails.reference}
                           </p>
                         )}
@@ -550,8 +550,8 @@ export function CheckoutForm({
 
                     {/* Net Terms info panel */}
                     {method.id === "net_terms" && selectedPaymentMethod === "net_terms" && (
-                      <div className="mt-2 ml-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                        <p className="text-sm text-amber-800">
+                      <div className="mt-2 ml-6 p-4 bg-member-bg border border-member/40 rounded-lg">
+                        <p className="text-sm text-member-text">
                           Your order will be placed immediately. An invoice with Net {method.netTermsDays ?? 30} payment terms will be sent to your email.
                         </p>
                       </div>
@@ -559,16 +559,16 @@ export function CheckoutForm({
 
                     {/* Stripe card element */}
                     {method.id === "stripe" && selectedPaymentMethod === "stripe" && stripePublishableKey && (
-                      <div className="mt-2 ml-6 p-4 bg-zinc-50 border border-zinc-200 rounded-lg">
-                        <label className="block text-sm font-medium text-zinc-700 mb-2">
+                      <div className="mt-2 ml-6 p-4 bg-steel-50 border border-steel-200 rounded-lg">
+                        <label className="block text-sm font-medium text-ink-700 mb-2">
                           Card details
                         </label>
                         <div
                           ref={cardContainerRef}
-                          className="border border-zinc-300 rounded-lg px-4 py-3 bg-white focus-within:ring-2 focus-within:ring-zinc-900 focus-within:border-zinc-900 transition-shadow"
+                          className="border border-steel-300 rounded-lg px-4 py-3 bg-white focus-within:ring-2 focus-within:ring-ink-900 focus-within:border-ink-900 transition-shadow"
                         />
                         {stripeError && (
-                          <p className="text-sm text-red-600 mt-2">{stripeError}</p>
+                          <p className="text-sm text-sale mt-2">{stripeError}</p>
                         )}
                       </div>
                     )}
@@ -576,7 +576,7 @@ export function CheckoutForm({
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-steel-500">
                 No payment methods configured. Orders will be created with payment status &ldquo;pending&rdquo;.
               </p>
             )}
@@ -585,17 +585,17 @@ export function CheckoutForm({
 
         {/* Order Summary */}
         <div className="lg:col-span-2">
-          <div className="border border-zinc-200 rounded-lg p-6 sticky top-24">
-            <h2 className="text-lg font-semibold text-zinc-900 mb-4">Order Summary</h2>
+          <div className="border border-steel-200 rounded-lg p-6 sticky top-24">
+            <h2 className="text-lg font-semibold text-ink-900 mb-4">Order Summary</h2>
 
-            <div className="divide-y divide-zinc-100">
+            <div className="divide-y divide-steel-100">
               {items.map((item, i) => {
                 const price = item.salePrice
                   ? parseFloat(item.salePrice)
                   : parseFloat(item.listPrice);
                 return (
                   <div key={i} className="py-2 flex justify-between text-sm">
-                    <span className="text-zinc-600">
+                    <span className="text-steel-500">
                       {item.productName} &times; {item.quantity}
                     </span>
                     <Price amount={price * item.quantity} className="font-medium" />
@@ -604,46 +604,46 @@ export function CheckoutForm({
               })}
             </div>
 
-            <div className="mt-4 pt-4 border-t border-zinc-200">
+            <div className="mt-4 pt-4 border-t border-steel-200">
               <div className="flex justify-between text-sm">
-                <span className="text-zinc-500">Subtotal</span>
+                <span className="text-steel-500">Subtotal</span>
                 <Price amount={subtotal} className="font-medium" />
               </div>
               <div className="flex justify-between text-sm mt-2">
-                <span className="text-zinc-500">GST {pricesIncludeTax ? "(included)" : "(10%)"}</span>
+                <span className="text-steel-500">GST {pricesIncludeTax ? "(included)" : "(10%)"}</span>
                 {pricesIncludeTax ? (
-                  <Price amount={gstAmount} className="font-medium text-zinc-400" />
+                  <Price amount={gstAmount} className="font-medium text-steel-400" />
                 ) : (
                   <Price amount={gstAmount} className="font-medium" />
                 )}
               </div>
               <div className="flex justify-between text-sm mt-2">
-                <span className="text-zinc-500">Shipping</span>
+                <span className="text-steel-500">Shipping</span>
                 {freeShippingEnabled && isMember && subtotal >= freeShippingThreshold ? (
-                  <span className="font-medium text-green-600">FREE</span>
+                  <span className="font-medium text-brand">FREE</span>
                 ) : shippingLoading ? (
-                  <span className="font-medium text-zinc-400 animate-pulse">Calculating...</span>
+                  <span className="font-medium text-steel-400 animate-pulse">Calculating...</span>
                 ) : shippingCost !== null && shippingCost > 0 ? (
                   <Price amount={shippingCost} className="font-medium" />
                 ) : shippingCost === 0 ? (
-                  <span className="font-medium text-green-600">FREE</span>
+                  <span className="font-medium text-brand">FREE</span>
                 ) : shippingError ? (
-                  <span className="font-medium text-amber-500 text-xs">{shippingError}</span>
+                  <span className="font-medium text-member text-xs">{shippingError}</span>
                 ) : shippingEnabled ? (
-                  <span className="font-medium text-zinc-400">Enter postcode</span>
+                  <span className="font-medium text-steel-400">Enter postcode</span>
                 ) : (
-                  <span className="font-medium text-zinc-400">--</span>
+                  <span className="font-medium text-steel-400">--</span>
                 )}
               </div>
               <input type="hidden" name="shippingCost" value={shippingCost ?? "0"} />
-              <div className="flex justify-between text-base font-semibold mt-4 pt-4 border-t border-zinc-200">
+              <div className="flex justify-between text-base font-semibold mt-4 pt-4 border-t border-steel-200">
                 <span>Total</span>
                 <span><Price amount={(pricesIncludeTax ? subtotal : subtotal + gstAmount) + (shippingCost ?? 0)} /></span>
               </div>
             </div>
 
             {(state?.error || stripeError) && (
-              <div className="mt-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg">
+              <div className="mt-4 p-3 bg-sale-bg text-sale-deep text-sm rounded-lg">
                 {state?.error || stripeError}
               </div>
             )}
@@ -651,7 +651,7 @@ export function CheckoutForm({
             <button
               type="submit"
               disabled={isPending || stripeProcessing || (selectedPaymentMethod === "stripe" && !cardReady)}
-              className="mt-6 w-full bg-zinc-900 text-white py-3 px-6 rounded-lg font-semibold hover:bg-zinc-800 transition-colors disabled:bg-zinc-300"
+              className="mt-6 w-full bg-ink-900 text-white py-3 px-6 rounded-lg font-semibold hover:bg-ink-800 transition-colors disabled:bg-steel-300"
             >
               {isPending || stripeProcessing ? "Processing..." : selectedPaymentMethod === "stripe" ? "Pay Now" : "Place Order"}
             </button>

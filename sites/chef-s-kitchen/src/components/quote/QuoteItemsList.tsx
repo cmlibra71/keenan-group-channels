@@ -73,7 +73,7 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
           SKU: {item.variant_sku || item.product_sku || "N/A"}
         </p>
         <p className="text-sm text-text-secondary mt-1">{isPoa ? (
-            <span className="inline-block bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded text-xs font-medium">Requires quote</span>
+            <span className="inline-block bg-member-bg text-member-text border border-member/40 px-2 py-0.5 rounded text-xs font-medium">Requires quote</span>
           ) : <><Price amount={unitPrice} /> each</>}</p>
       </div>
 
@@ -105,7 +105,7 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
       <button
         onClick={handleRemove}
         disabled={isPending}
-        className="text-text-muted hover:text-red-600 disabled:opacity-50"
+        className="text-text-muted hover:text-sale disabled:opacity-50"
       >
         <Trash2 className="h-4 w-4" strokeWidth={1.5} />
       </button>

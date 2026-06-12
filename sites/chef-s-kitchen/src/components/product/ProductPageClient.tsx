@@ -124,7 +124,7 @@ export function ProductPageClient({
             <RichContent
               html={product.descriptionShort}
               stripStyles
-              className="text-sm text-zinc-600 prose prose-sm"
+              className="text-sm text-steel-500 prose prose-sm"
             />
           </div>
         )}

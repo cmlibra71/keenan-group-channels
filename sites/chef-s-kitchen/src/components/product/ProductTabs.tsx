@@ -120,7 +120,7 @@ export function ProductTabs({
                   rel="noopener noreferrer"
                   className="flex items-center gap-3 card px-4 py-3 hover:bg-surface-secondary transition-colors duration-300"
                 >
-                  <FileText className="h-5 w-5 flex-shrink-0 text-red-500" strokeWidth={1.5} />
+                  <FileText className="h-5 w-5 flex-shrink-0 text-sale" strokeWidth={1.5} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-text-primary truncate">
                       {file.label || file.fileName}
@@ -361,7 +361,7 @@ function ReviewsSection({
             </div>
 
             {error && (
-              <p className="text-sm text-red-600">{error}</p>
+              <p className="text-sm text-sale">{error}</p>
             )}
 
             <button

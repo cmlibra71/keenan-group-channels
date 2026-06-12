@@ -94,21 +94,21 @@ export function AddressAutocomplete({ onSelect, inputRef }: Props) {
 
   return (
     <div ref={containerRef} className="relative">
-      <div className="absolute top-0 left-0 right-0 z-10 bg-white border border-zinc-200 rounded-lg shadow-lg max-h-60 overflow-auto">
+      <div className="absolute top-0 left-0 right-0 z-10 bg-white border border-steel-200 rounded-lg shadow-lg max-h-60 overflow-auto">
         {isLoading && predictions.length === 0 && (
-          <div className="px-3 py-2 text-sm text-zinc-400">Searching...</div>
+          <div className="px-3 py-2 text-sm text-steel-400">Searching...</div>
         )}
         {predictions.map((prediction) => (
           <button
             key={prediction.placeId}
             type="button"
-            className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 cursor-pointer"
+            className="w-full text-left px-3 py-2 text-sm hover:bg-steel-50 cursor-pointer"
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => handleSelect(prediction)}
           >
-            <span className="font-medium text-zinc-900">{prediction.mainText}</span>
+            <span className="font-medium text-ink-900">{prediction.mainText}</span>
             {prediction.secondaryText && (
-              <span className="text-zinc-500 ml-1">{prediction.secondaryText}</span>
+              <span className="text-steel-500 ml-1">{prediction.secondaryText}</span>
             )}
           </button>
         ))}

@@ -97,7 +97,7 @@ function CartItemRow({ item }: { item: CartItemRow }) {
       <button
         onClick={handleRemove}
         disabled={isPending}
-        className="text-text-muted hover:text-red-600 disabled:opacity-50"
+        className="text-text-muted hover:text-sale disabled:opacity-50"
       >
         <Trash2 className="h-4 w-4" strokeWidth={1.5} />
       </button>

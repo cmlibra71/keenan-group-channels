@@ -26,7 +26,7 @@ export function MembershipCTA({
             {benefits.length > 0 && (
               <ul className="mt-6 flex flex-col sm:flex-row flex-wrap gap-x-8 gap-y-3">
                 {benefits.slice(0, 4).map((benefit, i) => (
-                  <li key={i} className="flex items-center gap-3 text-sm text-slate-400">
+                  <li key={i} className="flex items-center gap-3 text-sm text-steel-400">
                     <span className="h-px w-4 bg-accent/60 shrink-0" />
                     {benefit}
                   </li>

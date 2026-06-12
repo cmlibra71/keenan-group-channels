@@ -36,7 +36,7 @@ export function CancelConfirmationModal({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-sm text-red-600 hover:text-red-800 underline"
+        className="text-sm text-sale hover:text-sale-deep underline"
       >
         Cancel membership
       </button>
@@ -59,7 +59,7 @@ export function CancelConfirmationModal({
               )}
 
               {totalEntries > 0 && (
-                <p className="text-red-600">
+                <p className="text-sale">
                   You will forfeit your <strong>{totalEntries} raffle {totalEntries === 1 ? "entry" : "entries"}</strong> for upcoming draws.
                 </p>
               )}
@@ -79,7 +79,7 @@ export function CancelConfirmationModal({
             </div>
 
             {error && (
-              <p className="text-sm text-red-600 mb-4">{error}</p>
+              <p className="text-sm text-sale mb-4">{error}</p>
             )}
 
             <div className="flex gap-3">
@@ -95,7 +95,7 @@ export function CancelConfirmationModal({
                 type="button"
                 onClick={handleCancel}
                 disabled={cancelling}
-                className="flex-1 border border-red-300 text-red-600 px-4 py-2 text-sm font-medium hover:bg-red-50 disabled:opacity-50 transition-colors"
+                className="flex-1 border border-sale/40 text-sale px-4 py-2 text-sm font-medium hover:bg-sale-bg disabled:opacity-50 transition-colors"
               >
                 {cancelling ? "Cancelling..." : "Cancel Membership"}
               </button>

@@ -62,7 +62,7 @@ export function DrawSpotlight({
                 Draw date: {new Date(draw.scheduledAt).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })}
               </p>
             )}
-            <p className="text-slate-300 text-sm mb-6">
+            <p className="text-steel-300 text-sm mb-6">
               The longer you stay a member, the better your odds. Entries accumulate every month and never reset.
             </p>
             <Link

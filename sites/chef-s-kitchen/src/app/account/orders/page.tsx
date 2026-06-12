@@ -96,7 +96,7 @@ export default async function OrdersPage() {
                     order.status === "completed"
                       ? "text-accent bg-accent-subtle"
                       : order.status === "shipped"
-                        ? "bg-blue-100 text-blue-700"
+                        ? "bg-accent-subtle text-accent-dark"
                         : "bg-surface-secondary text-text-secondary"
                   }`}>
                     {order.status}

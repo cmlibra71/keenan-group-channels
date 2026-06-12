@@ -74,7 +74,7 @@ export default async function MembershipLandingPage() {
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/images/membership-hero.webp')" }} />
-        <div className="absolute inset-0 bg-gradient-to-r from-zinc-900/80 via-zinc-900/50 to-zinc-900/30" />
+        <div className="absolute inset-0 bg-gradient-to-r from-ink-900/80 via-ink-900/50 to-ink-900/30" />
         <div className="relative z-10 container-page py-20 sm:py-28">
           <div className="backdrop-blur-xl bg-white/30 border border-white/25 rounded-[28px] p-10 shadow-[0_8px_40px_rgba(0,0,0,0.15)] max-w-2xl">
             <div className="inline-flex items-center gap-2 border border-white/30 text-white/80 text-xs font-bold uppercase tracking-[0.18em] px-4 py-1.5 mb-5 rounded-full">
@@ -100,7 +100,7 @@ export default async function MembershipLandingPage() {
             <div className="mt-9 flex flex-col sm:flex-row gap-3">
               <Link
                 href={joinHref}
-                className="inline-flex items-center justify-center gap-2 bg-teal-700 text-white px-7 py-3.5 rounded-[14px] font-semibold text-sm hover:bg-teal-800 transition-colors shadow-sm"
+                className="inline-flex items-center justify-center gap-2 bg-accent text-white px-7 py-3.5 rounded-[14px] font-semibold text-sm hover:bg-accent-hover transition-colors shadow-sm"
               >
                 {joinLabel}
                 <ArrowRight className="h-4 w-4" />

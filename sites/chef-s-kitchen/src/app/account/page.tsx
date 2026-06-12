@@ -85,28 +85,28 @@ export default async function AccountPage() {
         <div className="bg-gradient-to-br from-surface-dark to-surface-dark-alt text-white p-6 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <p className="text-slate-400 text-sm">Welcome back</p>
+              <p className="text-steel-400 text-sm">Welcome back</p>
               <p className="text-lg font-semibold">
                 {customer?.firstName} {customer?.lastName}
               </p>
-              <p className="text-sm text-slate-400">{customer?.email}</p>
+              <p className="text-sm text-steel-400">{customer?.email}</p>
             </div>
             <div className="flex items-center gap-4 text-sm">
               {activeSub.consecutiveMonths != null && (
                 <div className="text-center">
                   <p className="text-2xl font-bold text-accent">{activeSub.consecutiveMonths}</p>
-                  <p className="text-xs text-slate-400">months</p>
+                  <p className="text-xs text-steel-400">months</p>
                 </div>
               )}
               {drawsEnabled && (
                 <div className="text-center">
                   <p className="text-2xl font-bold text-accent">{totalEntries}</p>
-                  <p className="text-xs text-slate-400">draw entries</p>
+                  <p className="text-xs text-steel-400">draw entries</p>
                 </div>
               )}
               {nextDrawDate && (
                 <div className="text-center">
-                  <p className="text-xs text-slate-400">Next draw</p>
+                  <p className="text-xs text-steel-400">Next draw</p>
                   <p className="text-sm font-medium text-white">
                     {nextDrawDate.toLocaleDateString("en-AU", { day: "numeric", month: "short" })}
                   </p>

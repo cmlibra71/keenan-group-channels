@@ -30,14 +30,14 @@ interface QuoteWithItems extends QuoteRecord {
 
 // Zoey-aligned lifecycle statuses (QuoteService QUOTE_STATUSES).
 const statusStyles: Record<string, string> = {
-  quote_pending: "bg-yellow-100 text-yellow-700",
-  quote_available: "bg-blue-100 text-blue-700",
-  open_change_request: "bg-blue-100 text-blue-700",
+  quote_pending: "bg-warning-bg text-warning",
+  quote_available: "bg-accent-subtle text-accent-dark",
+  open_change_request: "bg-accent-subtle text-accent-dark",
   quote_accepted: "text-accent bg-accent-subtle",
   quote_on_hold: "bg-surface-secondary text-text-secondary",
   converted_to_order: "text-accent bg-accent-subtle",
   quote_expired: "bg-surface-secondary text-text-secondary",
-  quote_cancelled: "bg-red-100 text-red-700",
+  quote_cancelled: "bg-sale-bg text-sale-deep",
 };
 const statusLabels: Record<string, string> = {
   quote_pending: "awaiting review",

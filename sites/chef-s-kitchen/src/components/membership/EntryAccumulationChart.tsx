@@ -39,7 +39,7 @@ export function EntryAccumulationChart({ currentMonth }: { currentMonth?: number
 
   return (
     <div ref={ref} className="space-y-3">
-      <p className="text-sm text-zinc-600 mb-4">
+      <p className="text-sm text-steel-500 mb-4">
         You earn entries each month you stay subscribed. Month 1 = 1 entry, Month 2 = 2 more, and so on.
         Your entries accumulate — the longer you stay, the better your chances.
       </p>
@@ -52,33 +52,33 @@ export function EntryAccumulationChart({ currentMonth }: { currentMonth?: number
         return (
           <div key={m.month} className="space-y-1">
             <div className="flex justify-between text-sm">
-              <span className={`font-medium ${isCurrent ? "text-amber-700" : "text-zinc-600"}`}>
+              <span className={`font-medium ${isCurrent ? "text-member-text" : "text-steel-500"}`}>
                 Month {m.month}
                 {isCurrent && (
-                  <span className="ml-2 text-xs text-amber-600 font-semibold">You are here</span>
+                  <span className="ml-2 text-xs text-member-text font-semibold">You are here</span>
                 )}
               </span>
-              <span className="text-zinc-900 font-bold">{m.total} entries</span>
+              <span className="text-ink-900 font-bold">{m.total} entries</span>
             </div>
-            <div className="h-2.5 bg-zinc-100 rounded-full overflow-hidden">
+            <div className="h-2.5 bg-steel-100 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-1000 ease-out ${
                   isCurrent
-                    ? "bg-gradient-to-r from-amber-500 to-amber-400"
+                    ? "bg-gradient-to-r from-member to-member-bright"
                     : isPast
-                      ? "bg-gradient-to-r from-amber-400 to-amber-300"
-                      : "bg-gradient-to-r from-amber-400 to-amber-500"
+                      ? "bg-gradient-to-r from-member-bright to-member-bright"
+                      : "bg-gradient-to-r from-member-bright to-member"
                 }`}
                 style={{ width: visible ? `${pct}%` : "0%" }}
               />
             </div>
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-steel-500">
               +{m.entriesThisMonth} new {m.entriesThisMonth === 1 ? "entry" : "entries"} this month
             </p>
           </div>
         );
       })}
-      <p className="mt-4 text-sm text-red-600 font-medium bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+      <p className="mt-4 text-sm text-sale font-medium bg-sale-bg border border-sale/30 rounded-lg px-4 py-3">
         Cancel and you lose all entries. Stay and they keep growing.
       </p>
     </div>

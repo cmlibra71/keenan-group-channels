@@ -11,3 +11,6 @@ orchestrator/.ip-allocations.json
 # Scraper state (Phase 0–2)
 .scraper-profile/
 scripts/.work/
+
+# Local audit workspace (reports, crawls, large JSONL data) — not versioned
+/scripts/

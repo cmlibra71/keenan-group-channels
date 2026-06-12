@@ -252,7 +252,7 @@ export function SearchTypeahead({ defaultValue, inline }: { defaultValue?: strin
                 <div className="flex-shrink-0 text-right">
                   {hit.salePrice && hit.salePrice < hit.price ? (
                     <>
-                      <p className="text-sm font-medium text-red-600">
+                      <p className="text-sm font-medium text-sale">
                         {formatPrice(hit.salePrice)}
                       </p>
                       <p className="text-xs text-text-muted line-through">

@@ -53,23 +53,23 @@ export default async function ClearancePage({
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-zinc-900">{heading}</h1>
-        <p className="mt-2 text-zinc-500">
+        <h1 className="text-3xl font-bold text-ink-900">{heading}</h1>
+        <p className="mt-2 text-steel-500">
           {total} {total === 1 ? "item" : "items"}
         </p>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-8">
         <aside className="lg:w-60 flex-shrink-0">
-          <h2 className="text-sm font-semibold text-zinc-900 uppercase tracking-wide mb-3">Filter by Type</h2>
+          <h2 className="text-sm font-semibold text-ink-900 uppercase tracking-wide mb-3">Filter by Type</h2>
           <ul className="space-y-1">
             <li>
               <Link
                 href="/clearance"
                 className={`block px-3 py-2 text-sm rounded transition-colors ${
                   !activeFilter
-                    ? "bg-zinc-900 text-white font-medium"
-                    : "text-zinc-600 hover:bg-zinc-100"
+                    ? "bg-ink-900 text-white font-medium"
+                    : "text-steel-500 hover:bg-steel-100"
                 }`}
               >
                 All Last Units
@@ -81,8 +81,8 @@ export default async function ClearancePage({
                   href={`/clearance?type=${encodeURIComponent(opt.slug)}`}
                   className={`block px-3 py-2 text-sm rounded transition-colors ${
                     activeFilter?.id === opt.id
-                      ? "bg-zinc-900 text-white font-medium"
-                      : "text-zinc-600 hover:bg-zinc-100"
+                      ? "bg-ink-900 text-white font-medium"
+                      : "text-steel-500 hover:bg-steel-100"
                   }`}
                 >
                   {opt.name}
@@ -94,7 +94,7 @@ export default async function ClearancePage({
 
         <div className="flex-1 min-w-0">
           {products.length === 0 ? (
-            <p className="text-zinc-500 text-center py-12">
+            <p className="text-steel-500 text-center py-12">
               No clearance items {activeFilter ? `in ${activeFilter.name}` : ""}. Check back soon!
             </p>
           ) : (
@@ -106,7 +106,7 @@ export default async function ClearancePage({
                   {currentPage > 1 && (
                     <Link
                       href={`/clearance?${typeParam}page=${currentPage - 1}`}
-                      className="px-4 py-2 text-sm font-medium border border-zinc-300 rounded hover:bg-zinc-100 transition-colors"
+                      className="px-4 py-2 text-sm font-medium border border-steel-300 rounded hover:bg-steel-100 transition-colors"
                     >
                       Previous
                     </Link>
@@ -117,8 +117,8 @@ export default async function ClearancePage({
                       href={`/clearance?${typeParam}page=${p}`}
                       className={`px-3.5 py-2 text-sm font-medium rounded transition-colors ${
                         p === currentPage
-                          ? "bg-zinc-900 text-white"
-                          : "border border-zinc-300 hover:bg-zinc-100"
+                          ? "bg-ink-900 text-white"
+                          : "border border-steel-300 hover:bg-steel-100"
                       }`}
                     >
                       {p}
@@ -127,7 +127,7 @@ export default async function ClearancePage({
                   {currentPage < totalPages && (
                     <Link
                       href={`/clearance?${typeParam}page=${currentPage + 1}`}
-                      className="px-4 py-2 text-sm font-medium border border-zinc-300 rounded hover:bg-zinc-100 transition-colors"
+                      className="px-4 py-2 text-sm font-medium border border-steel-300 rounded hover:bg-steel-100 transition-colors"
                     >
                       Next
                     </Link>

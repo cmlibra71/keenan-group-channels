@@ -1,12 +1,14 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Search, Menu, Crown } from "lucide-react";
+import { Search, Crown } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
-import { getActiveSubscription, getFeatureFlag, drawEntryService, CHANNEL_ID } from "@/lib/store";
+import { getActiveSubscription, getFeatureFlag, getMegaMenu, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 import { GstToggle } from "./GstToggle";
+import { MegaMenu } from "./MegaMenu";
+import { MobileNavDrawer } from "./MobileNavDrawer";
 
 type NavCategory = { id: number; name: string; slug: string };
 
@@ -21,7 +23,7 @@ export async function Header({
   logoAlt?: string | null;
   navCategories?: NavCategory[];
 }) {
-  const [cart, quote] = await Promise.all([getCart(), getQuote()]);
+  const [cart, quote, megaMenu] = await Promise.all([getCart(), getQuote(), getMegaMenu()]);
   const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   const quoteCount = quote?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
 
@@ -103,12 +105,13 @@ export async function Header({
               <Search className="h-5 w-5" />
             </Link>
             <HeaderClient cartCount={cartCount} quoteCount={quoteCount} isMember={isMember} entryCount={entryCount} />
-            <button className="md:hidden text-zinc-600">
-              <Menu className="h-5 w-5" />
-            </button>
+            <MobileNavDrawer departments={megaMenu.departments} />
           </div>
         </div>
       </div>
+
+      {/* Department nav + mega panels — dark bar below the masthead */}
+      <MegaMenu departments={megaMenu.departments} featured={megaMenu.featured} />
     </header>
   );
 }

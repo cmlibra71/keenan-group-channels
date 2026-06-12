@@ -1,22 +1,23 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Crown, ArrowRight, ChevronRight } from "lucide-react";
-import { getProducts, getSiteConfig, getTopCategories, getFeatureFlag, getSubscriptionPlans, getUpcomingDraws, getBrandsForChannel, prizeService, productChannelAssignmentService, CHANNEL_ID } from "@/lib/store";
+import { getProducts, getSiteConfig, getMegaMenu, getTopCategories, getFeatureFlag, getSubscriptionPlans, getUpcomingDraws, getBrandsForChannel, prizeService, productChannelAssignmentService, CHANNEL_ID } from "@/lib/store";
 import { getListingPricing } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { TrustBar } from "@/components/home/TrustBar";
-import { MembershipCTA } from "@/components/home/MembershipCTA";
+import { MembershipValueStrip } from "@/components/home/MembershipValueStrip";
 import { DrawSpotlight } from "@/components/home/DrawSpotlight";
 import { StatsBanner } from "@/components/home/StatsBanner";
 import { BrandShowcase } from "@/components/home/BrandShowcase";
 import { ClearanceSpotlight } from "@/components/home/ClearanceSpotlight";
 
 export default async function HomePage() {
-  const [{ channel }, { products: featuredProducts }, { products: clearanceProducts }, topCategories, allBrands, memberPricingEnabled, subscriptionsEnabled, drawsEnabled, productCount, brandCount] = await Promise.all([
+  const [{ channel }, { products: featuredProducts }, { products: clearanceProducts }, topCategories, megaMenu, allBrands, memberPricingEnabled, subscriptionsEnabled, drawsEnabled, productCount, brandCount] = await Promise.all([
     getSiteConfig(),
     getProducts({ limit: 8, featured: true }),
     getProducts({ limit: 9, onSale: true }),
     getTopCategories(),
+    getMegaMenu(),
     getBrandsForChannel(),
     getFeatureFlag("member_pricing_enabled"),
     getFeatureFlag("subscriptions_enabled"),
@@ -189,70 +190,78 @@ export default async function HomePage() {
       <TrustBar />
 
 
-      {/* ═══ Categories — editorial grid ═══ */}
+      {/* ═══ Shop by category — design catcards ═══ */}
       {topCategories.length > 0 && (
         <section className="container-page section-padding">
-          <div className="flex items-end justify-between mb-10">
+          <div className="mb-10 flex items-end justify-between">
             <div>
               <p className="eyebrow mb-3">Departments</p>
               <h2 className="section-title">Shop by Category</h2>
             </div>
-            <Link href="/categories" className="hidden sm:inline-flex items-center gap-1.5 nav-link">
+            <Link href="/categories" className="hidden items-center gap-1.5 text-sm font-semibold text-accent transition-colors hover:text-accent-hover sm:inline-flex">
               View All
-              <ChevronRight className="h-3 w-3" />
+              <ChevronRight className="h-3.5 w-3.5" />
             </Link>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-            {topCategories.map((category: { id: number; name: string; slug: string; imageUrl?: string | null }) => (
-              <Link
-                key={category.id}
-                href={`/categories/${category.slug}`}
-                className="group relative overflow-hidden rounded-2xl bg-surface-secondary aspect-[4/5] ring-1 ring-transparent hover:ring-white/20 transition-all duration-500"
-              >
-                <div className="absolute inset-0 overflow-hidden">
-                  {category.imageUrl ? (
-                    <Image
-                      src={category.imageUrl}
-                      alt={category.name}
-                      fill
-                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                      className="object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
-                    />
-                  ) : (
-                    <div className="h-full w-full bg-gradient-to-br from-stone to-stone-warm" />
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-surface-dark/80 via-surface-dark/30 to-surface-dark/5 group-hover:from-surface-dark/85 transition-colors duration-500" />
-                </div>
-                <div className="relative h-full flex flex-col justify-end p-5 sm:p-6">
-                  <span className="heading-serif text-lg sm:text-xl lg:text-2xl text-white drop-shadow-sm transform translate-y-1 group-hover:translate-y-0 transition-transform duration-500 ease-out">
-                    {category.name}
-                  </span>
-                  <span className="block h-px w-0 group-hover:w-10 bg-accent mt-2 transition-all duration-500 ease-out" />
-                  <span className="mt-3 inline-flex items-center text-[11px] uppercase tracking-[0.18em] text-white/70 group-hover:text-white transition-colors duration-300">
-                    Explore
-                    <ChevronRight className="h-3 w-3 ml-1 transform translate-x-0 group-hover:translate-x-1 transition-transform duration-300" />
-                  </span>
-                </div>
-              </Link>
-            ))}
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+            {topCategories.slice(0, 8).map((category: { id: number; name: string; slug: string; imageUrl?: string | null }) => {
+              const childCount = megaMenu.departments.find((d) => d.id === category.id)?.children.length ?? 0;
+              return (
+                <Link
+                  key={category.id}
+                  href={`/categories/${category.slug}`}
+                  className="group overflow-hidden rounded-card border border-border bg-white transition-all duration-200 hover:-translate-y-[3px] hover:border-brand-light hover:shadow-hover"
+                >
+                  <div className="relative aspect-[4/3] bg-gradient-to-br from-brand-tint to-steel-200">
+                    {category.imageUrl && (
+                      <Image
+                        src={category.imageUrl}
+                        alt={category.name}
+                        fill
+                        sizes="(max-width: 640px) 50vw, 25vw"
+                        className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]"
+                      />
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-[15px]">
+                    <div>
+                      <b className="block text-[15px] font-bold text-text-primary">{category.name}</b>
+                      {childCount > 0 && (
+                        <span className="text-[11.5px] text-steel-500">
+                          {childCount} categor{childCount === 1 ? "y" : "ies"}
+                        </span>
+                      )}
+                    </div>
+                    <span className="grid h-[30px] w-[30px] place-items-center rounded-full bg-brand-tint text-brand-deep transition-colors duration-200 group-hover:bg-accent group-hover:text-white">
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         </section>
       )}
 
-      {/* ═══ Brand Showcase ═══ */}
-      <BrandShowcase brands={featuredBrands} />
-
-      {/* ═══ Clearance Spotlight ═══ */}
-      <ClearanceSpotlight products={clearanceProducts} heading="Last Units" eyebrow="While Stocks Last" />
-
-      {/* ═══ Membership CTA ═══ */}
+      {/* ═══ Membership value strip (design system) ═══ */}
       {subscriptionsEnabled && plan && (
-        <MembershipCTA
+        <MembershipValueStrip
           planPrice={planPrice!}
           billingInterval={plan.billingInterval}
           benefits={planBenefits}
         />
       )}
+
+      {/* ═══ Brand Showcase ═══ */}
+      <BrandShowcase brands={featuredBrands} />
+
+      {/* ═══ Last Units scroll row ═══ */}
+      <ClearanceSpotlight
+        products={clearanceProducts}
+        heading="Last Units"
+        eyebrow="While Stocks Last"
+        pricing={await getListingPricing(clearanceProducts)}
+      />
 
       {/* ═══ Featured Products ═══ */}
       <section className="container-page section-padding">

@@ -1,8 +1,8 @@
 import { Crown, Truck, Trophy, Gift } from "lucide-react";
 
 const allItems = [
-  { icon: Crown, label: "Members-Only Pricing", accent: "from-amber-500 to-amber-600", key: "pricing" },
-  { icon: Truck, label: "Australia-Wide Delivery", accent: "from-teal-500 to-teal-600", key: "delivery" },
+  { icon: Crown, label: "Members-Only Pricing", accent: "from-member to-member-text", key: "pricing" },
+  { icon: Truck, label: "Australia-Wide Delivery", accent: "from-accent-bright to-accent-bright", key: "delivery" },
   { icon: Trophy, label: "Exclusive Prize Draws", accent: "from-violet-500 to-violet-600", key: "draws" },
   { icon: Gift, label: "Partner Discounts", accent: "from-rose-500 to-rose-600", key: "partners" },
 ];
@@ -10,7 +10,7 @@ const allItems = [
 export function ValueBar({ drawsEnabled = true }: { drawsEnabled?: boolean }) {
   const items = drawsEnabled ? allItems : allItems.filter((i) => i.key !== "draws");
   return (
-    <section className="bg-zinc-900 border-y border-zinc-800">
+    <section className="bg-ink-900 border-y border-ink-800">
       {/* Desktop: horizontal row */}
       <div className="hidden md:block container-page">
         <div className={`grid grid-cols-2 ${items.length === 3 ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}>
@@ -27,7 +27,7 @@ export function ValueBar({ drawsEnabled = true }: { drawsEnabled?: boolean }) {
               </div>
               {/* Divider between items */}
               {i < items.length - 1 && (
-                <div className="absolute right-0 top-3 bottom-3 w-px bg-zinc-700" />
+                <div className="absolute right-0 top-3 bottom-3 w-px bg-ink-700" />
               )}
             </div>
           ))}

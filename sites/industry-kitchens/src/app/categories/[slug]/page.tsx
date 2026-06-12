@@ -2,104 +2,128 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ChevronRight, Package } from "lucide-react";
-import { getCategoryBySlug, getProducts, getSubcategories, getCategoryStats, getCategoryBreadcrumbs, getFeatureFlag } from "@/lib/store";
+import {
+  getCategoryBySlug,
+  getCategoryListing,
+  getSubcategories,
+  getCategoryBreadcrumbs,
+  getFeatureFlag,
+} from "@/lib/store";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
+import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
 import { RichContent } from "@/components/content/RichContent";
-import { Price } from "@/components/ui/Price";
 
+const PER_PAGE = 24;
+const MAX_PAGES = 8; // "Load more" renders cumulatively; hard cap keeps queries sane.
+
+type SearchParams = {
+  sub?: string;
+  brand?: string;
+  price?: string;
+  stock?: string;
+  sort?: string;
+  page?: string;
+};
+
+const parseIds = (v?: string) =>
+  v?.split(",").map((x) => parseInt(x, 10)).filter((n) => Number.isFinite(n)) ?? [];
+
+/**
+ * Faceted category page: light header block, subcategory tiles, sticky
+ * faceted filter rail, sort/result toolbar, grid beside the rail, and
+ * SEO-friendly "Load more" pagination (cumulative ?page=N).
+ */
 export default async function CategoryPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<SearchParams>;
 }) {
-  const { slug } = await params;
+  const [{ slug }, sp] = await Promise.all([params, searchParams]);
   const category = await getCategoryBySlug(slug);
 
   if (!category) {
     notFound();
   }
 
-  const [{ products }, subcategories, stats, breadcrumbs, memberPricingEnabled] = await Promise.all([
-    getProducts({ categoryId: category.id, limit: 24 }),
+  const page = Math.min(MAX_PAGES, Math.max(1, parseInt(sp.page || "1", 10)));
+  const sort = (["price_asc", "price_desc", "saving", "newest"] as const).includes(
+    sp.sort as never
+  )
+    ? (sp.sort as "price_asc" | "price_desc" | "saving" | "newest")
+    : "relevance";
+
+  const priceBands = (sp.price?.split(",").filter(Boolean) ?? []).filter((b) =>
+    ["lt1000", "1000to3000", "gt3000"].includes(b)
+  ) as ("lt1000" | "1000to3000" | "gt3000")[];
+  const availability = (sp.stock?.split(",").filter(Boolean) ?? []).filter((a) =>
+    ["in_stock", "clearance"].includes(a)
+  ) as ("in_stock" | "clearance")[];
+
+  const [listing, subcategories, breadcrumbs, memberPricingEnabled] = await Promise.all([
+    getCategoryListing(category.id, {
+      page: 1,
+      limit: PER_PAGE * page, // cumulative for Load more
+      subcategoryIds: parseIds(sp.sub),
+      brandIds: parseIds(sp.brand),
+      priceBands,
+      availability,
+      sort,
+    }),
     getSubcategories(category.id),
-    getCategoryStats(category.id),
     getCategoryBreadcrumbs(category.pathIds || []),
     getFeatureFlag("member_pricing_enabled"),
   ]);
 
+  const { products, total, facets } = listing;
+  const memberPriceMap = await getListingMemberPrices(products);
+  const shown = products.length;
+  const hasMore = shown < total && page < MAX_PAGES;
+
+  const nextPageHref = (() => {
+    const next = new URLSearchParams();
+    if (sp.sub) next.set("sub", sp.sub);
+    if (sp.brand) next.set("brand", sp.brand);
+    if (sp.price) next.set("price", sp.price);
+    if (sp.stock) next.set("stock", sp.stock);
+    if (sp.sort) next.set("sort", sp.sort);
+    next.set("page", String(page + 1));
+    return `/categories/${slug}?${next.toString()}`;
+  })();
+
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-      {/* Breadcrumbs */}
-      <nav className="flex flex-wrap items-center gap-1.5 text-sm text-zinc-400 mb-6">
-        <Link href="/categories" className="hover:text-zinc-600">Categories</Link>
-        {breadcrumbs.slice(0, -1).map((crumb: { id: number; name: string; slug: string }) => (
-          <span key={crumb.id} className="flex items-center gap-1.5">
-            <ChevronRight className="h-3.5 w-3.5" />
-            <Link href={`/categories/${crumb.slug}`} className="hover:text-zinc-600">{crumb.name}</Link>
-          </span>
-        ))}
-        <ChevronRight className="h-3.5 w-3.5" />
-        <span className="text-zinc-700">{category.name}</span>
-      </nav>
+      {/* ═══ Light header block ═══ */}
+      <div className="mb-8 rounded-2xl bg-zinc-50 px-6 py-8 sm:px-8">
+        {/* Breadcrumb */}
+        <nav className="mb-3 flex flex-wrap items-center gap-1.5 text-sm text-zinc-400">
+          <Link href="/categories" className="hover:text-zinc-600">Categories</Link>
+          {breadcrumbs.slice(0, -1).map((crumb: { id: number; name: string; slug: string }) => (
+            <span key={crumb.id} className="flex items-center gap-1.5">
+              <ChevronRight className="h-3.5 w-3.5" />
+              <Link href={`/categories/${crumb.slug}`} className="hover:text-zinc-600">{crumb.name}</Link>
+            </span>
+          ))}
+          <ChevronRight className="h-3.5 w-3.5" />
+          <span className="text-zinc-700">{category.name}</span>
+        </nav>
 
-      {/* Hero section */}
-      <div className="mb-10 flex flex-col lg:flex-row gap-8 items-start bg-zinc-50 rounded-2xl overflow-hidden">
-        {category.imageUrl && (
-          <div className="lg:w-2/5 flex-shrink-0 bg-white rounded-2xl m-3 p-6 relative min-h-[200px]">
-            <Image
-              src={category.imageUrl}
-              alt={category.name}
-              fill
-              sizes="(max-width: 1024px) 100vw, 40vw"
-              className="object-contain p-6"
-            />
-          </div>
+        <h1 className="text-3xl font-bold text-zinc-900">{category.name}</h1>
+        {category.description && (
+          <RichContent
+            html={category.description}
+            stripStyles
+            className="mt-3 max-w-[70ch] text-zinc-600 leading-relaxed prose prose-sm prose-zinc"
+          />
         )}
-        <div className={`flex-1 py-8 pr-8 text-left ${category.imageUrl ? "" : "pl-8"}`}>
-          <h1 className="text-3xl font-bold text-zinc-900">{category.name}</h1>
-
-          {category.description && (
-            <RichContent
-              html={category.description}
-              stripStyles
-              className="mt-3 text-zinc-600 leading-relaxed prose prose-sm prose-zinc"
-            />
-          )}
-
-          {/* Stats */}
-          <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-zinc-500">
-            <span>{stats.productCount} {stats.productCount === 1 ? "product" : "products"}</span>
-            {stats.minPrice > 0 && stats.maxPrice > 0 && (
-              <span>
-                <Price amount={stats.minPrice} gst /> &ndash; <Price amount={stats.maxPrice} gst />
-              </span>
-            )}
-            {stats.brands.length > 0 && (
-              <span>{stats.brands.length} {stats.brands.length === 1 ? "brand" : "brands"}</span>
-            )}
-          </div>
-
-          {/* Brand pills */}
-          {stats.brands.length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {stats.brands.slice(0, 12).map((brand: string) => (
-                <span
-                  key={brand}
-                  className="px-3 py-1 rounded-full bg-white text-xs font-medium text-zinc-600 border border-zinc-200"
-                >
-                  {brand}
-                </span>
-              ))}
-              {stats.brands.length > 12 && (
-                <span className="px-3 py-1 text-xs text-zinc-400">+{stats.brands.length - 12} more</span>
-              )}
-            </div>
-          )}
-        </div>
+        <p className="mt-3 text-sm text-zinc-500">
+          {total} product{total === 1 ? "" : "s"}
+        </p>
       </div>
 
-      {/* Subcategories */}
+      {/* ═══ Subcategory tiles ═══ */}
       {subcategories.length > 0 && (
         <div className="mb-10">
           <h2 className="text-lg font-semibold text-zinc-900 mb-4">Subcategories</h2>
@@ -134,17 +158,42 @@ export default async function CategoryPage({
         </div>
       )}
 
-      {/* Products */}
-      {products.length > 0 && (
-        <div>
-          <h2 className="text-lg font-semibold text-zinc-900 mb-4">Products</h2>
-          <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(products)} />
-        </div>
-      )}
+      {/* ═══ Rail + grid ═══ */}
+      <div className="flex gap-6">
+        <FilterRail facets={facets} />
 
-      {products.length === 0 && subcategories.length === 0 && (
-        <p className="text-zinc-500 text-center py-12">No products in this category yet.</p>
-      )}
+        <div className="min-w-0 flex-1">
+          {/* Toolbar */}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-[13px] text-zinc-600">
+                Showing <b className="text-zinc-900">1–{shown}</b> of <b className="text-zinc-900">{total}</b>
+              </p>
+              <FilterChips facets={facets} />
+            </div>
+            <SortSelect />
+          </div>
+
+          <ProductGrid
+            products={products}
+            memberPricingAvailable={memberPricingEnabled}
+            memberPriceMap={memberPriceMap}
+          />
+
+          {/* Load more */}
+          {hasMore && (
+            <div className="mt-10 text-center">
+              <Link
+                href={nextPageHref}
+                scroll={false}
+                className="inline-flex items-center rounded-md border border-zinc-300 bg-white px-5 py-2.5 text-sm font-semibold text-zinc-700 transition-colors hover:border-zinc-400 hover:bg-zinc-50"
+              >
+                Load more ({total - shown} remaining)
+              </Link>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -137,7 +137,7 @@ export function SubscribeForm({
   return (
     <form onSubmit={handleSubscribe}>
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 mb-4 text-sm">
+        <div className="bg-sale-bg border border-sale/30 text-sale-deep p-4 mb-4 text-sm">
           {error}
         </div>
       )}

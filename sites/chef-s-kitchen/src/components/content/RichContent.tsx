@@ -51,8 +51,8 @@ function Callout({ attrs }: CommandProps) {
   const text = attrs.text || "";
   const variant = attrs.variant || "info";
   const styles: Record<string, string> = {
-    info: "bg-blue-50 border-blue-200 text-blue-800",
-    warning: "bg-amber-50 border-amber-200 text-amber-800",
+    info: "bg-accent-subtle border-blue-200 text-accent-dark",
+    warning: "bg-member-bg border-member/40 text-member-text",
     success: "bg-accent/5 border-accent/20 text-accent-dark",
   };
 

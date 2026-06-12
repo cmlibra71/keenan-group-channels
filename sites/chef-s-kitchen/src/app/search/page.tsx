@@ -210,7 +210,7 @@ export default async function SearchPage({
                       {brand && (
                         <Link
                           href={buildSearchUrl({ q: query, category })}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-surface-secondary text-text-body hover:bg-stone-200 transition-colors duration-300"
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-surface-secondary text-text-body hover:bg-steel-200 transition-colors duration-300"
                         >
                           {brand} <X className="h-3 w-3" />
                         </Link>
@@ -218,7 +218,7 @@ export default async function SearchPage({
                       {category && (
                         <Link
                           href={buildSearchUrl({ q: query, brand })}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-surface-secondary text-text-body hover:bg-stone-200 transition-colors duration-300"
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-surface-secondary text-text-body hover:bg-steel-200 transition-colors duration-300"
                         >
                           {category} <X className="h-3 w-3" />
                         </Link>

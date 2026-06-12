@@ -7,10 +7,10 @@ export async function CartBadge() {
   const count = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
 
   return (
-    <Link href="/cart" className="relative text-zinc-600 hover:text-zinc-900">
+    <Link href="/cart" className="relative text-steel-500 hover:text-ink-900">
       <ShoppingCart className="h-5 w-5" />
       {count > 0 && (
-        <span className="absolute -top-2 -right-2 bg-zinc-900 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+        <span className="absolute -top-2 -right-2 bg-ink-900 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
           {count > 99 ? "99+" : count}
         </span>
       )}

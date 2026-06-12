@@ -38,14 +38,14 @@ interface QuoteDetailItem {
 }
 
 const statusStyles: Record<string, string> = {
-  quote_pending: "bg-yellow-100 text-yellow-700",
-  quote_available: "bg-blue-100 text-blue-700",
-  open_change_request: "bg-blue-100 text-blue-700",
+  quote_pending: "bg-warning-bg text-warning",
+  quote_available: "bg-accent-subtle text-accent-dark",
+  open_change_request: "bg-accent-subtle text-accent-dark",
   quote_accepted: "text-accent bg-accent-subtle",
   quote_on_hold: "bg-surface-secondary text-text-secondary",
   converted_to_order: "text-accent bg-accent-subtle",
   quote_expired: "bg-surface-secondary text-text-secondary",
-  quote_cancelled: "bg-red-100 text-red-700",
+  quote_cancelled: "bg-sale-bg text-sale-deep",
 };
 
 const statusLabels: Record<string, string> = {
@@ -126,7 +126,7 @@ export default async function QuoteDetailPage({
       </p>
 
       {hidePrices && (
-        <div className="mb-6 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+        <div className="mb-6 rounded-lg border border-yellow-200 bg-warning-bg px-4 py-3 text-sm text-warning">
           Our sales team is preparing pricing for this quote. We&apos;ll let you
           know as soon as it&apos;s ready.
         </div>
@@ -179,7 +179,7 @@ export default async function QuoteDetailPage({
                   )}
                 </p>
                 {!hasPrice && (
-                  <span className="mt-1 inline-block bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded text-xs font-medium">
+                  <span className="mt-1 inline-block bg-member-bg text-member-text border border-member/40 px-2 py-0.5 rounded text-xs font-medium">
                     Requires quote
                   </span>
                 )}
