@@ -151,6 +151,61 @@ export const getTopCategories = unstable_cache(
 
 export const getCategories = async () => categoryService.listVisibleSlim(CHANNEL_ID);
 
+// ── Mega menu ───────────────────────────────────────────────────────────
+// Department tree (3 levels) for the header mega menu, plus the per-
+// department featured panel content from the `mega_menu_featured` channel
+// setting: { [categoryId]: { image_url?, heading, body?, cta_text?, cta_href? } }.
+
+export type MegaMenuFeatured = {
+  image_url?: string;
+  heading: string;
+  body?: string;
+  cta_text?: string;
+  cta_href?: string;
+};
+
+export type MegaMenuNode = {
+  id: number;
+  name: string;
+  slug: string;
+  children: MegaMenuNode[];
+};
+
+export const getMegaMenu = unstable_cache(
+  async (): Promise<{ departments: MegaMenuNode[]; featured: Record<string, MegaMenuFeatured> }> => {
+    const rows = (await categoryService.listVisibleSlim(CHANNEL_ID)) as {
+      id: number;
+      name: string;
+      slug: string;
+      depth: number | null;
+      parentId: number | null;
+      sortOrder: number | null;
+    }[];
+
+    const byId = new Map<number, MegaMenuNode>();
+    for (const r of rows) byId.set(r.id, { id: r.id, name: r.name, slug: r.slug, children: [] });
+    const departments: MegaMenuNode[] = [];
+    for (const r of rows) {
+      const node = byId.get(r.id)!;
+      if ((r.depth ?? 0) === 0 || r.parentId == null) departments.push(node);
+      else byId.get(r.parentId)?.children.push(node);
+    }
+
+    const featuredSetting = await (async () => {
+      try {
+        const setting = await channelSettingsService.getByKey(CHANNEL_ID, "mega_menu_featured");
+        return (setting.setting_value as Record<string, MegaMenuFeatured>) ?? {};
+      } catch {
+        return {};
+      }
+    })();
+
+    return { departments, featured: featuredSetting };
+  },
+  [`mega-menu-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "categories", "channel-settings"] }
+);
+
 export const getCategoryBySlug = (slug: string) => unstable_cache(
   async () => categoryService.getBySlug(slug, CHANNEL_ID),
   [`category-slug-${CHANNEL_ID}-${slug}`],

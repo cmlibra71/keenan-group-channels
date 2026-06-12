@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscription, getSubscriptionPlans, customerService, CHANNEL_ID, getProductBreadcrumbs } from "@/lib/store";
-import { getSession } from "@/lib/auth";
+import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, CHANNEL_ID, getProductBreadcrumbs } from "@/lib/store";
+import { getMemberContext } from "@/lib/member";
 import { ChevronRight } from "lucide-react";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductTabs } from "@/components/product/ProductTabs";
@@ -35,53 +35,34 @@ export default async function ProductPage({
     slug: string;
   }[];
 
-  // Fetch member pricing if feature is enabled
+  // Member pricing — design-system model: the member figure is computed for
+  // EVERYONE (guests price at the base member tier) so the page can render
+  // either the member price or the gold "Join → pay $X" conversion funnel.
   let memberPrice: number | null = null;
-  let isMember = false;
   let membershipTeaser: { fromPrice: string | null } | null = null;
   const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
+  const memberCtx = await getMemberContext();
+  const isMember = memberCtx.isMember;
 
   let memberPriceMap: Record<number, number> = {};
-  if (memberPricingEnabled) {
-    const session = await getSession();
-    let customerGroupId: number | null = null;
-    if (session) {
-      const activeSub = await getActiveSubscription(session.customerId);
-      if (activeSub) {
-        const customer = await customerService.getById(session.customerId) as { customerGroupId: number | null } | null;
-        customerGroupId = customer?.customerGroupId ?? null;
-        isMember = true;
-      }
-    }
-    // Non-members get a generic membership pitch (never the exact member price).
-    if (!isMember) {
-      const plans = (await getSubscriptionPlans()) as { price: string | null }[];
-      const cheapest = plans
-        .map((p) => (p.price != null ? parseFloat(p.price) : NaN))
-        .filter((p) => Number.isFinite(p))
-        .sort((a, b) => a - b)[0];
-      membershipTeaser = { fromPrice: cheapest != null && Number.isFinite(cheapest) ? cheapest.toFixed(2) : null };
-    }
+  if (memberPricingEnabled && memberCtx.customerGroupId) {
+    membershipTeaser = { fromPrice: memberCtx.planPrice ? parseFloat(memberCtx.planPrice).toFixed(2) : null };
 
-    // Fetch member prices for ALL variants (only for actual members — the
-    // customer's group is what unlocks member pricing) so the client can update
-    // the displayed price on variant change.
-    if (customerGroupId) {
-      const variants = product.variants ?? [];
-      const pricingResults = await Promise.all(
-        variants.map((v) => getEffectivePrice(v.id, CHANNEL_ID, customerGroupId))
-      );
-      for (let i = 0; i < variants.length; i++) {
-        const pricing = pricingResults[i];
-        if (pricing.salePrice) {
-          memberPriceMap[variants[i].id] = parseFloat(pricing.salePrice);
-        }
+    // Member prices for ALL variants so the client can update on variant change.
+    const variants = product.variants ?? [];
+    const pricingResults = await Promise.all(
+      variants.map((v) => getEffectivePrice(v.id, CHANNEL_ID, memberCtx.customerGroupId))
+    );
+    for (let i = 0; i < variants.length; i++) {
+      const pricing = pricingResults[i];
+      if (pricing.salePrice) {
+        memberPriceMap[variants[i].id] = parseFloat(pricing.salePrice);
       }
-      // Set default member price from first variant for initial render
-      const defaultVariant = variants[0];
-      if (defaultVariant && memberPriceMap[defaultVariant.id] != null) {
-        memberPrice = memberPriceMap[defaultVariant.id];
-      }
+    }
+    // Default member price from first variant for initial render
+    const defaultVariant = variants[0];
+    if (defaultVariant && memberPriceMap[defaultVariant.id] != null) {
+      memberPrice = memberPriceMap[defaultVariant.id];
     }
   }
 

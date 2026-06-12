@@ -1,11 +1,33 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { cookies } from "next/headers";
+import { Fraunces, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { getSiteConfig, getFeatureFlag } from "@/lib/store";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { GstProvider } from "@/lib/gst";
 import "./globals.css";
+
+// Design-system type stack: Fraunces (serif voice for hero/marketing/PDP
+// titles), IBM Plex Sans (all UI/body), IBM Plex Mono (SKUs & specs).
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-fraunces",
+  display: "swap",
+});
+const plexSans = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-plex-sans",
+  display: "swap",
+});
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-plex-mono",
+  display: "swap",
+});
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +67,7 @@ export default async function RootLayout({
   const gstInclusive = cookieStore.get("gst_inclusive")?.value === "true";
 
   return (
-    <html lang="en">
+    <html lang="en" className={`${fraunces.variable} ${plexSans.variable} ${plexMono.variable}`}>
       <Script
         id="google-tag-manager"
         strategy="beforeInteractive"

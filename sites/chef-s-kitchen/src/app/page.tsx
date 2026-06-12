@@ -4,7 +4,7 @@ import { Crown, ArrowRight, ChevronRight } from "lucide-react";
 import { getProducts, getSiteConfig, getTopCategories, getFeatureFlag, getSubscriptionPlans, getUpcomingDraws, getBrandsForChannel, prizeService, productChannelAssignmentService, CHANNEL_ID } from "@/lib/store";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
-import { ValueBar } from "@/components/home/ValueBar";
+import { TrustBar } from "@/components/home/TrustBar";
 import { MembershipCTA } from "@/components/home/MembershipCTA";
 import { DrawSpotlight } from "@/components/home/DrawSpotlight";
 import { StatsBanner } from "@/components/home/StatsBanner";
@@ -63,80 +63,76 @@ export default async function HomePage() {
 
   return (
     <div>
-      {/* ═══ Hero ═══ */}
+      {/* ═══ Hero — glassmorphism over kitchen photo (design system) ═══ */}
       {subscriptionsEnabled && plan ? (
-        <section className="relative overflow-hidden">
-          {/* Background image with darkening gradient behind left card */}
+        <section className="relative flex min-h-[520px] items-center overflow-hidden">
+          {/* Photo + design-system dark overlay */}
           <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/images/hero-bg.webp')" }} />
-          <div className="absolute inset-0 bg-gradient-to-r from-zinc-900/80 via-zinc-900/50 to-zinc-900/30" />
+          <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(20,22,20,.78)_0%,rgba(28,30,28,.5)_50%,rgba(20,22,20,.62)_100%)]" />
 
-          <StatsBanner productCount={productCount} brandCount={brandCount} />
-
-          <div className="relative z-10 container-page py-20 sm:py-28 lg:py-32">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center">
-              {/* Left — main card */}
-              <div className="lg:col-span-7 backdrop-blur-xl bg-white/30 border border-white/25 rounded-[28px] p-10 shadow-[0_8px_40px_rgba(0,0,0,0.15)]">
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/70 mb-5">
+          <div className="relative z-10 container-page w-full py-10">
+            <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+              {/* Lead card — frosted glass */}
+              <div className="glass self-center p-8 text-white lg:p-10">
+                <p className="mb-[18px] text-[11.5px] font-bold uppercase tracking-[0.16em] text-white/85">
                   Members-Only Supply Partner
                 </p>
-                <h1 className="hero-title text-white leading-[1.08]">
-                  Professional Culinary Supplies{"\u00A0"}at Prices Reserved for the Trade
+                <h1 className="hero-title text-white">
+                  Professional Culinary Supplies at Prices{" "}
+                  <em className="not-italic text-member-bright">Reserved for the Trade</em>
                 </h1>
-                <p className="mt-5 text-base text-white/80 max-w-lg leading-relaxed">
-                  From ${planPrice!.toFixed(2)}/{plan.billingInterval} — access wholesale pricing,
-                  priority fulfilment{drawsEnabled ? ", and member-exclusive draws" : ""} across our full commercial range.
+                <p className="mt-[18px] max-w-[44ch] text-base leading-[1.55] text-white/[0.88]">
+                  From ${planPrice!.toFixed(2)}/{plan.billingInterval} — access wholesale pricing
+                  and priority fulfilment across our full commercial range.
                 </p>
-                <div className="mt-9 flex flex-col sm:flex-row gap-3">
-                  <Link
-                    href="/membership"
-                    className="inline-flex items-center justify-center gap-2 bg-teal-700 text-white px-7 py-3.5 rounded-[14px] font-semibold text-sm hover:bg-teal-800 transition-colors shadow-sm"
-                  >
-                    Join & Save
+                <div className="mt-[26px] flex flex-wrap gap-3">
+                  <Link href="/membership" className="btn-primary">
+                    Join &amp; Save
                     <ArrowRight className="h-4 w-4" />
                   </Link>
-                  <Link
-                    href="/search"
-                    className="inline-flex items-center justify-center gap-2 border border-white/30 bg-white/10 text-white px-7 py-3.5 rounded-[14px] font-semibold text-sm hover:bg-white/20 hover:border-white/50 transition-colors"
-                  >
-                    Browse Equipment & Supplies
+                  <Link href="/search" className="btn-glass">
+                    Browse Equipment &amp; Supplies
                   </Link>
                 </div>
               </div>
 
-              {/* Right — featured prize or benefits card */}
-              <div className="lg:col-span-5">
+              {/* Right column — Member Benefits (or prize) + gold stat card */}
+              <div className="flex flex-col gap-[18px] self-center">
                 {featuredPrize ? (
-                  <Link href="/membership#draws" className="block backdrop-blur-xl bg-zinc-900/30 border border-white/10 rounded-[24px] p-7 shadow-[0_8px_40px_rgba(0,0,0,0.25)] hover:border-amber-500/30 transition-colors group">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-400 mb-4">
+                  <Link
+                    href="/membership#draws"
+                    className="group ml-auto block w-full max-w-[430px] rounded-panel border border-white/[0.14] bg-[rgba(20,16,18,.46)] p-7 text-white backdrop-blur-[14px] transition-colors hover:border-member/40"
+                  >
+                    <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.18em] text-member">
                       Members-Only Draw
                     </p>
                     <div className="flex items-start gap-5">
-                      <div className="relative h-28 w-28 bg-zinc-800 rounded-[10px] overflow-hidden shrink-0 border border-white/5">
+                      <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-card border border-white/5 bg-ink-800">
                         {featuredPrize.imageUrl ? (
                           <Image
                             src={featuredPrize.imageUrl}
                             alt={featuredPrize.name}
                             fill
-                            sizes="112px"
-                            className="object-contain group-hover:scale-105 transition-transform duration-500"
+                            sizes="96px"
+                            className="object-contain transition-transform duration-500 group-hover:scale-105"
                           />
                         ) : (
-                          <div className="h-full w-full flex items-center justify-center">
-                            <Crown className="h-8 w-8 text-amber-400/30" />
+                          <div className="flex h-full w-full items-center justify-center">
+                            <Crown className="h-8 w-8 text-member/30" />
                           </div>
                         )}
                       </div>
                       <div>
-                        <h3 className="font-semibold text-white text-lg leading-snug">{featuredPrize.name}</h3>
+                        <h3 className="text-lg font-semibold leading-snug text-white">{featuredPrize.name}</h3>
                         {featuredPrize.value && parseFloat(featuredPrize.value) > 0 && (
-                          <p className="text-2xl font-bold text-amber-400 mt-2">
+                          <p className="mt-2 text-2xl font-bold text-member-bright">
                             ${parseFloat(featuredPrize.value).toLocaleString("en-AU", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                           </p>
                         )}
                         {featuredDraw?.scheduledAt && (
-                          <p className="mt-3 inline-flex items-center gap-2 bg-amber-400/15 border border-amber-400/30 rounded-full px-3 py-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                            <span className="text-xs text-amber-300 font-semibold tracking-wide">
+                          <p className="mt-3 inline-flex items-center gap-2 rounded-full border border-member/30 bg-member/15 px-3 py-1">
+                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-member" />
+                            <span className="text-xs font-semibold tracking-wide text-member-bright">
                               Next Draw: {new Date(featuredDraw.scheduledAt).toLocaleDateString("en-AU", { day: "numeric", month: "long" })}
                             </span>
                           </p>
@@ -145,45 +141,42 @@ export default async function HomePage() {
                     </div>
                   </Link>
                 ) : (
-                  <div className="backdrop-blur-xl bg-zinc-900/30 border border-white/10 rounded-[24px] p-7 shadow-[0_8px_40px_rgba(0,0,0,0.25)]">
-                    <Crown className="h-6 w-6 text-amber-400 mb-4" />
-                    <h3 className="heading-serif text-xl text-white mb-4">Member Benefits</h3>
-                    <ul className="space-y-3">
+                  <div className="ml-auto w-full max-w-[430px] rounded-panel border border-white/[0.14] bg-[rgba(20,16,18,.46)] px-7 py-[26px] text-white backdrop-blur-[14px]">
+                    <Crown className="mb-2 h-[22px] w-[22px] text-member" />
+                    <h3 className="heading-serif mb-3.5 text-[21px] text-white">Member Benefits</h3>
+                    <ul>
                       {planBenefits.slice(0, 4).map((b, i) => (
-                        <li key={i} className="text-sm text-zinc-300 flex items-start gap-3 leading-relaxed">
-                          <span className="h-px w-4 bg-teal-500/60 mt-2.5 shrink-0" />
+                        <li key={i} className="flex items-center gap-[11px] py-2 text-[13.5px] text-white/90">
+                          <span className={`h-0.5 w-4 shrink-0 ${i === 1 ? "bg-accent-bright" : "bg-member"}`} />
                           {b}
                         </li>
                       ))}
                     </ul>
                   </div>
                 )}
+
+                <StatsBanner productCount={productCount} brandCount={brandCount} />
               </div>
             </div>
           </div>
         </section>
       ) : (
-        <section className="relative overflow-hidden">
+        <section className="relative flex min-h-[460px] items-center overflow-hidden">
           <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/images/hero-bg.webp')" }} />
-          <div className="absolute inset-0 bg-gradient-to-r from-zinc-900/80 via-zinc-900/50 to-zinc-900/30" />
+          <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(20,22,20,.78)_0%,rgba(28,30,28,.5)_50%,rgba(20,22,20,.62)_100%)]" />
 
-          <StatsBanner productCount={productCount} brandCount={brandCount} />
-
-          <div className="relative z-10 container-page py-24 sm:py-32">
-            <div className="backdrop-blur-xl bg-white/30 border border-white/25 rounded-[28px] p-10 shadow-[0_8px_40px_rgba(0,0,0,0.15)] max-w-2xl">
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/70 mb-5">
+          <div className="relative z-10 container-page w-full py-10">
+            <div className="glass max-w-2xl p-8 text-white lg:p-10">
+              <p className="mb-[18px] text-[11.5px] font-bold uppercase tracking-[0.16em] text-white/85">
                 Commercial Kitchen Equipment
               </p>
               <h1 className="hero-title text-white">
                 Welcome to {channel?.name || "our store"}
               </h1>
-              <p className="mt-5 text-base text-white/80 max-w-lg leading-relaxed">
+              <p className="mt-[18px] max-w-[44ch] text-base leading-[1.55] text-white/[0.88]">
                 Discover our curated range of professional-grade kitchen equipment.
               </p>
-              <Link
-                href="/products"
-                className="mt-9 inline-flex items-center justify-center gap-2 bg-teal-700 text-white px-7 py-3.5 rounded-[14px] font-semibold text-sm hover:bg-teal-800 transition-colors shadow-sm"
-              >
+              <Link href="/products" className="btn-primary mt-[26px]">
                 Browse Equipment
                 <ArrowRight className="h-4 w-4" />
               </Link>
@@ -192,8 +185,9 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* ═══ Value Bar ═══ */}
-      {subscriptionsEnabled && <ValueBar drawsEnabled={drawsEnabled} />}
+      {/* ═══ Trust bar (design system) ═══ */}
+      <TrustBar />
+
 
       {/* ═══ Categories — editorial grid ═══ */}
       {topCategories.length > 0 && (

@@ -1,40 +1,72 @@
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getActiveSubscription, customerService, getMemberPriceMap } from "@/lib/store";
+import {
+  getFeatureFlag,
+  getActiveSubscription,
+  getSubscriptionPlans,
+  customerService,
+  getMemberPriceMap,
+} from "@/lib/store";
 
 export interface MemberContext {
   /** True only for a logged-in customer with an ACTIVE subscription. */
   isMember: boolean;
-  /** The member's customer group (tier) — what unlocks member pricing. */
+  /**
+   * The customer group used for pricing. For members this is their tier
+   * group; for GUESTS it's the plan's base member group — the design system
+   * shows guests the exact member price as the "Join → pay $X" conversion
+   * funnel, so everyone gets a member figure computed at the base tier.
+   */
   customerGroupId: number | null;
+  /** The cheapest active plan's monthly price, for "Join from $X/mo" lines. */
+  planPrice: string | null;
+}
+
+/** The plan's base member group — what a new subscriber would be priced at. */
+async function getBasePlan(): Promise<{ groupId: number | null; price: string | null }> {
+  const plans = (await getSubscriptionPlans()) as {
+    price: string | null;
+    memberCustomerGroupId: number | null;
+  }[];
+  const plan = plans[0];
+  return { groupId: plan?.memberCustomerGroupId ?? null, price: plan?.price ?? null };
 }
 
 /**
  * Resolve the current visitor's membership state for pricing purposes.
  * Membership is the key, the customer group sets the tier depth: a lapsed
- * subscription means no member pricing even if the group is still assigned.
+ * subscription means MEMBER pricing display is lost (isMember false), but
+ * like guests they still see the base member figure as the join funnel.
  */
 export async function getMemberContext(): Promise<MemberContext> {
-  const none: MemberContext = { isMember: false, customerGroupId: null };
+  const none: MemberContext = { isMember: false, customerGroupId: null, planPrice: null };
 
   const enabled = await getFeatureFlag("member_pricing_enabled");
   if (!enabled) return none;
 
+  const base = await getBasePlan();
+
   const session = await getSession();
-  if (!session) return none;
+  if (session) {
+    const activeSub = await getActiveSubscription(session.customerId);
+    if (activeSub) {
+      const customer = (await customerService.getById(session.customerId)) as {
+        customerGroupId: number | null;
+      } | null;
+      return {
+        isMember: true,
+        customerGroupId: customer?.customerGroupId ?? base.groupId,
+        planPrice: base.price,
+      };
+    }
+  }
 
-  const activeSub = await getActiveSubscription(session.customerId);
-  if (!activeSub) return none;
-
-  const customer = (await customerService.getById(session.customerId)) as {
-    customerGroupId: number | null;
-  } | null;
-
-  return { isMember: true, customerGroupId: customer?.customerGroupId ?? null };
+  // Guest / non-member: price at the base member tier for the join funnel.
+  return { isMember: false, customerGroupId: base.groupId, planPrice: base.price };
 }
 
 /**
- * Member prices for a page of listing products — empty for non-members, so
- * callers can pass the result straight to ProductGrid's memberPriceMap.
+ * Member prices for a page of listing products, keyed by product id. Computed
+ * for guests too (base tier) so cards can render the "Join → pay $X" line.
  */
 export async function getListingMemberPrices(
   products: { id: number }[]

@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600&display=swap');
 
 /* Prevent horizontal overflow when users pinch-zoom on mobile */
 html, body {
@@ -7,46 +6,110 @@ html, body {
 }
 
 /* ══════════════════════════════════════════════════════
-   DESIGN TOKENS
-   Change accent color, surfaces, or text hierarchy here.
-   Every component references these — one change propagates.
+   CHEF'S DEPOT — DESIGN TOKENS (Design System v2)
+   Source of truth: keenan-group-portal/reference/
+   chefs-depot-tokens.css + chefs-depot-design-system.html
+   Brand green / action teal / membership gold / sale rust /
+   warm ink structure / steel neutrals. Fraunces serif voice,
+   IBM Plex Sans UI, IBM Plex Mono for SKUs & specs.
+   Fonts are loaded via next/font in app/layout.tsx and exposed
+   as --font-fraunces / --font-plex-sans / --font-plex-mono.
    ══════════════════════════════════════════════════════ */
 
 @theme {
   /* ── Fonts ─────────────────────────────────────────── */
-  --font-serif: 'DM Serif Display', Georgia, 'Times New Roman', serif;
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-serif: var(--font-fraunces), "Fraunces", Georgia, serif;
+  --font-sans: var(--font-plex-sans), "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, monospace;
 
-  /* ── Palette (raw values, keep for reference) ──────── */
-  --color-navy: #0F172A;
-  --color-navy-light: #1E293B;
-  --color-stone: #E2E8F0;
-  --color-stone-warm: #F1F5F9;
-  --color-offwhite: #F8FAFC;
-  --color-teal: #0D9488;
-  --color-teal-light: #14B8A6;
-  --color-teal-dark: #0F766E;
-  --color-ink: #334155;
-  --color-ink-light: #64748B;
-  --color-ink-faint: #94A3B8;
+  /* ── Brand green (logo field, header, brand surfaces) ─ */
+  --color-brand-deep: #2E5E36;   /* green-700 — nav bar             */
+  --color-brand-mid: #3A7342;    /* green-600                       */
+  --color-brand: #45844D;        /* green-500 — PRIMARY BRAND       */
+  --color-brand-light: #5FA06A;  /* green-400                       */
+  --color-brand-tint: #E6F0E8;   /* green-100 — tint surfaces       */
 
-  /* ── Semantic roles (use these in components) ──────── */
-  --color-accent: #0D9488;
-  --color-accent-hover: #14B8A6;
-  --color-accent-dark: #0F766E;
-  --color-accent-subtle: oklch(from #0D9488 l c h / 0.10);
+  /* ── Action teal (the ONLY buy/go colour) ──────────── */
+  --color-accent: #00786F;       /* teal-700 — primary actions      */
+  --color-accent-hover: #005E56; /* teal-800 — hover / pressed      */
+  --color-accent-dark: #005E56;
+  --color-accent-bright: #0A8C81;/* teal-600                        */
+  --color-accent-subtle: #D9EFEC;/* teal-100                        */
 
-  --color-surface-primary: #F8FAFC;
-  --color-surface-secondary: #F1F5F9;
-  --color-surface-dark: #0F172A;
-  --color-surface-dark-alt: #1E293B;
+  /* ── Membership gold (savings, member price, crown) ── */
+  --color-member: #E9B949;       /* gold-500                        */
+  --color-member-bright: #F6D154;/* gold-400                        */
+  --color-member-text: #B98A1E;  /* gold-700 — gold text on light   */
+  --color-member-bg: #FBF1D6;    /* gold-100                        */
 
-  --color-text-primary: #0F172A;
-  --color-text-body: #334155;
-  --color-text-secondary: #64748B;
-  --color-text-muted: #94A3B8;
+  /* ── Sale rust (clearance / Save% urgency ONLY) ────── */
+  --color-sale: #C4502A;         /* rust-500                        */
+  --color-sale-deep: #A83E1F;    /* rust-600                        */
+  --color-sale-bg: #F7E4DC;      /* rust-100                        */
 
-  --color-border: #E2E8F0;
+  /* ── Warning ───────────────────────────────────────── */
+  --color-warning: #C8881C;
+  --color-warning-bg: #FBF1DC;
+
+  /* ── Ink (warm near-black) & steel neutrals ────────── */
+  --color-ink-900: #1B1416;
+  --color-ink-800: #241B1F;
+  --color-ink-700: #2F2429;
+  --color-steel-700: #4A5562;
+  --color-steel-500: #6B7785;
+  --color-steel-400: #8A95A3;
+  --color-steel-300: #C2C9D2;
+  --color-steel-200: #DDE2E8;
+  --color-steel-100: #EEF1F4;
+  --color-steel-50: #F6F8FA;
+
+  /* ── Semantic roles (components reference these) ───── */
+  --color-surface-primary: #F6F8FA;   /* page background  */
+  --color-surface-secondary: #EEF1F4;
+  --color-surface-dark: #1B1416;      /* trust bar, footer */
+  --color-surface-dark-alt: #241B1F;
+
+  --color-text-primary: #1B1416;
+  --color-text-body: #2F2429;
+  --color-text-secondary: #6B7785;
+  --color-text-muted: #8A95A3;
+
+  --color-border: #DDE2E8;
+  --color-border-strong: #C2C9D2;
+
+  /* Legacy aliases (pre-design-system component refs) */
+  --color-navy: #1B1416;
+  --color-navy-light: #241B1F;
+  --color-stone: #DDE2E8;
+  --color-stone-warm: #EEF1F4;
+  --color-offwhite: #F6F8FA;
+  --color-teal: #00786F;
+  --color-teal-light: #0A8C81;
+  --color-teal-dark: #005E56;
+  --color-ink: #2F2429;
+  --color-ink-light: #6B7785;
+  --color-ink-faint: #8A95A3;
+
+  /* ── Radii ─────────────────────────────────────────── */
+  --radius-btn: 8px;
+  --radius-card: 14px;
+  --radius-panel: 18px;
+
+  /* ── Shadows (cool, soft) ──────────────────────────── */
+  --shadow-sm: 0 1px 2px rgba(27,20,22,.06), 0 1px 3px rgba(27,20,22,.07);
+  --shadow-md: 0 6px 16px rgba(27,20,22,.09);
+  --shadow-lg: 0 16px 40px rgba(27,20,22,.14);
+  --shadow-hover: 0 20px 48px rgba(27,20,22,.18);
+
+  /* ── Motion ────────────────────────────────────────── */
+  --ease-cd: cubic-bezier(.2,.7,.3,1);
+}
+
+/* Non-theme design vars (glass fills etc.) */
+:root {
+  --cd-glass: rgba(255,255,255,.12);
+  --cd-glass-border: rgba(255,255,255,.22);
+  --cd-glass-dark: rgba(20,16,18,.46);
 }
 
 /* ══════════════════════════════════════════════════════
@@ -60,7 +123,8 @@ html {
 body {
   font-family: var(--font-sans);
   font-weight: 400;
-  letter-spacing: -0.01em;
+  background: var(--color-surface-primary);
+  color: var(--color-text-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -71,18 +135,19 @@ body {
 }
 
 /* ── Heading treatments ────────────────────────────── */
+/* Fraunces 500, slight negative tracking, sentence case — never all-caps. */
 
 .heading-serif {
   font-family: var(--font-serif);
-  font-weight: 400;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
 }
 
 .heading-sans {
   font-family: var(--font-sans);
-  font-weight: 600;
-  letter-spacing: -0.03em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   font-size: 0.6875rem;
 }
@@ -110,92 +175,137 @@ body {
   );
 }
 
+/* Frosted glass card (hero & header search) — solid fallback first. */
+.glass {
+  background: rgba(40, 44, 42, 0.85);
+  border: 1px solid var(--cd-glass-border);
+  border-radius: var(--radius-panel);
+}
+@supports (backdrop-filter: blur(14px)) {
+  .glass {
+    background: var(--cd-glass);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+}
+
 /* ══════════════════════════════════════════════════════
    COMPONENT CLASSES
-   Semantic classes that reference design tokens.
-   Components use these instead of raw Tailwind utilities.
    ══════════════════════════════════════════════════════ */
 
 /* ═══ BUTTONS ═══════════════════════════════════════ */
+/* Teal = the only buy/go colour. One primary per region. */
 
 .btn {
-  @apply inline-flex items-center justify-center gap-2.5
-         font-medium text-sm tracking-wide
-         px-7 py-3.5
-         transition-colors duration-300;
+  @apply inline-flex items-center justify-center gap-2
+         font-semibold text-sm
+         px-[22px] py-3 rounded-btn
+         transition-all duration-200;
 }
 
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-2.5
-         font-medium text-sm tracking-wide px-7 py-3.5
-         transition-colors duration-300
+  @apply inline-flex items-center justify-center gap-2
+         font-semibold text-sm px-[22px] py-3 rounded-btn
+         transition-all duration-200
          bg-accent text-white
-         hover:bg-accent-hover
-         disabled:bg-surface-secondary disabled:text-text-muted
+         hover:bg-accent-hover hover:shadow-md hover:-translate-y-px
+         disabled:bg-steel-200 disabled:text-steel-400
+         disabled:shadow-none disabled:translate-y-0
          disabled:cursor-not-allowed;
 }
 
+/* Outline peer action — "Add to Quote" */
 .btn-secondary {
-  @apply inline-flex items-center justify-center gap-2.5
-         font-medium text-sm tracking-wide px-7 py-3.5
-         transition-colors duration-300
-         border border-border text-text-body
-         hover:border-text-primary/30;
+  @apply inline-flex items-center justify-center gap-2
+         font-semibold text-sm px-[22px] py-3 rounded-btn
+         transition-all duration-200
+         bg-white border border-border-strong text-text-primary
+         hover:border-text-primary hover:bg-steel-50;
 }
 
 .btn-secondary-dark {
-  @apply inline-flex items-center justify-center gap-2.5
-         font-medium text-sm tracking-wide px-7 py-3.5
-         transition-colors duration-300
-         border border-slate-600 text-slate-300
-         hover:border-slate-400 hover:text-white;
+  @apply inline-flex items-center justify-center gap-2
+         font-semibold text-sm px-[22px] py-3 rounded-btn
+         transition-all duration-200
+         border border-white/40 text-white bg-white/15
+         hover:bg-white/25;
+}
+
+/* Glass button for use over the hero photo */
+.btn-glass {
+  @apply inline-flex items-center justify-center gap-2
+         font-semibold text-sm px-[22px] py-3 rounded-btn
+         transition-all duration-200
+         text-white border border-white/40 bg-white/15
+         backdrop-blur-sm hover:bg-white/25;
+}
+
+/* Gold — high-intent membership moments only */
+.btn-gold {
+  @apply inline-flex items-center justify-center gap-2
+         font-bold text-sm px-[22px] py-3 rounded-btn
+         transition-all duration-200
+         bg-member text-ink-900
+         hover:bg-member-bright;
+}
+
+/* Brand-green (brand surfaces, not buy actions) */
+.btn-brand {
+  @apply inline-flex items-center justify-center gap-2
+         font-semibold text-sm px-[22px] py-3 rounded-btn
+         transition-all duration-200
+         bg-brand text-white hover:bg-brand-mid;
+}
+
+.btn-sm {
+  @apply px-3.5 py-2 text-xs;
 }
 
 .btn-ghost {
-  @apply inline-flex items-center gap-2 text-sm
-         text-text-secondary hover:text-text-primary
-         transition-colors duration-300;
+  @apply inline-flex items-center gap-2 text-sm font-semibold
+         text-accent hover:text-accent-hover
+         transition-colors duration-200;
 }
 
 /* ═══ TYPOGRAPHY ════════════════════════════════════ */
 
 .eyebrow {
   font-family: var(--font-sans);
-  font-weight: 600;
-  letter-spacing: -0.03em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   font-size: 0.6875rem;
-  @apply text-accent tracking-widest;
+  @apply text-accent-dark;
 }
 
 .section-title {
   font-family: var(--font-serif);
-  font-weight: 400;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
   @apply text-3xl sm:text-4xl text-text-primary;
 }
 
 .hero-title {
   font-family: var(--font-serif);
-  font-weight: 400;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-  @apply text-4xl sm:text-5xl lg:text-6xl;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.04;
+  @apply text-4xl sm:text-5xl lg:text-[50px];
 }
 
 .page-title {
   font-family: var(--font-serif);
-  font-weight: 400;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
   @apply text-2xl sm:text-3xl text-text-primary;
 }
 
 .panel-title {
   font-family: var(--font-serif);
-  font-weight: 400;
-  letter-spacing: -0.02em;
+  font-weight: 500;
+  letter-spacing: -0.01em;
   line-height: 1.15;
   @apply text-lg text-text-primary;
 }
@@ -208,17 +318,24 @@ body {
   @apply text-xs text-text-muted tracking-wide;
 }
 
+/* Mono — SKUs, dimensions, electrical specs */
+.spec-mono {
+  font-family: var(--font-mono);
+  @apply text-xs text-text-secondary;
+}
+
 /* ═══ FORM INPUTS ══════════════════════════════════ */
 
 .input {
-  @apply mt-1 block w-full border border-border
-         px-3 py-2 text-sm
-         focus:border-text-primary focus:outline-none;
+  @apply mt-1 block w-full border border-border rounded-btn
+         px-3 py-2 text-sm bg-white
+         focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent;
 }
 
 .input-search {
-  @apply w-full pl-10 pr-4 py-3 border border-border
-         text-sm focus:border-text-primary focus:outline-none;
+  @apply w-full pl-10 pr-4 py-3 border border-border rounded-btn
+         text-sm bg-white
+         focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent;
 }
 
 .field-label {
@@ -228,43 +345,43 @@ body {
 /* ═══ CARDS & CONTAINERS ═══════════════════════════ */
 
 .card {
-  @apply border border-border;
+  @apply border border-border rounded-card bg-white shadow-sm;
 }
 
 .card-padded {
-  @apply border border-border p-6;
+  @apply border border-border rounded-card bg-white shadow-sm p-6;
 }
 
 .card-interactive {
-  @apply border border-border p-6
-         hover:border-text-primary/30
-         transition-colors duration-300;
+  @apply border border-border rounded-card bg-white shadow-sm p-6
+         hover:shadow-hover hover:-translate-y-[3px] hover:border-brand-light
+         transition-all duration-200;
 }
 
 .card-dark {
-  @apply border border-slate-700/50 bg-surface-dark-alt/50
+  @apply border border-white/10 bg-surface-dark-alt/60 rounded-card
          backdrop-blur-sm p-8;
 }
 
 .card-dark-interactive {
-  @apply border border-slate-700/50 bg-surface-dark-alt/50
+  @apply border border-white/10 bg-surface-dark-alt/60 rounded-card
          backdrop-blur-sm p-8
-         hover:border-accent/30
-         transition-all duration-500;
+         hover:border-member/40
+         transition-all duration-300;
 }
 
 /* ═══ SECTIONS & LAYOUT ════════════════════════════ */
 
 .container-page {
-  @apply mx-auto max-w-7xl px-6 lg:px-8;
+  @apply mx-auto max-w-[1320px] px-6;
 }
 
 .section-padding {
-  @apply py-20 sm:py-24;
+  @apply py-16 sm:py-20;
 }
 
 .section-light {
-  @apply mx-auto max-w-7xl px-6 lg:px-8 py-20 sm:py-24;
+  @apply mx-auto max-w-[1320px] px-6 py-16 sm:py-20;
 }
 
 .section-dark {
@@ -287,21 +404,65 @@ body {
 }
 
 /* ═══ BADGES & PILLS ═══════════════════════════════ */
+/* Stack at most two corner badges on a card. */
+
+.cd-badge {
+  @apply inline-flex items-center gap-1 font-bold uppercase
+         px-[9px] py-1 rounded-sm leading-none
+         text-[11px] tracking-[0.03em];
+}
 
 .badge-member {
-  @apply inline-flex items-center gap-1 text-xs font-medium
-         px-2 py-1 rounded-full bg-accent-subtle text-accent;
+  @apply inline-flex items-center gap-1 font-bold uppercase
+         px-[9px] py-1 rounded-sm leading-none
+         text-[11px] tracking-[0.03em]
+         bg-member-bg text-member-text;
 }
 
 .badge-member-pricing {
   @apply inline-flex items-center gap-1.5
-         text-accent text-xs font-medium tracking-wide;
+         text-member-text text-xs font-semibold tracking-wide;
+}
+
+.badge-save {
+  @apply inline-flex items-center gap-1 font-bold uppercase
+         px-[9px] py-1 rounded-sm leading-none
+         text-[11px] tracking-[0.03em]
+         bg-sale text-white;
+}
+
+.badge-clearance {
+  @apply inline-flex items-center gap-1 font-bold uppercase
+         px-[9px] py-1 rounded-sm leading-none
+         text-[11px] tracking-[0.03em]
+         bg-ink-900 text-white;
+}
+
+.badge-stock-in {
+  @apply inline-flex items-center gap-1 font-bold uppercase
+         px-[9px] py-1 rounded-sm leading-none
+         text-[11px] tracking-[0.03em]
+         bg-brand-tint text-brand-deep;
+}
+
+.badge-stock-low {
+  @apply inline-flex items-center gap-1 font-bold uppercase
+         px-[9px] py-1 rounded-sm leading-none
+         text-[11px] tracking-[0.03em]
+         bg-warning-bg text-warning;
+}
+
+.badge-new {
+  @apply inline-flex items-center gap-1 font-bold uppercase
+         px-[9px] py-1 rounded-sm leading-none
+         text-[11px] tracking-[0.03em]
+         bg-accent-subtle text-accent-dark;
 }
 
 /* ═══ ALERTS ════════════════════════════════════════ */
 
 .alert-error {
-  @apply p-3 bg-red-50 text-red-700 text-sm;
+  @apply p-3 bg-sale-bg text-sale-deep text-sm rounded-btn;
 }
 
 /* ═══ NAV LINKS ════════════════════════════════════ */
@@ -309,26 +470,22 @@ body {
 .nav-link {
   font-family: var(--font-sans);
   font-weight: 600;
-  letter-spacing: -0.03em;
-  text-transform: uppercase;
-  font-size: 0.6875rem;
+  font-size: 0.84375rem; /* 13.5px */
   @apply text-text-secondary
-         hover:text-text-primary transition-colors duration-300;
+         hover:text-text-primary transition-colors duration-200;
 }
 
 .nav-link-accent {
   font-family: var(--font-sans);
   font-weight: 600;
-  letter-spacing: -0.03em;
-  text-transform: uppercase;
-  font-size: 0.6875rem;
+  font-size: 0.84375rem;
   @apply text-accent
-         hover:text-accent-dark transition-colors duration-300;
+         hover:text-accent-dark transition-colors duration-200;
 }
 
 .footer-link {
-  @apply text-sm text-text-secondary
-         hover:text-text-primary transition-colors duration-300;
+  @apply text-sm text-white/65
+         hover:text-white transition-colors duration-200;
 }
 
 @keyframes shimmer {
@@ -339,8 +496,6 @@ body {
 /* ══════════════════════════════════════════════════════
    CONTENT PROSE
    Styles for data-driven content pages (/pages/[slug]).
-   Tailwind v4 preflight resets headings/lists, so restore
-   readable typography here using the theme tokens.
    ══════════════════════════════════════════════════════ */
 
 .content-prose {
@@ -351,6 +506,7 @@ body {
 .content-prose > div + div { margin-top: 1.1rem; }
 .content-prose h2 {
   font-family: var(--font-serif);
+  font-weight: 500;
   color: var(--color-text-primary);
   font-size: 1.6rem;
   line-height: 1.25;
@@ -358,6 +514,7 @@ body {
 }
 .content-prose h3 {
   font-family: var(--font-serif);
+  font-weight: 500;
   color: var(--color-text-primary);
   font-size: 1.3rem;
   line-height: 1.3;
