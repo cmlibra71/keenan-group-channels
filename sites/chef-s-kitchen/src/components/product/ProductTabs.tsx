@@ -44,13 +44,29 @@ export function ProductTabs({
   attachments?: Attachment[];
   productId: number;
 }) {
-  const tabs: Tab[] = [];
+  // Structured spec attributes — design-system Specifications table. The
+  // commerce `custom_fields` is a flat key→value map (e.g. {fuel_type:"Electric"});
+  // reserve the `tabs`/`leaseOptions` keys which carry rich content, not specs.
+  const specEntries = customFields
+    ? Object.entries(customFields).filter(
+        ([k, v]) =>
+          k !== "tabs" &&
+          k !== "leaseOptions" &&
+          (typeof v === "string" || typeof v === "number") &&
+          String(v).trim() !== ""
+      )
+    : [];
 
-  if (description) tabs.push({ key: "description", label: "FEATURES" });
+  // Design-system tab set (title case): Description · Specifications ·
+  // Delivery & Warranty · Reviews. Downloads / Lease Options remain as
+  // conditional extras (real B2B features) when they carry data.
+  const tabs: Tab[] = [];
+  if (description) tabs.push({ key: "description", label: "Description" });
+  if (specEntries.length > 0) tabs.push({ key: "specifications", label: "Specifications" });
+  tabs.push({ key: "warranty", label: "Delivery & Warranty" });
   tabs.push({ key: "reviews", label: `Reviews (${reviews.length})` });
-  tabs.push({ key: "warranty", label: "WARRANTY" });
-  tabs.push({ key: "downloads", label: `DOWNLOADS (${attachments.length})` });
-  tabs.push({ key: "leaseOptions", label: "LEASE OPTIONS" });
+  if (attachments.length > 0) tabs.push({ key: "downloads", label: `Downloads (${attachments.length})` });
+  if (typeof customFields?.leaseOptions === "string") tabs.push({ key: "leaseOptions", label: "Lease Options" });
 
   // Custom tabs from customFields.tabs array
   if (Array.isArray(customFields?.tabs)) {
@@ -88,6 +104,23 @@ export function ProductTabs({
             stripStyles
             className="prose prose-sm max-w-none text-text-secondary"
           />
+        )}
+
+        {activeTab === "specifications" && (
+          <div className="max-w-2xl overflow-hidden rounded-card border border-border">
+            <table className="w-full text-sm">
+              <tbody className="divide-y divide-border">
+                {specEntries.map(([key, value]) => (
+                  <tr key={key}>
+                    <td className="w-2/5 bg-surface-primary px-4 py-2.5 font-medium text-text-secondary">
+                      {humanizeKey(key)}
+                    </td>
+                    <td className="px-4 py-2.5 font-mono text-[13px] text-text-primary">{String(value)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
 
         {activeTab === "reviews" && (
@@ -376,6 +409,12 @@ function ReviewsSection({
       )}
     </div>
   );
+}
+
+function humanizeKey(key: string): string {
+  return key
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function formatFileSize(bytes: number): string {

@@ -488,7 +488,7 @@ export const calculateShipping = async (postcode: string, subtotal: number) =>
 // Content Pages (channel-scoped, data-driven via the `content_pages` setting)
 // ============================================================================
 
-const getJsonSetting = async <T,>(key: string, fallback: T): Promise<T> => {
+export const getJsonSetting = async <T,>(key: string, fallback: T): Promise<T> => {
   try {
     const setting = await channelSettingsService.getByKey(CHANNEL_ID, key);
     return (setting.setting_value as T) ?? fallback;

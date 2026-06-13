@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, brandService, CHANNEL_ID, getProductBreadcrumbs } from "@/lib/store";
-import { getMemberContext } from "@/lib/member";
+import { getMemberContext, getListingPricing } from "@/lib/member";
 import { ChevronRight } from "lucide-react";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductTabs } from "@/components/product/ProductTabs";
@@ -133,6 +133,8 @@ export default async function ProductPage({
     ],
   };
 
+  const relatedPricing = await getListingPricing(relatedProducts);
+
   const attachments = attachmentsRaw as {
     id: number;
     fileName: string;
@@ -218,11 +220,15 @@ export default async function ProductPage({
         productId={product.id}
       />
 
-      {/* Related Products */}
+      {/* Related Products — design product cards w/ member pricing */}
       {relatedProducts.length > 0 && (
-        <div className="mt-12 border-t border-steel-200 pt-8">
-          <h2 className="text-2xl font-bold text-ink-900 mb-6">Related Products</h2>
-          <ProductGrid products={relatedProducts} memberPricingAvailable={memberPricingEnabled} />
+        <div className="mt-12 border-t border-border pt-8">
+          <h2 className="section-title mb-6">You may also like</h2>
+          <ProductGrid
+            products={relatedProducts}
+            memberPricingAvailable={memberPricingEnabled}
+            {...relatedPricing}
+          />
         </div>
       )}
     </div>

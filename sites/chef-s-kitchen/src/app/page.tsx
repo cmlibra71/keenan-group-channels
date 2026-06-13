@@ -5,6 +5,8 @@ import { getProducts, getSiteConfig, getMegaMenu, getTopCategories, getFeatureFl
 import { getListingPricing } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { TrustBar } from "@/components/home/TrustBar";
+import { SeoFaq } from "@/components/home/SeoFaq";
+import { getJsonSetting } from "@/lib/store";
 import { MembershipValueStrip } from "@/components/home/MembershipValueStrip";
 import { DrawSpotlight } from "@/components/home/DrawSpotlight";
 import { StatsBanner } from "@/components/home/StatsBanner";
@@ -277,6 +279,9 @@ export default async function HomePage() {
         </div>
         <ProductGrid products={featuredProducts} memberPricingAvailable={memberPricingEnabled} {...(await getListingPricing(featuredProducts))} />
       </section>
+
+      {/* ═══ SEO copy + FAQ (design system) ═══ */}
+      <SeoFaq {...(await getJsonSetting("homepage_seo", {} as { heading?: string; body?: string; faqs?: { q: string; a: string }[] }))} />
 
       {/* ═══ Draw Spotlight ═══ */}
       {drawsEnabled && featuredPrize && (

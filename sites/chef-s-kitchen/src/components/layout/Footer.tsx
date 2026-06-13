@@ -34,7 +34,7 @@ export function Footer({ storeName, subscriptionsEnabled }: { storeName: string;
                   <li><Link href="/products" className="footer-link">All Products</Link></li>
                   <li><Link href="/categories" className="footer-link">Categories</Link></li>
                   <li><Link href="/brands" className="footer-link">Brands</Link></li>
-                  <li><Link href="/clearance" className="footer-link">Last Units</Link></li>
+                  <li><Link href="/clearance" className="footer-link">Clearance</Link></li>
                 </ul>
               </div>
               {subscriptionsEnabled && (
@@ -74,6 +74,8 @@ export function Footer({ storeName, subscriptionsEnabled }: { storeName: string;
           <div className="flex flex-col items-center justify-between gap-2 text-xs text-white/50 sm:flex-row">
             <p>&copy; {new Date().getFullYear()} {storeName}. All rights reserved.</p>
             <p className="flex items-center gap-3">
+              <span>ABN</span>
+              <span aria-hidden>·</span>
               <Link href="/pages/privacy" className="transition-colors hover:text-white">Privacy</Link>
               <span aria-hidden>·</span>
               <Link href="/pages/terms" className="transition-colors hover:text-white">Terms</Link>
