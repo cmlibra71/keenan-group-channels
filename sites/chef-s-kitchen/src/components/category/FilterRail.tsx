@@ -32,14 +32,17 @@ export function FilterRail({ facets }: { facets: CategoryFacets }) {
 
   return (
     <>
-      {/* Mobile trigger */}
-      <button
-        onClick={() => setDrawerOpen(true)}
-        className="btn-secondary btn-sm lg:hidden"
-      >
-        <SlidersHorizontal className="h-3.5 w-3.5" />
-        Filters
-      </button>
+      {/* Mobile trigger — wrapper carries the responsive hide so it isn't
+          overridden by .btn-secondary's own `display` (same specificity). */}
+      <div className="lg:hidden">
+        <button
+          onClick={() => setDrawerOpen(true)}
+          className="btn-secondary btn-sm"
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          Filters
+        </button>
+      </div>
 
       {/* Desktop rail */}
       <aside className="sticky top-[140px] hidden w-[248px] shrink-0 self-start lg:block">
