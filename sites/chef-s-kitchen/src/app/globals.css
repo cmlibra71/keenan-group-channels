@@ -124,7 +124,7 @@ body {
   font-family: var(--font-sans);
   font-weight: 400;
   background: var(--color-surface-primary);
-  color: var(--color-text-body);
+  color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -258,11 +258,11 @@ body {
 }
 
 .btn-sm {
-  @apply px-3.5 py-2 text-xs;
+  @apply px-3.5 py-[9px] text-[12.5px];
 }
 
 .btn-ghost {
-  @apply inline-flex items-center gap-2 text-sm font-semibold
+  @apply inline-flex items-center gap-2 rounded-btn px-2 py-3 text-sm font-semibold
          text-accent hover:text-accent-hover
          transition-colors duration-200;
 }

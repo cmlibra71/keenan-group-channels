@@ -98,7 +98,7 @@ export function ProductCard({
           <p className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.1em] text-steel-400">{eyebrow}</p>
         )}
         <Link href={`/products/${slug}`} className="block">
-          <h3 className="line-clamp-2 min-h-[2.5rem] text-sm font-medium leading-snug text-text-primary transition-colors duration-200 group-hover:text-accent">
+          <h3 className="line-clamp-2 min-h-[2.5rem] text-[13.5px] font-medium leading-snug text-ink-800 transition-colors duration-200 group-hover:text-accent">
             {name}
           </h3>
         </Link>
