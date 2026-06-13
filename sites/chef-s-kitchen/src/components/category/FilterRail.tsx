@@ -163,7 +163,7 @@ function FacetCheckbox({ param, value, label, count }: { param: string; value: s
   const { selected, toggle } = useFacetParam(param);
   const checked = selected.includes(value);
   return (
-    <label className="flex cursor-pointer items-center gap-2 py-0.5 text-[13px] text-ink-700 hover:text-accent">
+    <label className="flex cursor-pointer items-center gap-2 py-1 text-[13px] text-ink-700 hover:text-accent">
       <input
         type="checkbox"
         checked={checked}
