@@ -63,6 +63,7 @@ export function Footer({ storeName, subscriptionsEnabled }: { storeName: string;
                   <li><Link href="/pages/contact" className="footer-link">Contact Us</Link></li>
                   <li><Link href="/pages/shipping" className="footer-link">Shipping Info</Link></li>
                   <li><Link href="/pages/returns" className="footer-link">Returns</Link></li>
+                  <li><Link href="/pages/warranty" className="footer-link">Warranty</Link></li>
                 </ul>
               </div>
             </div>
