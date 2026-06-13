@@ -114,7 +114,7 @@ export default async function CheckoutPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-3xl font-bold text-ink-900 mb-8">Checkout</h1>
+      <h1 className="page-title mb-8">Checkout</h1>
 
       {isMember && memberSavings > 0 && (
         <div className="mb-6 flex items-center gap-2 bg-brand-tint border border-brand-light/40 rounded-lg px-4 py-3">

@@ -10,7 +10,7 @@ export async function CartBadge() {
     <Link href="/cart" className="relative text-steel-500 hover:text-ink-900">
       <ShoppingCart className="h-5 w-5" />
       {count > 0 && (
-        <span className="absolute -top-2 -right-2 bg-ink-900 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+        <span className="absolute -top-2 -right-2 bg-member text-ink-900 text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center">
           {count > 99 ? "99+" : count}
         </span>
       )}

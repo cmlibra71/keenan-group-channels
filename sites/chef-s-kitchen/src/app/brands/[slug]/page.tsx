@@ -46,7 +46,7 @@ export default async function BrandPage({
           </div>
         )}
         <div className={`flex-1 py-8 pr-8 text-left ${brand.image_url ? "" : "pl-8"}`}>
-          <h1 className="text-3xl font-bold text-ink-900">{brand.name as string}</h1>
+          <h1 className="page-title">{brand.name as string}</h1>
           <p className="mt-3 text-sm text-steel-500">
             {total} {total === 1 ? "product" : "products"}
           </p>

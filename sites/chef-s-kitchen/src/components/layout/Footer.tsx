@@ -74,7 +74,7 @@ export function Footer({ storeName, subscriptionsEnabled }: { storeName: string;
           <div className="flex flex-col items-center justify-between gap-2 text-xs text-white/50 sm:flex-row">
             <p>&copy; {new Date().getFullYear()} {storeName}. All rights reserved.</p>
             <p className="flex items-center gap-3">
-              <span>ABN</span>
+              <span>ABN 33 669 144 629</span>
               <span aria-hidden>·</span>
               <Link href="/pages/privacy" className="transition-colors hover:text-white">Privacy</Link>
               <span aria-hidden>·</span>

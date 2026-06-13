@@ -109,7 +109,7 @@ export default async function QuoteDetailPage({
       </Link>
 
       <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
-        <h1 className="text-3xl font-bold text-text-primary">
+        <h1 className="page-title">
           Quote #{quote.quote_number || quote.id}
         </h1>
         <span

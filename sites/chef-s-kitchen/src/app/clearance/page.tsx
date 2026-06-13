@@ -53,7 +53,7 @@ export default async function ClearancePage({
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-ink-900">{heading}</h1>
+        <h1 className="page-title">{heading}</h1>
         <p className="mt-2 text-steel-500">
           {total} {total === 1 ? "item" : "items"}
         </p>

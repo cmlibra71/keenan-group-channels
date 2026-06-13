@@ -12,7 +12,7 @@ export default async function BrandsPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-3xl font-bold text-ink-900 mb-8">Brands</h1>
+      <h1 className="page-title mb-8">Brands</h1>
 
       {brands.length === 0 ? (
         <p className="text-steel-500">No brands found.</p>

@@ -20,7 +20,7 @@ export function BrandShowcase({ brands }: { brands: Brand[] }) {
             <Award className="h-3 w-3" />
             Premium Partners
           </p>
-          <h2 className="text-2xl sm:text-3xl font-bold text-ink-900">Shop by Brand</h2>
+          <h2 className="section-title">Shop by Brand</h2>
         </div>
         <Link href="/brands" className="hidden sm:inline-flex items-center gap-1.5 text-sm font-medium text-steel-500 hover:text-ink-900 transition-colors">
           All Brands

@@ -71,7 +71,7 @@ export function CartSummary({
 
       <Link
         href="/checkout"
-        className="mt-6 block w-full bg-ink-900 text-white text-center py-3 px-6 rounded-lg font-semibold hover:bg-ink-800 transition-colors"
+        className="btn-primary mt-6 w-full"
       >
         Proceed to Checkout
       </Link>

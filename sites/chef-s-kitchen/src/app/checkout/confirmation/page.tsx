@@ -16,7 +16,7 @@ export default async function ConfirmationPage({
     <div className="mx-auto max-w-lg px-4 sm:px-6 lg:px-8 py-16 text-center">
       <CheckCircle className="h-16 w-16 text-brand mx-auto" />
 
-      <h1 className="mt-6 text-3xl font-bold text-ink-900">Order Confirmed</h1>
+      <h1 className="page-title mt-6">Order Confirmed</h1>
 
       <p className="mt-4 text-steel-500">
         Thank you for your order! Your order number is:
@@ -73,7 +73,7 @@ export default async function ConfirmationPage({
       <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
         <Link
           href="/account/orders"
-          className="bg-ink-900 text-white px-6 py-3 rounded-lg font-semibold hover:bg-ink-800 transition-colors"
+          className="btn-primary"
         >
           View Orders
         </Link>

@@ -651,7 +651,7 @@ export function CheckoutForm({
             <button
               type="submit"
               disabled={isPending || stripeProcessing || (selectedPaymentMethod === "stripe" && !cardReady)}
-              className="mt-6 w-full bg-ink-900 text-white py-3 px-6 rounded-lg font-semibold hover:bg-ink-800 transition-colors disabled:bg-steel-300"
+              className="btn-primary mt-6 w-full"
             >
               {isPending || stripeProcessing ? "Processing..." : selectedPaymentMethod === "stripe" ? "Pay Now" : "Place Order"}
             </button>

@@ -43,7 +43,7 @@ export default async function MembershipPage() {
 
     return (
       <div className="mx-auto max-w-2xl px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-3xl font-bold text-ink-900 mb-8">Membership</h1>
+        <h1 className="page-title mb-8">Membership</h1>
 
         {/* Past due warning */}
         {isPastDue && (
@@ -137,7 +137,7 @@ export default async function MembershipPage() {
   // Show available plans
   return (
     <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-3xl font-bold text-ink-900 mb-2">
+      <h1 className="page-title mb-2">
         {isReturningMember ? "Welcome Back" : "Membership"}
       </h1>
       <p className="text-steel-500 mb-8">
@@ -178,7 +178,7 @@ export default async function MembershipPage() {
               )}
               <Link
                 href={`/account/membership/subscribe/${plan.slug}`}
-                className="block w-full text-center bg-ink-900 text-white py-2 px-4 rounded-lg hover:bg-ink-800 transition-colors text-sm font-medium"
+                className="btn-primary btn-sm w-full"
               >
                 {isReturningMember ? "Rejoin" : "Subscribe"}
               </Link>

@@ -46,7 +46,7 @@ export default async function SubscribePage({
   if (!stripePublishableKey || !metafields?.stripe_price_id) {
     return (
       <div className="mx-auto max-w-lg px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-2xl font-bold text-ink-900 mb-4">Subscribe</h1>
+        <h1 className="page-title mb-4">Subscribe</h1>
         <p className="text-sale">
           Payment is not properly configured. Please contact support.
         </p>
@@ -56,7 +56,7 @@ export default async function SubscribePage({
 
   return (
     <div className="mx-auto max-w-lg px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-2xl font-bold text-ink-900 mb-2">
+      <h1 className="page-title mb-2">
         Subscribe to {plan.name}
       </h1>
       <p className="text-steel-500 mb-6">

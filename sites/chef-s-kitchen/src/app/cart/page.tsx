@@ -18,13 +18,13 @@ export default async function CartPage() {
   if (items.length === 0) {
     return (
       <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-3xl font-bold text-ink-900 mb-8">Your Cart</h1>
+        <h1 className="page-title mb-8">Your Cart</h1>
         <div className="text-center py-16">
           <ShoppingCart className="h-16 w-16 text-steel-300 mx-auto" />
           <p className="mt-4 text-steel-500">Your cart is empty.</p>
           <Link
             href="/products"
-            className="mt-6 inline-block bg-ink-900 text-white px-6 py-3 rounded-lg font-semibold hover:bg-ink-800 transition-colors"
+            className="btn-primary mt-6 inline-flex"
           >
             Continue Shopping
           </Link>
@@ -81,7 +81,7 @@ export default async function CartPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-3xl font-bold text-ink-900 mb-8">Your Cart</h1>
+      <h1 className="page-title mb-8">Your Cart</h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2">
