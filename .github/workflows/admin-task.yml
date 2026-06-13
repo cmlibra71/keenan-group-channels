@@ -20,6 +20,7 @@ on:
           - scripts/seed-cd-member-groups.ts
           - scripts/report-missing-cost-prices.ts
           - scripts/validate-cost-plus-vs-zoey.ts
+          - scripts/seed-cd-content-pages.ts
       timeout:
         description: "Timeout in seconds"
         required: false

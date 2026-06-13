@@ -103,6 +103,7 @@ The workflow builds a temporary Docker image from `@keenan/services` with the sc
 | `scripts/seed-cd-member-groups.ts` | Seed CD tier customer groups + `member_pricing_rules` (cost-plus) and wire the membership plan |
 | `scripts/report-missing-cost-prices.ts` | Read-only: CD products with no cost price (no member price possible) |
 | `scripts/validate-cost-plus-vs-zoey.ts` | Read-only: computed cost-plus vs legacy Zoey price lists match-rate report |
+| `scripts/seed-cd-content-pages.ts` | Seed CD (ch2) `privacy`/`terms`/`warranty` content pages by mirroring IK's same-entity legal copy with brand/contact substitution (footer linked these but they 404'd). Supports `--dry`. |
 
 ### Adding new admin scripts
 
