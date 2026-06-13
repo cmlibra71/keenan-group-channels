@@ -97,7 +97,7 @@ function RailContent({ facets }: { facets: CategoryFacets }) {
   const hasAny = ["sub", "brand", "price", "stock"].some((p) => searchParams.get(p));
 
   return (
-    <div className="rounded-card border border-border bg-white p-4 shadow-sm">
+    <div className="rounded-[12px] border border-border bg-white p-4 shadow-sm">
       <div className="mb-2 flex items-center justify-between">
         <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-text-primary">Filters</span>
         {hasAny && (

@@ -152,8 +152,8 @@ export default async function CategoryPage({
           <FilterRail facets={facets} />
 
           <div className="min-w-0 flex-1">
-            {/* Toolbar */}
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            {/* Toolbar — white card per design system (cat-toolbar, r12) */}
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-border bg-white px-4 py-[11px] shadow-sm">
               <div className="flex flex-wrap items-center gap-3">
                 <p className="text-[13px] text-text-secondary">
                   Showing <b className="text-text-primary">1–{shown}</b> of <b className="text-text-primary">{total}</b>
