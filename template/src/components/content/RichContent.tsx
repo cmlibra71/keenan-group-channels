@@ -135,7 +135,11 @@ export function RichContent({
   className?: string;
   stripStyles?: boolean;
 }) {
-  const cleaned = stripStyles ? html.replace(/style="[^"]*"/gi, "") : html;
+  // stripStyles removes inline style="" AND unwraps deprecated <font> tags
+  // (legacy content carries <font face="…"> that leaks non-system typefaces).
+  const cleaned = stripStyles
+    ? html.replace(/style="[^"]*"/gi, "").replace(/<\/?font[^>]*>/gi, "")
+    : html;
   const parts = splitByHandlebars(cleaned);
 
   // Check if there's a readmore command — need special handling

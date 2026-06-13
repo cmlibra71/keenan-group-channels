@@ -135,7 +135,12 @@ export function RichContent({
   className?: string;
   stripStyles?: boolean;
 }) {
-  const cleaned = stripStyles ? html.replace(/\s*style="[^"]*"/gi, "") : html;
+  // stripStyles removes inline style="" AND unwraps deprecated <font> tags
+  // (legacy Zoey content carries <font face="Inter,…"> which leaks the old
+  // pre-design-system typeface into product descriptions / content pages).
+  const cleaned = stripStyles
+    ? html.replace(/\s*style="[^"]*"/gi, "").replace(/<\/?font[^>]*>/gi, "")
+    : html;
   const parts = splitByHandlebars(cleaned);
 
   // Check if there's a readmore command — need special handling
