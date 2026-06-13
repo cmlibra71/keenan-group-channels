@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Menu, ChevronDown, Star } from "lucide-react";
 import type { MegaMenuNode, MegaMenuFeatured } from "@/lib/store";
+import { MegaMenuShell } from "./MegaMenuShell";
 
 /**
  * Design-system nav bar (Green-700) with CSS-driven mega panels: 3 link
@@ -28,7 +29,7 @@ export function MegaMenu({
   featured: Record<string, MegaMenuFeatured>;
 }) {
   return (
-    <nav aria-label="Departments" className="hidden lg:block bg-brand-deep relative">
+    <MegaMenuShell className="hidden lg:block bg-brand-deep relative">
       <div className="container-page">
         <ul className="flex items-stretch gap-0.5">
           <li>
@@ -71,7 +72,7 @@ export function MegaMenu({
           </li>
         </ul>
       </div>
-    </nav>
+    </MegaMenuShell>
   );
 }
 
@@ -89,7 +90,7 @@ function MegaPanel({ dept, feat }: { dept: MegaMenuNode; feat?: MegaMenuFeatured
 
   return (
     <div
-      className="invisible absolute left-0 right-0 top-full z-[110] translate-y-2 opacity-0 transition-all duration-200
+      className="mega-panel invisible absolute left-0 right-0 top-full z-[110] translate-y-2 opacity-0 transition-all duration-200
                  group-hover/nav:visible group-hover/nav:translate-y-0 group-hover/nav:opacity-100
                  group-focus-within/nav:visible group-focus-within/nav:translate-y-0 group-focus-within/nav:opacity-100"
     >
