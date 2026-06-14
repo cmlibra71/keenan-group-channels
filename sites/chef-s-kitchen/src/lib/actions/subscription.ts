@@ -150,9 +150,15 @@ export async function attemptTestMembership(
 
     const existing = await subscriptionService.getActiveForCustomer(session.customerId, CHANNEL_ID);
     if (existing) return { created: false, error: "You already have an active subscription" };
+
+    // Recover any stranded pending subscription (e.g. an abandoned real Stripe
+    // attempt that never completed) by activating it, rather than blocking.
     const all = await subscriptionService.listForCustomer(session.customerId, CHANNEL_ID);
-    if (all.find((s) => s.status === "pending")) {
-      return { created: false, error: "You have a pending subscription being processed" };
+    const pending = all.find((s) => s.status === "pending");
+    if (pending) {
+      await subscriptionService.activate(pending.id as number);
+      revalidatePath("/", "layout");
+      return { created: true };
     }
 
     const now = new Date();
