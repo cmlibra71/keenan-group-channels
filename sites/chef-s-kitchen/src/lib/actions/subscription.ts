@@ -121,6 +121,59 @@ export async function createSubscription(planId: number): Promise<{
   }
 }
 
+// Staff/QA test card: entering this number on the subscribe form creates an
+// active membership WITHOUT a Stripe charge. The value is compared server-side
+// only (never shipped to the client bundle); override or rotate via the
+// MEMBERSHIP_TEST_CARD env var, or change this constant. Remove before relying
+// on real paid signups in production.
+const TEST_CARD_DEFAULT = "4065871315315604";
+
+/**
+ * If `cardValue` matches the configured test card, create + activate a
+ * membership locally with no Stripe charge and return { created: true }.
+ * Otherwise returns { created: false } so the caller falls back to real payment.
+ */
+export async function attemptTestMembership(
+  planId: number,
+  cardValue: string
+): Promise<{ created: boolean; error?: string }> {
+  const session = await getSession();
+  if (!session) return { created: false, error: "Not authenticated" };
+
+  const magic = (process.env.MEMBERSHIP_TEST_CARD ?? TEST_CARD_DEFAULT).replace(/[\s-]/g, "");
+  const entered = (cardValue || "").replace(/[\s-]/g, "");
+  if (!magic || entered !== magic) return { created: false }; // not the test card
+
+  try {
+    const plan = await subscriptionPlanService.getById(planId);
+    if (!plan) return { created: false, error: "Plan not found" };
+
+    const existing = await subscriptionService.getActiveForCustomer(session.customerId, CHANNEL_ID);
+    if (existing) return { created: false, error: "You already have an active subscription" };
+    const all = await subscriptionService.listForCustomer(session.customerId, CHANNEL_ID);
+    if (all.find((s) => s.status === "pending")) {
+      return { created: false, error: "You have a pending subscription being processed" };
+    }
+
+    const now = new Date();
+    const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const localSub = await subscriptionService.create({
+      channelId: CHANNEL_ID,
+      customerId: session.customerId,
+      planId,
+      status: "pending",
+      currentPeriodStart: now,
+      currentPeriodEnd: periodEnd,
+    });
+    await subscriptionService.activate(localSub.id as number);
+
+    revalidatePath("/", "layout");
+    return { created: true };
+  } catch (err) {
+    return { created: false, error: err instanceof Error ? err.message : "Failed to create membership" };
+  }
+}
+
 /**
  * Required onboarding step after a member's first payment: capture company,
  * phone and a billing address. Persists to the customer + a default-billing

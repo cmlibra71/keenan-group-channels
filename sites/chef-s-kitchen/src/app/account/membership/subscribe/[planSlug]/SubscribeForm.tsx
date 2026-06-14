@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { createSubscription } from "@/lib/actions/subscription";
+import { createSubscription, attemptTestMembership } from "@/lib/actions/subscription";
 
 declare global {
   interface Window {
@@ -32,10 +31,10 @@ export function SubscribeForm({
   planId: number;
   stripePublishableKey: string;
 }) {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cardReady, setCardReady] = useState(false);
+  const [testCard, setTestCard] = useState("");
   const cardContainerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const stripeRef = useRef<any>(null);
@@ -95,10 +94,33 @@ export function SubscribeForm({
 
   async function handleSubscribe(e: React.FormEvent) {
     e.preventDefault();
-    if (!stripeRef.current || !cardElementRef.current) return;
-
     setLoading(true);
     setError(null);
+
+    // Staff/QA test card: create the membership without a real charge.
+    if (testCard.trim()) {
+      try {
+        const t = await attemptTestMembership(planId, testCard.trim());
+        if (t.created) {
+          window.location.assign("/account/membership/complete-profile");
+          return;
+        }
+        if (t.error) {
+          setError(t.error);
+          setLoading(false);
+          return;
+        }
+        // Not the test card — fall through to a normal Stripe payment.
+      } catch {
+        /* fall through to real payment */
+      }
+    }
+
+    if (!stripeRef.current || !cardElementRef.current) {
+      setError("Payment form is still loading — please try again.");
+      setLoading(false);
+      return;
+    }
 
     try {
       const result = await createSubscription(planId);
@@ -125,11 +147,11 @@ export function SubscribeForm({
       }
 
       // Success — collect required business/billing details before welcome.
-      router.push("/account/membership/complete-profile");
-      router.refresh();
+      // Hard navigation: router.push after a revalidating action proved
+      // unreliable here, so force a full navigation.
+      window.location.assign("/account/membership/complete-profile");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
       setLoading(false);
     }
   }
@@ -152,9 +174,25 @@ export function SubscribeForm({
         />
       </div>
 
+      <div className="mb-6">
+        <label htmlFor="testCard" className="field-label mb-2">
+          Test card (staff only — optional)
+        </label>
+        <input
+          id="testCard"
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          value={testCard}
+          onChange={(e) => setTestCard(e.target.value)}
+          placeholder="Leave blank to pay by card above"
+          className="block w-full input"
+        />
+      </div>
+
       <button
         type="submit"
-        disabled={loading || !cardReady}
+        disabled={loading || (!cardReady && !testCard.trim())}
         className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {loading ? "Processing..." : "Subscribe Now"}
