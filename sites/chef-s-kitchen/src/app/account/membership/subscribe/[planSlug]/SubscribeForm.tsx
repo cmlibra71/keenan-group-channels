@@ -124,8 +124,8 @@ export function SubscribeForm({
         }
       }
 
-      // Success — redirect to welcome page
-      router.push("/membership/welcome");
+      // Success — collect required business/billing details before welcome.
+      router.push("/account/membership/complete-profile");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");

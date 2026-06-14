@@ -7,22 +7,9 @@ import {
   subscriptionPlanService,
   subscriptionService,
   customerService,
-  storeSettingsService,
+  customerAddressService,
 } from "@/lib/store";
-import { StripeSubscriptionProvider } from "@keenan/services";
-
-async function getStripeProvider(): Promise<StripeSubscriptionProvider> {
-  const settings = await storeSettingsService.getByKey("payment_gateways");
-  const gateways = (settings.setting_value as { provider: string; credentials: Record<string, string>; enabled?: boolean; testMode?: boolean }[]) || [];
-  // Match the gateway entry tagged for the current environment: testMode=true
-    // in dev, testMode=false in prod. Lets both modes coexist in the DB row.
-    const wantTestMode = process.env.NODE_ENV !== "production";
-  const stripe = gateways.find((g) => g.provider === "stripe" && g.enabled !== false && Boolean(g.testMode) === wantTestMode) ?? (wantTestMode ? gateways.find((g) => g.provider === "stripe" && g.enabled !== false) : undefined);
-  if (!stripe?.credentials?.secret_key) {
-    throw new Error("Stripe is not configured. Set up the global Stripe gateway in the portal under Settings > Payments.");
-  }
-  return new StripeSubscriptionProvider(stripe.credentials.secret_key);
-}
+import { getStripeProvider } from "@/lib/stripe";
 
 /**
  * Create a subscription for the current customer.
@@ -129,6 +116,103 @@ export async function createSubscription(planId: number): Promise<{
     return {
       success: false,
       error: err instanceof Error ? err.message : "Failed to create subscription",
+    };
+  }
+}
+
+/**
+ * Required onboarding step after a member's first payment: capture company,
+ * phone and a billing address. Persists to the customer + a default-billing
+ * address, and best-effort syncs the details onto the Stripe customer (so
+ * invoices / the Billing Portal carry them). Requires an active or pending
+ * subscription so it can't be used to write arbitrary data.
+ */
+export async function completeMembershipProfile(input: {
+  company: string;
+  phone: string;
+  address1: string;
+  address2?: string;
+  city: string;
+  state?: string;
+  postalCode: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const session = await getSession();
+  if (!session) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  const company = input.company?.trim();
+  const phone = input.phone?.trim();
+  const address1 = input.address1?.trim();
+  const city = input.city?.trim();
+  const postalCode = input.postalCode?.trim();
+  if (!company || !phone || !address1 || !city || !postalCode) {
+    return { success: false, error: "Please fill in all required fields." };
+  }
+
+  try {
+    // Must have a subscription (active or pending) to complete onboarding.
+    const subs = await subscriptionService.listForCustomer(
+      session.customerId,
+      CHANNEL_ID
+    );
+    const sub = subs.find((s) => s.status === "active" || s.status === "pending");
+    if (!sub) {
+      return { success: false, error: "No membership found" };
+    }
+
+    const customer = await customerService.getById(session.customerId);
+    if (!customer) {
+      return { success: false, error: "Customer not found" };
+    }
+
+    const firstName = (customer.first_name as string) || "";
+    const lastName = (customer.last_name as string) || "";
+
+    await customerService.update(session.customerId, { company, phone });
+
+    await customerAddressService.createForParent(session.customerId, {
+      firstName,
+      lastName,
+      company,
+      phone,
+      address1,
+      address2: input.address2?.trim() || "",
+      city,
+      stateOrProvince: input.state?.trim() || "",
+      postalCode,
+      country: "Australia",
+      countryCode: "AU",
+      isDefaultBilling: true,
+    });
+
+    // Best-effort Stripe enrichment — never fail the onboarding on this.
+    try {
+      if (sub.stripeCustomerId) {
+        const stripeProvider = await getStripeProvider();
+        await stripeProvider.updateCustomer(sub.stripeCustomerId as string, {
+          name: `${firstName} ${lastName}`.trim() || undefined,
+          phone,
+          address: {
+            line1: address1,
+            line2: input.address2?.trim() || undefined,
+            city,
+            state: input.state?.trim() || undefined,
+            postal_code: postalCode,
+            country: "AU",
+          },
+        });
+      }
+    } catch (e) {
+      console.error("[completeMembershipProfile] Stripe customer update failed:", e);
+    }
+
+    revalidatePath("/", "layout");
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to save details",
     };
   }
 }

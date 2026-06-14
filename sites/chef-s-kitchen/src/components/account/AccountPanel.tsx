@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition, useActionState } from "react";
 import Link from "next/link";
-import { User, Package, FileText, LogOut } from "lucide-react";
+import { User, Package, FileText, MapPin, LogOut } from "lucide-react";
 import {
   getSessionInfo,
   loginFromPanel,
@@ -335,6 +335,13 @@ function PanelProfile({
         >
           <Package className="h-5 w-5 text-text-muted" strokeWidth={1.5} />
           <span className="text-sm font-medium text-text-body">Order History</span>
+        </Link>
+        <Link
+          href="/account/profile"
+          className="flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary transition-colors duration-300"
+        >
+          <MapPin className="h-5 w-5 text-text-muted" strokeWidth={1.5} />
+          <span className="text-sm font-medium text-text-body">Account Details</span>
         </Link>
         <button
           onClick={handleLogout}

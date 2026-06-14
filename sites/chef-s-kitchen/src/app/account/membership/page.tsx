@@ -12,6 +12,7 @@ import {
 } from "@/lib/store";
 import { CancelConfirmationModal } from "@/components/membership/CancelConfirmationModal";
 import { ManageBillingButton } from "@/components/membership/ManageBillingButton";
+import { getMembershipProfile } from "@/lib/membership";
 
 export const metadata = {
   title: "Membership",
@@ -31,6 +32,10 @@ export default async function MembershipPage() {
 
   // If user has active subscription, show status
   if (activeSub) {
+    // Required onboarding gate: bounce members missing business/billing details.
+    const profile = await getMembershipProfile(session.customerId);
+    if (!profile.complete) redirect("/account/membership/complete-profile");
+
     const drawsEnabled = await getFeatureFlag("draws_enabled");
     let totalEntries = 0;
     if (drawsEnabled) {
@@ -113,6 +118,42 @@ export default async function MembershipPage() {
                 <dd className="font-medium text-ink-900">{totalEntries}</dd>
               </div>
             )}
+          </dl>
+        </div>
+
+        {/* Account details summary */}
+        <div className="border border-border rounded-lg p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-ink-900">Account details</h2>
+            <Link href="/account/profile" className="text-sm font-semibold text-accent hover:text-accent-hover">
+              Edit details
+            </Link>
+          </div>
+          <dl className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <dt className="text-steel-500">Business</dt>
+              <dd className="font-medium text-ink-900">{(profile.customer?.company as string) || "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-steel-500">Phone</dt>
+              <dd className="font-medium text-ink-900">{(profile.customer?.phone as string) || "—"}</dd>
+            </div>
+            <div className="col-span-2">
+              <dt className="text-steel-500">Default billing address</dt>
+              <dd className="font-medium text-ink-900">
+                {profile.defaultBilling
+                  ? [
+                      profile.defaultBilling.address1,
+                      profile.defaultBilling.address2,
+                      profile.defaultBilling.city,
+                      profile.defaultBilling.state_or_province,
+                      profile.defaultBilling.postal_code,
+                    ]
+                      .filter(Boolean)
+                      .join(", ")
+                  : "—"}
+              </dd>
+            </div>
           </dl>
         </div>
 

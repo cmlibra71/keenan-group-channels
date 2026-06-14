@@ -191,6 +191,16 @@ export default async function AccountPage() {
           </Link>
         )}
         <Link
+          href="/account/profile"
+          className="flex items-center gap-4 card-interactive"
+        >
+          <MapPin className="h-8 w-8 text-text-muted" />
+          <div>
+            <h3 className="font-semibold text-text-primary">Account Details</h3>
+            <p className="text-sm text-text-secondary">Profile, addresses & contacts</p>
+          </div>
+        </Link>
+        <Link
           href="/account/orders"
           className="flex items-center gap-4 card-interactive"
         >

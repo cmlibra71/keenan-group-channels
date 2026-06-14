@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Check, Gift, ShoppingBag } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { getActiveSubscription, getFeatureFlag } from "@/lib/store";
+import { getMembershipProfile } from "@/lib/membership";
 
 export const metadata = {
   title: "Welcome to Membership",
@@ -14,6 +15,10 @@ export default async function MembershipWelcomePage() {
 
   const activeSub = await getActiveSubscription(session.customerId);
   if (!activeSub) redirect("/membership");
+
+  // Required onboarding: members must have business + billing details on file.
+  const { complete } = await getMembershipProfile(session.customerId);
+  if (!complete) redirect("/account/membership/complete-profile");
 
   const drawsEnabled = await getFeatureFlag("draws_enabled");
   const partnerOffersEnabled = await getFeatureFlag("partner_offers_enabled");
