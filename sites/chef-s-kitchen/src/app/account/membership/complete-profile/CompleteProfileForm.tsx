@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { completeMembershipProfile } from "@/lib/actions/subscription";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
 
@@ -14,7 +13,6 @@ export function CompleteProfileForm({
   defaultPhone?: string;
   googlePlacesEnabled?: boolean;
 }) {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,6 +38,8 @@ export function CompleteProfileForm({
     setLoading(true);
     setError(null);
     const fd = new FormData(e.currentTarget);
+    // On success the action redirects server-side to /membership/welcome and
+    // never returns; only an error case returns a result here.
     const result = await completeMembershipProfile({
       company: (fd.get("company") as string) || "",
       phone: (fd.get("phone") as string) || "",
@@ -49,13 +49,10 @@ export function CompleteProfileForm({
       state: (fd.get("state") as string) || "",
       postalCode: (fd.get("postalCode") as string) || "",
     });
-    if (!result.success) {
+    if (result && !result.success) {
       setError(result.error || "Failed to save details");
       setLoading(false);
-      return;
     }
-    router.push("/membership/welcome");
-    router.refresh();
   }
 
   return (

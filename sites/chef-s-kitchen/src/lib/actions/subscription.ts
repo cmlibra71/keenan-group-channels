@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import {
   CHANNEL_ID,
@@ -135,7 +136,7 @@ export async function completeMembershipProfile(input: {
   city: string;
   state?: string;
   postalCode: string;
-}): Promise<{ success: boolean; error?: string }> {
+}): Promise<{ success: false; error: string } | void> {
   const session = await getSession();
   if (!session) {
     return { success: false, error: "Not authenticated" };
@@ -208,13 +209,16 @@ export async function completeMembershipProfile(input: {
     }
 
     revalidatePath("/", "layout");
-    return { success: true };
   } catch (err) {
     return {
       success: false,
       error: err instanceof Error ? err.message : "Failed to save details",
     };
   }
+
+  // Navigate server-side after a successful mutation (outside try so the
+  // redirect's control-flow signal isn't swallowed by the catch).
+  redirect("/membership/welcome");
 }
 
 /**
