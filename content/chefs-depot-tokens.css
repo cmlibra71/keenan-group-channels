@@ -1,0 +1,95 @@
+/* ============================================================================
+   CHEF'S DEPOT — DESIGN TOKENS  (v2 · brand-aligned)
+   Palette, type and scales derived from the official Chef's Depot logo and
+   approved top-of-home design: forest-green brand, jewel-teal actions, a gold
+   membership accent, warm near-black structure, and an elegant serif voice.
+   Import once at the app root:  @import "./chefs-depot-tokens.css";
+   ============================================================================ */
+:root{
+  /* ---- BRAND GREEN (logo field, header, brand surfaces) ------------------ */
+  --cd-green-700:#2E5E36;  /* deep — nav bar, hovers on green               */
+  --cd-green-600:#3A7342;
+  --cd-green-500:#45844D;  /* PRIMARY BRAND — header bar, logo field        */
+  --cd-green-400:#5FA06A;
+  --cd-green-100:#E6F0E8;  /* tint surfaces                                 */
+
+  /* ---- ACTION TEAL-GREEN (primary CTAs — the "Join & Save" green) -------- */
+  --cd-teal-800:#005E56;   /* pressed / hover                               */
+  --cd-teal-700:#00786F;   /* PRIMARY ACTION buttons                        */
+  --cd-teal-600:#0A8C81;
+  --cd-teal-100:#D9EFEC;
+
+  /* ---- GOLD (membership, savings, stats, crown, premium emphasis) -------- */
+  --cd-gold-700:#B98A1E;   /* gold text on light                            */
+  --cd-gold-500:#E9B949;   /* primary gold                                  */
+  --cd-gold-400:#F6D154;   /* highlight                                     */
+  --cd-gold-100:#FBF1D6;   /* gold tint bg                                  */
+
+  /* ---- RUST (sale / clearance urgency ONLY — used sparingly) ------------- */
+  --cd-rust-600:#A83E1F;
+  --cd-rust-500:#C4502A;
+  --cd-rust-100:#F7E4DC;
+
+  /* ---- INK (warm near-black — trust bar, footer, body text, depth) ------- */
+  --cd-ink-900:#1B1416;
+  --cd-ink-800:#241B1F;
+  --cd-ink-700:#2F2429;
+  --cd-ink-600:#3E3137;
+  --cd-ink-500:#4E3F46;
+
+  /* ---- STEEL (neutral UI greys — borders, surfaces, muted text) ---------- */
+  --cd-steel-700:#4A5562; --cd-steel-500:#6B7785; --cd-steel-400:#8A95A3;
+  --cd-steel-300:#C2C9D2; --cd-steel-200:#DDE2E8; --cd-steel-100:#EEF1F4;
+  --cd-steel-50:#F6F8FA;  --cd-paper:#FFFFFF;
+
+  /* ---- SEMANTIC ----------------------------------------------------------- */
+  --cd-success:var(--cd-green-600); --cd-success-bg:var(--cd-green-100);
+  --cd-member:var(--cd-gold-500);   --cd-member-bg:var(--cd-gold-100);
+  --cd-sale:var(--cd-rust-500);     --cd-sale-bg:var(--cd-rust-100);
+  --cd-warning:#C8881C;             --cd-warning-bg:#FBF1DC;
+
+  --cd-text:#1B1416; --cd-text-muted:var(--cd-steel-500); --cd-text-invert:#fff;
+
+  /* ---- TYPOGRAPHY --------------------------------------------------------- */
+  /* Fraunces = editorial serif voice for marketing/hero headlines.
+     IBM Plex Sans = all UI, body, nav, product titles, prices.
+     IBM Plex Mono = SKUs and spec values. */
+  --cd-font-serif:"Fraunces","Georgia",serif;
+  --cd-font-sans:"IBM Plex Sans",system-ui,sans-serif;
+  --cd-font-mono:"IBM Plex Mono",ui-monospace,monospace;
+
+  --cd-fs-hero:3.25rem; --cd-fs-display:2.5rem; --cd-fs-h1:2.125rem;
+  --cd-fs-h2:1.625rem;  --cd-fs-h3:1.3125rem;   --cd-fs-h4:1.0625rem;
+  --cd-fs-body-lg:1.125rem; --cd-fs-body:1rem; --cd-fs-sm:.875rem;
+  --cd-fs-caption:.75rem; --cd-fs-micro:.6875rem;
+  --cd-fw-regular:400; --cd-fw-medium:500; --cd-fw-semi:600; --cd-fw-bold:700;
+  --cd-lh-tight:1.1; --cd-lh-snug:1.3; --cd-lh-base:1.55;
+  --cd-tracking-label:.12em;
+
+  /* ---- SPACING (4px base) ------------------------------------------------- */
+  --cd-space-1:4px;--cd-space-2:8px;--cd-space-3:12px;--cd-space-4:16px;
+  --cd-space-5:20px;--cd-space-6:24px;--cd-space-8:32px;--cd-space-10:40px;
+  --cd-space-12:48px;--cd-space-16:64px;--cd-space-20:80px;--cd-space-24:96px;
+
+  /* ---- RADII -------------------------------------------------------------- */
+  --cd-r-xs:4px;--cd-r-sm:8px;--cd-r-md:12px;--cd-r-card:14px;--cd-r-lg:18px;--cd-r-pill:999px;
+
+  /* ---- BORDERS / SHADOWS -------------------------------------------------- */
+  --cd-border:1px solid var(--cd-steel-200);
+  --cd-border-strong:1px solid var(--cd-steel-300);
+  --cd-shadow-sm:0 1px 2px rgba(27,20,22,.06),0 1px 3px rgba(27,20,22,.07);
+  --cd-shadow-md:0 6px 16px rgba(27,20,22,.09);
+  --cd-shadow-lg:0 16px 40px rgba(27,20,22,.14);
+  --cd-shadow-hover:0 20px 48px rgba(27,20,22,.18);
+  --cd-glass:rgba(255,255,255,.12);          /* frosted card fill           */
+  --cd-glass-border:rgba(255,255,255,.22);
+  --cd-glass-dark:rgba(20,16,18,.46);        /* dark frosted card fill       */
+
+  /* ---- LAYOUT / MOTION / Z ------------------------------------------------ */
+  --cd-container-max:1320px; --cd-gutter:24px;
+  --cd-ease:cubic-bezier(.2,.7,.3,1); --cd-dur-fast:140ms; --cd-dur:200ms; --cd-dur-slow:320ms;
+  --cd-z-header:100; --cd-z-megamenu:110; --cd-z-drawer:200; --cd-z-modal:300;
+}
+/* Breakpoints: sm640 md768 lg1024 xl1280 2xl1440.
+   Mega menu -> drawer <1024 · category sidebar -> off-canvas <1024
+   Product grid: 2(sm)/3(md)/4(lg) · hero glass cards stack <1024. */

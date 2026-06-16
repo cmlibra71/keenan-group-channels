@@ -47,17 +47,57 @@ export async function createSubscription(planId: number): Promise<{
       return { success: false, error: "You already have an active subscription" };
     }
 
-    // Check for pending subscription that hasn't been activated yet
+    const stripeProvider = await getStripeProvider();
+
+    // Recover any stranded "pending" record before creating a new one. A pending
+    // row is written before the customer confirms payment, so an abandoned or
+    // declined checkout leaves one behind. Rather than hard-blocking every
+    // future attempt ("You have a pending subscription being processed"), we
+    // reconcile it against Stripe:
+    //   - still awaiting first payment → reuse it (return its client secret so
+    //     the customer can retry payment on the same subscription)
+    //   - already paid (active/trialing) → activate locally and let them through
+    //   - dead/expired/gone → discard it and fall through to create a fresh one
     const allSubs = await subscriptionService.listForCustomer(
       session.customerId,
       CHANNEL_ID
     );
     const pendingSub = allSubs.find((s) => s.status === "pending");
     if (pendingSub) {
-      return { success: false, error: "You have a pending subscription being processed" };
-    }
+      const stripeSubId = pendingSub.stripeSubscriptionId as string | null;
+      const remote = stripeSubId
+        ? await stripeProvider.getSubscription(stripeSubId).catch(() => null)
+        : null;
 
-    const stripeProvider = await getStripeProvider();
+      if (remote && (remote.status === "active" || remote.status === "trialing")) {
+        // Payment already succeeded (a missed/late webhook) — reconcile locally.
+        await subscriptionService.activate(pendingSub.id as number);
+        revalidatePath("/", "layout");
+        return {
+          success: true,
+          clientSecret: null,
+          subscriptionId: pendingSub.id as number,
+        };
+      }
+
+      if (
+        remote &&
+        (remote.status === "incomplete" || remote.status === "past_due") &&
+        remote.clientSecret
+      ) {
+        // Still awaiting its first payment — let the customer retry on the same
+        // subscription instead of stranding them.
+        return {
+          success: true,
+          clientSecret: remote.clientSecret,
+          subscriptionId: pendingSub.id as number,
+        };
+      }
+
+      // No usable Stripe subscription (never finalised, expired, cancelled, or a
+      // bypass-created pending with no Stripe id): discard and recreate.
+      await subscriptionService.delete(pendingSub.id as number).catch(() => {});
+    }
 
     // Get or create Stripe customer
     const stripeCustomerId = await stripeProvider.getOrCreateCustomer(
