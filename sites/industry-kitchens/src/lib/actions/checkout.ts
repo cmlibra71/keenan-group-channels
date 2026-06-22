@@ -141,14 +141,17 @@ export async function placeOrder(
   const checkoutSettings = await getCheckoutSettings();
   const isMember = !!(session && await getActiveSubscription(session.customerId));
 
-  if (checkoutSettings.freeShippingEnabled && isMember && subtotalIncTax >= checkoutSettings.freeShippingThreshold) {
+  // Shipping is quoted to the customer on the EX-tax subtotal (checkout page +
+  // CheckoutForm pass cart.cartAmount), so the order must use the same basis or
+  // the charged shipping diverges from the quote at tier/cap boundaries.
+  if (checkoutSettings.freeShippingEnabled && isMember && subtotalExTax >= checkoutSettings.freeShippingThreshold) {
     // Free delivery for members over threshold
     shippingIncTax = 0;
   } else {
     // Calculate from shipping rate cards (zone-based flat-rate)
     try {
       const { calculateShipping } = await import("@/lib/store");
-      const shippingResult = await calculateShipping(postalCode, subtotalIncTax);
+      const shippingResult = await calculateShipping(postalCode, subtotalExTax);
       if (shippingResult.success) {
         shippingIncTax = shippingResult.cost;
       }
@@ -221,7 +224,13 @@ export async function placeOrder(
     };
   });
 
-  await orderItemService.createManyForParent(order.id, orderItemsData);
+  try {
+    await orderItemService.createManyForParent(order.id, orderItemsData);
+  } catch (err) {
+    // Compensate so we never leave an order with no line items.
+    await orderService.delete(order.id).catch(() => {});
+    return { error: err instanceof Error ? err.message : "We couldn't complete your order. Please try again." };
+  }
 
   // For Stripe: create PaymentIntent and return client secret for browser confirmation.
   // Uses the global paymentService — credentials live in store_settings.payment_gateways
@@ -262,14 +271,19 @@ export async function placeOrder(
 export async function confirmStripePayment(
   orderNumber: string
 ): Promise<{ success: boolean; error?: string }> {
+  // Require auth + ownership — this mutates payment status and order numbers are
+  // semi-guessable. The portal webhook remains the source of truth.
+  const session = await getSession();
+  if (!session) return { success: false, error: "Not authenticated" };
   try {
     const orders = await orderService.list({
       page: 1, limit: 1, sort: "id", direction: "desc",
       filters: { order_number: { type: "eq", value: orderNumber } },
     });
-    if (orders.data.length > 0) {
-      await orderService.update(orders.data[0].id as number, { paymentStatus: "paid" });
-    }
+    const order = orders.data[0] as { id: number; customer_id: number | null } | undefined;
+    if (!order) return { success: false, error: "Order not found" };
+    if (order.customer_id !== session.customerId) return { success: false, error: "Forbidden" };
+    await orderService.update(order.id, { paymentStatus: "paid" });
     return { success: true };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : "Failed to confirm payment" };

@@ -43,7 +43,7 @@ export function Footer({ storeName, subscriptionsEnabled }: { storeName: string;
                   <ul className="space-y-2.5">
                     <li><Link href="/membership" className="footer-link">Join</Link></li>
                     <li><Link href="/membership#savings" className="footer-link">Member Benefits</Link></li>
-                    <li><Link href="/membership#draws" className="footer-link">Prize Draws</Link></li>
+                    <li><Link href="/membership" className="footer-link">Prize Draws</Link></li>
                     <li><Link href="/account/partner-offers" className="footer-link">Partner Offers</Link></li>
                   </ul>
                 </div>

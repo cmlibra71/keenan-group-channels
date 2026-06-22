@@ -1,12 +1,41 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, brandService, CHANNEL_ID, getProductBreadcrumbs } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, brandService, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { getMemberContext, getListingPricing } from "@/lib/member";
 import { ChevronRight } from "lucide-react";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductTabs } from "@/components/product/ProductTabs";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { BackButton } from "@/components/ui/BackButton";
+import type { Metadata } from "next";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const product = await getProductBySlug(slug);
+  if (!product) return { title: "Product not found" };
+  const name = (product.name as string) || "Product";
+  const descRaw =
+    (product.metaDescription as string) ||
+    (product.descriptionShort as string) ||
+    `${name} — professional kitchen equipment at Chef's Depot.`;
+  const description = descRaw.replace(/<[^>]*>/g, "").trim().slice(0, 160);
+  const imgs = product.images as Array<{ url?: string | null }> | undefined;
+  const image = Array.isArray(imgs) && imgs[0]?.url ? imgs[0].url : undefined;
+  return {
+    title: name,
+    description,
+    openGraph: {
+      title: name,
+      description,
+      type: "website",
+      images: image ? [{ url: image }] : undefined,
+    },
+  };
+}
 
 export default async function ProductPage({
   params,
@@ -44,6 +73,10 @@ export default async function ProductPage({
   let memberPrice: number | null = null;
   let membershipTeaser: { fromPrice: string | null } | null = null;
   const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
+  // Bulk-pricing tiers are shared-catalog public pricing (like sale_price); on a
+  // cost-plus member channel they aren't charged, so suppress the display rather
+  // than promise a price the cart won't honour.
+  const suppressCatalogPricing = await shouldSuppressCatalogSalePrice();
   const memberCtx = await getMemberContext();
   const isMember = memberCtx.isMember;
 
@@ -183,7 +216,7 @@ export default async function ProductPage({
           options: product.options ?? [],
           optionValues: product.optionValues ?? [],
           variantOptionMappings: product.variantOptionMappings ?? [],
-          bulkPricing: product.bulkPricing ?? [],
+          bulkPricing: suppressCatalogPricing ? [] : (product.bulkPricing ?? []),
         }}
         memberPrice={memberPrice}
         memberPriceMap={memberPriceMap}
