@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CheckCircle, Building2, FileText, CreditCard } from "lucide-react";
+import { getCheckoutSettings } from "@/lib/store";
 
 export const metadata = {
   title: "Order Confirmed",
@@ -12,60 +13,113 @@ export default async function ConfirmationPage({
 }) {
   const { order, pm } = await searchParams;
 
+  // Load the configured bank-transfer / net-terms details so the customer has
+  // what they need to pay even though there is no confirmation email yet.
+  let bankDetails:
+    | { bankName: string; accountName: string; bsb: string; accountNumber: string; reference?: string }
+    | undefined;
+  let netTermsDays: number | undefined;
+  if (pm === "bank_transfer" || pm === "net_terms") {
+    try {
+      const { paymentMethods } = await getCheckoutSettings();
+      const method = paymentMethods.find((m) => m.id === pm);
+      bankDetails = method?.bankDetails;
+      netTermsDays = method?.netTermsDays;
+    } catch {
+      // Fall back to the generic copy below.
+    }
+  }
+
+  const reference = bankDetails?.reference?.trim() || order;
+
   return (
     <div className="mx-auto max-w-lg px-4 sm:px-6 lg:px-8 py-16 text-center">
-      <CheckCircle className="h-16 w-16 text-green-500 mx-auto" />
+      <CheckCircle className="h-16 w-16 text-brand mx-auto" />
 
-      <h1 className="mt-6 text-3xl font-bold text-zinc-900">Order Confirmed</h1>
+      <h1 className="page-title mt-6">Order Confirmed</h1>
 
-      <p className="mt-4 text-zinc-600">
+      <p className="mt-4 text-steel-500">
         Thank you for your order! Your order number is:
       </p>
 
       {order && (
-        <p className="mt-2 text-xl font-semibold text-zinc-900">{order}</p>
+        <p className="mt-2 text-xl font-semibold text-ink-900">{order}</p>
       )}
 
-      <p className="mt-4 text-sm text-zinc-500">
-        You will receive an email confirmation shortly.
+      <p className="mt-4 text-sm text-steel-500">
+        Please keep a record of your order number.
       </p>
 
       {/* Payment-specific instructions */}
       {pm === "stripe" && (
-        <div className="mt-6 text-left bg-green-50 border border-green-200 rounded-lg p-4">
+        <div className="mt-6 text-left bg-brand-tint border border-brand-light/40 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
-            <CreditCard className="h-4 w-4 text-green-600" />
-            <h3 className="text-sm font-semibold text-green-900">Payment Successful</h3>
+            <CreditCard className="h-4 w-4 text-brand" />
+            <h3 className="text-sm font-semibold text-brand-deep">Payment Successful</h3>
           </div>
-          <p className="text-sm text-green-800">
-            Your card payment has been processed successfully. A receipt will be sent to your email.
+          <p className="text-sm text-brand-deep">
+            Your card payment has been processed successfully.
           </p>
         </div>
       )}
 
       {pm === "bank_transfer" && (
-        <div className="mt-6 text-left bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="mt-6 text-left bg-accent-subtle border border-accent/30 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
-            <Building2 className="h-4 w-4 text-blue-600" />
-            <h3 className="text-sm font-semibold text-blue-900">Bank Transfer Details</h3>
+            <Building2 className="h-4 w-4 text-accent" />
+            <h3 className="text-sm font-semibold text-accent-dark">Bank Transfer Details</h3>
           </div>
-          <p className="text-sm text-blue-800">
-            Please transfer the order total to our bank account. Use your order number <strong>{order}</strong> as the payment reference.
+          <p className="text-sm text-accent-dark">
+            Please transfer your order total to the account below and use{" "}
+            <strong>{reference}</strong> as the payment reference. Your order is processed once
+            payment is received.
           </p>
-          <p className="text-sm text-blue-700 mt-2">
-            Bank details will be included in your confirmation email.
-          </p>
+          {bankDetails ? (
+            <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+              {bankDetails.bankName && (
+                <>
+                  <dt className="text-accent font-medium">Bank</dt>
+                  <dd className="text-accent-dark">{bankDetails.bankName}</dd>
+                </>
+              )}
+              {bankDetails.accountName && (
+                <>
+                  <dt className="text-accent font-medium">Account Name</dt>
+                  <dd className="text-accent-dark">{bankDetails.accountName}</dd>
+                </>
+              )}
+              {bankDetails.bsb && (
+                <>
+                  <dt className="text-accent font-medium">BSB</dt>
+                  <dd className="text-accent-dark">{bankDetails.bsb}</dd>
+                </>
+              )}
+              {bankDetails.accountNumber && (
+                <>
+                  <dt className="text-accent font-medium">Account No.</dt>
+                  <dd className="text-accent-dark">{bankDetails.accountNumber}</dd>
+                </>
+              )}
+              <dt className="text-accent font-medium">Reference</dt>
+              <dd className="text-accent-dark">{reference}</dd>
+            </dl>
+          ) : (
+            <p className="text-sm text-accent-dark mt-2">
+              Please contact us for our bank account details to complete your payment.
+            </p>
+          )}
         </div>
       )}
 
       {pm === "net_terms" && (
-        <div className="mt-6 text-left bg-amber-50 border border-amber-200 rounded-lg p-4">
+        <div className="mt-6 text-left bg-member-bg border border-member/40 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
-            <FileText className="h-4 w-4 text-amber-600" />
-            <h3 className="text-sm font-semibold text-amber-900">Invoice &amp; Payment Terms</h3>
+            <FileText className="h-4 w-4 text-member-text" />
+            <h3 className="text-sm font-semibold text-member-text">Invoice &amp; Payment Terms</h3>
           </div>
-          <p className="text-sm text-amber-800">
-            An invoice will be sent to your email with payment terms. No action is required at this time.
+          <p className="text-sm text-member-text">
+            An invoice with Net {netTermsDays ?? 30} payment terms will be sent to you. No action
+            is required at this time.
           </p>
         </div>
       )}
@@ -73,13 +127,13 @@ export default async function ConfirmationPage({
       <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
         <Link
           href="/account/orders"
-          className="bg-zinc-900 text-white px-6 py-3 rounded-lg font-semibold hover:bg-zinc-800 transition-colors"
+          className="btn-primary"
         >
           View Orders
         </Link>
         <Link
           href="/products"
-          className="border border-zinc-300 text-zinc-700 px-6 py-3 rounded-lg font-semibold hover:border-zinc-400 transition-colors"
+          className="border border-steel-300 text-ink-700 px-6 py-3 rounded-lg font-semibold hover:border-steel-400 transition-colors"
         >
           Continue Shopping
         </Link>

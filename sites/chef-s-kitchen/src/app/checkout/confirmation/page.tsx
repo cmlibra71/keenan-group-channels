@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CheckCircle, Building2, FileText, CreditCard } from "lucide-react";
+import { getCheckoutSettings } from "@/lib/store";
 
 export const metadata = {
   title: "Order Confirmed",
@@ -11,6 +12,25 @@ export default async function ConfirmationPage({
   searchParams: Promise<{ order?: string; pm?: string }>;
 }) {
   const { order, pm } = await searchParams;
+
+  // Load the configured bank-transfer / net-terms details so the customer has
+  // what they need to pay even though there is no confirmation email yet.
+  let bankDetails:
+    | { bankName: string; accountName: string; bsb: string; accountNumber: string; reference?: string }
+    | undefined;
+  let netTermsDays: number | undefined;
+  if (pm === "bank_transfer" || pm === "net_terms") {
+    try {
+      const { paymentMethods } = await getCheckoutSettings();
+      const method = paymentMethods.find((m) => m.id === pm);
+      bankDetails = method?.bankDetails;
+      netTermsDays = method?.netTermsDays;
+    } catch {
+      // Fall back to the generic copy below.
+    }
+  }
+
+  const reference = bankDetails?.reference?.trim() || order;
 
   return (
     <div className="mx-auto max-w-lg px-4 sm:px-6 lg:px-8 py-16 text-center">
@@ -27,7 +47,7 @@ export default async function ConfirmationPage({
       )}
 
       <p className="mt-4 text-sm text-steel-500">
-        You will receive an email confirmation shortly.
+        Please keep a record of your order number.
       </p>
 
       {/* Payment-specific instructions */}
@@ -38,7 +58,7 @@ export default async function ConfirmationPage({
             <h3 className="text-sm font-semibold text-brand-deep">Payment Successful</h3>
           </div>
           <p className="text-sm text-brand-deep">
-            Your card payment has been processed successfully. A receipt will be sent to your email.
+            Your card payment has been processed successfully.
           </p>
         </div>
       )}
@@ -50,11 +70,44 @@ export default async function ConfirmationPage({
             <h3 className="text-sm font-semibold text-accent-dark">Bank Transfer Details</h3>
           </div>
           <p className="text-sm text-accent-dark">
-            Please transfer the order total to our bank account. Use your order number <strong>{order}</strong> as the payment reference.
+            Please transfer your order total to the account below and use{" "}
+            <strong>{reference}</strong> as the payment reference. Your order is processed once
+            payment is received.
           </p>
-          <p className="text-sm text-accent-dark mt-2">
-            Bank details will be included in your confirmation email.
-          </p>
+          {bankDetails ? (
+            <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+              {bankDetails.bankName && (
+                <>
+                  <dt className="text-accent font-medium">Bank</dt>
+                  <dd className="text-accent-dark">{bankDetails.bankName}</dd>
+                </>
+              )}
+              {bankDetails.accountName && (
+                <>
+                  <dt className="text-accent font-medium">Account Name</dt>
+                  <dd className="text-accent-dark">{bankDetails.accountName}</dd>
+                </>
+              )}
+              {bankDetails.bsb && (
+                <>
+                  <dt className="text-accent font-medium">BSB</dt>
+                  <dd className="text-accent-dark">{bankDetails.bsb}</dd>
+                </>
+              )}
+              {bankDetails.accountNumber && (
+                <>
+                  <dt className="text-accent font-medium">Account No.</dt>
+                  <dd className="text-accent-dark">{bankDetails.accountNumber}</dd>
+                </>
+              )}
+              <dt className="text-accent font-medium">Reference</dt>
+              <dd className="text-accent-dark">{reference}</dd>
+            </dl>
+          ) : (
+            <p className="text-sm text-accent-dark mt-2">
+              Please contact us for our bank account details to complete your payment.
+            </p>
+          )}
         </div>
       )}
 
@@ -65,7 +118,8 @@ export default async function ConfirmationPage({
             <h3 className="text-sm font-semibold text-member-text">Invoice &amp; Payment Terms</h3>
           </div>
           <p className="text-sm text-member-text">
-            An invoice will be sent to your email with payment terms. No action is required at this time.
+            An invoice with Net {netTermsDays ?? 30} payment terms will be sent to you. No action
+            is required at this time.
           </p>
         </div>
       )}
