@@ -9,8 +9,8 @@ type GoogleSignInResult = {
   session?: {
     customerId: number;
     email: string;
-    firstName: string;
-    lastName: string;
+    first_name: string;
+    last_name: string;
   };
 };
 
@@ -59,8 +59,8 @@ export async function googleSignIn(credential: string): Promise<GoogleSignInResu
   const existing = (await customerService.findByEmailAndChannel(email, CHANNEL_ID)) as {
     id: number;
     email: string;
-    firstName: string;
-    lastName: string;
+    first_name: string;
+    last_name: string;
   } | null;
 
   if (existing) {
@@ -86,7 +86,7 @@ export async function googleSignIn(credential: string): Promise<GoogleSignInResu
     lastName,
     isActive: true,
     attributes: { googleSub: tokenInfo.sub },
-  })) as { id: number; email: string; firstName: string; lastName: string };
+  })) as { id: number; email: string; first_name: string; last_name: string };
 
   await setSession(customer.id, customer.email);
   revalidatePath("/", "layout");
@@ -95,8 +95,8 @@ export async function googleSignIn(credential: string): Promise<GoogleSignInResu
     session: {
       customerId: customer.id,
       email: customer.email,
-      firstName: customer.firstName,
-      lastName: customer.lastName,
+      firstName: customer.first_name,
+      lastName: customer.last_name,
     },
   };
 }

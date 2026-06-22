@@ -24,8 +24,8 @@ export default async function AccountPage() {
   const [customer, subscriptionsEnabled, drawsEnabled, partnerOffersEnabled] =
     await Promise.all([
       customerService.getById(session.customerId) as Promise<{
-        firstName: string;
-        lastName: string;
+        first_name: string;
+        last_name: string;
         email: string;
       } | null>,
       getFeatureFlag("subscriptions_enabled"),
@@ -86,7 +86,7 @@ export default async function AccountPage() {
             <div>
               <p className="text-zinc-400 text-sm">Welcome back</p>
               <p className="text-lg font-semibold">
-                {customer?.firstName} {customer?.lastName}
+                {customer?.first_name} {customer?.last_name}
               </p>
               <p className="text-sm text-zinc-400">{customer?.email}</p>
             </div>
@@ -118,7 +118,7 @@ export default async function AccountPage() {
         <div className="border border-zinc-200 rounded-lg p-6 mb-6">
           <h2 className="text-lg font-semibold text-zinc-900 mb-2">Welcome back</h2>
           <p className="text-zinc-600">
-            {customer?.firstName} {customer?.lastName}
+            {customer?.first_name} {customer?.last_name}
           </p>
           <p className="text-sm text-zinc-500">{customer?.email}</p>
         </div>

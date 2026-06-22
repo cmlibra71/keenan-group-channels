@@ -18,8 +18,8 @@ export async function getSessionInfo() {
   if (!session) return null;
 
   const customer = (await customerService.getById(session.customerId)) as {
-    firstName: string;
-    lastName: string;
+    first_name: string;
+    last_name: string;
     email: string;
   } | null;
 
@@ -28,14 +28,14 @@ export async function getSessionInfo() {
   return {
     customerId: session.customerId,
     email: customer.email,
-    firstName: customer.firstName,
-    lastName: customer.lastName,
+    firstName: customer.first_name,
+    lastName: customer.last_name,
   };
 }
 
 export async function loginFromPanel(formData: FormData): Promise<{
   error?: string;
-  session?: { customerId: number; email: string; firstName: string; lastName: string };
+  session?: { customerId: number; email: string; first_name: string; lastName: string };
 }> {
   const email = (formData.get("email") as string)?.trim().toLowerCase();
   const password = formData.get("password") as string;
@@ -48,8 +48,8 @@ export async function loginFromPanel(formData: FormData): Promise<{
   const customer = (await customerService.findByEmailAndChannel(email, CHANNEL_ID)) as {
     id: number;
     email: string;
-    firstName: string;
-    lastName: string;
+    first_name: string;
+    last_name: string;
     passwordHash: string | null;
   } | null;
 
@@ -64,15 +64,15 @@ export async function loginFromPanel(formData: FormData): Promise<{
     session: {
       customerId: customer.id,
       email: customer.email,
-      firstName: customer.firstName,
-      lastName: customer.lastName,
+      firstName: customer.first_name,
+      lastName: customer.last_name,
     },
   };
 }
 
 export async function registerFromPanel(formData: FormData): Promise<{
   error?: string;
-  session?: { customerId: number; email: string; firstName: string; lastName: string };
+  session?: { customerId: number; email: string; first_name: string; lastName: string };
 }> {
   const firstName = (formData.get("firstName") as string)?.trim();
   const lastName = (formData.get("lastName") as string)?.trim();
@@ -101,7 +101,7 @@ export async function registerFromPanel(formData: FormData): Promise<{
     firstName,
     lastName,
     isActive: true,
-  })) as { id: number; email: string; firstName: string; lastName: string };
+  })) as { id: number; email: string; first_name: string; lastName: string };
 
   await setSession(customer.id, customer.email);
   revalidatePath("/", "layout");
@@ -110,8 +110,8 @@ export async function registerFromPanel(formData: FormData): Promise<{
     session: {
       customerId: customer.id,
       email: customer.email,
-      firstName: customer.firstName,
-      lastName: customer.lastName,
+      firstName: customer.first_name,
+      lastName: customer.last_name,
     },
   };
 }
