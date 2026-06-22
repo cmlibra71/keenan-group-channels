@@ -28,7 +28,11 @@ export function Price({
 }: PriceProps) {
   const { inclusive, pricesIncludeTax } = useGst();
   let num = typeof amount === "string" ? parseFloat(amount) : amount;
-  if (gst && Number.isFinite(num)) {
+  // Never render "$NaN" from a null/blank/non-numeric amount — show a neutral dash.
+  if (!Number.isFinite(num)) {
+    return <span className={className}>&mdash;</span>;
+  }
+  if (gst) {
     num = adjustForGst(num, inclusive, pricesIncludeTax);
   }
   const formatted = formatter.format(num);

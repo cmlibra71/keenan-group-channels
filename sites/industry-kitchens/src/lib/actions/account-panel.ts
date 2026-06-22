@@ -3,15 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { customerService, CHANNEL_ID } from "@/lib/store";
 import { getSession, setSession, clearSession } from "@/lib/auth";
-
-async function hashPassword(password: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hash = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
+import { hashPassword, verifyPassword } from "@/lib/password";
 
 type PanelSession = { customerId: number; email: string; firstName: string; lastName: string };
 
@@ -47,7 +39,6 @@ export async function loginFromPanel(formData: FormData): Promise<{
     return { error: "Email and password are required." };
   }
 
-  const passwordHash = await hashPassword(password);
   // findByEmailAndChannel uses a raw Drizzle .select() → camelCase keys.
   const customer = (await customerService.findByEmailAndChannel(email, CHANNEL_ID)) as {
     id: number;
@@ -57,8 +48,16 @@ export async function loginFromPanel(formData: FormData): Promise<{
     passwordHash: string | null;
   } | null;
 
-  if (!customer || customer.passwordHash !== passwordHash) {
+  const { valid, needsRehash } = await verifyPassword(password, customer?.passwordHash);
+  if (!customer || !valid) {
     return { error: "Invalid email or password." };
+  }
+  if (needsRehash) {
+    try {
+      await customerService.update(customer.id, { passwordHash: await hashPassword(password) });
+    } catch {
+      /* non-fatal */
+    }
   }
 
   await setSession(customer.id, customer.email);
