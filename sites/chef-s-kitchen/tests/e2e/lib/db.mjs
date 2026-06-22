@@ -111,3 +111,27 @@ export async function countTestCustomers(emailLike = "e2e-%@e2e.test") {
   const rows = await sql`SELECT count(*)::int AS n FROM customers WHERE email LIKE ${emailLike}`;
   return rows[0].n;
 }
+
+/** The customer's member group + latest channel-2 subscription status (diagnostics). */
+export async function getCustomerMembership(email) {
+  if (!email) return null;
+  const sql = getSql();
+  const rows = await sql`
+    SELECT c.id, c.customer_group_id,
+      (SELECT s.status FROM subscriptions s
+         WHERE s.customer_id = c.id AND s.channel_id = 2
+         ORDER BY s.id DESC LIMIT 1) AS sub_status
+    FROM customers c WHERE lower(c.email) = ${String(email).toLowerCase()} LIMIT 1`;
+  return rows[0] || null;
+}
+
+/** Look up an order by its order_number (for status/payment-status assertions). */
+export async function getOrderByNumber(orderNumber) {
+  if (!orderNumber) return null;
+  const sql = getSql();
+  const rows = await sql`
+    SELECT id, order_number, status, payment_status, payment_method, total_inc_tax,
+           billing_address
+    FROM orders WHERE order_number = ${orderNumber} LIMIT 1`;
+  return rows[0] || null;
+}

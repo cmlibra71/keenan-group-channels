@@ -182,3 +182,66 @@ export async function addPricedProductToCart(page, base, slugs) {
   }
   return null;
 }
+
+/** Add a single specific product (by slug) to the cart; returns true on success. */
+export async function addSlugToCart(page, base, slug) {
+  const status = await goto(page, base, `/products/${slug}`);
+  if (status >= 400) return false;
+  if (!(await makeAddToCartReady(page))) return false;
+  await page.getByRole("button", { name: /^Add to Cart$/ }).first().click();
+  await page.waitForTimeout(1200);
+  return cartHasItems(page, base);
+}
+
+/** Remove every line from the cart (best-effort) so a price check sees one item. */
+export async function clearCart(page, base) {
+  await goto(page, base, "/cart");
+  await settle(page, 300);
+  for (let i = 0; i < 12; i++) {
+    // The cart line "remove" control is an unlabelled button with a trash icon.
+    const del = page.locator("button:has(svg.lucide-trash-2), button:has(svg.lucide-trash2)").first();
+    if (!(await del.isVisible().catch(() => false))) break;
+    await del.click().catch(() => {});
+    await page.waitForTimeout(800);
+    await goto(page, base, "/cart");
+    await settle(page, 250);
+  }
+}
+
+/** The first "$X.YZ each" unit price on the /cart page (null if none). */
+export async function firstCartUnitPrice(page) {
+  return page.evaluate(() => {
+    const m = (document.body.innerText || "").match(/\$\s?([\d,]+\.\d{2})\s*each/i);
+    return m ? parseFloat(m[1].replace(/,/g, "")) : null;
+  });
+}
+
+/** The headline ($) price shown in the PDP pricing card (member price for members). */
+export async function pdpHeadlinePrice(page) {
+  return page.evaluate(() => {
+    const card =
+      document.querySelector("[class*='border-l-member']") ||
+      document.querySelector("main");
+    const nums = [...(card?.textContent || "").matchAll(/\$\s?([\d,]+\.\d{2})/g)].map((m) =>
+      parseFloat(m[1].replace(/,/g, ""))
+    );
+    return nums.length ? nums[0] : null;
+  });
+}
+
+/** Best-effort fill of a Stripe single-card Element across its iframes (test card 4242). */
+export async function fillStripeCard(page) {
+  const frame = page
+    .frameLocator("iframe[name^='__privateStripeFrame'], iframe[title*='payment'], iframe[title*='Secure']")
+    .first();
+  await frame.locator("[name='cardnumber'], [placeholder*='Card number']").first().fill("4242424242424242", { timeout: 6000 });
+  await frame.locator("[name='exp-date'], [placeholder*='MM']").first().fill("12 34", { timeout: 6000 });
+  await frame.locator("[name='cvc'], [placeholder*='CVC']").first().fill("123", { timeout: 6000 });
+  // Postal appears after the card number for some Stripe configs; give it time
+  // and try the common selectors. Some elements don't show it at all (no-op).
+  await frame
+    .locator("[name='postal'], [name='postalCode'], [placeholder*='ZIP'], [placeholder*='postcode'], [placeholder*='Postal']")
+    .first()
+    .fill("3000", { timeout: 5000 })
+    .catch(() => {});
+}

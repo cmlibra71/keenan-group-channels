@@ -4,7 +4,8 @@
 // a code read suggested guests see RRP only. We record what actually renders and
 // flag a mismatch instead of guessing the rule.
 import { goto, bypassLogin, settle } from "../lib/harness.mjs";
-import { logoutViaPanel } from "../lib/site.mjs";
+import { logoutViaPanel, pdpHeadlinePrice, firstCartUnitPrice, addSlugToCart, clearCart } from "../lib/site.mjs";
+import { getCustomerMembership } from "../lib/db.mjs";
 
 export const meta = { name: "member-pricing", writes: false };
 
@@ -43,6 +44,33 @@ export async function run(ctx) {
     await settle(page, 400);
     memberView = await capturePdp(page);
     s.note(`member view: ${JSON.stringify(memberView)}`);
+  });
+
+  // Correctness: the member price SHOWN on the PDP must equal the price CHARGED
+  // in the cart (catches the classic "PDP shows member price, cart charges RRP").
+  await report.step({ flow: "member-pricing", name: "member price: displayed == charged", route: "/cart" }, async (s) => {
+    await goto(page, base, `/products/${slug}`);
+    await settle(page, 400);
+    const shown = await pdpHeadlinePrice(page);
+    await clearCart(page, base); // ensure a single line for an unambiguous read
+    const added = await addSlugToCart(page, base, slug);
+    if (!added) return s.warn("could not add the product to the cart to verify the charged price");
+    await goto(page, base, "/cart");
+    await settle(page, 300);
+    const charged = await firstCartUnitPrice(page);
+    const mem = await getCustomerMembership(ctx.account.email).catch(() => null);
+    s.note(`member PDP price = ${shown}, cart unit price = ${charged}`);
+    s.note(`DB: customer_group_id=${mem?.customer_group_id ?? "null"}, sub_status=${mem?.sub_status ?? "none"}`);
+    if (shown == null || charged == null) {
+      s.warn("could not parse both the displayed and charged prices — not verified");
+      return;
+    }
+    if (Math.abs(shown - charged) > 0.02) {
+      s.fail("broken", `member price mismatch: PDP shows $${shown} but cart charges $${charged}`);
+    } else {
+      s.note("displayed member price matches the charged price ✓");
+    }
+    await clearCart(page, base); // leave the cart clean for later flows
   });
 
   await report.step({ flow: "member-pricing", name: "capture guest view", route: `/products/${slug}` }, async (s) => {

@@ -1,24 +1,17 @@
 // Cart → checkout as a (non-member) logged-in customer. Adds a priced product,
 // then places an order via a no-Stripe method (bank transfer / net terms) so no
-// card is charged. If Stripe is the only method and a testMode gateway is
-// configured, fills the 4242 test card; otherwise the Stripe path is skipped.
+// card is charged. Verifies the confirmation content, the bank-transfer details,
+// and the persisted order status in the DB. Records the order number on ctx so
+// the order-scoping flow can reuse it.
 import { goto, assert, bypassLogin, settle, fillStable } from "../lib/harness.mjs";
-import { addPricedProductToCart } from "../lib/site.mjs";
+import { addPricedProductToCart, fillStripeCard } from "../lib/site.mjs";
+import { getOrderByNumber } from "../lib/db.mjs";
 
 export const meta = { name: "checkout", writes: true };
 
 async function ensureLoggedIn(ctx) {
   const { page, base, secret, account } = ctx;
   if (secret) await bypassLogin(page, { base, secret, email: account.email }).catch(() => {});
-}
-
-/** Best-effort fill of a Stripe single-card Element across its iframes. */
-async function fillStripeCard(page) {
-  const frame = page.frameLocator("iframe[name^='__privateStripeFrame'], iframe[title*='payment']").first();
-  await frame.locator("[name='cardnumber'], [placeholder*='Card number']").first().fill("4242424242424242", { timeout: 5000 });
-  await frame.locator("[name='exp-date'], [placeholder*='MM']").first().fill("12 34", { timeout: 5000 });
-  await frame.locator("[name='cvc'], [placeholder*='CVC']").first().fill("123", { timeout: 5000 });
-  await frame.locator("[name='postal'], [placeholder*='ZIP'], [placeholder*='postcode']").first().fill("3000", { timeout: 2000 }).catch(() => {});
 }
 
 export async function run(ctx) {
@@ -55,7 +48,6 @@ export async function run(ctx) {
       if (!val) await fillStable(page, "input[name='email']", ctx.account.email);
     }
 
-    // New-address form (shown when there are no saved addresses).
     const addr1 = page.locator("input[name='address1']").first();
     if (await addr1.isVisible().catch(() => false)) {
       await fillStable(page, "input[name='firstName']", ctx.account.firstName).catch(() => {});
@@ -73,9 +65,13 @@ export async function run(ctx) {
     const pick = ["bank_transfer", "net_terms"].find((m) => methods.includes(m));
     if (pick) {
       await page.locator(`input[name='paymentMethod'][value='${pick}']`).check().catch(() => {});
+      ctx.lastPaymentMethod = pick;
     } else if (methods.includes("stripe")) {
       await page.locator("input[name='paymentMethod'][value='stripe']").check().catch(() => {});
       usedStripe = true;
+      ctx.lastPaymentMethod = "stripe";
+    } else {
+      ctx.lastPaymentMethod = "";
     }
 
     if (usedStripe) {
@@ -97,13 +93,44 @@ export async function run(ctx) {
       const err = await page.locator(".bg-sale-bg, .alert-error").first().textContent().catch(() => null);
       throw new Error(err ? `order not confirmed: ${err.trim()}` : "did not reach /checkout/confirmation");
     }
-    const orderParam = new URL(page.url()).searchParams.get("order");
-    s.note(`order confirmed: ${orderParam || "(no order param)"}`);
+    ctx.lastOrderNumber = new URL(page.url()).searchParams.get("order");
+    s.note(`order confirmed: ${ctx.lastOrderNumber || "(no order param)"} via ${ctx.lastPaymentMethod || "(no method)"}`);
   });
 
-  await report.step({ flow: "checkout", name: "confirmation page", route: "/checkout/confirmation" }, async (s) => {
+  await report.step({ flow: "checkout", name: "confirmation content", route: "/checkout/confirmation" }, async (s) => {
     if (!/\/checkout\/confirmation/.test(page.url())) return s.warn("not on confirmation page (order may not have been placed)");
-    const hasThanks = await page.locator("text=/order|thank|confirm/i").first().isVisible().catch(() => false);
-    assert(hasThanks, "confirmation page missing order/thank-you copy");
+    const body = (await page.locator("main").innerText().catch(() => "")) || "";
+    assert(/order|thank|confirm/i.test(body), "confirmation page missing order/thank-you copy");
+    if (ctx.lastPaymentMethod === "bank_transfer") {
+      assert(/Bank Transfer Details/i.test(body), "bank-transfer order missing 'Bank Transfer Details' panel");
+      if (ctx.lastOrderNumber) {
+        assert(body.includes(ctx.lastOrderNumber), "confirmation does not show the order number as the payment reference");
+      }
+      // CD has no bank account configured yet → the fallback copy is expected for now.
+      if (/contact us for our bank account details/i.test(body)) {
+        s.warn("bank-transfer order placed but NO bank account details are configured for this channel (fallback shown) — fill them in the portal Checkout tab");
+      } else {
+        s.note("configured bank account details are displayed");
+      }
+    }
+  });
+
+  // 4. The order persisted with the correct status (source of truth: the DB).
+  await report.step({ flow: "checkout", name: "order persisted with correct status (DB)", route: "/checkout" }, async (s) => {
+    if (!ctx.lastOrderNumber) return s.warn("no order number captured — skipping DB check");
+    const order = await getOrderByNumber(ctx.lastOrderNumber).catch(() => null);
+    assert(order, `order ${ctx.lastOrderNumber} not found in the DB`);
+    s.note(`DB: status=${order.status}, payment_status=${order.payment_status}, method=${order.payment_method}`);
+    const expected = {
+      bank_transfer: ["pending_payment"],
+      net_terms: ["net_terms"],
+      stripe: ["awaiting_payment", "paid"],
+    }[ctx.lastPaymentMethod] || null;
+    if (expected) {
+      assert(
+        expected.includes(order.payment_status),
+        `payment_status="${order.payment_status}" — expected one of ${expected.join("/")} for ${ctx.lastPaymentMethod}`
+      );
+    }
   });
 }
