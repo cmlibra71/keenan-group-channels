@@ -13,10 +13,13 @@ async function hashPassword(password: string): Promise<string> {
     .join("");
 }
 
+type PanelSession = { customerId: number; email: string; firstName: string; lastName: string };
+
 export async function getSessionInfo() {
   const session = await getSession();
   if (!session) return null;
 
+  // getById goes through transformRow → snake_case keys.
   const customer = (await customerService.getById(session.customerId)) as {
     first_name: string;
     last_name: string;
@@ -35,7 +38,7 @@ export async function getSessionInfo() {
 
 export async function loginFromPanel(formData: FormData): Promise<{
   error?: string;
-  session?: { customerId: number; email: string; first_name: string; lastName: string };
+  session?: PanelSession;
 }> {
   const email = (formData.get("email") as string)?.trim().toLowerCase();
   const password = formData.get("password") as string;
@@ -45,11 +48,12 @@ export async function loginFromPanel(formData: FormData): Promise<{
   }
 
   const passwordHash = await hashPassword(password);
+  // findByEmailAndChannel uses a raw Drizzle .select() → camelCase keys.
   const customer = (await customerService.findByEmailAndChannel(email, CHANNEL_ID)) as {
     id: number;
     email: string;
-    first_name: string;
-    last_name: string;
+    firstName: string;
+    lastName: string;
     passwordHash: string | null;
   } | null;
 
@@ -64,15 +68,15 @@ export async function loginFromPanel(formData: FormData): Promise<{
     session: {
       customerId: customer.id,
       email: customer.email,
-      firstName: customer.first_name,
-      lastName: customer.last_name,
+      firstName: customer.firstName,
+      lastName: customer.lastName,
     },
   };
 }
 
 export async function registerFromPanel(formData: FormData): Promise<{
   error?: string;
-  session?: { customerId: number; email: string; first_name: string; lastName: string };
+  session?: PanelSession;
 }> {
   const firstName = (formData.get("firstName") as string)?.trim();
   const lastName = (formData.get("lastName") as string)?.trim();
@@ -94,6 +98,7 @@ export async function registerFromPanel(formData: FormData): Promise<{
 
   const passwordHash = await hashPassword(password);
 
+  // create goes through transformRow → snake_case keys.
   const customer = (await customerService.create({
     originChannelId: CHANNEL_ID,
     email,
@@ -101,7 +106,7 @@ export async function registerFromPanel(formData: FormData): Promise<{
     firstName,
     lastName,
     isActive: true,
-  })) as { id: number; email: string; first_name: string; lastName: string };
+  })) as { id: number; email: string; first_name: string; last_name: string };
 
   await setSession(customer.id, customer.email);
   revalidatePath("/", "layout");
