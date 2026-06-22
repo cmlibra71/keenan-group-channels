@@ -60,8 +60,8 @@ export default async function ProductPage({
     if (session) {
       const activeSub = await getActiveSubscription(session.customerId);
       if (activeSub) {
-        const customer = await customerService.getById(session.customerId) as { customerGroupId: number | null } | null;
-        customerGroupId = customer?.customerGroupId ?? null;
+        const customer = await customerService.getById(session.customerId) as { customer_group_id: number | null } | null;
+        customerGroupId = customer?.customer_group_id ?? null;
         isMember = true;
       }
     }

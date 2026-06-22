@@ -50,11 +50,11 @@ export async function getMemberContext(): Promise<MemberContext> {
     const activeSub = await getActiveSubscription(session.customerId);
     if (activeSub) {
       const customer = (await customerService.getById(session.customerId)) as {
-        customerGroupId: number | null;
+        customer_group_id: number | null;
       } | null;
       return {
         isMember: true,
-        customerGroupId: customer?.customerGroupId ?? base.groupId,
+        customerGroupId: customer?.customer_group_id ?? base.groupId,
         planPrice: base.price,
       };
     }

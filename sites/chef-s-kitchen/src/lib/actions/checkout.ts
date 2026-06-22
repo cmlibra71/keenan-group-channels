@@ -193,7 +193,7 @@ export async function placeOrder(
     totalTax: String(totalTax),
     itemsTotal: totalItems,
     billingAddress,
-  }) as { id: number; orderNumber: string };
+  }) as { id: number; order_number: string };
 
   // Create order items
   const orderItemsData = fullCart.items.map((item) => {
@@ -231,7 +231,7 @@ export async function placeOrder(
     try {
       const { clientSecret } = await paymentService.createStripePaymentIntent(order.id, {
         amount: String(totalIncTax),
-        description: `Order ${order.orderNumber}`,
+        description: `Order ${order.order_number}`,
         customer_email: email,
       });
 
@@ -239,7 +239,7 @@ export async function placeOrder(
       await cartService.markCompleted(cartWithItems.id);
       await clearCartUuid();
 
-      return { stripe: { clientSecret, orderNumber: order.orderNumber } };
+      return { stripe: { clientSecret, orderNumber: order.order_number } };
     } catch (err) {
       return { error: err instanceof Error ? err.message : "Failed to create payment." };
     }
@@ -250,7 +250,7 @@ export async function placeOrder(
   await clearCartUuid();
 
   const pmParam = paymentMethod ? `&pm=${encodeURIComponent(paymentMethod)}` : "";
-  redirect(`/checkout/confirmation?order=${order.orderNumber}${pmParam}`);
+  redirect(`/checkout/confirmation?order=${order.order_number}${pmParam}`);
 }
 
 /**

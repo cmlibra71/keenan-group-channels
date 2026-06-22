@@ -52,13 +52,13 @@ export async function addToCart(productId: number, variantId?: number | null, qu
     if (session) {
       const activeSub = await getActiveSubscription(session.customerId);
       if (activeSub) {
-        const customer = await customerService.getById(session.customerId) as { customerGroupId: number | null } | null;
-        if (customer?.customerGroupId) {
+        const customer = await customerService.getById(session.customerId) as { customer_group_id: number | null } | null;
+        if (customer?.customer_group_id) {
           // Use the variant ID or find the default variant for pricing lookup
           const variantResult = variantId ? null : await productVariantService.listForParent(productId, { page: 1, limit: 1, sort: "id", direction: "asc" });
           const pricingVariantId = variantId || (variantResult?.data[0] as { id: number } | undefined)?.id;
           if (pricingVariantId) {
-            const pricing = await getEffectivePrice(pricingVariantId, CHANNEL_ID, customer.customerGroupId);
+            const pricing = await getEffectivePrice(pricingVariantId, CHANNEL_ID, customer.customer_group_id);
             if (pricing.salePrice) {
               salePrice = salePrice && parseFloat(salePrice) < parseFloat(pricing.salePrice)
                 ? salePrice
