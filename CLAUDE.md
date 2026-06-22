@@ -36,6 +36,40 @@ cd ../keenan-group-services && npm run build
 
 Then restart the dev servers to pick up changes.
 
+## Testing & Browser Automation
+
+**Browser automation tool: cloakbrowser** (a Playwright-API stealth Chromium, driven from
+`node` via Bash — global Claude Code skill at `~/.claude/skills/cloakbrowser/`). Use it to
+load, screenshot, fill, and verify pages — including auth-gated and Stripe/OAuth pages. Prefer
+it over Playwright/Puppeteer here. Quick one-shots:
+
+```bash
+S=~/.claude/skills/cloakbrowser/scripts
+node $S/cloak.mjs shot http://localhost:3002 --out /tmp/cd.png   # then Read the PNG
+node $S/cloak.mjs eval http://localhost:3002 "document.title"
+```
+
+### Chef's Depot E2E suite
+
+`sites/chef-s-kitchen/tests/e2e/` is a cloakbrowser-driven walk through every CD path
+(register, login/out, browse/search, cart→checkout, quote incl. price-on-application,
+become a member, member pricing, account mgmt, draws, partner offers, cancel). It emits a
+markdown **issues report** with screenshots to `tests/e2e/artifacts/<runId>/report.md`.
+
+```bash
+# Start the dev server, then (with E2E_LOGIN_SECRET set in the CD .env):
+node sites/chef-s-kitchen/tests/e2e/run.mjs --base http://localhost:3002
+# Read-only smoke pass (zero writes — safe against prod):
+node sites/chef-s-kitchen/tests/e2e/run.mjs --smoke-only --base https://chefsdepot.com.au
+```
+
+- **Test data:** the dev site writes the **production** commerce DB, so the suite tags every
+  account `e2e-<runId>@e2e.test` and deletes everything it creates in teardown.
+- **Bypasses:** guarded login route `POST /api/test/login` (gated on `E2E_LOGIN_SECRET`, test
+  emails only — returns 404 when the secret is unset, so it is safe in every env); membership
+  staff test card `MEMBERSHIP_TEST_CARD` (default `4065871315315604`, no Stripe charge);
+  checkout via `bank_transfer`/`net_terms` (no card charge). See `tests/e2e/README.md`.
+
 ## Project Structure
 
 - `template/` - Base Next.js template that new sites are scaffolded from
