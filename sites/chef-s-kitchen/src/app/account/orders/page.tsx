@@ -2,15 +2,16 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Package } from "lucide-react";
 import { getSession } from "@/lib/auth";
-import { orderService } from "@/lib/store";
+import { orderService, CHANNEL_ID } from "@/lib/store";
 import { Price } from "@/components/ui/Price";
 
+// orderService returns snake_case keys (transformRow).
 interface OrderRecord {
   id: number;
-  orderNumber: string;
+  order_number: string;
   status: string;
-  totalIncTax: string;
-  createdAt: Date | null;
+  total_inc_tax: string;
+  created_at: Date | null;
   items?: Array<{ name: string; quantity: number }>;
 }
 
@@ -22,12 +23,18 @@ export default async function OrdersPage() {
   const session = await getSession();
   if (!session) redirect("/account");
 
+  // Scope to THIS customer (and channel, defence-in-depth). Both are registered
+  // filters on OrderService; without the customer_id filter the list would return
+  // channel-wide orders.
   const { data } = await orderService.list({
     page: 1,
     limit: 50,
     sort: "created_at",
     direction: "desc",
-    filters: { customer_id: { type: "eq", value: session.customerId } },
+    filters: {
+      customer_id: { type: "eq", value: session.customerId },
+      channel_id: { type: "eq", value: CHANNEL_ID },
+    },
   });
 
   const customerOrders = data as unknown as OrderRecord[];
@@ -51,11 +58,11 @@ export default async function OrdersPage() {
     );
   }
 
-  // Fetch orders with items included
+  // Fetch orders with items included; fall back to the list row if getById is null.
   const ordersWithItems = await Promise.all(
     customerOrders.map(async (order) => {
-      const result = await orderService.getById(order.id, ["items"]) as unknown as OrderRecord;
-      return result;
+      const result = (await orderService.getById(order.id, ["items"])) as unknown as OrderRecord | null;
+      return result ?? order;
     })
   );
 
@@ -85,10 +92,10 @@ export default async function OrdersPage() {
               <div className="flex items-center justify-between mb-2">
                 <div>
                   <span className="font-semibold text-text-primary">
-                    Order #{order.orderNumber}
+                    Order #{order.order_number}
                   </span>
                   <span className="ml-3 text-sm text-text-secondary">
-                    {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : ""}
+                    {order.created_at ? new Date(order.created_at).toLocaleDateString() : ""}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -101,7 +108,7 @@ export default async function OrdersPage() {
                   }`}>
                     {order.status}
                   </span>
-                  <Price amount={order.totalIncTax} className="font-semibold text-text-primary" />
+                  <Price amount={order.total_inc_tax} className="font-semibold text-text-primary" />
                 </div>
               </div>
               <p className="text-sm text-text-secondary">

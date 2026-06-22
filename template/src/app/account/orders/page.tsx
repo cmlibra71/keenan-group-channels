@@ -2,15 +2,16 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Package } from "lucide-react";
 import { getSession } from "@/lib/auth";
-import { orderService } from "@/lib/store";
+import { orderService, CHANNEL_ID } from "@/lib/store";
 import { Price } from "@/components/ui/Price";
 
+// orderService returns snake_case keys (transformRow).
 interface OrderRecord {
   id: number;
-  orderNumber: string;
+  order_number: string;
   status: string;
-  totalIncTax: string;
-  createdAt: Date | null;
+  total_inc_tax: string;
+  created_at: Date | null;
   items?: Array<{ name: string; quantity: number }>;
 }
 
@@ -22,26 +23,33 @@ export default async function OrdersPage() {
   const session = await getSession();
   if (!session) redirect("/account");
 
+  // Scope to THIS customer (and channel, defence-in-depth). Both are registered
+  // filters on OrderService; without the customer_id filter the list would return
+  // channel-wide orders.
   const { data } = await orderService.list({
     page: 1,
     limit: 50,
     sort: "created_at",
     direction: "desc",
-    filters: { customer_id: { type: "eq", value: session.customerId } },
+    filters: {
+      customer_id: { type: "eq", value: session.customerId },
+      channel_id: { type: "eq", value: CHANNEL_ID },
+    },
   });
 
   const customerOrders = data as unknown as OrderRecord[];
 
   if (customerOrders.length === 0) {
     return (
-      <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-3xl font-bold text-zinc-900 mb-8">Order History</h1>
-        <div className="text-center py-16">
-          <Package className="h-16 w-16 text-zinc-300 mx-auto" />
-          <p className="mt-4 text-zinc-500">No orders yet.</p>
+      <div className="mx-auto max-w-3xl px-6 lg:px-8 section-padding">
+        <p className="eyebrow mb-3">ORDERS</p>
+        <h1 className="text-3xl heading-serif text-text-primary mb-8">Order History</h1>
+        <div className="text-center section-padding">
+          <Package className="h-16 w-16 text-text-muted mx-auto" />
+          <p className="mt-4 text-text-secondary">No orders yet.</p>
           <Link
             href="/products"
-            className="mt-6 inline-block bg-zinc-900 text-white px-6 py-3 rounded-lg font-semibold hover:bg-zinc-800 transition-colors"
+            className="mt-6 inline-block btn-primary"
           >
             Start Shopping
           </Link>
@@ -50,19 +58,22 @@ export default async function OrdersPage() {
     );
   }
 
-  // Fetch orders with items included
+  // Fetch orders with items included; fall back to the list row if getById is null.
   const ordersWithItems = await Promise.all(
     customerOrders.map(async (order) => {
-      const result = await orderService.getById(order.id, ["items"]) as unknown as OrderRecord;
-      return result;
+      const result = (await orderService.getById(order.id, ["items"])) as unknown as OrderRecord | null;
+      return result ?? order;
     })
   );
 
   return (
-    <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
+    <div className="mx-auto max-w-3xl px-6 lg:px-8 section-padding">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold text-zinc-900">Order History</h1>
-        <Link href="/account" className="text-sm text-zinc-500 hover:text-zinc-900">
+        <div>
+          <p className="eyebrow mb-3">ORDERS</p>
+          <h1 className="text-3xl heading-serif text-text-primary">Order History</h1>
+        </div>
+        <Link href="/account" className="text-sm text-text-secondary hover:text-text-primary transition-colors duration-300">
           Back to Account
         </Link>
       </div>
@@ -77,30 +88,30 @@ export default async function OrdersPage() {
             .join(", ");
 
           return (
-            <div key={order.id} className="border border-zinc-200 rounded-lg p-6">
+            <div key={order.id} className="card-padded">
               <div className="flex items-center justify-between mb-2">
                 <div>
-                  <span className="font-semibold text-zinc-900">
-                    Order #{order.orderNumber}
+                  <span className="font-semibold text-text-primary">
+                    Order #{order.order_number}
                   </span>
-                  <span className="ml-3 text-sm text-zinc-500">
-                    {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : ""}
+                  <span className="ml-3 text-sm text-text-secondary">
+                    {order.created_at ? new Date(order.created_at).toLocaleDateString() : ""}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className={`text-xs font-medium px-2 py-1 rounded-full ${
                     order.status === "completed"
-                      ? "bg-green-100 text-green-700"
+                      ? "text-accent bg-accent-subtle"
                       : order.status === "shipped"
-                        ? "bg-blue-100 text-blue-700"
-                        : "bg-zinc-100 text-zinc-600"
+                        ? "bg-accent-subtle text-accent-dark"
+                        : "bg-surface-secondary text-text-secondary"
                   }`}>
                     {order.status}
                   </span>
-                  <Price amount={order.totalIncTax} className="font-semibold text-zinc-900" />
+                  <Price amount={order.total_inc_tax} className="font-semibold text-text-primary" />
                 </div>
               </div>
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-text-secondary">
                 {totalItems} item{totalItems !== 1 ? "s" : ""}
                 {itemNames ? `: ${itemNames}` : ""}
                 {orderItemsList.length > 3 ? "..." : ""}
