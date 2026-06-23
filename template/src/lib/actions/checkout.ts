@@ -5,6 +5,7 @@ import { cartService, orderService, orderItemService, CHANNEL_ID, getEffectivePr
 import { getFeatureFlag, getActiveSubscription, shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
+import { sendOrderConfirmationEmail } from "@keenan/services";
 
 const GST_RATE = 0.1;
 
@@ -257,6 +258,26 @@ export async function placeOrder(
   // Mark cart as completed
   await cartService.markCompleted(cartWithItems.id);
   await clearCartUuid();
+
+  // Order confirmation email — best-effort, never blocks the order. The email
+  // helper redirects any @e2e.test (test) recipient to the test inbox, so test
+  // orders never email a real person.
+  try {
+    const method = checkoutSettings.paymentMethods.find((m) => m.id === paymentMethod);
+    await sendOrderConfirmationEmail({
+      to: email,
+      orderNumber: order.order_number,
+      customerName: `${firstName} ${lastName}`.trim() || undefined,
+      paymentMethod,
+      total: String(totalIncTax),
+      items: fullCart.items.map((i) => ({ name: i.productName, quantity: i.quantity })),
+      bankDetails: method?.bankDetails ?? null,
+      netTermsDays: method?.netTermsDays ?? null,
+      siteUrl: process.env.SITE_URL || `https://${process.env.NEXT_PUBLIC_SITE_DOMAIN || "chefsdepot.com.au"}`,
+    });
+  } catch (e) {
+    console.error("[placeOrder] confirmation email failed (non-fatal):", e);
+  }
 
   const pmParam = paymentMethod ? `&pm=${encodeURIComponent(paymentMethod)}` : "";
   redirect(`/checkout/confirmation?order=${order.order_number}${pmParam}`);

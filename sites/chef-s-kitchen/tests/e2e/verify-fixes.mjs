@@ -59,6 +59,15 @@ try {
   await shot(page, "1-account-dashboard");
   r.dashboardText = (await page.locator("main").innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 260);
 
+  // FIX (order leak) — a customer with no orders must see an EMPTY order history
+  // (previously leaked the 50 newest orders across all customers/channels).
+  await goto(page, base, "/account/orders");
+  await settle(page, 600);
+  r.ordersBefore = await page.evaluate(() => {
+    const t = document.querySelector("main")?.innerText || "";
+    return { orderCards: (t.match(/Order #/g) || []).length, empty: /no orders/i.test(t), hasNaN: /NaN/.test(t) };
+  });
+
   // FIX 2 — member price on the PDP, and (critical) the SAME price charged in the cart.
   await goto(page, base, `/products/${SLUG}`);
   await settle(page, 500);
@@ -91,6 +100,18 @@ try {
   r.orderNumber = new URL(page.url()).searchParams.get("order");
   r.confirmationText = (await page.locator("main").innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 320);
   if (r.orderNumber) r.orderRow = await getOrderByNumber(r.orderNumber).catch(() => null);
+
+  // FIX (order leak) — after ordering, the customer sees ONLY their own order.
+  await goto(page, base, "/account/orders");
+  await settle(page, 600);
+  r.ordersAfter = await page.evaluate((ordNum) => {
+    const t = document.querySelector("main")?.innerText || "";
+    return {
+      orderCards: (t.match(/Order #/g) || []).length,
+      showsOwn: ordNum ? t.includes(ordNum) : false,
+      hasNaN: /NaN/.test(t),
+    };
+  }, r.orderNumber);
 
   // FIX 3b — account slide-out panel name.
   await goto(page, base, "/");
