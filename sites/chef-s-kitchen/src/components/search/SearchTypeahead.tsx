@@ -116,7 +116,7 @@ export function SearchTypeahead({ defaultValue, inline, variant }: { defaultValu
 
   function navigateToProduct(hit: SearchHit) {
     setIsOpen(false);
-    router.push(`/search?q=${encodeURIComponent(hit.name)}`);
+    router.push(`/products/${hit.urlPath || hit.id}`);
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {

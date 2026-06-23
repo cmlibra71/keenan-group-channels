@@ -4,6 +4,20 @@ import { useState, useTransition } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { ChevronDown, X, SlidersHorizontal } from "lucide-react";
 
+// ── Generic facet model ───────────────────────────────────────────────────
+// A group is one accordion section (Brand, Category, Price …). `value` is the
+// opaque token written to the URL (?param=v1,v2); `label` is what the user sees.
+export interface FacetOption {
+  value: string;
+  label: string;
+  count: number;
+}
+export interface FacetGroupDef {
+  param: string;
+  title: string;
+  options: FacetOption[];
+}
+
 export interface CategoryFacets {
   subcategories: { id: number; name: string; slug: string; count: number }[];
   brands: { id: number; name: string; count: number }[];
@@ -21,13 +35,42 @@ const AVAIL_LABELS: Record<string, string> = {
   clearance: "Clearance",
 };
 
+/** Map the category page's CategoryFacets into the generic group list. */
+function categoryGroups(facets: CategoryFacets): FacetGroupDef[] {
+  const groups: FacetGroupDef[] = [];
+  if (facets.subcategories.length > 0)
+    groups.push({
+      param: "sub",
+      title: "Sub-category",
+      options: facets.subcategories.map((f) => ({ value: String(f.id), label: f.name, count: f.count })),
+    });
+  if (facets.brands.length > 0)
+    groups.push({
+      param: "brand",
+      title: "Brand",
+      options: facets.brands.map((f) => ({ value: String(f.id), label: f.name, count: f.count })),
+    });
+  groups.push({
+    param: "price",
+    title: "Price (ex GST)",
+    options: facets.price.map((f) => ({ value: f.key, label: PRICE_LABELS[f.key] ?? f.key, count: f.count })),
+  });
+  groups.push({
+    param: "stock",
+    title: "Availability",
+    options: facets.availability.map((f) => ({ value: f.key, label: AVAIL_LABELS[f.key] ?? f.key, count: f.count })),
+  });
+  return groups;
+}
+
 /**
- * Faceted filter rail: sticky 248px sidebar ≥1024px, off-canvas drawer below.
- * Selections update the URL query (?sub=&brand=&price=&stock=) so filtered
- * states are shareable and SSR-rendered; active facets show as removable
- * chips above the grid (rendered by FilterChips).
+ * Generic faceted filter rail: sticky 248px sidebar ≥1024px, off-canvas drawer
+ * below. Selections update the URL query (one comma-joined param per group) so
+ * filtered states are shareable and SSR-rendered; active facets show as
+ * removable chips above the grid (FacetChips). Shared by the category page (via
+ * the FilterRail adapter) and the search page.
  */
-export function FilterRail({ facets }: { facets: CategoryFacets }) {
+export function FacetRail({ groups, clearParams }: { groups: FacetGroupDef[]; clearParams: string[] }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
@@ -43,7 +86,7 @@ export function FilterRail({ facets }: { facets: CategoryFacets }) {
 
       {/* Desktop rail */}
       <aside className="sticky top-[140px] hidden w-[248px] shrink-0 self-start lg:block">
-        <RailContent facets={facets} />
+        <RailContent groups={groups} clearParams={clearParams} />
       </aside>
 
       {/* Off-canvas drawer */}
@@ -57,12 +100,17 @@ export function FilterRail({ facets }: { facets: CategoryFacets }) {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <RailContent facets={facets} />
+            <RailContent groups={groups} clearParams={clearParams} />
           </div>
         </div>
       )}
     </>
   );
+}
+
+/** Category-page adapter — keeps the existing `<FilterRail facets={…} />` call site. */
+export function FilterRail({ facets }: { facets: CategoryFacets }) {
+  return <FacetRail groups={categoryGroups(facets)} clearParams={["sub", "brand", "price", "stock"]} />;
 }
 
 function useFacetParam(param: string) {
@@ -87,11 +135,11 @@ function useFacetParam(param: string) {
   return { selected, toggle };
 }
 
-function RailContent({ facets }: { facets: CategoryFacets }) {
+function RailContent({ groups, clearParams }: { groups: FacetGroupDef[]; clearParams: string[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const hasAny = ["sub", "brand", "price", "stock"].some((p) => searchParams.get(p));
+  const hasAny = clearParams.some((p) => searchParams.get(p));
 
   return (
     <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
@@ -101,7 +149,7 @@ function RailContent({ facets }: { facets: CategoryFacets }) {
           <button
             onClick={() => {
               const next = new URLSearchParams(searchParams.toString());
-              ["sub", "brand", "price", "stock", "page"].forEach((p) => next.delete(p));
+              [...clearParams, "page"].forEach((p) => next.delete(p));
               router.replace(`${pathname}?${next.toString()}`, { scroll: false });
             }}
             className="text-xs font-semibold text-teal-600 hover:text-teal-700"
@@ -111,33 +159,17 @@ function RailContent({ facets }: { facets: CategoryFacets }) {
         )}
       </div>
 
-      {facets.subcategories.length > 0 && (
-        <FacetGroup title="Sub-category">
-          {facets.subcategories.map((f) => (
-            <FacetCheckbox key={f.id} param="sub" value={String(f.id)} label={f.name} count={f.count} />
-          ))}
-        </FacetGroup>
-      )}
-
-      {facets.brands.length > 0 && (
-        <FacetGroup title="Brand">
-          {facets.brands.map((f) => (
-            <FacetCheckbox key={f.id} param="brand" value={String(f.id)} label={f.name} count={f.count} />
-          ))}
-        </FacetGroup>
-      )}
-
-      <FacetGroup title="Price (ex GST)">
-        {facets.price.filter((f) => f.count > 0).map((f) => (
-          <FacetCheckbox key={f.key} param="price" value={f.key} label={PRICE_LABELS[f.key] ?? f.key} count={f.count} />
-        ))}
-      </FacetGroup>
-
-      <FacetGroup title="Availability">
-        {facets.availability.filter((f) => f.count > 0).map((f) => (
-          <FacetCheckbox key={f.key} param="stock" value={f.key} label={AVAIL_LABELS[f.key] ?? f.key} count={f.count} />
-        ))}
-      </FacetGroup>
+      {groups.map((g) => {
+        const opts = g.options.filter((o) => o.count > 0);
+        if (opts.length === 0) return null;
+        return (
+          <FacetGroup key={g.param} title={g.title}>
+            {opts.map((o) => (
+              <FacetCheckbox key={o.value} param={g.param} value={o.value} label={o.label} count={o.count} />
+            ))}
+          </FacetGroup>
+        );
+      })}
     </div>
   );
 }
@@ -176,28 +208,20 @@ function FacetCheckbox({ param, value, label, count }: { param: string; value: s
   );
 }
 
-/** Removable chips for the active facet selections (toolbar row). */
-export function FilterChips({ facets }: { facets: CategoryFacets }) {
+/** Generic removable chips for the active facet selections (toolbar row). */
+export function FacetChips({ groups }: { groups: FacetGroupDef[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const chips: { param: string; value: string; label: string }[] = [];
-  const add = (param: string, value: string, label: string) => chips.push({ param, value, label });
+  const labelFor = (param: string, value: string) =>
+    groups.find((g) => g.param === param)?.options.find((o) => o.value === value)?.label ?? value;
 
-  for (const v of searchParams.get("sub")?.split(",").filter(Boolean) ?? []) {
-    const f = facets.subcategories.find((s) => String(s.id) === v);
-    if (f) add("sub", v, f.name);
-  }
-  for (const v of searchParams.get("brand")?.split(",").filter(Boolean) ?? []) {
-    const f = facets.brands.find((b) => String(b.id) === v);
-    add("brand", v, f?.name ?? `Brand ${v}`);
-  }
-  for (const v of searchParams.get("price")?.split(",").filter(Boolean) ?? []) {
-    add("price", v, PRICE_LABELS[v] ?? v);
-  }
-  for (const v of searchParams.get("stock")?.split(",").filter(Boolean) ?? []) {
-    add("stock", v, AVAIL_LABELS[v] ?? v);
+  const chips: { param: string; value: string; label: string }[] = [];
+  for (const g of groups) {
+    for (const v of searchParams.get(g.param)?.split(",").filter(Boolean) ?? []) {
+      chips.push({ param: g.param, value: v, label: labelFor(g.param, v) });
+    }
   }
 
   if (chips.length === 0) return null;
@@ -228,8 +252,21 @@ export function FilterChips({ facets }: { facets: CategoryFacets }) {
   );
 }
 
-/** Sort dropdown — writes ?sort= to the URL. */
-export function SortSelect() {
+/** Category-page adapter — keeps the existing `<FilterChips facets={…} />` call site. */
+export function FilterChips({ facets }: { facets: CategoryFacets }) {
+  return <FacetChips groups={categoryGroups(facets)} />;
+}
+
+const DEFAULT_SORT_OPTIONS = [
+  { value: "relevance", label: "Relevance" },
+  { value: "price_asc", label: "Price: low → high" },
+  { value: "price_desc", label: "Price: high → low" },
+  { value: "saving", label: "Biggest saving" },
+  { value: "newest", label: "Newest" },
+];
+
+/** Sort dropdown — writes ?sort= to the URL. Callers can override the options. */
+export function SortSelect({ options = DEFAULT_SORT_OPTIONS }: { options?: { value: string; label: string }[] } = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -249,11 +286,11 @@ export function SortSelect() {
         }}
         className="rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-[13px] font-medium text-zinc-900 focus:border-teal-600 focus:outline-none"
       >
-        <option value="relevance">Relevance</option>
-        <option value="price_asc">Price: low → high</option>
-        <option value="price_desc">Price: high → low</option>
-        <option value="saving">Biggest saving</option>
-        <option value="newest">Newest</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
       </select>
     </label>
   );

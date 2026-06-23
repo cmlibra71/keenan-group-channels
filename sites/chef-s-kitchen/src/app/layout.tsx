@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import Script from "next/script";
 import { cookies } from "next/headers";
 import { Fraunces, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { getSiteConfig, getFeatureFlag } from "@/lib/store";
@@ -68,19 +67,23 @@ export default async function RootLayout({
 
   return (
     <html lang="en" className={`${fraunces.variable} ${plexSans.variable} ${plexMono.variable}`}>
-      <Script
-        id="google-tag-manager"
-        strategy="beforeInteractive"
-        dangerouslySetInnerHTML={{
-          __html: `
+      <head>
+        {/* Google Tag Manager — inline bootstrap. Rendered as a raw <script>
+            inside <head> (not next/script's beforeInteractive, which placed it
+            as a direct child of <html> — invalid in React 19 / Next 16). */}
+        <script
+          id="google-tag-manager"
+          dangerouslySetInnerHTML={{
+            __html: `
 (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
 j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
 })(window,document,'script','dataLayer','GTM-TR7SC2JH');
-          `.trim(),
-        }}
-      />
+            `.trim(),
+          }}
+        />
+      </head>
       <body className="min-h-screen flex flex-col bg-surface-primary text-text-body antialiased">
         <noscript>
           <iframe

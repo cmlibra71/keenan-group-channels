@@ -2,130 +2,195 @@ import { getProducts, getFeatureFlag, CHANNEL_ID, shouldSuppressCatalogSalePrice
 import { getListingPricing } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { SearchTypeahead } from "@/components/search/SearchTypeahead";
+import { FacetRail, FacetChips, SortSelect, type FacetGroupDef } from "@/components/category/FilterRail";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export const metadata = {
   title: "Search",
 };
 
 const PER_PAGE = 40;
+const PRICE_KEYS = ["lt1000", "1000to3000", "gt3000"] as const;
+const PRICE_LABELS: Record<string, string> = {
+  lt1000: "Under $1,000",
+  "1000to3000": "$1,000–$3,000",
+  gt3000: "$3,000+",
+};
+const SEARCH_SORT_OPTIONS = [
+  { value: "relevance", label: "Relevance" },
+  { value: "price_asc", label: "Price: low → high" },
+  { value: "price_desc", label: "Price: high → low" },
+  { value: "newest", label: "Newest" },
+];
+const SORT_MAP: Record<string, string[] | undefined> = {
+  price_asc: ["price:asc"],
+  price_desc: ["price:desc"],
+  newest: ["createdAt:desc"],
+};
 
-interface FacetDistribution {
-  [key: string]: Record<string, number>;
-}
+type Product = {
+  id: number;
+  name: string;
+  urlPath: string | null;
+  price: string;
+  salePrice: string | null;
+  thumbnailImage?: { urlStandard: string; urlThumbnail: string | null } | null;
+};
+type SearchResult = {
+  products: Product[];
+  total: number;
+  groups: FacetGroupDef[];
+};
+
+// Multi-select params are comma-joined; brand/category facet *values* are
+// percent-encoded names (names can contain commas), so split first, decode after.
+const parseMulti = (v?: string) => v?.split(",").map((x) => x.trim()).filter(Boolean) ?? [];
+const decVal = (v: string) => {
+  try {
+    return decodeURIComponent(v);
+  } catch {
+    return v;
+  }
+};
+// Meili string literal with escaped backslashes/quotes.
+const meiliStr = (s: string) => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+const bandExpr = (k: string) =>
+  k === "lt1000" ? "price < 1000" : k === "1000to3000" ? "(price >= 1000 AND price <= 3000)" : "price > 3000";
 
 async function searchWithMeilisearch(
   query: string,
   page: number,
-  brand?: string,
-  category?: string
-) {
+  brandVals: string[],
+  categoryVals: string[],
+  priceVals: string[],
+  sortKey: string
+): Promise<SearchResult | null> {
   try {
     const { searchProducts } = await import("@keenan/services/search");
 
-    const filters: string[] = [];
-    if (brand) filters.push(`brandName = "${brand}"`);
-    if (category) filters.push(`categoryNames = "${category}"`);
+    const brandNames = brandVals.map(decVal);
+    const categoryNames = categoryVals.map(decVal);
 
-    const result = await searchProducts(CHANNEL_ID, query, {
-      limit: PER_PAGE,
-      offset: (page - 1) * PER_PAGE,
-      filter: filters.length > 0 ? filters : undefined,
-      facets: ["brandName", "categoryNames"],
-    });
+    const brandClause = brandNames.length ? `brandName IN [${brandNames.map(meiliStr).join(", ")}]` : null;
+    const categoryClause = categoryNames.length ? `categoryNames IN [${categoryNames.map(meiliStr).join(", ")}]` : null;
+    const priceClause = priceVals.length ? `(${priceVals.map(bandExpr).join(" OR ")})` : null;
+    const and = (...cs: (string | null)[]) => {
+      const f = cs.filter(Boolean) as string[];
+      return f.length ? f : undefined;
+    };
 
-    // Map Meilisearch hits to ProductWithImage shape for ProductGrid.
+    const sort = SORT_MAP[sortKey];
+
+    // One results query (all filters) plus disjunctive facet queries (each group
+    // counted with its own filter removed, like the category page) — so picking
+    // one brand doesn't zero the others. All run in parallel.
+    const [main, brandRes, catRes, ...priceCounts] = await Promise.all([
+      searchProducts(CHANNEL_ID, query, {
+        limit: PER_PAGE,
+        offset: (page - 1) * PER_PAGE,
+        filter: and(brandClause, categoryClause, priceClause),
+        sort,
+      }),
+      searchProducts(CHANNEL_ID, query, {
+        limit: 0,
+        filter: and(categoryClause, priceClause),
+        facets: ["brandName"],
+      }),
+      searchProducts(CHANNEL_ID, query, {
+        limit: 0,
+        filter: and(brandClause, priceClause),
+        facets: ["categoryNames"],
+      }),
+      ...PRICE_KEYS.map((k) =>
+        searchProducts(CHANNEL_ID, query, { limit: 0, filter: and(brandClause, categoryClause, bandExpr(k)) })
+      ),
+    ]);
+
     // Member-only pricing channels suppress the shared catalog sale price.
     const suppressSale = await shouldSuppressCatalogSalePrice();
-    const products = result.hits.map((hit) => ({
+    const products: Product[] = main.hits.map((hit) => ({
       id: hit.id,
       name: hit.name,
       urlPath: hit.urlPath,
       price: String(hit.price),
       salePrice: !suppressSale && hit.salePrice ? String(hit.salePrice) : null,
-      thumbnailImage: hit.thumbnailUrl
-        ? { urlStandard: hit.thumbnailUrl, urlThumbnail: hit.thumbnailUrl }
-        : null,
+      thumbnailImage: hit.thumbnailUrl ? { urlStandard: hit.thumbnailUrl, urlThumbnail: hit.thumbnailUrl } : null,
     }));
 
-    return {
-      products,
-      total: result.estimatedTotalHits,
-      facets: result.facetDistribution as FacetDistribution | undefined,
-      source: "meilisearch" as const,
-    };
+    const toOptions = (dist?: Record<string, number>) =>
+      Object.entries(dist ?? {})
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 15)
+        .map(([name, count]) => ({ value: encodeURIComponent(name), label: name, count }));
+
+    const groups: FacetGroupDef[] = [];
+    const catOpts = toOptions(catRes.facetDistribution?.categoryNames);
+    if (catOpts.length) groups.push({ param: "category", title: "Category", options: catOpts });
+    const brandOpts = toOptions(brandRes.facetDistribution?.brandName);
+    if (brandOpts.length) groups.push({ param: "brand", title: "Brand", options: brandOpts });
+    const priceOpts = PRICE_KEYS.map((k, i) => ({
+      value: k,
+      label: PRICE_LABELS[k],
+      count: priceCounts[i].estimatedTotalHits,
+    })).filter((o) => o.count > 0);
+    if (priceOpts.length) groups.push({ param: "price", title: "Price (ex GST)", options: priceOpts });
+
+    return { products, total: main.estimatedTotalHits, groups };
   } catch {
     return null; // Meilisearch unavailable — caller will fall back
   }
 }
 
-async function searchWithPostgres(query: string, page: number) {
-  const results = await getProducts({
-    search: query,
-    limit: PER_PAGE,
-    page,
-  });
-  return {
-    products: results.products,
-    total: results.total,
-    facets: undefined as FacetDistribution | undefined,
-    source: "postgres" as const,
-  };
-}
-
-function buildSearchUrl(params: {
-  q: string;
-  page?: number;
-  brand?: string;
-  category?: string;
-}) {
-  const sp = new URLSearchParams();
-  sp.set("q", params.q);
-  if (params.page && params.page > 1) sp.set("page", String(params.page));
-  if (params.brand) sp.set("brand", params.brand);
-  if (params.category) sp.set("category", params.category);
-  return `/search?${sp.toString()}`;
+async function searchWithPostgres(query: string, page: number): Promise<SearchResult> {
+  const results = await getProducts({ search: query, limit: PER_PAGE, page });
+  return { products: results.products, total: results.total, groups: [] };
 }
 
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; brand?: string; category?: string; page?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    brand?: string;
+    category?: string;
+    price?: string;
+    sort?: string;
+    page?: string;
+  }>;
 }) {
-  const { q, brand, category, page: pageParam } = await searchParams;
-  const query = q?.trim() || "";
-  const page = Math.max(1, parseInt(pageParam || "1", 10) || 1);
+  const sp = await searchParams;
+  const query = sp.q?.trim() || "";
+  const page = Math.max(1, parseInt(sp.page || "1", 10) || 1);
 
-  let results: {
-    products: Array<{
-      id: number;
-      name: string;
-      urlPath: string | null;
-      price: string;
-      salePrice: string | null;
-      thumbnailImage?: { urlStandard: string; urlThumbnail: string | null } | null;
-    }>;
-    total: number;
-    facets?: FacetDistribution;
-    source: "meilisearch" | "postgres";
-  } | null = null;
+  const brandVals = parseMulti(sp.brand);
+  const categoryVals = parseMulti(sp.category);
+  const priceVals = parseMulti(sp.price).filter((k) => (PRICE_KEYS as readonly string[]).includes(k));
+  const sortKey = sp.sort ?? "relevance";
+  const hasFilters = brandVals.length > 0 || categoryVals.length > 0 || priceVals.length > 0;
 
+  let results: SearchResult | null = null;
   if (query) {
-    // Try Meilisearch first, fall back to Postgres
-    results = await searchWithMeilisearch(query, page, brand, category);
-    if (!results) {
-      results = await searchWithPostgres(query, page);
-    }
+    results = await searchWithMeilisearch(query, page, brandVals, categoryVals, priceVals, sortKey);
+    if (!results) results = await searchWithPostgres(query, page);
   }
 
   const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
-
-  const activeBrands = results?.facets?.brandName;
-  const activeCategories = results?.facets?.categoryNames;
-  const hasFacets = activeBrands || activeCategories;
-
+  const groups = results?.groups ?? [];
+  const showRail = groups.length > 0;
   const totalPages = results ? Math.ceil(results.total / PER_PAGE) : 0;
+
+  const pageHref = (n: number) => {
+    const u = new URLSearchParams();
+    u.set("q", query);
+    if (sp.brand) u.set("brand", sp.brand);
+    if (sp.category) u.set("category", sp.category);
+    if (sp.price) u.set("price", sp.price);
+    if (sp.sort) u.set("sort", sp.sort);
+    if (n > 1) u.set("page", String(n));
+    return `/search?${u.toString()}`;
+  };
+  const clearFiltersHref = `/search?q=${encodeURIComponent(query)}`;
 
   return (
     <div className="container-page section-padding">
@@ -137,22 +202,16 @@ export default async function SearchPage({
       <div className="mt-8">
         {!query && (
           <div className="text-center section-padding">
-            <p className="text-text-secondary">
-              Enter a search term to find products.
-            </p>
+            <p className="text-text-secondary">Enter a search term to find products.</p>
           </div>
         )}
 
         {query && results && results.products.length === 0 && (
           <div className="text-center section-padding">
-            <p className="text-text-secondary">
-              No products found for &ldquo;{query}&rdquo;
-              {brand && <> in brand &ldquo;{brand}&rdquo;</>}
-              {category && <> in category &ldquo;{category}&rdquo;</>}.
-            </p>
-            {(brand || category) && (
+            <p className="text-text-secondary">No products found for &ldquo;{query}&rdquo;.</p>
+            {hasFilters && (
               <Link
-                href={buildSearchUrl({ q: query })}
+                href={clearFiltersHref}
                 className="mt-2 inline-block text-sm text-text-secondary underline hover:text-text-primary transition-colors duration-300"
               >
                 Clear filters
@@ -161,153 +220,35 @@ export default async function SearchPage({
           </div>
         )}
 
-        {/* Active filter breadcrumbs */}
-        {results && results.products.length > 0 && (brand || category) && (
-          <nav className="flex flex-wrap items-center gap-1.5 text-sm text-text-muted mb-4">
-            <Link href={buildSearchUrl({ q: query })} className="hover:text-text-secondary transition-colors duration-300">
-              Search: &ldquo;{query}&rdquo;
-            </Link>
-            {category && (
-              <>
-                <ChevronRight className="h-3.5 w-3.5" />
-                {brand ? (
-                  <Link href={buildSearchUrl({ q: query, category })} className="hover:text-text-secondary transition-colors duration-300">
-                    {category}
-                  </Link>
-                ) : (
-                  <span className="text-text-body">{category}</span>
-                )}
-              </>
-            )}
-            {brand && (
-              <>
-                <ChevronRight className="h-3.5 w-3.5" />
-                <span className="text-text-body">{brand}</span>
-              </>
-            )}
-            <Link
-              href={buildSearchUrl({ q: query })}
-              className="ml-2 inline-flex items-center gap-1 text-xs text-text-muted hover:text-text-primary transition-colors duration-300"
-            >
-              <X className="h-3 w-3" />
-              Clear filters
-            </Link>
-          </nav>
-        )}
-
         {results && results.products.length > 0 && (
-          <div className={hasFacets ? "flex gap-8" : ""}>
-            {/* Facet Sidebar */}
-            {hasFacets && (
-              <aside className="hidden lg:block w-56 flex-shrink-0">
-                {/* Active Filters */}
-                {(brand || category) && (
-                  <div className="mb-6">
-                    <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-2">
-                      Active Filters
-                    </h3>
-                    <div className="flex flex-wrap gap-2">
-                      {brand && (
-                        <Link
-                          href={buildSearchUrl({ q: query, category })}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-surface-secondary text-text-body hover:bg-steel-200 transition-colors duration-300"
-                        >
-                          {brand} <X className="h-3 w-3" />
-                        </Link>
-                      )}
-                      {category && (
-                        <Link
-                          href={buildSearchUrl({ q: query, brand })}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-surface-secondary text-text-body hover:bg-steel-200 transition-colors duration-300"
-                        >
-                          {category} <X className="h-3 w-3" />
-                        </Link>
-                      )}
-                    </div>
-                  </div>
-                )}
+          <div className={showRail ? "flex gap-6" : ""}>
+            {showRail && <FacetRail groups={groups} clearParams={["category", "brand", "price"]} />}
 
-                {/* Brand Facets */}
-                {activeBrands && Object.keys(activeBrands).length > 0 && (
-                  <div className="mb-6">
-                    <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-2">
-                      Brand
-                    </h3>
-                    <ul className="space-y-1">
-                      {Object.entries(activeBrands)
-                        .sort(([, a], [, b]) => b - a)
-                        .map(([name, count]) => (
-                          <li key={name}>
-                            <Link
-                              href={buildSearchUrl({ q: query, brand: name, category })}
-                              className={`flex items-center justify-between text-sm py-0.5 transition-colors duration-300 ${
-                                brand === name
-                                  ? "font-medium text-text-primary"
-                                  : "text-text-secondary hover:text-text-primary"
-                              }`}
-                            >
-                              <span className="truncate">{name}</span>
-                              <span className="text-xs text-text-muted ml-2">
-                                {count}
-                              </span>
-                            </Link>
-                          </li>
-                        ))}
-                    </ul>
-                  </div>
-                )}
+            <div className="min-w-0 flex-1">
+              {/* Toolbar */}
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <p className="text-sm text-text-secondary">
+                    {results.total} result{results.total !== 1 ? "s" : ""} for &ldquo;{query}&rdquo;
+                    {totalPages > 1 && <span className="ml-1">(page {page} of {totalPages})</span>}
+                  </p>
+                  {showRail && <FacetChips groups={groups} />}
+                </div>
+                {showRail && <SortSelect options={SEARCH_SORT_OPTIONS} />}
+              </div>
 
-                {/* Category Facets */}
-                {activeCategories && Object.keys(activeCategories).length > 0 && (
-                  <div className="mb-6">
-                    <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-2">
-                      Category
-                    </h3>
-                    <ul className="space-y-1">
-                      {Object.entries(activeCategories)
-                        .sort(([, a], [, b]) => b - a)
-                        .map(([name, count]) => (
-                          <li key={name}>
-                            <Link
-                              href={buildSearchUrl({ q: query, brand, category: name })}
-                              className={`flex items-center justify-between text-sm py-0.5 transition-colors duration-300 ${
-                                category === name
-                                  ? "font-medium text-text-primary"
-                                  : "text-text-secondary hover:text-text-primary"
-                              }`}
-                            >
-                              <span className="truncate">{name}</span>
-                              <span className="text-xs text-text-muted ml-2">
-                                {count}
-                              </span>
-                            </Link>
-                          </li>
-                        ))}
-                    </ul>
-                  </div>
-                )}
-              </aside>
-            )}
-
-            {/* Results */}
-            <div className="flex-1">
-              <p className="text-sm text-text-secondary mb-4">
-                {results.total} result{results.total !== 1 ? "s" : ""} for
-                &ldquo;{query}&rdquo;
-                {brand && <> in <strong>{brand}</strong></>}
-                {category && <> in <strong>{category}</strong></>}
-                {totalPages > 1 && (
-                  <span className="ml-1">(page {page} of {totalPages})</span>
-                )}
-              </p>
-              <ProductGrid products={results.products} memberPricingAvailable={memberPricingEnabled} {...(await getListingPricing(results.products))} />
+              <ProductGrid
+                products={results.products}
+                memberPricingAvailable={memberPricingEnabled}
+                {...(await getListingPricing(results.products))}
+              />
 
               {/* Pagination */}
               {totalPages > 1 && (
                 <nav className="mt-10 flex items-center justify-center gap-2">
                   {page > 1 ? (
                     <Link
-                      href={buildSearchUrl({ q: query, page: page - 1, brand, category })}
+                      href={pageHref(page - 1)}
                       className="inline-flex items-center gap-1 px-4 py-2 text-sm font-medium text-text-body bg-white border border-border hover:bg-surface-primary transition-colors duration-300"
                     >
                       <ChevronLeft className="h-4 w-4" />
@@ -336,7 +277,7 @@ export default async function SearchPage({
                       return (
                         <Link
                           key={pageNum}
-                          href={buildSearchUrl({ q: query, page: pageNum, brand, category })}
+                          href={pageHref(pageNum)}
                           className={`px-3 py-2 text-sm font-medium transition-colors duration-300 ${
                             pageNum === page
                               ? "bg-surface-dark text-white"
@@ -356,7 +297,7 @@ export default async function SearchPage({
 
                   {page < totalPages ? (
                     <Link
-                      href={buildSearchUrl({ q: query, page: page + 1, brand, category })}
+                      href={pageHref(page + 1)}
                       className="inline-flex items-center gap-1 px-4 py-2 text-sm font-medium text-text-body bg-white border border-border hover:bg-surface-primary transition-colors duration-300"
                     >
                       Next
