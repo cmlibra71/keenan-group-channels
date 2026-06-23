@@ -146,3 +146,48 @@ export async function getQuotesForCustomer() {
   const customerQuotes = await quoteService.listForCustomer(session.customerId, CHANNEL_ID);
   return { quotes: customerQuotes };
 }
+
+// Customer self-service: accept a finalised quote (B2B). quote_available / open_change_request → accepted.
+export async function acceptQuote(quoteId: number) {
+  const session = await getSession();
+  if (!session?.customerId) return { error: "Please sign in." };
+  const q = (await quoteService.getWithItems(quoteId)) as (QuoteRow & { status?: string }) | null;
+  if (!q || q.customer_id !== session.customerId) return { error: "Quote not found." };
+  if (!["quote_available", "open_change_request"].includes(String(q.status))) {
+    return { error: "This quote can't be accepted yet." };
+  }
+  await quoteService.update(quoteId, { status: "quote_accepted" });
+  revalidatePath(`/account/quotes/${quoteId}`);
+  revalidatePath("/account/quotes");
+  return { success: true };
+}
+
+// Customer self-service: duplicate a quote into a fresh editable quote (same items).
+export async function duplicateQuote(quoteId: number) {
+  const session = await getSession();
+  if (!session?.customerId) return { error: "Please sign in." };
+  const q = (await quoteService.getWithItems(quoteId)) as
+    | (QuoteRow & { email?: string | null; items?: Array<Record<string, unknown>> })
+    | null;
+  if (!q || q.customer_id !== session.customerId) return { error: "Quote not found." };
+  const copy = (await quoteService.create({
+    channelId: CHANNEL_ID,
+    customerId: session.customerId,
+    email: q.email ?? session.email,
+  })) as QuoteRow;
+  for (const it of q.items ?? []) {
+    try {
+      await quoteItemService.createForParent(copy.id, {
+        productId: Number(it.product_id),
+        variantId: (it.variant_id as number | null) ?? null,
+        quantity: Number(it.quantity) || 1,
+        listPrice: (it.list_price as string) ?? "0",
+        salePrice: (it.sale_price as string) ?? null,
+      });
+    } catch {
+      /* skip a line that fails rather than losing the duplicate */
+    }
+  }
+  revalidatePath("/account/quotes");
+  return { success: true, quoteId: copy.id };
+}

@@ -6,6 +6,7 @@ import { Package } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { quoteService, productImageService, CHANNEL_ID } from "@/lib/store";
 import { Price } from "@/components/ui/Price";
+import { QuoteActions } from "./quote-actions";
 
 // QuoteService returns snake_case rows (transformRow convention).
 interface QuoteDetail {
@@ -214,6 +215,9 @@ export default async function QuoteDetailPage({
           <p className="text-sm text-text-secondary whitespace-pre-wrap">{quote.customer_notes}</p>
         </div>
       )}
+
+      {/* Customer self-service actions */}
+      <QuoteActions quoteId={quote.id} status={status} />
     </div>
   );
 }
