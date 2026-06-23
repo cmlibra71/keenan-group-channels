@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { cartService, orderService, orderItemService, CHANNEL_ID, getEffectivePrice, productVariantService, channelSettingsService, getCheckoutSettings, paymentService } from "@/lib/store";
-import { getFeatureFlag, getActiveSubscription, shouldSuppressCatalogSalePrice } from "@/lib/store";
+import { getFeatureFlag, getActiveSubscription, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { sendOrderConfirmationEmail } from "@keenan/services";
@@ -261,19 +261,28 @@ export async function placeOrder(
 
   // Order confirmation email — best-effort, never blocks the order. The email
   // helper redirects any @e2e.test (test) recipient to the test inbox, so test
-  // orders never email a real person.
+  // orders never email a real person. Branded with THIS channel's name/logo/from
+  // address (not Keenan Group) from the site config.
   try {
     const method = checkoutSettings.paymentMethods.find((m) => m.id === paymentMethod);
+    const { site, channel } = await getSiteConfig();
+    const storeName = site?.siteName || channel?.name || undefined;
+    const siteUrl =
+      site?.url || process.env.SITE_URL || `https://${process.env.NEXT_PUBLIC_SITE_DOMAIN || "chefsdepot.com.au"}`;
     await sendOrderConfirmationEmail({
       to: email,
       orderNumber: order.order_number,
       customerName: `${firstName} ${lastName}`.trim() || undefined,
+      storeName,
       paymentMethod,
       total: String(totalIncTax),
       items: fullCart.items.map((i) => ({ name: i.productName, quantity: i.quantity })),
       bankDetails: method?.bankDetails ?? null,
       netTermsDays: method?.netTermsDays ?? null,
-      siteUrl: process.env.SITE_URL || `https://${process.env.NEXT_PUBLIC_SITE_DOMAIN || "chefsdepot.com.au"}`,
+      siteUrl,
+      logoUrl: site?.logoUrl ?? null,
+      logoAlt: site?.logoAlt ?? null,
+      fromEmail: site?.fromEmail ?? null,
     });
   } catch (e) {
     console.error("[placeOrder] confirmation email failed (non-fatal):", e);

@@ -5,6 +5,7 @@ import { ChevronRight } from "lucide-react";
 import {
   getCategoryBySlug,
   getCategoryListing,
+  getSubcategories,
   getCategoryBreadcrumbs,
   getFeatureFlag,
   getChannelSetting,
@@ -70,7 +71,7 @@ export default async function CategoryPage({
     ["in_stock", "clearance"].includes(a)
   ) as ("in_stock" | "clearance")[];
 
-  const [listing, breadcrumbs, memberPricingEnabled] = await Promise.all([
+  const [listing, subcategories, breadcrumbs, memberPricingEnabled] = await Promise.all([
     getCategoryListing(category.id, {
       page: 1,
       limit: PER_PAGE * page, // cumulative for Load more
@@ -80,6 +81,7 @@ export default async function CategoryPage({
       availability,
       sort,
     }),
+    getSubcategories(category.id),
     getCategoryBreadcrumbs(category.pathIds || []),
     getFeatureFlag("member_pricing_enabled"),
   ]);
@@ -145,6 +147,41 @@ export default async function CategoryPage({
           </span>
         </div>
       </section>
+
+      {/* ═══ Browse subcategories — design catcards (mirrors homepage "Shop by Category") ═══ */}
+      {subcategories.length > 0 && (
+        <section className="container-page pt-8">
+          <p className="eyebrow mb-3">Browse</p>
+          <h2 className="section-title mb-6">Shop by subcategory</h2>
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+            {subcategories.map((sub: { id: number; name: string; slug: string; imageUrl?: string | null }) => (
+              <Link
+                key={sub.id}
+                href={`/categories/${sub.slug}`}
+                className="group overflow-hidden rounded-card border border-border bg-white transition-all duration-200 hover:-translate-y-[3px] hover:border-brand-light hover:shadow-hover"
+              >
+                <div className="relative aspect-[4/3] bg-gradient-to-br from-brand-tint to-steel-200">
+                  {sub.imageUrl && (
+                    <Image
+                      src={sub.imageUrl}
+                      alt={sub.name}
+                      fill
+                      sizes="(max-width: 640px) 50vw, 25vw"
+                      className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]"
+                    />
+                  )}
+                </div>
+                <div className="flex items-center justify-between gap-2 px-4 py-[15px]">
+                  <b className="text-[15px] font-bold text-text-primary">{sub.name}</b>
+                  <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-brand-tint text-brand-deep transition-colors duration-200 group-hover:bg-accent group-hover:text-white">
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ═══ Rail + grid ═══ */}
       <div className="container-page py-8">
