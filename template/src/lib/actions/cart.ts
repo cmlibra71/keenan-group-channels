@@ -30,12 +30,14 @@ async function getOrCreateCart() {
  * "price", but percent is handled for forward-compatibility.
  */
 async function bestBulkUnitPrice(productId: number, quantity: number, listPrice: number): Promise<number | null> {
-  const result = (await bulkPricingRuleService.listForParent(productId, {
+  // listForParent is now precisely typed (snake_case Row), so no cast is needed —
+  // r.quantity_min / quantity_max / type / amount are all correctly typed.
+  const result = await bulkPricingRuleService.listForParent(productId, {
     page: 1,
     limit: 100,
     sort: "quantity_min",
     direction: "asc",
-  })) as { data: Array<{ quantity_min: number; quantity_max: number | null; type: string; amount: string }> };
+  });
 
   let best: number | null = null;
   for (const r of result.data) {

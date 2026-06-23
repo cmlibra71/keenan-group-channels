@@ -25,16 +25,18 @@ async function getOrCreateQuote() {
 }
 
 export async function addToQuote(productId: number, variantId?: number | null) {
-  const product = await productService.getById(productId) as { price: string; salePrice: string | null } | null;
+  // getById returns snake_case — read sale_price (reading salePrice was undefined,
+  // so quotes silently used RRP instead of the catalog sale price).
+  const product = await productService.getById(productId) as { price: string; sale_price: string | null } | null;
   if (!product) return { error: "Product not found" };
 
   let listPrice = product.price;
-  let salePrice = product.salePrice;
+  let salePrice = product.sale_price;
 
   if (variantId) {
-    const variant = await productVariantService.getById(variantId) as { price: string | null; salePrice: string | null } | null;
+    const variant = await productVariantService.getById(variantId) as { price: string | null; sale_price: string | null } | null;
     if (variant?.price) listPrice = variant.price;
-    if (variant?.salePrice) salePrice = variant.salePrice;
+    if (variant?.sale_price) salePrice = variant.sale_price;
   }
 
   // Member-only pricing channels quote at RRP — the shared catalog sale price

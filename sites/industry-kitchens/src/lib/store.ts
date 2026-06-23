@@ -60,7 +60,10 @@ const CHANNEL_ID = parseInt(process.env.CHANNEL_ID || "1", 10);
 export const getSiteConfig = unstable_cache(
   async (): Promise<{ channel: Channel | null; site: Site | null }> => {
     try {
-      const channel = await channelService.getById(CHANNEL_ID) as Channel;
+      // getById returns the snake_cased row; `Channel` is the camelCase model. Only
+      // `channel.name` is read downstream (same in both casings), so this nominal cast
+      // is behaviour-preserving.
+      const channel = await channelService.getById(CHANNEL_ID) as unknown as Channel;
       const site = await siteService.getPrimaryForChannel(CHANNEL_ID) as Site | null;
       return { channel, site };
     } catch {
@@ -269,9 +272,7 @@ export const getBrandsForChannel = unstable_cache(
     const brandIds = await productService.getBrandIdsForChannel(CHANNEL_ID);
     if (brandIds.length === 0) return [];
     const brands = await brandService.getByIds(brandIds);
-    return brands.sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
-      (a.name as string).localeCompare(b.name as string)
-    );
+    return brands.sort((a, b) => a.name.localeCompare(b.name));
   },
   [`brands-${CHANNEL_ID}`],
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "brands"] }

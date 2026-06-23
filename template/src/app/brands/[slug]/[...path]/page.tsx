@@ -63,7 +63,7 @@ export default async function BrandCategoryPage({
       </nav>
 
       <div className="mb-10 flex flex-col lg:flex-row gap-8 items-start bg-zinc-50 rounded-2xl overflow-hidden">
-        {brand.image_url && (
+        {(brand.image_url as string | null) && (
           <div className="lg:w-2/5 flex-shrink-0 bg-white rounded-2xl m-3 p-6 relative min-h-[200px]">
             <Image
               src={brand.image_url as string}

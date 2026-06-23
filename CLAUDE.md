@@ -138,6 +138,7 @@ The workflow builds a temporary Docker image from `@keenan/services` with the sc
 | `scripts/report-missing-cost-prices.ts` | Read-only: CD products with no cost price (no member price possible) |
 | `scripts/validate-cost-plus-vs-zoey.ts` | Read-only: computed cost-plus vs legacy Zoey price lists match-rate report |
 | `scripts/seed-cd-content-pages.ts` | Seed CD (ch2) `privacy`/`terms`/`warranty` content pages by mirroring IK's same-entity legal copy with brand/contact substitution (footer linked these but they 404'd). Supports `--dry`. |
+| `scripts/cleanup-e2e-test-data.ts` | Purge `@e2e.test`-tagged test data (orders/quotes/subs/customers) created by manual QA or the E2E suite on a live env. **DRY RUN by default** — reports what would be deleted; pass `--apply` (or `CLEANUP_APPLY=true`) to delete. `--email-like=<pattern>` overrides the tag (must be test-scoped). |
 
 ### Adding new admin scripts
 

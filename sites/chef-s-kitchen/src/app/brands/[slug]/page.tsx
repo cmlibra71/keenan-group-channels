@@ -12,7 +12,11 @@ export default async function BrandPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const brand = await getBrandBySlug(slug);
+  // getBrandBySlug → getBySlug runs transformRow, so the row is snake_case at runtime
+  // (image_url). Type it so the loose Record<string,unknown> doesn't surface as `unknown`.
+  const brand = (await getBrandBySlug(slug)) as
+    | { id: number; name: string; slug: string; image_url: string | null }
+    | null;
 
   if (!brand) {
     notFound();

@@ -1,0 +1,57 @@
+name: Typecheck
+
+# Fast type-safety gate. Runs `tsc --noEmit` for every site against a freshly built
+# @keenan/services, so the snake_case/camelCase service-result bug class (and any other
+# type error) is caught on every push/PR — not discovered at runtime. The deploy build
+# also enforces types (ignoreBuildErrors: false); this job is the quicker signal.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout @keenan/services
+        uses: actions/checkout@v4
+        with:
+          repository: cmlibra71/keenan-group-services
+          token: ${{ secrets.GH_PAT }}
+          path: _services
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build and pack @keenan/services
+        run: |
+          cd _services
+          npm install
+          npm run build
+          npm pack
+          mv keenan-services-*.tgz ../keenan-services-1.0.0.tgz
+
+      - name: Point the workspace at the packed services tarball
+        run: sed -i 's|"file:../keenan-group-services"|"file:./keenan-services-1.0.0.tgz"|' package.json
+
+      - name: Install workspace
+        run: npm install
+
+      - name: Typecheck every site + template
+        run: |
+          code=0
+          for cfg in template/tsconfig.json sites/*/tsconfig.json; do
+            echo "::group::tsc --noEmit -p $cfg"
+            if npx tsc --noEmit -p "$cfg"; then
+              echo "OK: $cfg"
+            else
+              echo "::error::Type errors in $cfg"
+              code=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $code

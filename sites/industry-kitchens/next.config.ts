@@ -4,7 +4,9 @@ const nextConfig: NextConfig = {
   output: "standalone",
   transpilePackages: ["@keenan/services"],
   serverExternalPackages: ["sharp"],
-  typescript: { ignoreBuildErrors: true },
+  // Type errors FAIL the build — this is what prevents the snake_case/camelCase
+  // service-result bug class (and others) from shipping silently. Keep at false.
+  typescript: { ignoreBuildErrors: false },
   images: {
     loader: "custom",
     loaderFile: "./src/lib/image-loader.ts",

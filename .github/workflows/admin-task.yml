@@ -21,6 +21,7 @@ on:
           - scripts/report-missing-cost-prices.ts
           - scripts/validate-cost-plus-vs-zoey.ts
           - scripts/seed-cd-content-pages.ts
+          - scripts/cleanup-e2e-test-data.ts
       timeout:
         description: "Timeout in seconds"
         required: false

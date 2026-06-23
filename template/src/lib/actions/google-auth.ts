@@ -9,8 +9,8 @@ type GoogleSignInResult = {
   session?: {
     customerId: number;
     email: string;
-    first_name: string;
-    last_name: string;
+    firstName: string;
+    lastName: string;
   };
 };
 
@@ -55,12 +55,13 @@ export async function googleSignIn(credential: string): Promise<GoogleSignInResu
   const firstName = tokenInfo.given_name || "";
   const lastName = tokenInfo.family_name || "";
 
-  // Find existing customer by email + channel
+  // Find existing customer by email + channel. findByEmailAndChannel is a raw
+  // select → camelCase keys (unlike create/getById which are snake_case).
   const existing = (await customerService.findByEmailAndChannel(email, CHANNEL_ID)) as {
     id: number;
     email: string;
-    first_name: string;
-    last_name: string;
+    firstName: string;
+    lastName: string;
   } | null;
 
   if (existing) {

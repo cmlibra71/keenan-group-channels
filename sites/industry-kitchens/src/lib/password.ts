@@ -1,7 +1,11 @@
-import { scrypt, randomBytes, timingSafeEqual, createHash } from "node:crypto";
-import { promisify } from "node:util";
+import { scrypt, randomBytes, timingSafeEqual, createHash, type ScryptOptions } from "node:crypto";
 
-const scryptAsync = promisify(scrypt);
+// Hand-rolled promise wrapper: util.promisify's emitted overload for scrypt drops
+// the optional `options` arg, so passing work-factor PARAMS tripped "expected 3 args".
+const scryptAsync = (password: string, salt: string, keylen: number, options: ScryptOptions): Promise<Buffer> =>
+  new Promise((resolve, reject) =>
+    scrypt(password, salt, keylen, options, (err, derivedKey) => (err ? reject(err) : resolve(derivedKey)))
+  );
 
 // Salted, work-factored scrypt. Stored as `scrypt$<saltHex>$<hashHex>`.
 const PREFIX = "scrypt$";

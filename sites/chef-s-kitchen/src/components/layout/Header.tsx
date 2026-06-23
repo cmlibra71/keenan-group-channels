@@ -19,7 +19,9 @@ import { SearchTypeahead } from "../search/SearchTypeahead";
 export async function Header({ storeName, logoUrl, logoAlt }: { storeName: string; logoUrl?: string | null; logoAlt?: string | null }) {
   const [cart, quote, megaMenu] = await Promise.all([getCart(), getQuote(), getMegaMenu()]);
   const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
-  const quoteCount = quote?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+  // QuoteService.getWithItems types its items loosely (Record<string,unknown>) unlike
+  // CartService — precise typing there is a separate cleanup. quantity is runtime-correct.
+  const quoteCount = quote?.items.reduce((sum, item) => sum + (item.quantity as number), 0) ?? 0;
 
   let isMember = false;
   let entryCount = 0;
