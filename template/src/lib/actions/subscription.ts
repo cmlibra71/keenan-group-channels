@@ -9,14 +9,13 @@ import {
   customerService,
   storeSettingsService,
 } from "@/lib/store";
-import { StripeSubscriptionProvider } from "@keenan/services";
+import { StripeSubscriptionProvider, wantsStripeTestMode } from "@keenan/services";
 
 async function getStripeProvider(): Promise<StripeSubscriptionProvider> {
   const settings = await storeSettingsService.getByKey("payment_gateways");
   const gateways = (settings.setting_value as { provider: string; credentials: Record<string, string>; enabled?: boolean; testMode?: boolean }[]) || [];
-  // Match the gateway entry tagged for the current environment: testMode=true
-    // in dev, testMode=false in prod. Lets both modes coexist in the DB row.
-    const wantTestMode = process.env.NODE_ENV !== "production";
+  // Test mode in local dev OR when the channel's "Payments test mode" toggle is on.
+    const wantTestMode = await wantsStripeTestMode(CHANNEL_ID);
   const stripe = gateways.find((g) => g.provider === "stripe" && g.enabled !== false && Boolean(g.testMode) === wantTestMode) ?? (wantTestMode ? gateways.find((g) => g.provider === "stripe" && g.enabled !== false) : undefined);
   if (!stripe?.credentials?.secret_key) {
     throw new Error("Stripe is not configured. Set up the global Stripe gateway in the portal under Settings > Payments.");
@@ -87,7 +86,7 @@ export async function createSubscription(planId: number): Promise<{
     // dev (stripe_price_id_test), the live price in prod (stripe_price_id).
     // A test price with a live key (or vice versa) hard-fails at Stripe, so
     // there is no cross-mode fallback here (unlike the gateway selector).
-    const stripePriceId = process.env.NODE_ENV !== "production"
+    const stripePriceId = (await wantsStripeTestMode(CHANNEL_ID))
       ? metafields?.stripe_price_id_test
       : metafields?.stripe_price_id;
     if (!stripePriceId) {

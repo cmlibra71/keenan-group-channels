@@ -4,6 +4,7 @@ import { Crown, ArrowRight } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
 import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription, getCheckoutSettings, customerAddressService, channelSettingsService, storeSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
+import { wantsStripeTestMode } from "@keenan/services";
 import { CheckoutForm } from "@/components/checkout/CheckoutForm";
 
 export const metadata = {
@@ -69,7 +70,7 @@ export default async function CheckoutPage() {
     const gateways = (gatewaysSetting.setting_value as { provider: string; credentials: Record<string, string>; enabled?: boolean; testMode?: boolean }[]) || [];
     // Match the gateway entry tagged for the current environment: testMode=true
     // in dev, testMode=false in prod. Lets both modes coexist in the DB row.
-    const wantTestMode = process.env.NODE_ENV !== "production";
+    const wantTestMode = await wantsStripeTestMode(CHANNEL_ID);
     const stripeGateway = gateways.find((g) => g.provider === "stripe" && g.enabled !== false && Boolean(g.testMode) === wantTestMode) ?? (wantTestMode ? gateways.find((g) => g.provider === "stripe" && g.enabled !== false) : undefined);
     if (stripeGateway?.credentials?.publishable_key) {
       stripePublishableKey = stripeGateway.credentials.publishable_key;

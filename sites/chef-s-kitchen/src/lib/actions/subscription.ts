@@ -9,6 +9,7 @@ import {
   subscriptionService,
   customerService,
   customerAddressService,
+  wantStripeTestMode,
 } from "@/lib/store";
 import { getStripeProvider } from "@/lib/stripe";
 
@@ -111,11 +112,12 @@ export async function createSubscription(planId: number): Promise<{
 
     // Get Stripe price ID from plan metafields
     const metafields = plan.metafields as Record<string, string> | null;
-    // Pick the price id tagged for the current environment: the test price in
-    // dev (stripe_price_id_test), the live price in prod (stripe_price_id).
-    // A test price with a live key (or vice versa) hard-fails at Stripe, so
-    // there is no cross-mode fallback here (unlike the gateway selector).
-    const stripePriceId = process.env.NODE_ENV !== "production"
+    // Pick the price id matching the Stripe mode: the test price in dev OR when
+    // the channel's "Payments test mode" toggle is on (stripe_price_id_test), the
+    // live price otherwise (stripe_price_id). Must match the gateway the provider
+    // selected — a test price with a live key (or vice versa) hard-fails at Stripe,
+    // so there is no cross-mode fallback here.
+    const stripePriceId = (await wantStripeTestMode())
       ? metafields?.stripe_price_id_test
       : metafields?.stripe_price_id;
     if (!stripePriceId) {

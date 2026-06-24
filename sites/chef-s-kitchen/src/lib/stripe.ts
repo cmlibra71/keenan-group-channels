@@ -1,10 +1,12 @@
-import { storeSettingsService } from "@/lib/store";
+import { storeSettingsService, wantStripeTestMode } from "@/lib/store";
 import { StripeSubscriptionProvider } from "@keenan/services";
 
 /**
  * Build a StripeSubscriptionProvider from the global payment_gateways setting,
- * picking the entry tagged for the current environment (testMode in dev, live
- * in prod). Shared by the subscription + account server actions.
+ * picking the test or live entry. Test mode applies in local dev (NODE_ENV) OR
+ * when this channel's portal "Payments test mode" toggle is on — letting the live
+ * site run entirely on the test Stripe account. Shared by the subscription +
+ * account server actions.
  */
 export async function getStripeProvider(): Promise<StripeSubscriptionProvider> {
   const settings = await storeSettingsService.getByKey("payment_gateways");
@@ -15,7 +17,7 @@ export async function getStripeProvider(): Promise<StripeSubscriptionProvider> {
       enabled?: boolean;
       testMode?: boolean;
     }[]) || [];
-  const wantTestMode = process.env.NODE_ENV !== "production";
+  const wantTestMode = await wantStripeTestMode();
   const stripe =
     gateways.find(
       (g) => g.provider === "stripe" && g.enabled !== false && Boolean(g.testMode) === wantTestMode

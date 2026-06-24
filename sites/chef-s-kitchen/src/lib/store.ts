@@ -40,6 +40,7 @@ import {
   getEffectivePricesForProducts,
   shippingRateCalculator,
   shippingRateCardService,
+  wantsStripeTestMode,
 } from "@keenan/services";
 import { googlePlacesService } from "@keenan/services/integrations";
 import type { Channel, Site } from "@keenan/services";
@@ -417,6 +418,12 @@ export const getChannelSetting = async (key: string): Promise<unknown> => {
     return null;
   }
 };
+
+/** True when Stripe should run in TEST mode for this channel: the portal "Payments
+ * test mode" toggle (`payments_test_mode`) OR a non-production NODE_ENV. Delegates to
+ * the canonical @keenan/services helper — the single source of truth for every
+ * test-vs-live Stripe selection (gateway keys, publishable key, price id). */
+export const wantStripeTestMode = (): Promise<boolean> => wantsStripeTestMode(CHANNEL_ID);
 
 export const getFeatureFlag = async (key: string): Promise<boolean> => {
   try {
