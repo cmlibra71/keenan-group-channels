@@ -166,7 +166,9 @@ export async function createSubscription(planId: number): Promise<{
 // only (never shipped to the client bundle); override or rotate via the
 // MEMBERSHIP_TEST_CARD env var, or change this constant. Remove before relying
 // on real paid signups in production.
-const TEST_CARD_DEFAULT = "4065871315315604";
+// Entered value + this value both have spaces/dashes stripped before comparison,
+// so "4242 4242 4242 4242" and "4242424242424242" both work.
+const TEST_CARD_DEFAULT = "4242424242424242";
 
 /**
  * If `cardValue` matches the configured test card, create + activate a

@@ -70,7 +70,7 @@ removed in teardown but stock adjustments are not reverted, so the suite uses qu
 | Concern | Mechanism |
 | --- | --- |
 | Login | `POST /api/test/login { secret, email }` → signs a session cookie (test emails only) |
-| Membership | Staff test card `4065871315315604` (`MEMBERSHIP_TEST_CARD`) → membership with no Stripe charge |
+| Membership | Staff test card `4242 4242 4242 4242` (`MEMBERSHIP_TEST_CARD`; spaces/dashes ignored) → membership with no Stripe charge |
 | Checkout | `bank_transfer` / `net_terms` payment methods → order with no card charge (Stripe 4242 attempted only if it's the only method and a testMode gateway is configured) |
 
 ## Adding a flow

@@ -41,7 +41,7 @@ const startedAt = new Date();
 const runId = String(startedAt.getTime());
 const emailDomain = (process.env.E2E_EMAIL_DOMAIN || "e2e.test").toLowerCase();
 const secret = process.env.E2E_LOGIN_SECRET || "";
-const testCard = process.env.MEMBERSHIP_TEST_CARD || "4065871315315604";
+const testCard = process.env.MEMBERSHIP_TEST_CARD || "4242424242424242";
 const emailLike = `e2e-%@${emailDomain}`;
 
 const account_ = {

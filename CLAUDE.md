@@ -67,7 +67,7 @@ node sites/chef-s-kitchen/tests/e2e/run.mjs --smoke-only --base https://chefsdep
   account `e2e-<runId>@e2e.test` and deletes everything it creates in teardown.
 - **Bypasses:** guarded login route `POST /api/test/login` (gated on `E2E_LOGIN_SECRET`, test
   emails only — returns 404 when the secret is unset, so it is safe in every env); membership
-  staff test card `MEMBERSHIP_TEST_CARD` (default `4065871315315604`, no Stripe charge);
+  staff test card `MEMBERSHIP_TEST_CARD` (default `4242424242424242`, spaces/dashes ignored, no Stripe charge);
   checkout via `bank_transfer`/`net_terms` (no card charge). See `tests/e2e/README.md`.
 
 ## Project Structure

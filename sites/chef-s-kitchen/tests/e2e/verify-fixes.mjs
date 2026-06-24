@@ -11,7 +11,7 @@ loadSiteEnv();
 const base = (process.argv[2] || "http://localhost:3002").replace(/\/$/, "");
 const ts = Date.now();
 const SLUG = "11020-11-x-20-mm-gastronorm-pan-australian-style"; // known member price $12 / RRP $18
-const testCard = process.env.MEMBERSHIP_TEST_CARD || "4065871315315604";
+const testCard = process.env.MEMBERSHIP_TEST_CARD || "4242424242424242";
 const account = { email: `e2e-verify-${ts}@e2e.test`, password: "Test1234!aA", firstName: "Verity", lastName: "Member" };
 const dir = "/tmp/verify";
 mkdirSync(dir, { recursive: true });
