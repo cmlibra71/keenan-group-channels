@@ -251,10 +251,13 @@ export async function placeOrder(
         customer_email: email,
       });
 
-      // Mark cart as completed
-      await cartService.markCompleted(cartWithItems.id);
-      await clearCartUuid();
-
+      // IMPORTANT: do NOT clear the cart here. Returning from a server action
+      // triggers Next.js to refresh the current route; if the cart were already
+      // empty, the /checkout page would redirect("/cart") and navigate the
+      // browser away BEFORE the client can run stripe.confirmCardPayment() — the
+      // PaymentIntent would be left at requires_payment_method (never charged).
+      // The cart is finalised in confirmStripePayment(), once the card is
+      // actually confirmed.
       return { stripe: { clientSecret, orderNumber: order.order_number } };
     } catch (err) {
       return { error: err instanceof Error ? err.message : "Failed to create payment." };
@@ -308,6 +311,20 @@ export async function placeOrder(
 export async function confirmStripePayment(
   orderNumber: string
 ): Promise<{ success: boolean; error?: string }> {
+  // Finalise the cart now that the card has been confirmed (placeOrder's Stripe
+  // branch deliberately left it intact — see the comment there). Cookie-based,
+  // so it works for guests as well as logged-in customers; best-effort.
+  try {
+    const uuid = await getCartUuid();
+    if (uuid) {
+      const cart = await cartService.getByUuid(uuid);
+      if (cart) await cartService.markCompleted(cart.id);
+      await clearCartUuid();
+    }
+  } catch {
+    /* non-fatal: payment already succeeded; the webhook is the source of truth */
+  }
+
   // Require auth + ownership — this mutates payment status and order numbers are
   // semi-guessable. The portal webhook remains the source of truth.
   const session = await getSession();

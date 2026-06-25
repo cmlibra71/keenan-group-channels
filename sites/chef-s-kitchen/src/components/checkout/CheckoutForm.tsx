@@ -134,6 +134,10 @@ export function CheckoutForm({
 
         const elements = stripe.elements();
         const card = elements.create("card", {
+          // The billing-address form already collects the postal code, so hide
+          // Stripe's redundant in-widget postal field (avoids double entry and a
+          // second place the customer can leave incomplete).
+          hidePostalCode: true,
           style: {
             base: {
               fontSize: "16px",
