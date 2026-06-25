@@ -289,6 +289,7 @@ export async function placeOrder(
       logoUrl: site?.logoUrl ?? null,
       logoAlt: site?.logoAlt ?? null,
       fromEmail: site?.fromEmail ?? null,
+      testMode: isTestMode,
     });
   } catch (e) {
     console.error("[placeOrder] confirmation email failed (non-fatal):", e);
