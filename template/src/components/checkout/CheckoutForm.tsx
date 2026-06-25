@@ -83,6 +83,7 @@ export function CheckoutForm({
   freeShippingThreshold = 500,
   shippingEnabled = false,
   stripePublishableKey,
+  testMode = false,
 }: {
   items: CartItem[];
   subtotal: number;
@@ -98,6 +99,7 @@ export function CheckoutForm({
   freeShippingThreshold?: number;
   shippingEnabled?: boolean;
   stripePublishableKey?: string;
+  testMode?: boolean;
 }) {
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(placeOrder, null);
@@ -499,6 +501,17 @@ export function CheckoutForm({
           {/* Payment Method */}
           <div className="border border-zinc-200 rounded-lg p-6">
             <h2 className="text-lg font-semibold text-zinc-900 mb-4">Payment Method</h2>
+            {testMode && (
+              <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <span aria-hidden className="text-base leading-none">🧪</span>
+                <span>
+                  <strong>Test mode</strong> — this is a test transaction and no real payment is
+                  taken. Card payments use the <strong>test</strong> Stripe account; pay with{" "}
+                  <span className="font-mono">4242&nbsp;4242&nbsp;4242&nbsp;4242</span>, any future
+                  expiry, any CVC.
+                </span>
+              </div>
+            )}
             {paymentMethods.length > 0 ? (
               <div className="space-y-3">
                 {paymentMethods.map((method) => (

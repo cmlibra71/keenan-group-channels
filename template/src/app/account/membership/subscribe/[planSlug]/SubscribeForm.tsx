@@ -28,9 +28,11 @@ function loadStripeScript(): Promise<void> {
 export function SubscribeForm({
   planId,
   stripePublishableKey,
+  testMode = false,
 }: {
   planId: number;
   stripePublishableKey: string;
+  testMode?: boolean;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -136,6 +138,18 @@ export function SubscribeForm({
 
   return (
     <form onSubmit={handleSubscribe}>
+      {testMode && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <span aria-hidden className="text-base leading-none">🧪</span>
+          <span>
+            <strong>Test mode</strong> — this is a test transaction and no real payment is taken.
+            Card payments use the <strong>test</strong> Stripe account; pay with{" "}
+            <span className="font-mono">4242&nbsp;4242&nbsp;4242&nbsp;4242</span>, any future expiry,
+            any CVC.
+          </span>
+        </div>
+      )}
+
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 mb-4 text-sm">
           {error}

@@ -64,13 +64,14 @@ export default async function CheckoutPage() {
 
   // Load Stripe publishable key from the global portal payment_gateways setting.
   // All channels share one Stripe account; segmentation happens via metadata.
+  // wantTestMode also drives the TEST MODE banner shown on the payment options.
+  const wantTestMode = await wantsStripeTestMode(CHANNEL_ID);
   let stripePublishableKey: string | undefined;
   try {
     const gatewaysSetting = await storeSettingsService.getByKey("payment_gateways");
     const gateways = (gatewaysSetting.setting_value as { provider: string; credentials: Record<string, string>; enabled?: boolean; testMode?: boolean }[]) || [];
     // Match the gateway entry tagged for the current environment: testMode=true
     // in dev, testMode=false in prod. Lets both modes coexist in the DB row.
-    const wantTestMode = await wantsStripeTestMode(CHANNEL_ID);
     const stripeGateway = gateways.find((g) => g.provider === "stripe" && g.enabled !== false && Boolean(g.testMode) === wantTestMode) ?? (wantTestMode ? gateways.find((g) => g.provider === "stripe" && g.enabled !== false) : undefined);
     if (stripeGateway?.credentials?.publishable_key) {
       stripePublishableKey = stripeGateway.credentials.publishable_key;
@@ -157,6 +158,7 @@ export default async function CheckoutPage() {
         freeShippingThreshold={checkoutSettings.freeShippingThreshold}
         shippingEnabled={shippingEnabled}
         stripePublishableKey={stripePublishableKey}
+        testMode={wantTestMode}
       />
     </div>
   );
