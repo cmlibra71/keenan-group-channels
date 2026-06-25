@@ -5,7 +5,7 @@ import { cartService, orderService, orderItemService, CHANNEL_ID, getEffectivePr
 import { getFeatureFlag, getActiveSubscription, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
-import { sendOrderConfirmationEmail } from "@keenan/services";
+import { sendOrderConfirmationEmail, wantsStripeTestMode } from "@keenan/services";
 
 const GST_RATE = 0.1;
 
@@ -180,6 +180,11 @@ export async function placeOrder(
     paymentStatus = "net_terms";
   }
 
+  // Tag orders created while this channel is in payments test mode so they can be
+  // cleared later from the portal. Only storefront orders are tagged — Zoey/backfill
+  // imports go through the service layer directly and are never marked test.
+  const isTestMode = await wantsStripeTestMode(CHANNEL_ID);
+
   // Create order
   const order = await orderService.create({
     channelId: CHANNEL_ID,
@@ -197,6 +202,7 @@ export async function placeOrder(
     totalTax: String(totalTax),
     itemsTotal: totalItems,
     billingAddress,
+    ...(isTestMode ? { metafields: { test_mode: true } } : {}),
   }) as { id: number; order_number: string };
 
   // Create order items

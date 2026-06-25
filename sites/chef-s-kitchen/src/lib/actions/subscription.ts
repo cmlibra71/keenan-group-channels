@@ -146,6 +146,7 @@ export async function createSubscription(planId: number): Promise<{
       status: "pending",
       stripeSubscriptionId: stripeSub.subscriptionId,
       stripeCustomerId,
+      ...((await wantStripeTestMode()) ? { metafields: { test_mode: true } } : {}),
     });
 
     revalidatePath("/", "layout");
@@ -214,6 +215,7 @@ export async function attemptTestMembership(
       status: "pending",
       currentPeriodStart: now,
       currentPeriodEnd: periodEnd,
+      ...((await wantStripeTestMode()) ? { metafields: { test_mode: true } } : {}),
     });
     await subscriptionService.activate(localSub.id as number);
 

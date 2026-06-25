@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { quoteService, quoteItemService, productService, productVariantService, CHANNEL_ID, shouldSuppressCatalogSalePrice } from "@/lib/store";
+import { quoteService, quoteItemService, productService, productVariantService, CHANNEL_ID, shouldSuppressCatalogSalePrice, wantStripeTestMode } from "@/lib/store";
 import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
 import { getSession } from "@/lib/auth";
 
@@ -16,8 +16,10 @@ async function getOrCreateQuote() {
     if (quote) return quote;
   }
 
+  // Tag quotes created in payments test mode so they can be cleared from the portal.
   const quote = await quoteService.create({
     channelId: CHANNEL_ID,
+    ...((await wantStripeTestMode()) ? { attributes: { test_mode: true } } : {}),
   }) as QuoteRow;
 
   await setQuoteUuid(quote.uuid);

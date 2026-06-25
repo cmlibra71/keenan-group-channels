@@ -115,6 +115,7 @@ export async function createSubscription(planId: number): Promise<{
       status: "pending",
       stripeSubscriptionId: stripeSub.subscriptionId,
       stripeCustomerId,
+      ...((await wantsStripeTestMode(CHANNEL_ID)) ? { metafields: { test_mode: true } } : {}),
     });
 
     revalidatePath("/", "layout");

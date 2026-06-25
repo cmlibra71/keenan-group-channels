@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { quoteService, quoteItemService, productService, productVariantService, CHANNEL_ID, shouldSuppressCatalogSalePrice } from "@/lib/store";
+import { wantsStripeTestMode } from "@keenan/services";
 import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
 import { getSession } from "@/lib/auth";
 
@@ -18,6 +19,7 @@ async function getOrCreateQuote() {
 
   const quote = await quoteService.create({
     channelId: CHANNEL_ID,
+    ...((await wantsStripeTestMode(CHANNEL_ID)) ? { attributes: { test_mode: true } } : {}),
   }) as QuoteRow;
 
   await setQuoteUuid(quote.uuid);
