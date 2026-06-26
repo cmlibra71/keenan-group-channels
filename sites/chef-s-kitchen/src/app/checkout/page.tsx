@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Crown, ArrowRight } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription, getCheckoutSettings, customerAddressService, channelSettingsService, storeSettingsService, shippingRateCardService, CHANNEL_ID, wantStripeTestMode } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription, getCheckoutSettings, customerAddressService, channelSettingsService, storeSettingsService, shippingRateCardService, accountService, CHANNEL_ID, wantStripeTestMode } from "@/lib/store";
 import { CheckoutForm } from "@/components/checkout/CheckoutForm";
 
 export const metadata = {
@@ -21,6 +21,18 @@ export default async function CheckoutPage() {
     getSession(),
     getCheckoutSettings(),
   ]);
+
+  // Net Terms is account-gated: only a logged-in customer whose email maps to an
+  // active B2B account with net_terms_days > 0 may defer payment. Everyone else
+  // (guests, customers with no net-terms account) pays upfront — card or bank
+  // transfer (invoice → pay → deliver). When eligible, show the account's actual
+  // term length, not the flat channel default. placeOrder re-checks server-side.
+  const netTerms = session?.email
+    ? await accountService.resolveNetTermsForEmail(session.email)
+    : null;
+  const paymentMethods = checkoutSettings.paymentMethods
+    .filter((m) => m.id !== "net_terms" || !!netTerms)
+    .map((m) => (m.id === "net_terms" && netTerms ? { ...m, netTermsDays: netTerms.netTermsDays } : m));
 
   const subtotal = parseFloat(cart.cartAmount ?? "0");
 
@@ -150,7 +162,7 @@ export default async function CheckoutPage() {
         pricesIncludeTax={pricesIncludeTax}
         customerEmail={session?.email}
         countries={checkoutSettings.supportedCountries}
-        paymentMethods={checkoutSettings.paymentMethods}
+        paymentMethods={paymentMethods}
         savedAddresses={savedAddresses}
         googlePlacesEnabled={checkoutSettings.googlePlacesEnabled}
         freeShippingEnabled={checkoutSettings.freeShippingEnabled}

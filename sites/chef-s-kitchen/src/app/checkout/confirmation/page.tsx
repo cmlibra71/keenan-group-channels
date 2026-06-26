@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { CheckCircle, Building2, FileText, CreditCard } from "lucide-react";
-import { getCheckoutSettings } from "@/lib/store";
+import { getCheckoutSettings, orderService } from "@/lib/store";
 
 export const metadata = {
   title: "Order Confirmed",
@@ -27,6 +27,20 @@ export default async function ConfirmationPage({
       netTermsDays = method?.netTermsDays;
     } catch {
       // Fall back to the generic copy below.
+    }
+  }
+  // Net Terms is account-specific — prefer the actual term length stamped on the
+  // order at checkout over the flat channel default.
+  if (pm === "net_terms" && order) {
+    try {
+      const res = await orderService.list({
+        page: 1, limit: 1, sort: "id", direction: "desc",
+        filters: { order_number: { type: "eq", value: order } },
+      });
+      const stored = (res.data[0] as { metafields?: { net_terms_days?: number } } | undefined)?.metafields?.net_terms_days;
+      if (typeof stored === "number") netTermsDays = stored;
+    } catch {
+      // keep the channel-default fallback
     }
   }
 

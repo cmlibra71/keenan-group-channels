@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { cartService, orderService, orderItemService, CHANNEL_ID, getEffectivePrice, productVariantService, channelSettingsService, getCheckoutSettings, paymentService } from "@/lib/store";
+import { cartService, orderService, orderItemService, CHANNEL_ID, getEffectivePrice, productVariantService, channelSettingsService, getCheckoutSettings, paymentService, accountService } from "@/lib/store";
 import { getFeatureFlag, getActiveSubscription, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
@@ -170,6 +170,18 @@ export async function placeOrder(
   const totalExTax = subtotalExTax + shippingExTax;
   const totalTax = subtotalTax + shippingTax;
 
+  // Net Terms is account-gated. Resolve the logged-in customer's B2B account (by
+  // email — storefront customers and B2B accounts are linked only by email) and
+  // reject a net_terms submission from anyone not entitled. The UI hides the
+  // option, but never trust the client. Reuse the account for the order's
+  // accountId + the invoice term length. Guests (no session) never qualify.
+  const netTerms = session?.email
+    ? await accountService.resolveNetTermsForEmail(session.email)
+    : null;
+  if (paymentMethod === "net_terms" && !netTerms) {
+    return { error: "Net terms aren't available on your account. Please pay by card or bank transfer." };
+  }
+
   // Determine payment status based on payment method
   let paymentStatus = "pending";
   if (paymentMethod === "stripe") {
@@ -185,10 +197,19 @@ export async function placeOrder(
   // imports go through the service layer directly and are never marked test.
   const isTestMode = await wantsStripeTestMode(CHANNEL_ID);
 
+  // Stamp test-mode marker + (for net-terms orders) the actual term length used,
+  // so the confirmation page / invoice email show the customer's real terms.
+  const orderMetafields: Record<string, unknown> = {};
+  if (isTestMode) orderMetafields.test_mode = true;
+  if (paymentMethod === "net_terms" && netTerms) orderMetafields.net_terms_days = netTerms.netTermsDays;
+
   // Create order
   const order = await orderService.create({
     channelId: CHANNEL_ID,
     customerId: session?.customerId ?? null,
+    // Link the order to the B2B account when the shopper belongs to one, so the
+    // backoffice can reconcile it (esp. net-terms invoices).
+    ...(netTerms ? { accountId: netTerms.accountId } : {}),
     status: "pending",
     paymentMethod: paymentMethod || undefined,
     paymentStatus,
@@ -202,7 +223,7 @@ export async function placeOrder(
     totalTax: String(totalTax),
     itemsTotal: totalItems,
     billingAddress,
-    ...(isTestMode ? { metafields: { test_mode: true } } : {}),
+    ...(Object.keys(orderMetafields).length ? { metafields: orderMetafields } : {}),
   }) as { id: number; order_number: string };
 
   // Create order items
@@ -287,7 +308,8 @@ export async function placeOrder(
       total: String(totalIncTax),
       items: fullCart.items.map((i) => ({ name: i.productName, quantity: i.quantity })),
       bankDetails: method?.bankDetails ?? null,
-      netTermsDays: method?.netTermsDays ?? null,
+      // Use the customer's actual account terms for a net-terms invoice email.
+      netTermsDays: paymentMethod === "net_terms" && netTerms ? netTerms.netTermsDays : (method?.netTermsDays ?? null),
       siteUrl,
       logoUrl: site?.logoUrl ?? null,
       logoAlt: site?.logoAlt ?? null,
