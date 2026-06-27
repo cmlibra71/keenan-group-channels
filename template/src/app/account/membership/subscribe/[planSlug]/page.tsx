@@ -62,7 +62,7 @@ export default async function SubscribePage({
         Subscribe to {plan.name}
       </h1>
       <p className="text-zinc-600 mb-6">
-        ${parseFloat(plan.price).toFixed(2)} / {plan.billingInterval}
+        ${parseFloat(plan.price).toFixed(2)} / {plan.billing_interval}
       </p>
 
       <SubscribeForm

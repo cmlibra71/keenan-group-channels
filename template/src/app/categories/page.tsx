@@ -38,9 +38,9 @@ export default async function CategoriesPage() {
               className="group block rounded-lg border border-zinc-200 overflow-hidden hover:border-zinc-400 hover:shadow-sm transition-all"
             >
               <div className="relative aspect-[4/3] bg-zinc-100 overflow-hidden">
-                {category.imageUrl ? (
+                {category.image_url ? (
                   <Image
-                    src={category.imageUrl}
+                    src={category.image_url}
                     alt={category.name}
                     fill
                     sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"

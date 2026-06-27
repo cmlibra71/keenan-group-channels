@@ -43,9 +43,9 @@ export default async function HomePage() {
   ].slice(0, 9);
 
   // Fetch membership data if enabled
-  let plan: { price: string; billingInterval: string; slug: string; benefits: unknown } | null = null;
+  let plan: { price: string; billing_interval: string; slug: string; benefits: unknown } | null = null;
   let featuredPrize: { id: number; name: string; imageUrl: string | null; value: string | null } | null = null;
-  let featuredDraw: { id: number; name: string; scheduledAt: string | Date | null } | null = null;
+  let featuredDraw: { id: number; name: string; scheduled_at: string | Date | null } | null = null;
 
   if (subscriptionsEnabled) {
     const [plans, upcomingDraws, activePrizes] = await Promise.all([
@@ -85,7 +85,7 @@ export default async function HomePage() {
                   Professional Kitchen Equipment at Members-Only Prices
                 </h1>
                 <p className="mt-4 text-lg text-zinc-300">
-                  From ${planPrice!.toFixed(2)}/{plan.billingInterval} — unlock exclusive member pricing on everything.
+                  From ${planPrice!.toFixed(2)}/{plan.billing_interval} — unlock exclusive member pricing on everything.
                 </p>
                 <div className="mt-8 flex flex-col sm:flex-row gap-3">
                   <Link
@@ -134,9 +134,9 @@ export default async function HomePage() {
                             Valued at ${parseFloat(featuredPrize.value).toLocaleString("en-AU", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                           </p>
                         )}
-                        {featuredDraw?.scheduledAt && (
+                        {featuredDraw?.scheduled_at && (
                           <p className="text-xs text-zinc-400 mt-1">
-                            Draw: {new Date(featuredDraw.scheduledAt).toLocaleDateString("en-AU", { day: "numeric", month: "long" })}
+                            Draw: {new Date(featuredDraw.scheduled_at).toLocaleDateString("en-AU", { day: "numeric", month: "long" })}
                           </p>
                         )}
                       </div>
@@ -262,7 +262,7 @@ export default async function HomePage() {
       {subscriptionsEnabled && plan && (
         <MembershipCTA
           planPrice={planPrice!}
-          billingInterval={plan.billingInterval}
+          billingInterval={plan.billing_interval}
           benefits={planBenefits}
         />
       )}

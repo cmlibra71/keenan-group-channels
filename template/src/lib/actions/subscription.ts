@@ -152,13 +152,13 @@ export async function createBillingPortalSession(returnUrl: string): Promise<{
       session.customerId,
       CHANNEL_ID
     );
-    if (!sub?.stripeCustomerId) {
+    if (!sub?.stripe_customer_id) {
       return { success: false, error: "No active subscription found" };
     }
 
     const stripeProvider = await getStripeProvider();
     const url = await stripeProvider.createBillingPortalSession(
-      sub.stripeCustomerId,
+      sub.stripe_customer_id,
       returnUrl
     );
 
@@ -193,9 +193,9 @@ export async function cancelSubscription(): Promise<{
     }
 
     // Cancel via Stripe (at period end)
-    if (sub.stripeSubscriptionId) {
+    if (sub.stripe_subscription_id) {
       const stripeProvider = await getStripeProvider();
-      await stripeProvider.cancelSubscription(sub.stripeSubscriptionId, true);
+      await stripeProvider.cancelSubscription(sub.stripe_subscription_id, true);
     }
 
     // Update local record

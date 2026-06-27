@@ -28,10 +28,10 @@ function loadStripeScript(): Promise<void> {
 }
 
 type CartItem = {
-  productName: string;
+  product_name: string;
   quantity: number;
-  listPrice: string;
-  salePrice: string | null;
+  list_price: string;
+  sale_price: string | null;
 };
 
 type Country = {
@@ -607,13 +607,13 @@ export function CheckoutForm({
 
             <div className="divide-y divide-zinc-100">
               {items.map((item, i) => {
-                const price = item.salePrice
-                  ? parseFloat(item.salePrice)
-                  : parseFloat(item.listPrice);
+                const price = item.sale_price
+                  ? parseFloat(item.sale_price)
+                  : parseFloat(item.list_price);
                 return (
                   <div key={i} className="py-2 flex justify-between text-sm">
                     <span className="text-zinc-600">
-                      {item.productName} &times; {item.quantity}
+                      {item.product_name} &times; {item.quantity}
                     </span>
                     <Price amount={price * item.quantity} className="font-medium" />
                   </div>

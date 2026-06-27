@@ -39,7 +39,7 @@ export default async function MembershipPage() {
     }
 
     const isPastDue = activeSub.status === "past_due";
-    const isCancelling = activeSub.cancelAtPeriodEnd;
+    const isCancelling = activeSub.cancel_at_period_end;
 
     return (
       <div className="mx-auto max-w-2xl px-4 sm:px-6 lg:px-8 py-8">
@@ -64,8 +64,8 @@ export default async function MembershipPage() {
               <Clock className="h-5 w-5 text-amber-600 shrink-0" />
               <p className="text-amber-800 text-sm font-medium">
                 Your membership is set to cancel. Benefits remain active until{" "}
-                {activeSub.currentPeriodEnd
-                  ? new Date(activeSub.currentPeriodEnd).toLocaleDateString()
+                {activeSub.current_period_end
+                  ? new Date(activeSub.current_period_end).toLocaleDateString()
                   : "the end of your billing period"}.
               </p>
             </div>
@@ -95,15 +95,15 @@ export default async function MembershipPage() {
             </div>
             <div>
               <dt className="text-zinc-500">Consecutive Months</dt>
-              <dd className="font-medium text-zinc-900">{activeSub.consecutiveMonths ?? 0}</dd>
+              <dd className="font-medium text-zinc-900">{activeSub.consecutive_months ?? 0}</dd>
             </div>
-            {activeSub.currentPeriodEnd && (
+            {activeSub.current_period_end && (
               <div>
                 <dt className="text-zinc-500">
                   {isCancelling ? "Benefits End" : "Next Billing Date"}
                 </dt>
                 <dd className="font-medium text-zinc-900">
-                  {new Date(activeSub.currentPeriodEnd).toLocaleDateString()}
+                  {new Date(activeSub.current_period_end).toLocaleDateString()}
                 </dd>
               </div>
             )}
@@ -118,11 +118,11 @@ export default async function MembershipPage() {
 
         <div className="flex items-center gap-4 mt-4">
           <ManageBillingButton />
-          {!activeSub.cancelAtPeriodEnd && (
+          {!activeSub.cancel_at_period_end && (
             <CancelConfirmationModal
-              currentPeriodEnd={activeSub.currentPeriodEnd ? String(activeSub.currentPeriodEnd) : null}
+              currentPeriodEnd={activeSub.current_period_end ? String(activeSub.current_period_end) : null}
               totalEntries={totalEntries}
-              consecutiveMonths={activeSub.consecutiveMonths ?? 0}
+              consecutiveMonths={activeSub.consecutive_months ?? 0}
             />
           )}
         </div>
@@ -160,7 +160,7 @@ export default async function MembershipPage() {
               <p className="text-3xl font-bold text-zinc-900 mb-1">
                 ${parseFloat(plan.price).toFixed(2)}
                 <span className="text-base font-normal text-zinc-500">
-                  /{plan.billingInterval}
+                  /{plan.billing_interval}
                 </span>
               </p>
               {plan.description && (

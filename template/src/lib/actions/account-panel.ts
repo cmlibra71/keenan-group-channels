@@ -39,16 +39,9 @@ export async function loginFromPanel(formData: FormData): Promise<{
     return { error: "Email and password are required." };
   }
 
-  // findByEmailAndChannel uses a raw Drizzle .select() → camelCase keys.
-  const customer = (await customerService.findByEmailAndChannel(email, CHANNEL_ID)) as {
-    id: number;
-    email: string;
-    firstName: string;
-    lastName: string;
-    passwordHash: string | null;
-  } | null;
+  const customer = await customerService.findByEmailAndChannel(email, CHANNEL_ID);
 
-  const { valid, needsRehash } = await verifyPassword(password, customer?.passwordHash);
+  const { valid, needsRehash } = await verifyPassword(password, customer?.password_hash);
   if (!customer || !valid) {
     return { error: "Invalid email or password." };
   }
@@ -67,8 +60,8 @@ export async function loginFromPanel(formData: FormData): Promise<{
     session: {
       customerId: customer.id,
       email: customer.email,
-      firstName: customer.firstName,
-      lastName: customer.lastName,
+      firstName: customer.first_name ?? "",
+      lastName: customer.last_name ?? "",
     },
   };
 }
@@ -114,8 +107,8 @@ export async function registerFromPanel(formData: FormData): Promise<{
     session: {
       customerId: customer.id,
       email: customer.email,
-      firstName: customer.first_name,
-      lastName: customer.last_name,
+      firstName: customer.first_name ?? "",
+      lastName: customer.last_name ?? "",
     },
   };
 }

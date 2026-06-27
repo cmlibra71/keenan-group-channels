@@ -39,13 +39,9 @@ export async function login(
     return { error: "Too many attempts. Please wait a few minutes and try again." };
   }
 
-  const customer = (await customerService.findByEmailAndChannel(email, CHANNEL_ID)) as {
-    id: number;
-    email: string;
-    passwordHash: string | null;
-  } | null;
+  const customer = await customerService.findByEmailAndChannel(email, CHANNEL_ID);
 
-  const { valid, needsRehash } = await verifyPassword(password, customer?.passwordHash);
+  const { valid, needsRehash } = await verifyPassword(password, customer?.password_hash);
 
   if (!customer || !valid) {
     recordFailure(email);

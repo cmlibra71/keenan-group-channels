@@ -45,7 +45,7 @@ export default async function DrawsPage() {
     0
   );
 
-  const consecutiveMonths = activeSub?.consecutiveMonths ?? 0;
+  const consecutiveMonths = activeSub?.consecutive_months ?? 0;
 
   // Find the highest-value prize
   const featuredPrize = activePrizes.length > 0
@@ -72,7 +72,7 @@ export default async function DrawsPage() {
           <PrizeCard
             prize={featuredPrize}
             drawName={featuredDraw.name}
-            scheduledAt={featuredDraw.scheduledAt}
+            scheduledAt={featuredDraw.scheduled_at}
             myEntries={activeEntries
               .filter((e) => e.entry.drawId === featuredDraw.id)
               .reduce((sum, e) => sum + (e.entry.entryCount ?? 1), 0)}
@@ -106,9 +106,9 @@ export default async function DrawsPage() {
                   </span>
                 </div>
 
-                {draw.scheduledAt && (
+                {draw.scheduled_at && (
                   <div className="mb-3">
-                    <DrawCountdown targetDate={draw.scheduledAt} />
+                    <DrawCountdown targetDate={draw.scheduled_at} />
                   </div>
                 )}
 
@@ -116,9 +116,9 @@ export default async function DrawsPage() {
                   <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 text-xs font-medium px-2 py-1 rounded-full">
                     Your entries: {myEntryCount}
                   </span>
-                  {draw.entryDeadline && (
+                  {draw.entry_deadline && (
                     <p className="text-xs text-zinc-500">
-                      Entries close: {new Date(draw.entryDeadline).toLocaleDateString()}
+                      Entries close: {new Date(draw.entry_deadline).toLocaleDateString()}
                     </p>
                   )}
                 </div>
