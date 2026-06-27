@@ -2,8 +2,6 @@
 
 import { createContext, useContext, useState, useCallback } from "react";
 
-const GST_RATE = 0.1;
-
 type GstContextValue = {
   /** true → show GST-inclusive prices; false → GST-exclusive (default). */
   inclusive: boolean;
@@ -49,12 +47,6 @@ export function useGst() {
   return useContext(GstContext);
 }
 
-/** Convert a stored price to the requested GST display mode. */
-export function adjustForGst(
-  amount: number,
-  inclusive: boolean,
-  pricesIncludeTax: boolean
-): number {
-  if (inclusive === pricesIncludeTax) return amount;
-  return inclusive ? amount * (1 + GST_RATE) : amount / (1 + GST_RATE);
-}
+// adjustForGst (pure GST display math) is the single source of truth in
+// @keenan/services; re-exported so `@/lib/gst` consumers keep importing it here.
+export { adjustForGst } from "@keenan/services/calc";
