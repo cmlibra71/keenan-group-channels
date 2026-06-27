@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { getFeatureFlag, getActiveSubscription, subscriptionPlanService, storeSettingsService, CHANNEL_ID } from "@/lib/store";
-import { wantsStripeTestMode } from "@keenan/services";
+import { wantsStripeTestMode, selectGateway } from "@keenan/services";
 import { SubscribeForm } from "./SubscribeForm";
 
 export const metadata = {
@@ -41,7 +41,7 @@ export default async function SubscribePage({
     const gateways = (gatewaysSetting.setting_value as { provider: string; credentials: Record<string, string>; enabled?: boolean; testMode?: boolean }[]) || [];
     // Match the gateway entry tagged for the current environment: testMode=true
     // in dev, testMode=false in prod. Lets both modes coexist in the DB row.
-    const stripeGateway = gateways.find((g) => g.provider === "stripe" && g.enabled !== false && Boolean(g.testMode) === wantTestMode) ?? (wantTestMode ? gateways.find((g) => g.provider === "stripe" && g.enabled !== false) : undefined);
+    const stripeGateway = selectGateway(gateways.filter((g) => g.provider === "stripe" && g.enabled !== false), wantTestMode);
     stripePublishableKey = stripeGateway?.credentials?.publishable_key;
   } catch {}
 
