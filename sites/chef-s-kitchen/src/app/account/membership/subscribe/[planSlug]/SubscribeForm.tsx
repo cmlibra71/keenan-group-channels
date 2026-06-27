@@ -56,6 +56,10 @@ export function SubscribeForm({
 
         const elements = stripe.elements();
         const card = elements.create("card", {
+          // Postal/billing is collected on the complete-profile step after
+          // subscribe; hide Stripe's in-widget postal field for consistency with
+          // checkout (CheckoutForm also sets hidePostalCode: true).
+          hidePostalCode: true,
           style: {
             base: {
               fontSize: "16px",
