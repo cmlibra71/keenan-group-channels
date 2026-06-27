@@ -36,12 +36,12 @@ export default async function CartPage() {
   // Member savings flow through item salePrice (cart.discountAmount stays 0),
   // so compute the discount from the items: full list value minus what's
   // actually charged. Subtotal shows the undiscounted (RRP) value.
-  const typedItems = items as { listPrice: string | null; salePrice: string | null; quantity: number }[];
+  const typedItems = items as { list_price: string | null; sale_price: string | null; quantity: number }[];
   const subtotal = typedItems.reduce(
-    (sum, i) => sum + (i.listPrice ? parseFloat(i.listPrice) : 0) * i.quantity,
+    (sum, i) => sum + (i.list_price ? parseFloat(i.list_price) : 0) * i.quantity,
     0
   );
-  const total = parseFloat(cart!.cartAmount ?? "0");
+  const total = parseFloat(cart!.cart_amount ?? "0");
   const discount = Math.max(0, Math.round((subtotal - total) * 100) / 100);
 
   // Check tax mode
@@ -74,7 +74,7 @@ export default async function CartPage() {
       if (plans.length > 0) {
         showUpsell = true;
         planPrice = parseFloat(plans[0].price);
-        billingInterval = plans[0].billingInterval;
+        billingInterval = plans[0].billing_interval;
       }
     }
   }

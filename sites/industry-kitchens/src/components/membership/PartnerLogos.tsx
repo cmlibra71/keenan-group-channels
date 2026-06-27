@@ -1,14 +1,14 @@
 type PartnerOffer = {
   id: number;
-  partnerName: string;
-  partnerLogo: string | null;
+  partner_name: string;
+  partner_logo: string | null;
 };
 
 export function PartnerLogos({ offers }: { offers: PartnerOffer[] }) {
   if (offers.length === 0) return null;
 
   const uniquePartners = offers.reduce<PartnerOffer[]>((acc, offer) => {
-    if (!acc.find((p) => p.partnerName === offer.partnerName)) {
+    if (!acc.find((p) => p.partner_name === offer.partner_name)) {
       acc.push(offer);
     }
     return acc;
@@ -22,11 +22,11 @@ export function PartnerLogos({ offers }: { offers: PartnerOffer[] }) {
         </p>
         <div className="flex flex-wrap items-center justify-center gap-8">
           {uniquePartners.map((partner) =>
-            partner.partnerLogo ? (
+            partner.partner_logo ? (
               <img
                 key={partner.id}
-                src={partner.partnerLogo}
-                alt={partner.partnerName}
+                src={partner.partner_logo}
+                alt={partner.partner_name}
                 className="h-10 w-auto grayscale opacity-60 hover:grayscale-0 hover:opacity-100 transition-all"
               />
             ) : (
@@ -34,7 +34,7 @@ export function PartnerLogos({ offers }: { offers: PartnerOffer[] }) {
                 key={partner.id}
                 className="text-sm font-medium text-zinc-400"
               >
-                {partner.partnerName}
+                {partner.partner_name}
               </span>
             )
           )}

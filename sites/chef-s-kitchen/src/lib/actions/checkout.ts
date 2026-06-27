@@ -85,21 +85,21 @@ export async function placeOrder(
       const suppressCatalogSale = await shouldSuppressCatalogSalePrice();
       let pricesChanged = false;
       for (const item of fullCart.items) {
-        if (item.salePrice && item.listPrice) {
-          const oldPrice = item.salePrice;
+        if (item.sale_price && item.list_price) {
+          const oldPrice = item.sale_price;
           if (suppressCatalogSale) {
             // Member-only pricing channel: without a membership the standard
             // (RRP) price applies — never the shared catalog sale price.
-            item.salePrice = null;
+            item.sale_price = null;
           } else {
-            const variantId = item.variantId;
-            const pricingVariantId = variantId || (await productVariantService.listForParent(item.productId, { page: 1, limit: 1, sort: "id", direction: "asc" }))?.data[0]?.id;
+            const variantId = item.variant_id;
+            const pricingVariantId = variantId || (await productVariantService.listForParent(item.product_id, { page: 1, limit: 1, sort: "id", direction: "asc" }))?.data[0]?.id;
             if (pricingVariantId) {
               const pricing = await getEffectivePrice(pricingVariantId as number, CHANNEL_ID, null);
-              item.salePrice = pricing.salePrice || null;
+              item.sale_price = pricing.salePrice || null;
             }
           }
-          if (item.salePrice !== oldPrice) {
+          if (item.sale_price !== oldPrice) {
             pricesChanged = true;
           }
         }
@@ -125,7 +125,7 @@ export async function placeOrder(
   let subtotalTax = 0;
 
   for (const item of fullCart.items) {
-    const unitPrice = item.salePrice ? parseFloat(item.salePrice) : parseFloat(item.listPrice);
+    const unitPrice = item.sale_price ? parseFloat(item.sale_price) : parseFloat(item.list_price);
     const linePrice = unitPrice * item.quantity;
     const { exTax, tax, incTax } = calcTax(linePrice, pricesIncludeTax);
     subtotalIncTax += incTax;
@@ -213,7 +213,7 @@ export async function placeOrder(
     status: "pending",
     paymentMethod: paymentMethod || undefined,
     paymentStatus,
-    currencyCode: cartWithItems.currencyCode,
+    currencyCode: cartWithItems.currency_code,
     subtotalExTax: String(subtotalExTax),
     subtotalIncTax: String(subtotalIncTax),
     shippingCostExTax: String(shippingExTax),
@@ -228,18 +228,18 @@ export async function placeOrder(
 
   // Create order items
   const orderItemsData = fullCart.items.map((item) => {
-    const unitPrice = item.salePrice
-      ? parseFloat(item.salePrice)
-      : parseFloat(item.listPrice);
+    const unitPrice = item.sale_price
+      ? parseFloat(item.sale_price)
+      : parseFloat(item.list_price);
     const linePrice = unitPrice * item.quantity;
     const unitCalc = calcTax(unitPrice, pricesIncludeTax);
     const lineCalc = calcTax(linePrice, pricesIncludeTax);
 
     return {
-      productId: item.productId,
-      variantId: item.variantId,
-      name: item.productName,
-      sku: item.productSku,
+      productId: item.product_id,
+      variantId: item.variant_id,
+      name: item.product_name,
+      sku: item.product_sku,
       quantity: item.quantity,
       basePrice: String(unitPrice),
       priceExTax: String(unitCalc.exTax),
@@ -306,7 +306,7 @@ export async function placeOrder(
       storeName,
       paymentMethod,
       total: String(totalIncTax),
-      items: fullCart.items.map((i) => ({ name: i.productName, quantity: i.quantity })),
+      items: fullCart.items.map((i) => ({ name: i.product_name, quantity: i.quantity })),
       bankDetails: method?.bankDetails ?? null,
       // Use the customer's actual account terms for a net-terms invoice email.
       netTermsDays: paymentMethod === "net_terms" && netTerms ? netTerms.netTermsDays : (method?.netTermsDays ?? null),

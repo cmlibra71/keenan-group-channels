@@ -25,10 +25,10 @@ export interface MemberContext {
 async function getBasePlan(): Promise<{ groupId: number | null; price: string | null }> {
   const plans = (await getSubscriptionPlans()) as {
     price: string | null;
-    memberCustomerGroupId: number | null;
+    member_customer_group_id: number | null;
   }[];
   const plan = plans[0];
-  return { groupId: plan?.memberCustomerGroupId ?? null, price: plan?.price ?? null };
+  return { groupId: plan?.member_customer_group_id ?? null, price: plan?.price ?? null };
 }
 
 /**

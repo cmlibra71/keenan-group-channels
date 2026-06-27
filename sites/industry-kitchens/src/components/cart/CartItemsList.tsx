@@ -7,18 +7,18 @@ import { Price } from "@/components/ui/Price";
 
 type CartItemRow = {
   id: number;
-  productId: number;
-  variantId: number | null;
+  product_id: number;
+  variant_id: number | null;
   quantity: number;
-  listPrice: string;
-  salePrice: string | null;
-  extendedListPrice: string | null;
-  extendedSalePrice: string | null;
-  productName: string;
-  productSlug: string | null;
-  productSku: string | null;
-  variantSku: string | null;
-  variantOptionName: string | null;
+  list_price: string;
+  sale_price: string | null;
+  extended_list_price: string | null;
+  extended_sale_price: string | null;
+  product_name: string;
+  product_slug: string | null;
+  product_sku: string | null;
+  variant_sku: string | null;
+  variant_option_name: string | null;
 };
 
 export function CartItemsList({ items }: { items: CartItemRow[] }) {
@@ -34,9 +34,9 @@ export function CartItemsList({ items }: { items: CartItemRow[] }) {
 function CartItemRow({ item }: { item: CartItemRow }) {
   const [isPending, startTransition] = useTransition();
 
-  const unitPrice = item.salePrice
-    ? parseFloat(item.salePrice)
-    : parseFloat(item.listPrice);
+  const unitPrice = item.sale_price
+    ? parseFloat(item.sale_price)
+    : parseFloat(item.list_price);
   const lineTotal = unitPrice * item.quantity;
 
   function handleQuantity(newQty: number) {
@@ -55,16 +55,16 @@ function CartItemRow({ item }: { item: CartItemRow }) {
     <div className={`py-4 flex items-center gap-4 ${isPending ? "opacity-50" : ""}`}>
       <div className="flex-1 min-w-0">
         <a
-          href={item.productSlug ? `/products/${item.productSlug}` : "#"}
+          href={item.product_slug ? `/products/${item.product_slug}` : "#"}
           className="text-sm font-medium text-zinc-900 hover:underline truncate block"
         >
-          {item.productName}
+          {item.product_name}
         </a>
-        {item.variantOptionName && (
-          <p className="text-xs text-zinc-500 mt-0.5">{item.variantOptionName}</p>
+        {item.variant_option_name && (
+          <p className="text-xs text-zinc-500 mt-0.5">{item.variant_option_name}</p>
         )}
         <p className="text-xs text-zinc-400 mt-0.5">
-          SKU: {item.variantSku || item.productSku || "N/A"}
+          SKU: {item.variant_sku || item.product_sku || "N/A"}
         </p>
         <p className="text-sm text-zinc-600 mt-1"><Price amount={unitPrice} /> each</p>
       </div>

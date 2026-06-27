@@ -76,9 +76,9 @@ export async function updateCustomerProfile(input: {
     try {
       const subs = await subscriptionService.listForCustomer(session.customerId, CHANNEL_ID);
       const sub = subs.find((s) => s.status === "active" || s.status === "pending");
-      if (sub?.stripeCustomerId) {
+      if (sub?.stripe_customer_id) {
         const stripe = await getStripeProvider();
-        await stripe.updateCustomer(sub.stripeCustomerId as string, {
+        await stripe.updateCustomer(sub.stripe_customer_id as string, {
           name: `${firstName} ${lastName}`.trim(),
           phone: phone || undefined,
         });

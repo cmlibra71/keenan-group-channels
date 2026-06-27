@@ -80,7 +80,7 @@ export default async function CategoryPage({
       availability,
       sort,
     }),
-    getCategoryBreadcrumbs(category.pathIds || []),
+    getCategoryBreadcrumbs(category.path_ids || []),
     getFeatureFlag("member_pricing_enabled"),
   ]);
 
@@ -104,10 +104,10 @@ export default async function CategoryPage({
     <div>
       {/* ═══ Branded banner ═══ */}
       <section className="relative overflow-hidden bg-gradient-to-br from-brand-mid to-brand-deep">
-        {category.imageUrl && (
+        {category.image_url && (
           <>
             <Image
-              src={category.imageUrl}
+              src={category.image_url}
               alt=""
               fill
               sizes="100vw"

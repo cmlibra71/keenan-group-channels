@@ -46,10 +46,10 @@ export default async function PartnerOffersPage() {
                   className="border border-border p-5 relative"
                 >
                   <div className="flex items-start gap-3 mb-3">
-                    {offer.partnerLogo && (
+                    {offer.partner_logo && (
                       <img
-                        src={offer.partnerLogo}
-                        alt={offer.partnerName}
+                        src={offer.partner_logo}
+                        alt={offer.partner_name}
                         className="h-10 w-10 object-contain"
                       />
                     )}
@@ -57,17 +57,17 @@ export default async function PartnerOffersPage() {
                       <h3 className="font-semibold text-text-primary">
                         {offer.title}
                       </h3>
-                      <p className="text-xs text-text-secondary">{offer.partnerName}</p>
+                      <p className="text-xs text-text-secondary">{offer.partner_name}</p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 mb-3">
                     <span className="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1 rounded-full text-accent bg-accent-subtle">
                       <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-                      {offer.discountType === "percentage"
-                        ? `${offer.discountValue ? parseFloat(String(offer.discountValue)) : 0}% off`
-                        : offer.discountType === "fixed"
-                          ? `$${offer.discountValue ? parseFloat(String(offer.discountValue)).toFixed(2) : "0.00"} off`
+                      {offer.discount_type === "percentage"
+                        ? `${offer.discount_value ? parseFloat(String(offer.discount_value)) : 0}% off`
+                        : offer.discount_type === "fixed"
+                          ? `$${offer.discount_value ? parseFloat(String(offer.discount_value)).toFixed(2) : "0.00"} off`
                           : "Free item"}
                     </span>
                   </div>

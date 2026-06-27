@@ -85,12 +85,12 @@ export default async function QuoteDetailPage({
   // Item thumbnails (quote items don't carry images themselves).
   const productIds = [...new Set(quote.items.map((i) => i.product_id))];
   const thumbs = (await productImageService.getThumbnailsForProducts(productIds)) as {
-    productId: number;
-    urlThumbnail: string | null;
-    urlStandard: string | null;
+    product_id: number;
+    url_thumbnail: string | null;
+    url_standard: string | null;
   }[];
   const thumbByProduct = new Map(
-    thumbs.map((t) => [t.productId, t.urlThumbnail || t.urlStandard])
+    thumbs.map((t) => [t.product_id, t.url_thumbnail || t.url_standard])
   );
 
   const status = quote.status || "quote_pending";

@@ -52,8 +52,8 @@ export default async function AccountPage() {
     totalEntries = entries
       .filter((e) => e.entry.status === "active")
       .reduce((sum, e) => sum + (e.entry.entryCount ?? 1), 0);
-    if (upcomingDraws.length > 0 && upcomingDraws[0].scheduledAt) {
-      nextDrawDate = new Date(upcomingDraws[0].scheduledAt);
+    if (upcomingDraws.length > 0 && upcomingDraws[0].scheduled_at) {
+      nextDrawDate = new Date(upcomingDraws[0].scheduled_at);
     }
   }
 
@@ -92,9 +92,9 @@ export default async function AccountPage() {
               <p className="text-sm text-steel-400">{customer?.email}</p>
             </div>
             <div className="flex items-center gap-4 text-sm">
-              {activeSub.consecutiveMonths != null && (
+              {activeSub.consecutive_months != null && (
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-accent">{activeSub.consecutiveMonths}</p>
+                  <p className="text-2xl font-bold text-accent">{activeSub.consecutive_months}</p>
                   <p className="text-xs text-steel-400">months</p>
                 </div>
               )}

@@ -186,8 +186,8 @@ export const getMegaMenu = unstable_cache(
       name: string;
       slug: string;
       depth: number | null;
-      parentId: number | null;
-      sortOrder: number | null;
+      parent_id: number | null;
+      sort_order: number | null;
     }[];
 
     const byId = new Map<number, MegaMenuNode>();
@@ -195,8 +195,8 @@ export const getMegaMenu = unstable_cache(
     const departments: MegaMenuNode[] = [];
     for (const r of rows) {
       const node = byId.get(r.id)!;
-      if ((r.depth ?? 0) === 0 || r.parentId == null) departments.push(node);
-      else byId.get(r.parentId)?.children.push(node);
+      if ((r.depth ?? 0) === 0 || r.parent_id == null) departments.push(node);
+      else byId.get(r.parent_id)?.children.push(node);
     }
 
     const featuredSetting = await (async () => {

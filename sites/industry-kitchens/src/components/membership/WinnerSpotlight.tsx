@@ -3,7 +3,7 @@ import { Trophy, Calendar } from "lucide-react";
 type Draw = {
   id: number;
   name: string;
-  scheduledAt: string | Date | null;
+  scheduled_at: string | Date | null;
 };
 
 export function WinnerSpotlight({ upcomingDraws }: { upcomingDraws: Draw[] }) {
@@ -27,10 +27,10 @@ export function WinnerSpotlight({ upcomingDraws }: { upcomingDraws: Draw[] }) {
           >
             <Trophy className="h-8 w-8 text-amber-500 mx-auto mb-3" />
             <h3 className="font-semibold text-zinc-900 mb-1">{draw.name}</h3>
-            {draw.scheduledAt && (
+            {draw.scheduled_at && (
               <div className="flex items-center justify-center gap-1.5 text-sm text-zinc-500">
                 <Calendar className="h-3.5 w-3.5" />
-                {new Date(draw.scheduledAt).toLocaleDateString("en-AU", {
+                {new Date(draw.scheduled_at).toLocaleDateString("en-AU", {
                   day: "numeric",
                   month: "long",
                   year: "numeric",

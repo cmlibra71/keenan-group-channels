@@ -25,7 +25,7 @@ export function CartPanel() {
   }, [isOpen]);
 
   const items = cart?.items ?? [];
-  const subtotal = parseFloat(cart?.baseAmount ?? "0");
+  const subtotal = parseFloat(cart?.base_amount ?? "0");
 
   if (isPending) {
     return (

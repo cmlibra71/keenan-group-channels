@@ -35,9 +35,9 @@ export default async function HomePage() {
   ].slice(0, 9);
 
   // Fetch membership data if enabled
-  let plan: { price: string; billingInterval: string; slug: string; benefits: unknown } | null = null;
+  let plan: { price: string; billing_interval: string; slug: string; benefits: unknown } | null = null;
   let featuredPrize: { id: number; name: string; imageUrl: string | null; value: string | null } | null = null;
-  let featuredDraw: { id: number; name: string; scheduledAt: string | Date | null } | null = null;
+  let featuredDraw: { id: number; name: string; scheduled_at: string | Date | null } | null = null;
 
   if (subscriptionsEnabled) {
     const [plans, upcomingDraws, activePrizes] = await Promise.all([
@@ -85,7 +85,7 @@ export default async function HomePage() {
                   <em className="not-italic text-member-bright">Reserved for the Trade</em>
                 </h1>
                 <p className="mt-[18px] max-w-[44ch] text-base leading-[1.55] text-white/[0.88]">
-                  From ${planPrice!.toFixed(2)}/{plan.billingInterval} — access wholesale pricing
+                  From ${planPrice!.toFixed(2)}/{plan.billing_interval} — access wholesale pricing
                   and priority fulfilment across our full commercial range.
                 </p>
                 <div className="mt-[26px] flex flex-wrap gap-3">
@@ -132,11 +132,11 @@ export default async function HomePage() {
                             ${parseFloat(featuredPrize.value).toLocaleString("en-AU", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                           </p>
                         )}
-                        {featuredDraw?.scheduledAt && (
+                        {featuredDraw?.scheduled_at && (
                           <p className="mt-3 inline-flex items-center gap-2 rounded-full border border-member/30 bg-member/15 px-3 py-1">
                             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-member" />
                             <span className="text-xs font-semibold tracking-wide text-member-bright">
-                              Next Draw: {new Date(featuredDraw.scheduledAt).toLocaleDateString("en-AU", { day: "numeric", month: "long" })}
+                              Next Draw: {new Date(featuredDraw.scheduled_at).toLocaleDateString("en-AU", { day: "numeric", month: "long" })}
                             </span>
                           </p>
                         )}
@@ -249,7 +249,7 @@ export default async function HomePage() {
       {subscriptionsEnabled && plan && (
         <MembershipValueStrip
           planPrice={planPrice!}
-          billingInterval={plan.billingInterval}
+          billingInterval={plan.billing_interval}
           benefits={planBenefits}
         />
       )}

@@ -34,7 +34,7 @@ export default async function CheckoutPage() {
     .filter((m) => m.id !== "net_terms" || !!netTerms)
     .map((m) => (m.id === "net_terms" && netTerms ? { ...m, netTermsDays: netTerms.netTermsDays } : m));
 
-  const subtotal = parseFloat(cart.cartAmount ?? "0");
+  const subtotal = parseFloat(cart.cart_amount ?? "0");
 
   // Check tax mode
   let pricesIncludeTax = false;
@@ -111,8 +111,8 @@ export default async function CheckoutPage() {
     if (isMember) {
       // Member savings flow through item salePrice (cart.discountAmount stays
       // 0): the saving is full list value minus what's actually charged.
-      const listValue = (cart.items as { listPrice: string | null; quantity: number }[]).reduce(
-        (sum, i) => sum + (i.listPrice ? parseFloat(i.listPrice) : 0) * i.quantity,
+      const listValue = (cart.items as { list_price: string | null; quantity: number }[]).reduce(
+        (sum, i) => sum + (i.list_price ? parseFloat(i.list_price) : 0) * i.quantity,
         0
       );
       memberSavings = Math.max(0, Math.round((listValue - subtotal) * 100) / 100);

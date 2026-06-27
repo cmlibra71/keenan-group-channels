@@ -39,9 +39,9 @@ export default async function CategoriesPage() {
               className="group block card hover:border-text-primary/30 hover:shadow-sm transition-all duration-300"
             >
               <div className="relative aspect-[4/3] bg-surface-secondary overflow-hidden">
-                {category.imageUrl ? (
+                {category.image_url ? (
                   <Image
-                    src={category.imageUrl}
+                    src={category.image_url}
                     alt={category.name}
                     fill
                     sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"

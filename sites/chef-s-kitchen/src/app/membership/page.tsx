@@ -79,7 +79,7 @@ export default async function MembershipLandingPage() {
           <div className="backdrop-blur-xl bg-white/30 border border-white/25 rounded-[28px] p-10 shadow-[0_8px_40px_rgba(0,0,0,0.15)] max-w-2xl">
             <div className="inline-flex items-center gap-2 border border-white/30 text-white/80 text-xs font-bold uppercase tracking-[0.18em] px-4 py-1.5 mb-5 rounded-full">
               <Crown className="h-3.5 w-3.5" />
-              From ${planPrice.toFixed(2)}/{plan.billingInterval}
+              From ${planPrice.toFixed(2)}/{plan.billing_interval}
             </div>
             <h1 className="hero-title text-white leading-[1.08]">
               Professional Kitchen Equipment at Members-Only Prices
@@ -200,7 +200,7 @@ export default async function MembershipLandingPage() {
             <h2 className="heading-serif text-2xl text-text-primary mb-2">{plan.name}</h2>
             <p className="heading-serif text-4xl text-text-primary mb-1">
               ${planPrice.toFixed(2)}
-              <span className="text-base font-normal text-text-secondary">/{plan.billingInterval}</span>
+              <span className="text-base font-normal text-text-secondary">/{plan.billing_interval}</span>
             </p>
             {plan.description && (
               <p className="text-sm text-text-secondary mb-5">{plan.description}</p>

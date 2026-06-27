@@ -13,7 +13,7 @@ type Prize = {
 type Draw = {
   id: number;
   name: string;
-  scheduledAt: string | Date | null;
+  scheduled_at: string | Date | null;
 };
 
 export function DrawSpotlight({
@@ -57,9 +57,9 @@ export function DrawSpotlight({
                 Valued at ${value.toLocaleString("en-AU", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
               </p>
             )}
-            {draw?.scheduledAt && (
+            {draw?.scheduled_at && (
               <p className="text-sm text-text-muted mb-4">
-                Draw date: {new Date(draw.scheduledAt).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })}
+                Draw date: {new Date(draw.scheduled_at).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })}
               </p>
             )}
             <p className="text-steel-300 text-sm mb-6">

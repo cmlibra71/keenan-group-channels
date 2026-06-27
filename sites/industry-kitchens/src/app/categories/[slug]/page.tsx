@@ -73,7 +73,7 @@ export default async function CategoryPage({
       sort,
     }),
     getSubcategories(category.id),
-    getCategoryBreadcrumbs(category.pathIds || []),
+    getCategoryBreadcrumbs(category.path_ids || []),
     getFeatureFlag("member_pricing_enabled"),
   ]);
 

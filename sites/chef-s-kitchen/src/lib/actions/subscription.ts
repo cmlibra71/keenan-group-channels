@@ -65,7 +65,7 @@ export async function createSubscription(planId: number): Promise<{
     );
     const pendingSub = allSubs.find((s) => s.status === "pending");
     if (pendingSub) {
-      const stripeSubId = pendingSub.stripeSubscriptionId as string | null;
+      const stripeSubId = pendingSub.stripe_subscription_id as string | null;
       const remote = stripeSubId
         ? await stripeProvider.getSubscription(stripeSubId).catch(() => null)
         : null;
@@ -294,9 +294,9 @@ export async function completeMembershipProfile(input: {
 
     // Best-effort Stripe enrichment — never fail the onboarding on this.
     try {
-      if (sub.stripeCustomerId) {
+      if (sub.stripe_customer_id) {
         const stripeProvider = await getStripeProvider();
-        await stripeProvider.updateCustomer(sub.stripeCustomerId as string, {
+        await stripeProvider.updateCustomer(sub.stripe_customer_id as string, {
           name: `${firstName} ${lastName}`.trim() || undefined,
           phone,
           address: {
@@ -345,13 +345,13 @@ export async function createBillingPortalSession(returnUrl: string): Promise<{
       session.customerId,
       CHANNEL_ID
     );
-    if (!sub?.stripeCustomerId) {
+    if (!sub?.stripe_customer_id) {
       return { success: false, error: "No active subscription found" };
     }
 
     const stripeProvider = await getStripeProvider();
     const url = await stripeProvider.createBillingPortalSession(
-      sub.stripeCustomerId,
+      sub.stripe_customer_id,
       returnUrl
     );
 
@@ -386,9 +386,9 @@ export async function cancelSubscription(): Promise<{
     }
 
     // Cancel via Stripe (at period end)
-    if (sub.stripeSubscriptionId) {
+    if (sub.stripe_subscription_id) {
       const stripeProvider = await getStripeProvider();
-      await stripeProvider.cancelSubscription(sub.stripeSubscriptionId, true);
+      await stripeProvider.cancelSubscription(sub.stripe_subscription_id, true);
     }
 
     // Update local record

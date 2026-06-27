@@ -55,14 +55,8 @@ export async function googleSignIn(credential: string): Promise<GoogleSignInResu
   const firstName = tokenInfo.given_name || "";
   const lastName = tokenInfo.family_name || "";
 
-  // Find existing customer by email + channel. findByEmailAndChannel is a raw
-  // select → camelCase keys (unlike create/getById which are snake_case).
-  const existing = (await customerService.findByEmailAndChannel(email, CHANNEL_ID)) as {
-    id: number;
-    email: string;
-    firstName: string;
-    lastName: string;
-  } | null;
+  // Find existing customer by email + channel (returns a snake_case customer row).
+  const existing = await customerService.findByEmailAndChannel(email, CHANNEL_ID);
 
   if (existing) {
     // Existing customer — log them in (email-based account linking)
@@ -73,8 +67,8 @@ export async function googleSignIn(credential: string): Promise<GoogleSignInResu
       session: {
         customerId: existing.id,
         email: existing.email,
-        firstName: existing.firstName,
-        lastName: existing.lastName,
+        firstName: existing.first_name ?? "",
+        lastName: existing.last_name ?? "",
       },
     };
   }
