@@ -5,27 +5,10 @@ import { cartService, orderService, orderItemService, CHANNEL_ID, getEffectivePr
 import { getFeatureFlag, getActiveSubscription, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
-import { sendOrderConfirmationEmail, wantsStripeTestMode } from "@keenan/services";
+import { sendOrderConfirmationEmail, wantsStripeTestMode, gstSplit } from "@keenan/services";
 
-const GST_RATE = 0.1;
-
-// Whether stored product prices already include GST.
-// Set via channel setting "prices_include_tax" — defaults to false (ex-tax).
-// When false: price is ex-tax, GST is added on top (total = price × 1.1)
-// When true: price is inc-tax, GST is extracted (ex-tax = price / 1.1)
-function calcTax(
-  price: number,
-  pricesIncludeTax: boolean
-): { exTax: number; tax: number; incTax: number } {
-  if (pricesIncludeTax) {
-    const exTax = Math.round((price / (1 + GST_RATE)) * 10000) / 10000;
-    const tax = Math.round((price - exTax) * 10000) / 10000;
-    return { exTax, tax, incTax: price };
-  }
-  const tax = Math.round(price * GST_RATE * 10000) / 10000;
-  const incTax = Math.round((price + tax) * 10000) / 10000;
-  return { exTax: price, tax, incTax };
-}
+// GST split (ex/tax/inc) comes from @keenan/services `gstSplit` — the single
+// source of truth for tax math, shared with the pricing engine and cart totals.
 
 type PlaceOrderResult = {
   error?: string;
@@ -127,7 +110,7 @@ export async function placeOrder(
   for (const item of fullCart.items) {
     const unitPrice = item.sale_price ? parseFloat(item.sale_price) : parseFloat(item.list_price);
     const linePrice = unitPrice * item.quantity;
-    const { exTax, tax, incTax } = calcTax(linePrice, pricesIncludeTax);
+    const { exTax, tax, incTax } = gstSplit(linePrice, pricesIncludeTax);
     subtotalIncTax += incTax;
     subtotalExTax += exTax;
     subtotalTax += tax;
@@ -162,7 +145,7 @@ export async function placeOrder(
     }
   }
   // Shipping is always specified as inc-tax amount
-  const shippingCalc = calcTax(shippingIncTax, true);
+  const shippingCalc = gstSplit(shippingIncTax, true);
   shippingExTax = shippingCalc.exTax;
   shippingTax = shippingCalc.tax;
 
@@ -232,8 +215,8 @@ export async function placeOrder(
       ? parseFloat(item.sale_price)
       : parseFloat(item.list_price);
     const linePrice = unitPrice * item.quantity;
-    const unitCalc = calcTax(unitPrice, pricesIncludeTax);
-    const lineCalc = calcTax(linePrice, pricesIncludeTax);
+    const unitCalc = gstSplit(unitPrice, pricesIncludeTax);
+    const lineCalc = gstSplit(linePrice, pricesIncludeTax);
 
     return {
       productId: item.product_id,
