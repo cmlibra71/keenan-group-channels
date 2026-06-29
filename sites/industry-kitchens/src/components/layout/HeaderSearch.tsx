@@ -204,12 +204,9 @@ export function HeaderSearch({
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p
-                          className="truncate text-sm font-medium text-zinc-900"
-                          dangerouslySetInnerHTML={{
-                            __html: hit._formatted?.name || hit.name,
-                          }}
-                        />
+                        <p className="truncate text-sm font-medium text-zinc-900">
+                          {hit.name}
+                        </p>
                         {(hit.brandName || hit.sku) && (
                           <p className="truncate text-xs text-zinc-500">
                             {hit.brandName}

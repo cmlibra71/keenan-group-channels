@@ -20,6 +20,11 @@ RUN npm install
 # Build TypeScript
 RUN npm run build
 
+# Drop root: run as the unprivileged `node` user baked into the base image.
+# Ownership is handed over after the build steps (which need root for npm).
+RUN chown -R node:node /app
+USER node
+
 # Default: run the specified script
 ENV SCRIPT=${SCRIPT}
 CMD ["sh", "-c", "npx tsx $SCRIPT"]

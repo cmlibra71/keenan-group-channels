@@ -2,14 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getCacheKey } from "@keenan/services/utils";
+import { isAllowedImageUrl } from "@/lib/image-origin";
 
 const S3_BUCKET = process.env.IMAGE_CACHE_S3_BUCKET || "keenan-group-images";
 const S3_REGION = process.env.IMAGE_CACHE_S3_REGION || "ap-southeast-2";
-const ALLOWED_ORIGINS = [
-  "keenan-group-images.s3.ap-southeast-2.amazonaws.com",
-  "keenan-portal-assets.s3.ap-southeast-2.amazonaws.com",
-];
-
 const s3 = new S3Client({ region: S3_REGION });
 
 export async function GET(request: NextRequest) {
@@ -22,14 +18,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing url parameter" }, { status: 400 });
   }
 
-  // Only allow images from our S3 bucket
-  try {
-    const parsed = new URL(url);
-    if (!ALLOWED_ORIGINS.includes(parsed.hostname)) {
-      return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
-    }
-  } catch {
-    return NextResponse.json({ error: "Invalid url" }, { status: 400 });
+  // SSRF guard: only fetch https images from our own S3 buckets.
+  if (!isAllowedImageUrl(url)) {
+    return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
   }
 
   const cacheKey = getCacheKey(url, width, quality);

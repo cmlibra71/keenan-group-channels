@@ -13,7 +13,7 @@
 
 import { readdirSync, statSync, existsSync } from "fs";
 import { join } from "path";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import postgres from "postgres";
 
 const ROOT = new URL("..", import.meta.url).pathname;
@@ -72,10 +72,25 @@ async function main() {
 
       console.log(`  [new]    ${siteName} (channel ${row.channel_id}, domain: ${domain})`);
 
+      // Validate the DB-derived domain before it reaches a child process.
+      if (!isValidHostname(domain)) {
+        console.error(`  Skipping ${siteName}: invalid domain ${JSON.stringify(domain)}`);
+        continue;
+      }
+
       if (!dryRun) {
         try {
-          execSync(
-            `node ${join(ROOT, "orchestrator/new-site.mjs")} ${siteName} --channel-id=${row.channel_id} --domain=${domain} --db-url="${dbUrl}"`,
+          // execFileSync with an args array — no shell, so DB-derived values
+          // can never break out into shell metacharacters.
+          execFileSync(
+            "node",
+            [
+              join(ROOT, "orchestrator/new-site.mjs"),
+              siteName,
+              `--channel-id=${row.channel_id}`,
+              `--domain=${domain}`,
+              `--db-url=${dbUrl}`,
+            ],
             { stdio: "inherit" }
           );
         } catch (err) {
@@ -90,6 +105,17 @@ async function main() {
   } finally {
     await sql.end();
   }
+}
+
+// RFC-1123-ish hostname check (labels of a-z0-9/hyphen, dot-separated). Also
+// accepts the "<site>.localhost" fallback used when a channel has no site URL.
+function isValidHostname(host) {
+  return (
+    typeof host === "string" &&
+    host.length > 0 &&
+    host.length <= 253 &&
+    /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i.test(host)
+  );
 }
 
 function slugify(name) {

@@ -17,6 +17,23 @@ import {
 
 const BATCH_CONCURRENCY = 5;
 
+// SSRF guard: image URLs come from the commerce DB and are passed to a
+// server-side fetch inside generateOptimizedSizes(). Only process https URLs
+// served from our own S3 buckets. Mirrors src/lib/image-origin.ts in the sites.
+const ALLOWED_IMAGE_ORIGINS = [
+  "keenan-group-images.s3.ap-southeast-2.amazonaws.com",
+  "keenan-portal-assets.s3.ap-southeast-2.amazonaws.com",
+];
+
+function isAllowedImageUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && ALLOWED_IMAGE_ORIGINS.includes(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 async function main() {
   const dbUrl = process.env.COMMERCE_DATABASE_URL;
   if (!dbUrl) {
@@ -44,10 +61,15 @@ async function main() {
     ...categoryImages.map((r) => r.image_url),
   ].filter(Boolean);
 
-  const uniqueUrls = [...new Set(allUrls)];
+  const allUnique = [...new Set(allUrls)];
+  const uniqueUrls = allUnique.filter(isAllowedImageUrl);
+  const rejected = allUnique.length - uniqueUrls.length;
   console.log(
     `Found ${uniqueUrls.length} unique image URLs (${productImages.length} product, ${categoryImages.length} category)`
   );
+  if (rejected > 0) {
+    console.warn(`Skipped ${rejected} URL(s) outside the allowed image origins.`);
+  }
 
   if (uniqueUrls.length === 0) {
     console.log("No images to process.");

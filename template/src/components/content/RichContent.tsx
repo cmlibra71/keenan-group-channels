@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 
 /**
  * Handlebar command registry.
@@ -153,7 +154,7 @@ export function RichContent({
       <div className={className}>
         {parts.map((part, i) => {
           if (part.type === "html") {
-            return <div key={i} dangerouslySetInnerHTML={{ __html: closeOpenTags(part.content) }} />;
+            return <div key={i} dangerouslySetInnerHTML={{ __html: sanitizeHtml(closeOpenTags(part.content)) }} />;
           }
           const Command = commands[part.commandType];
           return Command ? <Command key={i} attrs={part.attrs} /> : null;
@@ -187,7 +188,7 @@ function ReadMoreContent({
     <div className={className}>
       {beforeParts.map((part, i) => {
         if (part.type === "html") {
-          return <div key={i} dangerouslySetInnerHTML={{ __html: closeOpenTags(part.content) }} />;
+          return <div key={i} dangerouslySetInnerHTML={{ __html: sanitizeHtml(closeOpenTags(part.content)) }} />;
         }
         const Command = commands[part.commandType];
         return Command ? <Command key={i} attrs={part.attrs} /> : null;
@@ -202,7 +203,7 @@ function ReadMoreContent({
 
       {expanded && afterParts.map((part, i) => {
         if (part.type === "html") {
-          return <div key={`after-${i}`} dangerouslySetInnerHTML={{ __html: closeOpenTags(part.content) }} />;
+          return <div key={`after-${i}`} dangerouslySetInnerHTML={{ __html: sanitizeHtml(closeOpenTags(part.content)) }} />;
         }
         const Command = commands[part.commandType];
         return Command ? <Command key={`after-${i}`} attrs={part.attrs} /> : null;

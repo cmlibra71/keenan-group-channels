@@ -165,13 +165,14 @@ export async function createSubscription(planId: number): Promise<{
 }
 
 // Staff/QA test card: entering this number on the subscribe form creates an
-// active membership WITHOUT a Stripe charge. The value is compared server-side
-// only (never shipped to the client bundle); override or rotate via the
-// MEMBERSHIP_TEST_CARD env var, or change this constant. Remove before relying
-// on real paid signups in production.
-// Entered value + this value both have spaces/dashes stripped before comparison,
-// so "4242 4242 4242 4242" and "4242424242424242" both work.
-const TEST_CARD_DEFAULT = "4242424242424242";
+// active membership WITHOUT a Stripe charge. DISABLED by default — there is NO
+// built-in card value: the feature is inert unless MEMBERSHIP_TEST_CARD is
+// explicitly set, and it is ALWAYS disabled when NODE_ENV=production (so an
+// unset/leaked env var can never grant free paid membership in prod). The value
+// is compared server-side only (never shipped to the client bundle). Mirrors the
+// inert-unless-provisioned pattern in src/app/api/test/login/route.ts.
+// Entered value + the configured value both have spaces/dashes stripped before
+// comparison, so "4242 4242 4242 4242" and "4242424242424242" both match.
 
 /**
  * If `cardValue` matches the configured test card, create + activate a
@@ -185,7 +186,11 @@ export async function attemptTestMembership(
   const session = await getSession();
   if (!session) return { created: false, error: "Not authenticated" };
 
-  const magic = (process.env.MEMBERSHIP_TEST_CARD ?? TEST_CARD_DEFAULT).replace(/[\s-]/g, "");
+  // Inert unless explicitly provisioned, and never active in production.
+  if (process.env.NODE_ENV === "production") return { created: false };
+  const configured = process.env.MEMBERSHIP_TEST_CARD;
+  if (!configured) return { created: false };
+  const magic = configured.replace(/[\s-]/g, "");
   const entered = (cardValue || "").replace(/[\s-]/g, "");
   if (!magic || entered !== magic) return { created: false }; // not the test card
 

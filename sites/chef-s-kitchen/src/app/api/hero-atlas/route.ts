@@ -3,6 +3,7 @@ import crypto from "crypto";
 import sharp from "sharp";
 import { S3Client, GetObjectCommand, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getProducts } from "@/lib/store";
+import { isAllowedImageUrl } from "@/lib/image-origin";
 
 const S3_BUCKET = process.env.IMAGE_CACHE_S3_BUCKET || "keenan-group-images";
 const S3_REGION = process.env.IMAGE_CACHE_S3_REGION || "ap-southeast-2";
@@ -67,6 +68,8 @@ export async function GET(request: NextRequest) {
   // 3. Fetch all product images in parallel
   const imageBuffers = await Promise.all(
     imageUrls.map(async (url: string): Promise<Buffer | null> => {
+      // SSRF guard: image URLs come from the DB, only fetch allowlisted origins.
+      if (!isAllowedImageUrl(url)) return null;
       try {
         const res = await fetch(url);
         if (!res.ok) return null;

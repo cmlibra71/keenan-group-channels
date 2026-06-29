@@ -235,12 +235,9 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
 
                 {/* Product Info */}
                 <div className="flex-1 min-w-0">
-                  <p
-                    className="text-sm font-medium text-zinc-900 truncate"
-                    dangerouslySetInnerHTML={{
-                      __html: hit._formatted?.name || hit.name,
-                    }}
-                  />
+                  <p className="text-sm font-medium text-zinc-900 truncate">
+                    {hit.name}
+                  </p>
                   <p className="text-xs text-zinc-500 truncate">
                     {hit.brandName && <span>{hit.brandName}</span>}
                     {hit.brandName && hit.sku && <span> &middot; </span>}

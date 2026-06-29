@@ -40,15 +40,16 @@ case "${1:-}" in
       echo "  Warning: Not running on EC2, skipping association."
     fi
 
-    # Save to map
-    python3 -c "
-import json
-with open('$IP_MAP', 'r') as f:
+    # Save to map (values passed via env, never interpolated into the source)
+    IP_MAP="$IP_MAP" SITE_NAME="$SITE_NAME" ALLOC_ID="$ALLOC_ID" PUBLIC_IP="$PUBLIC_IP" python3 -c '
+import os, json
+ip_map = os.environ["IP_MAP"]
+with open(ip_map, "r") as f:
     data = json.load(f)
-data['$SITE_NAME'] = {'allocation_id': '$ALLOC_ID', 'public_ip': '$PUBLIC_IP'}
-with open('$IP_MAP', 'w') as f:
+data[os.environ["SITE_NAME"]] = {"allocation_id": os.environ["ALLOC_ID"], "public_ip": os.environ["PUBLIC_IP"]}
+with open(ip_map, "w") as f:
     json.dump(data, f, indent=2)
-"
+'
     echo "  Saved to $IP_MAP"
     echo ""
     echo "  Point your DNS for $SITE_NAME to: $PUBLIC_IP"
@@ -58,12 +59,12 @@ with open('$IP_MAP', 'w') as f:
     SITE_NAME="${2:?Site name required}"
     echo "Releasing Elastic IP for $SITE_NAME..."
 
-    ALLOC_ID=$(python3 -c "
-import json
-with open('$IP_MAP', 'r') as f:
+    ALLOC_ID=$(IP_MAP="$IP_MAP" SITE_NAME="$SITE_NAME" python3 -c '
+import os, json
+with open(os.environ["IP_MAP"], "r") as f:
     data = json.load(f)
-print(data.get('$SITE_NAME', {}).get('allocation_id', ''))
-")
+print(data.get(os.environ["SITE_NAME"], {}).get("allocation_id", ""))
+')
 
     if [ -z "$ALLOC_ID" ]; then
       echo "  No allocation found for $SITE_NAME"
@@ -74,29 +75,30 @@ print(data.get('$SITE_NAME', {}).get('allocation_id', ''))
     aws ec2 release-address --allocation-id "$ALLOC_ID" 2>/dev/null || true
     echo "  Released: $ALLOC_ID"
 
-    # Remove from map
-    python3 -c "
-import json
-with open('$IP_MAP', 'r') as f:
+    # Remove from map (values passed via env, never interpolated into the source)
+    IP_MAP="$IP_MAP" SITE_NAME="$SITE_NAME" python3 -c '
+import os, json
+ip_map = os.environ["IP_MAP"]
+with open(ip_map, "r") as f:
     data = json.load(f)
-data.pop('$SITE_NAME', None)
-with open('$IP_MAP', 'w') as f:
+data.pop(os.environ["SITE_NAME"], None)
+with open(ip_map, "w") as f:
     json.dump(data, f, indent=2)
-"
+'
     ;;
 
   list)
     echo "IP Allocations:"
-    python3 -c "
-import json
-with open('$IP_MAP', 'r') as f:
+    IP_MAP="$IP_MAP" python3 -c '
+import os, json
+with open(os.environ["IP_MAP"], "r") as f:
     data = json.load(f)
 if not data:
-    print('  (none - all sites sharing host IP)')
+    print("  (none - all sites sharing host IP)")
 else:
     for site, info in data.items():
-        print(f'  {site}: {info[\"public_ip\"]} ({info[\"allocation_id\"]})')
-"
+        print("  " + site + ": " + info["public_ip"] + " (" + info["allocation_id"] + ")")
+'
     ;;
 
   *)
