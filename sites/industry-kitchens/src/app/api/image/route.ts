@@ -45,7 +45,14 @@ export async function GET(request: NextRequest) {
   // 2. Fetch original image
   let originalBuffer: Buffer;
   try {
-    const res = await fetch(url);
+    // Do NOT follow redirects: an allowlisted origin could 30x to an internal /
+    // unlisted host, defeating the SSRF allowlist above. undici surfaces a manual
+    // redirect as an "opaqueredirect" response (status 0); other runtimes expose
+    // the 30x status directly — refuse both.
+    const res = await fetch(url, { redirect: "manual" });
+    if (res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400)) {
+      return NextResponse.json({ error: "Redirect not allowed" }, { status: 502 });
+    }
     if (!res.ok) {
       return NextResponse.json({ error: "Failed to fetch original image" }, { status: 502 });
     }

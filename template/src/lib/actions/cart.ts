@@ -188,17 +188,25 @@ export async function updateCartItem(itemId: number, quantity: number) {
   // Re-price the line for the new quantity so bulk tiers are applied/removed as
   // the quantity crosses a break (the stored salePrice carries the effective price).
   const full = await cartService.getWithItems(cart.id);
+  // getWithItems returns snake_case rows — read product_id / variant_id (reading
+  // the camelCase keys yielded undefined, so re-pricing threw on every change).
   const item = full?.items.find((i: { id: number }) => i.id === itemId) as
-    | { id: number; productId: number; variantId: number | null }
+    | { id: number; product_id: number; variant_id: number | null }
     | undefined;
 
   if (item) {
-    const pricing = await resolveItemPricing(item.productId, item.variantId, quantity);
-    await cartItemService.updateForParent(cart.id, itemId, {
-      quantity,
-      listPrice: pricing.listPrice,
-      salePrice: pricing.salePrice,
-    });
+    // Re-pricing can throw (product lookup); never let it block the quantity
+    // change — fall back to updating just the quantity, matching addToCart.
+    try {
+      const pricing = await resolveItemPricing(item.product_id, item.variant_id, quantity);
+      await cartItemService.updateForParent(cart.id, itemId, {
+        quantity,
+        listPrice: pricing.listPrice,
+        salePrice: pricing.salePrice,
+      });
+    } catch {
+      await cartItemService.updateForParent(cart.id, itemId, { quantity });
+    }
   } else {
     await cartItemService.updateForParent(cart.id, itemId, { quantity });
   }

@@ -23,6 +23,7 @@ import {
   accountService,
   orderService,
   orderItemService,
+  orderShippingAddressService,
   subscriptionPlanService,
   subscriptionService,
   subscriptionEventService,
@@ -41,14 +42,13 @@ import {
   blogService,
 } from "@keenan/services";
 import { googlePlacesService } from "@keenan/services/integrations";
+import { CHANNEL_ID } from "./channel";
 
 // Auto-initialize DB connection on first import
 const dbUrl = process.env.COMMERCE_DATABASE_URL;
 if (dbUrl) {
   initCommerceDb(dbUrl, { maxConnections: 5 });
 }
-
-const CHANNEL_ID = parseInt(process.env.CHANNEL_ID || "1", 10);
 
 // ============================================================================
 // Shared channel-store factory — all channel-scoped, cache-wrapped accessors
@@ -432,6 +432,7 @@ export {
   customerAddressService,
   orderService,
   orderItemService,
+  orderShippingAddressService,
   subscriptionPlanService,
   subscriptionService,
   subscriptionEventService,

@@ -3,6 +3,7 @@
 import { useActionState, useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { placeOrder, confirmStripePayment } from "@/lib/actions/checkout";
+import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
 import { Price } from "@/components/ui/Price";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
 
@@ -236,7 +237,7 @@ export function CheckoutForm({
       }
 
       // Don't calculate if free shipping applies
-      if (freeShippingEnabled && isMember && subtotal >= freeShippingThreshold) {
+      if (qualifiesForFreeDelivery({ enabled: !!freeShippingEnabled, isMember: !!isMember, amount: subtotal, threshold: freeShippingThreshold })) {
         setShippingCost(0);
         return;
       }
@@ -636,7 +637,7 @@ export function CheckoutForm({
               </div>
               <div className="flex justify-between text-sm mt-2">
                 <span className="text-zinc-500">Shipping</span>
-                {freeShippingEnabled && isMember && subtotal >= freeShippingThreshold ? (
+                {qualifiesForFreeDelivery({ enabled: !!freeShippingEnabled, isMember: !!isMember, amount: subtotal, threshold: freeShippingThreshold }) ? (
                   <span className="font-medium text-green-600">FREE</span>
                 ) : shippingLoading ? (
                   <span className="font-medium text-zinc-400 animate-pulse">Calculating...</span>
@@ -652,7 +653,6 @@ export function CheckoutForm({
                   <span className="font-medium text-zinc-400">--</span>
                 )}
               </div>
-              <input type="hidden" name="shippingCost" value={shippingCost ?? "0"} />
               <div className="flex justify-between text-base font-semibold mt-4 pt-4 border-t border-zinc-200">
                 <span>Total</span>
                 <span><Price amount={(pricesIncludeTax ? subtotal : subtotal + gstAmount) + (shippingCost ?? 0)} /></span>

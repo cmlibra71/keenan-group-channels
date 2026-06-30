@@ -1,8 +1,8 @@
 import { redirect, notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getActiveSubscription, subscriptionPlanService, storeSettingsService, CHANNEL_ID, wantStripeTestMode } from "@/lib/store";
+import { getFeatureFlag, getActiveSubscription, subscriptionPlanService, CHANNEL_ID } from "@/lib/store";
 import { SubscribeForm } from "./SubscribeForm";
-import { selectGateway } from "@keenan/services";
+import { resolveStripeGateway } from "@/lib/payments/gateway";
 
 export const metadata = {
   title: "Subscribe",
@@ -34,16 +34,8 @@ export default async function SubscribePage({
   // place the cart checkout reads it from). Comment in checkout/page.tsx:
   // "All channels share one Stripe account; segmentation happens via metadata."
   // wantTestMode also drives the TEST MODE banner shown above the card field.
-  const wantTestMode = await wantStripeTestMode();
-  let stripePublishableKey: string | undefined;
-  try {
-    const gatewaysSetting = await storeSettingsService.getByKey("payment_gateways");
-    const gateways = (gatewaysSetting.setting_value as { provider: string; credentials: Record<string, string>; enabled?: boolean; testMode?: boolean }[]) || [];
-    // Match the gateway entry tagged for the current environment: testMode=true
-    // in dev, testMode=false in prod. Lets both modes coexist in the DB row.
-    const stripeGateway = selectGateway(gateways.filter((g) => g.provider === "stripe" && g.enabled !== false), wantTestMode);
-    stripePublishableKey = stripeGateway?.credentials?.publishable_key;
-  } catch {}
+  const { gateway: stripeGateway, wantTestMode } = await resolveStripeGateway();
+  const stripePublishableKey: string | undefined = stripeGateway?.credentials?.publishable_key;
 
   if (!stripePublishableKey || !metafields?.stripe_price_id) {
     return (

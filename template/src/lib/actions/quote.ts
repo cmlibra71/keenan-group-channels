@@ -154,7 +154,7 @@ export async function acceptQuote(quoteId: number) {
   const session = await getSession();
   if (!session?.customerId) return { error: "Please sign in." };
   const q = (await quoteService.getWithItems(quoteId)) as (QuoteRow & { status?: string }) | null;
-  if (!q || q.customer_id !== session.customerId) return { error: "Quote not found." };
+  if (!q || q.customer_id !== session.customerId || q.channel_id !== CHANNEL_ID) return { error: "Quote not found." };
   if (!["quote_available", "open_change_request"].includes(String(q.status))) {
     return { error: "This quote can't be accepted yet." };
   }
@@ -171,7 +171,7 @@ export async function duplicateQuote(quoteId: number) {
   const q = (await quoteService.getWithItems(quoteId)) as
     | (QuoteRow & { email?: string | null; items?: Array<Record<string, unknown>> })
     | null;
-  if (!q || q.customer_id !== session.customerId) return { error: "Quote not found." };
+  if (!q || q.customer_id !== session.customerId || q.channel_id !== CHANNEL_ID) return { error: "Quote not found." };
   const copy = (await quoteService.create({
     channelId: CHANNEL_ID,
     customerId: session.customerId,

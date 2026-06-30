@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { CHANNEL_ID } from "./channel";
 
 const SESSION_COOKIE = "session";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
@@ -37,7 +38,9 @@ function fromBase64Url(str: string): ArrayBuffer {
 
 export async function signToken(payload: { customerId: number; email: string }): Promise<string> {
   const key = await getKey();
-  const data = JSON.stringify({ ...payload, exp: Date.now() + SESSION_MAX_AGE * 1000 });
+  // Bind the token to THIS channel so a session minted on one storefront can't be
+  // replayed against another (the cookie name is shared across channels).
+  const data = JSON.stringify({ ...payload, channelId: CHANNEL_ID, exp: Date.now() + SESSION_MAX_AGE * 1000 });
   const dataBytes = encoder.encode(data);
   const sig = await crypto.subtle.sign("HMAC", key, dataBytes.buffer as ArrayBuffer);
   const dataB64 = toBase64Url(dataBytes.buffer as ArrayBuffer);
@@ -59,6 +62,10 @@ export async function verifyToken(token: string): Promise<{ customerId: number; 
 
     const payload = JSON.parse(new TextDecoder().decode(dataBuf));
     if (payload.exp < Date.now()) return null;
+    // Reject a validly-signed token issued for a different channel (treat as
+    // logged-out). Legacy tokens minted before channel-binding carry no
+    // channelId; require a re-login rather than silently honouring them.
+    if (payload.channelId !== CHANNEL_ID) return null;
 
     return { customerId: payload.customerId, email: payload.email };
   } catch {

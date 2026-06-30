@@ -80,7 +80,9 @@ export async function register(
 
   const existing = await customerService.findByEmailAndChannel(email, CHANNEL_ID);
   if (existing) {
-    return { error: "An account with this email already exists." };
+    // Neutral response — do NOT confirm that an account with this email exists
+    // (account enumeration). Mirrors login's generic error.
+    return { error: "We couldn't complete your registration. If you already have an account, please sign in." };
   }
 
   const passwordHash = await hashPassword(password);
@@ -92,6 +94,12 @@ export async function register(
     firstName,
     lastName,
     isActive: true,
+    // Mark self-service registrations as unverified. Checkout refuses to grant
+    // B2B net terms (matched only by email string) to a self-registered customer
+    // whose email ownership was never verified — otherwise anyone could register
+    // with a B2B account's email and buy on invoice. Staff/Zoey-imported
+    // customers carry no such marker and keep their terms.
+    metafields: { self_registered: true, email_verified: false },
   })) as { id: number; email: string };
 
   await setSession(customer.id, customer.email);

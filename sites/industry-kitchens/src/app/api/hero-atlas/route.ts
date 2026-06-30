@@ -4,10 +4,10 @@ import sharp from "sharp";
 import { S3Client, GetObjectCommand, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getProducts } from "@/lib/store";
 import { isAllowedImageUrl } from "@/lib/image-origin";
+import { CHANNEL_ID } from "@/lib/channel";
 
 const S3_BUCKET = process.env.IMAGE_CACHE_S3_BUCKET || "keenan-group-images";
 const S3_REGION = process.env.IMAGE_CACHE_S3_REGION || "ap-southeast-2";
-const CHANNEL_ID = process.env.CHANNEL_ID || "1";
 
 const ATLAS_SIZE = 1024;
 const GRID = 5; // 5x5 = 25 slots

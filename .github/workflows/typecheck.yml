@@ -16,6 +16,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Fail fast on shared-module drift (channel-agnostic files that must stay
+      # identical to template/ across every site). Needs no deps — pure file diff.
+      - name: Check shared-module sync (template -> sites)
+        run: node orchestrator/check-shared-sync.mjs
+
       - name: Checkout @keenan/services
         uses: actions/checkout@v4
         with:
