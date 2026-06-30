@@ -652,7 +652,6 @@ export function CheckoutForm({
                   <span className="font-medium text-steel-400">--</span>
                 )}
               </div>
-              <input type="hidden" name="shippingCost" value={shippingCost ?? "0"} />
               <div className="flex justify-between text-base font-semibold mt-4 pt-4 border-t border-steel-200">
                 <span>Total</span>
                 <span><Price amount={(pricesIncludeTax ? subtotal : subtotal + gstAmount) + (shippingCost ?? 0)} /></span>

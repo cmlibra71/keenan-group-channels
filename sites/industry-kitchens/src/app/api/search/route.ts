@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchProducts } from "@keenan/services/search";
 import { shouldSuppressCatalogSalePrice } from "@/lib/store";
-
-const CHANNEL_ID = parseInt(process.env.CHANNEL_ID || "1", 10);
+import { CHANNEL_ID } from "@/lib/channel";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;

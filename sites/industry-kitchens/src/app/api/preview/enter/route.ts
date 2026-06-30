@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { draftMode } from "next/headers";
 import { redirect } from "next/navigation";
 import { verifyPreviewToken } from "@keenan/services";
+import { CHANNEL_ID } from "@/lib/channel";
 
 /**
  * Enter Next draft mode for a CMS preview. The portal mints a short-lived signed
@@ -16,8 +17,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Invalid or expired token" }, { status: 401 });
   }
 
-  const channelId = parseInt(process.env.CHANNEL_ID || "1", 10);
-  if (claims.channelId !== channelId) {
+  if (claims.channelId !== CHANNEL_ID) {
     return NextResponse.json({ error: "Wrong channel" }, { status: 403 });
   }
 
