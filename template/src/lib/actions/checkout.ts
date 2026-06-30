@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { cartService, orderService, orderItemService, CHANNEL_ID, getEffectivePrice, productVariantService, channelSettingsService, getCheckoutSettings, paymentService, accountService } from "@/lib/store";
+import { cartService, orderService, orderItemService, orderShippingAddressService, CHANNEL_ID, getEffectivePrice, productVariantService, channelSettingsService, getCheckoutSettings, paymentService, accountService } from "@/lib/store";
 import { getFeatureFlag, getActiveSubscription, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
@@ -241,6 +241,37 @@ export async function placeOrder(
     // Compensate so we never leave an order with no line items.
     await orderService.delete(order.id).catch(() => {});
     return { error: err instanceof Error ? err.message : "We couldn't complete your order. Please try again." };
+  }
+
+  // Persist the delivery address as an order_shipping_addresses row. The checkout
+  // form collects a single address; without this insert the backoffice order detail
+  // (and the freight engine) see no shipping address for card/bank/net-terms orders —
+  // only quote-converted and Zoey-synced orders were getting one. Runs before the
+  // Stripe early-return so EVERY payment method records shipping. Best-effort: a
+  // failure here must not strand a paid order, so we log and continue.
+  try {
+    await orderShippingAddressService.createForParent(order.id, {
+      first_name: firstName,
+      last_name: lastName,
+      email,
+      phone: (formData.get("phone") as string)?.trim() || null,
+      company: (formData.get("company") as string)?.trim() || null,
+      address1,
+      address2: billingAddress.address2 || null,
+      city,
+      state_or_province: state || null,
+      postal_code: postalCode,
+      country,
+      country_code: country,
+      shipping_method: shippingIncTax > 0 ? "Storefront delivery" : "Free delivery",
+      base_cost: String(shippingExTax),
+      cost_ex_tax: String(shippingExTax),
+      cost_inc_tax: String(shippingIncTax),
+      cost_tax: String(shippingTax),
+      items_total: totalItems,
+    });
+  } catch (e) {
+    console.error("[placeOrder] shipping address insert failed (non-fatal):", e);
   }
 
   // For Stripe: create PaymentIntent and return client secret for browser confirmation.
