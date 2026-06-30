@@ -7,20 +7,16 @@ import {
   subscriptionPlanService,
   subscriptionService,
   customerService,
-  storeSettingsService,
 } from "@/lib/store";
-import { StripeSubscriptionProvider, wantsStripeTestMode, selectGateway } from "@keenan/services";
+import { StripeSubscriptionProvider, wantsStripeTestMode } from "@keenan/services";
+import { resolveStripeGateway } from "@/lib/payments/gateway";
 
 async function getStripeProvider(): Promise<StripeSubscriptionProvider> {
-  const settings = await storeSettingsService.getByKey("payment_gateways");
-  const gateways = (settings.setting_value as { provider: string; credentials: Record<string, string>; enabled?: boolean; testMode?: boolean }[]) || [];
-  // Test mode in local dev OR when the channel's "Payments test mode" toggle is on.
-    const wantTestMode = await wantsStripeTestMode(CHANNEL_ID);
-  const stripe = selectGateway(gateways.filter((g) => g.provider === "stripe" && g.enabled !== false), wantTestMode);
-  if (!stripe?.credentials?.secret_key) {
+  const { gateway } = await resolveStripeGateway();
+  if (!gateway?.credentials?.secret_key) {
     throw new Error("Stripe is not configured. Set up the global Stripe gateway in the portal under Settings > Payments.");
   }
-  return new StripeSubscriptionProvider(stripe.credentials.secret_key);
+  return new StripeSubscriptionProvider(gateway.credentials.secret_key);
 }
 
 /**

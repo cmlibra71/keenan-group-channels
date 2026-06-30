@@ -86,6 +86,8 @@ node sites/chef-s-kitchen/tests/e2e/run.mjs --smoke-only --base https://chefsdep
 - `store.ts` auto-initializes the DB connection and scopes all queries to `CHANNEL_ID`
 - DB pool is kept small (5 connections) per site to avoid exhausting PostgreSQL
 - New files created in `template/` must be copied to all sites in `sites/`
+- Channel-agnostic shared logic (pure helpers, API routes, shared actions) must stay **byte-identical** to `template/` across every site. The set is declared in `orchestrator/shared-modules.json` and enforced by `npm run sync:check` (also a CI gate). Editing a shared file in `template/` means copying it to every site; the check tells you which drifted. Everything NOT in the manifest (design, layout, homepage, `store.ts` config, `blocks/registry.tsx`) is intentionally per-channel and free to diverge.
+- Pure checkout/payment logic lives behind small seams under `template/src/lib/checkout/` (`order-draft`, `shipping`, `net-terms`) and `template/src/lib/payments/` (`gateway`, `stripe-gateways`), each with co-located `*.test.ts` runnable via `node --test`. `placeOrder` is a thin imperative shell over these; don't re-inline tax/shipping/gateway/net-terms logic at call sites.
 
 ## Commerce Database Migrations
 

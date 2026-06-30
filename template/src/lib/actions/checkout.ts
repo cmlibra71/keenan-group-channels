@@ -1,14 +1,19 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { cartService, cartItemService, customerService, orderService, orderItemService, orderShippingAddressService, CHANNEL_ID, getEffectivePrice, productVariantService, channelSettingsService, getCheckoutSettings, paymentService, accountService } from "@/lib/store";
+import { cartService, cartItemService, orderService, orderItemService, orderShippingAddressService, CHANNEL_ID, getEffectivePrice, productVariantService, channelSettingsService, getCheckoutSettings, paymentService } from "@/lib/store";
 import { getFeatureFlag, getActiveSubscription, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
-import { sendOrderConfirmationEmail, wantsStripeTestMode, gstSplit } from "@keenan/services";
+import { sendOrderConfirmationEmail, wantsStripeTestMode } from "@keenan/services";
+import { buildLineItems, withShipping, determinePaymentStatus } from "@/lib/checkout/order-draft";
+import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
+import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 
-// GST split (ex/tax/inc) comes from @keenan/services `gstSplit` — the single
-// source of truth for tax math, shared with the pricing engine and cart totals.
+// Pricing/tax/payment-status computation lives in the pure order-draft module
+// (lib/checkout/order-draft.ts), which delegates GST math to @keenan/services
+// `gstSplit`. placeOrder is the imperative shell: it fetches, runs the impure
+// shipping-rate lookup, then persists and fires side-effects.
 
 type PlaceOrderResult = {
   error?: string;
@@ -115,33 +120,30 @@ export async function placeOrder(
     // Default: prices are ex-tax (GST added on top)
   }
 
-  // Calculate totals with GST
-  let subtotalIncTax = 0;
-  let subtotalExTax = 0;
-  let subtotalTax = 0;
-
-  for (const item of fullCart.items) {
-    const unitPrice = item.sale_price ? parseFloat(item.sale_price) : parseFloat(item.list_price);
-    const linePrice = unitPrice * item.quantity;
-    const { exTax, tax, incTax } = gstSplit(linePrice, pricesIncludeTax);
-    subtotalIncTax += incTax;
-    subtotalExTax += exTax;
-    subtotalTax += tax;
-  }
-
-  const totalItems = fullCart.items.reduce((sum, i) => sum + i.quantity, 0);
+  // Calculate line items + subtotal (pure; GST math delegated to gstSplit).
+  const { subtotal, itemsTotal: totalItems, lineItems } = buildLineItems(
+    fullCart.items,
+    pricesIncludeTax
+  );
+  const subtotalIncTax = subtotal.incTax;
+  const subtotalExTax = subtotal.exTax;
 
   // Shipping calculation
   let shippingIncTax = 0;
-  let shippingExTax = 0;
-  let shippingTax = 0;
   const checkoutSettings = await getCheckoutSettings();
   const isMember = !!(session && await getActiveSubscription(session.customerId));
 
   // Shipping is quoted to the customer on the EX-tax subtotal (checkout page +
   // CheckoutForm pass cart.cartAmount), so the order must use the same basis or
   // the charged shipping diverges from the quote at tier/cap boundaries.
-  if (checkoutSettings.freeShippingEnabled && isMember && subtotalExTax >= checkoutSettings.freeShippingThreshold) {
+  if (
+    qualifiesForFreeDelivery({
+      enabled: checkoutSettings.freeShippingEnabled,
+      isMember,
+      amount: subtotalExTax,
+      threshold: checkoutSettings.freeShippingThreshold,
+    })
+  ) {
     // Free delivery for members over threshold
     shippingIncTax = 0;
   } else {
@@ -157,56 +159,26 @@ export async function placeOrder(
       shippingIncTax = 0;
     }
   }
-  // Shipping is always specified as inc-tax amount
-  const shippingCalc = gstSplit(shippingIncTax, true);
-  shippingExTax = shippingCalc.exTax;
-  shippingTax = shippingCalc.tax;
+  // Shipping is always specified as inc-tax amount; roll it into the order total.
+  const { shipping, total } = withShipping(subtotal, shippingIncTax);
+  const shippingExTax = shipping.exTax;
+  const shippingTax = shipping.tax;
+  const totalIncTax = total.incTax;
+  const totalExTax = total.exTax;
+  const totalTax = total.tax;
 
-  const totalIncTax = subtotalIncTax + shippingIncTax;
-  const totalExTax = subtotalExTax + shippingExTax;
-  const totalTax = subtotalTax + shippingTax;
-
-  // Net Terms is account-gated. Resolve the logged-in customer's B2B account (by
-  // email — storefront customers and B2B accounts are linked only by email) and
-  // reject a net_terms submission from anyone not entitled. The UI hides the
-  // option, but never trust the client. Reuse the account for the order's
-  // accountId + the invoice term length. Guests (no session) never qualify.
-  let netTerms = session?.email
-    ? await accountService.resolveNetTermsForEmail(session.email)
-    : null;
-  // Net-terms entitlement is matched on the email STRING only, and self-service
-  // registration never verifies that the registrant actually owns that inbox.
-  // Refuse to auto-grant invoice terms to a self-registered, unverified customer
-  // — otherwise anyone could register with a known B2B account's email and buy on
-  // net terms. Customers created outside self-service (staff / Zoey imports)
-  // carry no self_registered marker and keep their terms. If we can't confirm the
-  // customer is trusted, fail closed.
-  if (netTerms && session?.customerId) {
-    try {
-      const customer = (await customerService.getById(session.customerId)) as
-        | { metafields?: Record<string, unknown> | null }
-        | null;
-      const meta = (customer?.metafields ?? {}) as Record<string, unknown>;
-      if (meta.self_registered === true && meta.email_verified !== true) {
-        netTerms = null;
-      }
-    } catch {
-      netTerms = null;
-    }
-  }
+  // Net Terms is account-gated. Resolve the logged-in customer's entitlement (the
+  // SAME decision the checkout page uses to show the option, incl. the
+  // self-registered/unverified fail-closed rule) and reject a net_terms submission
+  // from anyone not entitled — never trust the client. Reuse the account for the
+  // order's accountId + the invoice term length. Guests (no session) never qualify.
+  const netTerms = await resolveNetTermsEntitlement(session);
   if (paymentMethod === "net_terms" && !netTerms) {
     return { error: "Net terms aren't available on your account. Please pay by card or bank transfer." };
   }
 
   // Determine payment status based on payment method
-  let paymentStatus = "pending";
-  if (paymentMethod === "stripe") {
-    paymentStatus = "awaiting_payment";
-  } else if (paymentMethod === "bank_transfer") {
-    paymentStatus = "pending_payment";
-  } else if (paymentMethod === "net_terms") {
-    paymentStatus = "net_terms";
-  }
+  const paymentStatus = determinePaymentStatus(paymentMethod);
 
   // Tag orders created while this channel is in payments test mode so they can be
   // cleared later from the portal. Only storefront orders are tagged — Zoey/backfill
@@ -280,34 +252,9 @@ export async function placeOrder(
     ...(Object.keys(orderMetafields).length ? { metafields: orderMetafields } : {}),
   }) as { id: number; order_number: string };
 
-  // Create order items
-  const orderItemsData = fullCart.items.map((item) => {
-    const unitPrice = item.sale_price
-      ? parseFloat(item.sale_price)
-      : parseFloat(item.list_price);
-    const linePrice = unitPrice * item.quantity;
-    const unitCalc = gstSplit(unitPrice, pricesIncludeTax);
-    const lineCalc = gstSplit(linePrice, pricesIncludeTax);
-
-    return {
-      productId: item.product_id,
-      variantId: item.variant_id,
-      name: item.product_name,
-      sku: item.product_sku,
-      quantity: item.quantity,
-      basePrice: String(unitPrice),
-      priceExTax: String(unitCalc.exTax),
-      priceIncTax: String(unitCalc.incTax),
-      priceTax: String(unitCalc.tax),
-      baseTotal: String(linePrice),
-      totalExTax: String(lineCalc.exTax),
-      totalIncTax: String(lineCalc.incTax),
-      totalTax: String(lineCalc.tax),
-    };
-  });
-
+  // Create order items (line items precomputed by buildLineItems above)
   try {
-    await orderItemService.createManyForParent(order.id, orderItemsData);
+    await orderItemService.createManyForParent(order.id, lineItems);
   } catch (err) {
     // Compensate so we never leave an order with no line items.
     await orderService.delete(order.id).catch(() => {});

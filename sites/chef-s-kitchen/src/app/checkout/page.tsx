@@ -3,9 +3,11 @@ import { redirect } from "next/navigation";
 import { Crown, ArrowRight } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription, getCheckoutSettings, customerAddressService, channelSettingsService, storeSettingsService, shippingRateCardService, accountService, CHANNEL_ID, wantStripeTestMode } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription, getCheckoutSettings, customerAddressService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
 import { CheckoutForm } from "@/components/checkout/CheckoutForm";
-import { selectGateway } from "@keenan/services";
+import { gstSplit } from "@keenan/services/calc";
+import { resolveStripeGateway } from "@/lib/payments/gateway";
+import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 
 export const metadata = {
   title: "Checkout",
@@ -27,10 +29,9 @@ export default async function CheckoutPage() {
   // active B2B account with net_terms_days > 0 may defer payment. Everyone else
   // (guests, customers with no net-terms account) pays upfront — card or bank
   // transfer (invoice → pay → deliver). When eligible, show the account's actual
-  // term length, not the flat channel default. placeOrder re-checks server-side.
-  const netTerms = session?.email
-    ? await accountService.resolveNetTermsForEmail(session.email)
-    : null;
+  // term length, not the flat channel default. Uses the SAME entitlement resolver
+  // placeOrder authorizes against, so what we show is exactly what we'll accept.
+  const netTerms = await resolveNetTermsEntitlement(session);
   const paymentMethods = checkoutSettings.paymentMethods
     .filter((m) => m.id !== "net_terms" || !!netTerms)
     .map((m) => (m.id === "net_terms" && netTerms ? { ...m, netTermsDays: netTerms.netTermsDays } : m));
@@ -43,9 +44,8 @@ export default async function CheckoutPage() {
     const taxSetting = await channelSettingsService.getByKey(CHANNEL_ID, "prices_include_tax");
     pricesIncludeTax = taxSetting.setting_value === true || taxSetting.setting_value === "true";
   } catch {}
-  const gstAmount = pricesIncludeTax
-    ? Math.round((subtotal / 1.1 * 0.1) * 100) / 100
-    : Math.round(subtotal * 0.1 * 100) / 100;
+  // GST display amount via gstSplit (single source of tax math — services D4).
+  const gstAmount = Math.round(gstSplit(subtotal, pricesIncludeTax).tax * 100) / 100;
 
   // Load saved addresses for logged-in customers
   let savedAddresses: { id: number; firstName: string; lastName: string; address1: string; address2?: string; city: string; stateOrProvince: string; postalCode: string; countryCode: string; isDefaultBilling: boolean }[] = [];
@@ -74,21 +74,12 @@ export default async function CheckoutPage() {
     }
   }
 
-  // Load Stripe publishable key from the global portal payment_gateways setting.
-  // All channels share one Stripe account; segmentation happens via metadata.
-  // wantTestMode also drives the TEST MODE banner shown on the payment options.
-  const wantTestMode = await wantStripeTestMode();
-  let stripePublishableKey: string | undefined;
-  try {
-    const gatewaysSetting = await storeSettingsService.getByKey("payment_gateways");
-    const gateways = (gatewaysSetting.setting_value as { provider: string; credentials: Record<string, string>; enabled?: boolean; testMode?: boolean }[]) || [];
-    // Match the gateway entry tagged for the current environment: testMode=true
-    // in dev, testMode=false in prod. Lets both modes coexist in the DB row.
-    const stripeGateway = selectGateway(gateways.filter((g) => g.provider === "stripe" && g.enabled !== false), wantTestMode);
-    if (stripeGateway?.credentials?.publishable_key) {
-      stripePublishableKey = stripeGateway.credentials.publishable_key;
-    }
-  } catch {}
+  // Resolve the channel's Stripe gateway (test-vs-live aware, prod-safe fallback)
+  // from the global payment_gateways setting. All channels share one Stripe
+  // account; segmentation happens via metadata. wantTestMode also drives the
+  // TEST MODE banner shown on the payment options.
+  const { gateway: stripeGateway, wantTestMode } = await resolveStripeGateway();
+  const stripePublishableKey: string | undefined = stripeGateway?.credentials?.publishable_key;
 
   // Check if shipping rate calculation is available
   let shippingEnabled = false;

@@ -3,6 +3,7 @@
 import { useActionState, useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { placeOrder, confirmStripePayment } from "@/lib/actions/checkout";
+import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
 import { Price } from "@/components/ui/Price";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
 
@@ -236,7 +237,7 @@ export function CheckoutForm({
       }
 
       // Don't calculate if free shipping applies
-      if (freeShippingEnabled && isMember && subtotal >= freeShippingThreshold) {
+      if (qualifiesForFreeDelivery({ enabled: !!freeShippingEnabled, isMember: !!isMember, amount: subtotal, threshold: freeShippingThreshold })) {
         setShippingCost(0);
         return;
       }
@@ -636,7 +637,7 @@ export function CheckoutForm({
               </div>
               <div className="flex justify-between text-sm mt-2">
                 <span className="text-steel-500">Shipping</span>
-                {freeShippingEnabled && isMember && subtotal >= freeShippingThreshold ? (
+                {qualifiesForFreeDelivery({ enabled: !!freeShippingEnabled, isMember: !!isMember, amount: subtotal, threshold: freeShippingThreshold }) ? (
                   <span className="font-medium text-brand">FREE</span>
                 ) : shippingLoading ? (
                   <span className="font-medium text-steel-400 animate-pulse">Calculating...</span>

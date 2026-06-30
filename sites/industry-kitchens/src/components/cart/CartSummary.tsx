@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { gstSplit } from "@keenan/services/calc";
+import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
 import { Price } from "@/components/ui/Price";
 
 export function CartSummary({
@@ -18,9 +20,8 @@ export function CartSummary({
   freeShippingEnabled?: boolean;
   freeShippingThreshold?: number;
 }) {
-  const gstAmount = pricesIncludeTax
-    ? Math.round((total / 1.1 * 0.1) * 100) / 100
-    : Math.round(total * 0.1 * 100) / 100;
+  // GST display amount via gstSplit (single source of tax math — services D4).
+  const gstAmount = Math.round(gstSplit(total, !!pricesIncludeTax).tax * 100) / 100;
 
   return (
     <div className="border border-zinc-200 rounded-lg p-6">
@@ -48,7 +49,7 @@ export function CartSummary({
         </div>
         <div className="flex justify-between text-sm">
           <span className="text-zinc-500">Shipping</span>
-          {freeShippingEnabled && isMember && total >= freeShippingThreshold ? (
+          {qualifiesForFreeDelivery({ enabled: !!freeShippingEnabled, isMember: !!isMember, amount: total, threshold: freeShippingThreshold }) ? (
             <span className="font-medium text-green-600">FREE</span>
           ) : (
             <span className="font-medium text-zinc-400">Calculated at checkout</span>
