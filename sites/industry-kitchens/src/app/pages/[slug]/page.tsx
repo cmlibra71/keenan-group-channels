@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
+import { draftMode } from "next/headers";
 import type { Metadata } from "next";
-import { getContentPage } from "@/lib/store";
+import { getContentPage, getCmsPage } from "@/lib/store";
 import { RichContent } from "@/components/content/RichContent";
+import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 
 export async function generateMetadata({
   params,
@@ -9,6 +11,17 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
+  const { isEnabled: draft } = await draftMode();
+
+  const cms = await getCmsPage(slug, draft);
+  if (cms) {
+    const meta = cms.page_meta as { meta_title?: string; meta_description?: string };
+    return {
+      title: meta.meta_title || cms.meta_title || cms.title,
+      description: meta.meta_description || cms.meta_description || undefined,
+    };
+  }
+
   const page = await getContentPage(slug);
   if (!page) return {};
   return {
@@ -23,6 +36,17 @@ export default async function ContentPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  const { isEnabled: draft } = await draftMode();
+
+  const cms = await getCmsPage(slug, draft);
+  if (cms) {
+    return (
+      <div className="py-4">
+        <BlockRenderer blocks={cms.blocks as unknown as RenderedBlock[]} draft={draft} />
+      </div>
+    );
+  }
+
   const page = await getContentPage(slug);
   if (!page) notFound();
 
