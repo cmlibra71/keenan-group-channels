@@ -6,7 +6,7 @@ Multi-storefront system where each channel gets its own independent Next.js site
 
 ### Prerequisites
 - Node 22+
-- `@keenan/services` linked from `../keenan-group-services` (via `file:` dependency in root package.json)
+- `@keenan/services` installed from a **packed tarball** (`file:./keenan-services-1.0.0.tgz` in root package.json) — the committed tgz built from `../keenan-group-services`. This deliberately mirrors how prod (CI/Docker) and the portal consume services: a tarball has no nested `node_modules`, so `drizzle-orm`/`postgres`/`zod` resolve to the channels-root copies (single drizzle install — no dual-drizzle type clash). It is NOT a live symlink to the sibling repo.
 - Access to the commerce PostgreSQL database
 
 ### Starting Dev Servers
@@ -24,17 +24,19 @@ npm run dev -w chef-s-kitchen -- --port 3002
 npm run dev:template
 ```
 
-Sites use `next dev --webpack` (not Turbopack) because Turbopack has issues resolving the symlinked `@keenan/services` package.
+Sites use `next dev --webpack` (not Turbopack) because Turbopack has issues resolving the `@keenan/services` package.
 
 ### Rebuilding @keenan/services
 
-After making changes to `../keenan-group-services`:
+After making changes to `../keenan-group-services`, re-pack and re-link it with one command from the channels root:
 
 ```bash
-cd ../keenan-group-services && npm run build
+npm run sync:services
 ```
 
-Then restart the dev servers to pick up changes.
+This builds services, `npm pack`s it, copies the tgz to the channels root, and re-extracts it into `node_modules/@keenan/services` (replacing the previous copy). Then restart the dev servers to pick up changes. Commit the refreshed `keenan-services-1.0.0.tgz` when the services change is meant to ship — CI repacks it fresh from `services@main` at deploy time, so the committed tgz is just the bootstrap for `npm install` and local dev.
+
+> Why a tarball instead of a `file:../` symlink: a symlink resolves into the services repo's **own** `node_modules`, which carries a second `drizzle-orm` install. TypeScript treats Drizzle's classes from two installs as nominally incompatible (TS2769, "separate declarations of a private property"), so passing Drizzle tables/operators across the boundary failed to compile. The tarball has no nested `node_modules`, so everything resolves to the single channels-root drizzle.
 
 ## Testing & Browser Automation
 

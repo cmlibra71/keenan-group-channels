@@ -8,11 +8,12 @@
   "scripts": {
     "dev:template": "npm run dev -w template",
     "new-site": "node orchestrator/new-site.mjs",
-    "sync:check": "node orchestrator/check-shared-sync.mjs"
+    "sync:check": "node orchestrator/check-shared-sync.mjs",
+    "sync:services": "cd ../keenan-group-services && npm run build && npm pack >/dev/null && cd - && cp ../keenan-group-services/keenan-services-1.0.0.tgz keenan-services-1.0.0.tgz && rm -rf node_modules/@keenan/services && mkdir -p node_modules/@keenan/services && tar xzf keenan-services-1.0.0.tgz -C node_modules/@keenan/services --strip-components=1"
   },
   "dependencies": {
-    "@keenan/services": "file:../keenan-group-services",
-    "drizzle-orm": "^0.45.0",
+    "@keenan/services": "file:./keenan-services-1.0.0.tgz",
+    "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.7",
     "zod": "^4.1.13"
   },

@@ -15,8 +15,11 @@ COPY package.json ./
 COPY keenan-services-1.0.0.tgz ./
 COPY sites/${SITE_NAME}/ ./sites/${SITE_NAME}/
 
-# Rewrite root package.json to use the tarball instead of file:../
-RUN sed -i 's|"file:../keenan-group-services"|"file:./keenan-services-1.0.0.tgz"|' package.json
+# Normalise the @keenan/services dependency to the build-context tarball,
+# regardless of whether the committed spec is the tarball or a local file: path.
+# (Local dev links the same tarball via `npm run sync:services`; CI repacks it
+# fresh from services@main into the build context above.)
+RUN sed -i 's|"@keenan/services": "file:[^"]*"|"@keenan/services": "file:./keenan-services-1.0.0.tgz"|' package.json
 
 # Install dependencies
 RUN npm install
