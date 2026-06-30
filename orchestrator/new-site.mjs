@@ -68,6 +68,8 @@ const envContent = `# Auto-generated for site: ${siteName}
 COMMERCE_DATABASE_URL=${dbUrl}
 CHANNEL_ID=${channelId}
 SITE_URL=https://${domain}
+# Set "true" only on a public, indexable storefront (robots.txt + sitemap.xml).
+SITE_INDEXABLE=false
 
 # Meilisearch (product search)
 MEILI_URL=http://localhost:7700
@@ -91,7 +93,7 @@ if (existsSync(servicesRepo)) {
 }
 
 // 5. Create site config (committed to repo - no secrets)
-const siteConfig = { channelId, domain, port: Number(port) };
+const siteConfig = { channelId, domain, port: Number(port), indexable: false };
 writeFileSync(join(siteDir, "site.config.json"), JSON.stringify(siteConfig, null, 2) + "\n");
 
 // 6. Generate Caddy site config

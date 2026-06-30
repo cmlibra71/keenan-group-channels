@@ -1,5 +1,5 @@
 import { unstable_cache } from "next/cache";
-import { initCommerceDb, createChannelStore } from "@keenan/services";
+import { initCommerceDb, createChannelStore, getCommerceClient } from "@keenan/services";
 import {
   channelService,
   siteService,
@@ -92,6 +92,8 @@ export const {
   getFeatureFlag,
   getContentPages,
   getContentPage,
+  getCmsPage,
+  getCmsCategoryPage,
   getCheckoutSettings,
   calculateShipping,
 } = _store;
@@ -127,6 +129,47 @@ export const getJsonSetting = async <T,>(key: string, fallback: T): Promise<T> =
     return fallback;
   }
 };
+
+// ============================================================================
+// Sitemap (slim, paged catalog queries)
+//
+// The XML sitemap can list tens of thousands of product URLs (CD ≈ 38k), so it
+// must NOT go through productService.listForChannel (which joins images, brands
+// and resolves pricing). These read only url_path + updated_at for the channel's
+// visible products, paged so each sitemap chunk stays well under the 50k limit.
+// ============================================================================
+
+// Raw postgres.js (not Drizzle) to avoid the dual drizzle-orm copy bundled in
+// @keenan/services — its tables are typed against a nested drizzle install that
+// is structurally incompatible with the root one's query builders.
+
+function toDate(value: string | Date): Date | null {
+  const d = value instanceof Date ? value : new Date(value);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+export async function getSitemapProducts(
+  offset: number,
+  limit: number
+): Promise<Array<{ slug: string; updatedAt: Date | null }>> {
+  const sql = getCommerceClient();
+  if (!sql) return [];
+  const rows = await sql<{ id: number; url_path: string | null; updated_at: string | Date | null }[]>`
+    SELECT p.id, p.url_path, p.updated_at
+    FROM product_channel_assignments a
+    JOIN products p ON p.id = a.product_id
+    WHERE a.channel_id = ${CHANNEL_ID} AND a.is_visible = true AND p.is_visible = true
+    ORDER BY p.id
+    LIMIT ${limit} OFFSET ${offset}`;
+  // Product routes are keyed by url_path, falling back to the numeric id
+  // (mirrors ProductGrid: `slug={product.urlPath || String(product.id)}`).
+  return rows.map((r) => ({
+    slug: r.url_path || String(r.id),
+    // postgres.js returns timestamptz as a string here; coerce to Date so Next
+    // serialises a valid W3C <lastmod>. Drop unparseable values.
+    updatedAt: r.updated_at ? toDate(r.updated_at) : null,
+  }));
+}
 
 // ============================================================================
 // Re-export services for direct access

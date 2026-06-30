@@ -105,10 +105,12 @@ jobs:
           CHANNEL_ID=$(jq -r '.channelId' "$CONFIG")
           DOMAIN=$(jq -r '.domain' "$CONFIG")
           PORT=$(jq -r '.port' "$CONFIG")
+          INDEXABLE=$(jq -r '.indexable // false' "$CONFIG")
 
           echo "channel_id=${CHANNEL_ID}" >> $GITHUB_OUTPUT
           echo "domain=${DOMAIN}" >> $GITHUB_OUTPUT
           echo "port=${PORT}" >> $GITHUB_OUTPUT
+          echo "indexable=${INDEXABLE}" >> $GITHUB_OUTPUT
 
       - name: Deploy via SSM
         run: |
@@ -116,6 +118,7 @@ jobs:
           PORT="${{ steps.config.outputs.port }}"
           CHANNEL_ID="${{ steps.config.outputs.channel_id }}"
           DOMAIN="${{ steps.config.outputs.domain }}"
+          INDEXABLE="${{ steps.config.outputs.indexable }}"
           IMAGE="ghcr.io/${{ github.repository_owner }}/keenan-channels-${SITE}:latest"
           CONTAINER="keenan-channel-${SITE}"
 
@@ -127,7 +130,7 @@ jobs:
               \"docker pull ${IMAGE}\",
               \"docker stop ${CONTAINER} || true\",
               \"docker rm ${CONTAINER} || true\",
-              \"docker run -d --name ${CONTAINER} --restart unless-stopped --network ${DOCKER_NETWORK} -p 127.0.0.1:${PORT}:3000 -e COMMERCE_DATABASE_URL=${{ secrets.COMMERCE_DATABASE_URL }} -e CHANNEL_ID=${CHANNEL_ID} -e SITE_URL=https://${DOMAIN} -e SESSION_SECRET=${{ secrets.SESSION_SECRET }} -e E2E_LOGIN_SECRET=${{ secrets.E2E_LOGIN_SECRET }} -e TEST_EMAIL_RECIPIENT=chrisbmosely@gmail.com -e GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} -e MEILI_URL=http://keenan-search:7700 -e MEILI_API_KEY=${{ secrets.MEILI_MASTER_KEY }} -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} -e AWS_REGION=ap-southeast-2 ${IMAGE}\",
+              \"docker run -d --name ${CONTAINER} --restart unless-stopped --network ${DOCKER_NETWORK} -p 127.0.0.1:${PORT}:3000 -e COMMERCE_DATABASE_URL=${{ secrets.COMMERCE_DATABASE_URL }} -e CHANNEL_ID=${CHANNEL_ID} -e SITE_URL=https://${DOMAIN} -e SITE_INDEXABLE=${INDEXABLE} -e SESSION_SECRET=${{ secrets.SESSION_SECRET }} -e E2E_LOGIN_SECRET=${{ secrets.E2E_LOGIN_SECRET }} -e TEST_EMAIL_RECIPIENT=chrisbmosely@gmail.com -e GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} -e MEILI_URL=http://keenan-search:7700 -e MEILI_API_KEY=${{ secrets.MEILI_MASTER_KEY }} -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} -e AWS_REGION=ap-southeast-2 ${IMAGE}\",
               \"docker image prune -f\",
               \"if ! grep -q '${DOMAIN}' /etc/caddy/Caddyfile 2>/dev/null; then echo '' >> /etc/caddy/Caddyfile && echo '${DOMAIN} { reverse_proxy localhost:${PORT} }' >> /etc/caddy/Caddyfile && systemctl reload caddy && echo 'Added Caddy config for ${DOMAIN}'; else echo 'Caddy config for ${DOMAIN} already exists'; fi\"
             ]" \

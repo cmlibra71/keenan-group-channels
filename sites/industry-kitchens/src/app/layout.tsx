@@ -5,6 +5,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { SpecialistButton } from "@/components/layout/SpecialistButton";
 import { GstProvider } from "@/lib/gst";
+import { siteBaseUrl } from "@/lib/seo";
 import "./globals.css";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,7 @@ export const viewport: Viewport = {
 export async function generateMetadata(): Promise<Metadata> {
   const { site, channel } = await getSiteConfig();
   return {
+    metadataBase: new URL(siteBaseUrl(site?.url)),
     title: site?.metaTitle || channel?.name || "Store",
     description: site?.metaDescription || `Welcome to ${channel?.name || "our store"}`,
     // Favicon is provided by app/icon.tsx — it uses faviconUrl when set,

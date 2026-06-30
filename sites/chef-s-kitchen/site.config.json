@@ -1,5 +1,6 @@
 {
   "channelId": "2",
   "domain": "chefsdepot.com.au",
-  "port": 3002
+  "port": 3002,
+  "indexable": true
 }

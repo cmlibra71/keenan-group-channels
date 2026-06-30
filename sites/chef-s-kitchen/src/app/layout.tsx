@@ -5,6 +5,7 @@ import { getSiteConfig, getFeatureFlag } from "@/lib/store";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { GstProvider } from "@/lib/gst";
+import { siteBaseUrl } from "@/lib/seo";
 import "./globals.css";
 
 // Design-system type stack: Fraunces (serif voice for hero/marketing/PDP
@@ -40,6 +41,7 @@ export const viewport: Viewport = {
 export async function generateMetadata(): Promise<Metadata> {
   const { site, channel } = await getSiteConfig();
   return {
+    metadataBase: new URL(siteBaseUrl(site?.url)),
     title: site?.metaTitle || channel?.name || "Store",
     description: site?.metaDescription || `Welcome to ${channel?.name || "our store"}`,
     icons: site?.faviconUrl ? { icon: site.faviconUrl } : undefined,

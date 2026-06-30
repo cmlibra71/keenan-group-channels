@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import { getSiteConfig, getFeatureFlag, getFooterConfig, getTopCategories } from "@/lib/store";
+import { siteBaseUrl } from "@/lib/seo";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { GstProvider } from "@/lib/gst";
@@ -18,6 +19,7 @@ export const viewport: Viewport = {
 export async function generateMetadata(): Promise<Metadata> {
   const { site, channel } = await getSiteConfig();
   return {
+    metadataBase: new URL(siteBaseUrl(site?.url)),
     title: site?.metaTitle || channel?.name || "Store",
     description: site?.metaDescription || `Welcome to ${channel?.name || "our store"}`,
     icons: site?.faviconUrl ? { icon: site.faviconUrl } : undefined,

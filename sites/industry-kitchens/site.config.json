@@ -1,5 +1,6 @@
 {
   "channelId": "1",
   "domain": "industrialkitchens.com.au",
-  "port": 3001
+  "port": 3001,
+  "indexable": false
 }
