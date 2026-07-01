@@ -8,6 +8,7 @@ import { getSession } from "@/lib/auth";
 import { sendOrderConfirmationEmail, wantsStripeTestMode } from "@keenan/services";
 import { buildLineItems, withShipping, determinePaymentStatus } from "@/lib/checkout/order-draft";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
+import { siteBaseUrl } from "@/lib/seo";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 
 // Pricing/tax/payment-status computation lives in the pure order-draft module
@@ -256,8 +257,26 @@ export async function placeOrder(
   try {
     await orderItemService.createManyForParent(order.id, lineItems);
   } catch (err) {
-    // Compensate so we never leave an order with no line items.
-    await orderService.delete(order.id).catch(() => {});
+    // Compensate so we never leave an order with no line items. The delete can itself fail
+    // (e.g. a DB blip mid-checkout) — don't swallow it: retry once, and if it still fails,
+    // cancel the order so it's not an orphaned "pending" order with items_total but no items.
+    console.error("[placeOrder] order items failed to persist:", err);
+    let cleaned = false;
+    for (let attempt = 0; attempt < 2 && !cleaned; attempt++) {
+      try {
+        await orderService.delete(order.id);
+        cleaned = true;
+      } catch (delErr) {
+        console.error(`[placeOrder] compensating delete failed (attempt ${attempt + 1}):`, delErr);
+      }
+    }
+    if (!cleaned) {
+      try {
+        await orderService.update(order.id, { status: "cancelled", paymentStatus: "failed" });
+      } catch (cancelErr) {
+        console.error("[placeOrder] cancel fallback also failed — order is orphaned:", cancelErr);
+      }
+    }
     return { error: err instanceof Error ? err.message : "We couldn't complete your order. Please try again." };
   }
 
@@ -329,8 +348,9 @@ export async function placeOrder(
     const method = checkoutSettings.paymentMethods.find((m) => m.id === paymentMethod);
     const { site, channel } = await getSiteConfig();
     const storeName = site?.siteName || channel?.name || undefined;
-    const siteUrl =
-      site?.url || process.env.SITE_URL || `https://${process.env.NEXT_PUBLIC_SITE_DOMAIN || "chefsdepot.com.au"}`;
+    // Resolve the site origin through the shared SEO helper so email links use the exact
+    // same precedence as every canonical/OG link (was DB-first here vs env-first in seo.ts).
+    const siteUrl = siteBaseUrl(site?.url);
     await sendOrderConfirmationEmail({
       to: email,
       orderNumber: order.order_number,
