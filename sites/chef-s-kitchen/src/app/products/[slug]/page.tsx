@@ -260,6 +260,7 @@ export default async function ProductPage({
       <ProductTabs
         description={product.description}
         warranty={product.warranty ?? null}
+        brandName={brandRow?.name ?? null}
         customFields={product.customFields as Record<string, unknown> | null}
         reviews={reviews}
         attachments={attachments}
