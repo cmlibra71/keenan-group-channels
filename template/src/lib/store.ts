@@ -162,6 +162,14 @@ export const getValueBarItems = unstable_cache(
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
 );
 
+/** Klaviyo public (site) key for this channel — powers the onsite tracking snippet
+ *  and client-side events. Empty string when Klaviyo isn't connected (snippet omitted). */
+export const getKlaviyoPublicKey = unstable_cache(
+  async () => getJsonSetting<string>("klaviyo_public_key", ""),
+  [`klaviyo-public-key-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
 // ============================================================================
 // Homepage spotlights (curated product carousels backed by categories whose
 // metafields.is_homepage_spotlight = true).

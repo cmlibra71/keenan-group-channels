@@ -5,6 +5,7 @@ import { quoteService, quoteItemService, productService, productVariantService, 
 import { wantsStripeTestMode } from "@keenan/services";
 import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
 import { getSession } from "@/lib/auth";
+import { layerCartPrice } from "@/lib/pricing/cart-pricing";
 
 // QuoteService returns snake_case rows (transformRow convention).
 type QuoteRow = { id: number; uuid: string; customer_id?: number | null; [key: string]: unknown };
@@ -33,19 +34,27 @@ export async function addToQuote(productId: number, variantId?: number | null) {
   if (!product) return { error: "Product not found" };
 
   let listPrice = product.price;
-  let salePrice = product.sale_price;
+  let catalogSalePrice: string | null = product.sale_price;
 
   if (variantId) {
     const variant = await productVariantService.getById(variantId) as { price: string | null; sale_price: string | null } | null;
     if (variant?.price) listPrice = variant.price;
-    if (variant?.sale_price) salePrice = variant.sale_price;
+    if (variant?.sale_price) catalogSalePrice = variant.sale_price;
   }
 
-  // Member-only pricing channels quote at RRP — the shared catalog sale price
-  // is another channel's public price. Staff apply tier pricing on review.
-  if (await shouldSuppressCatalogSalePrice()) {
-    salePrice = null;
-  }
+  // A quote applies ONLY base price + catalog-sale suppression at add time; member
+  // (cost-plus) and bulk quantity-break tiers are deliberately left off and applied
+  // by staff on review (see docs/adr/0001-quote-defers-tier-pricing-to-staff.md).
+  // Reuse the shared best-price-wins layerer with those two sources disabled so the
+  // suppression semantics match the cart exactly (one tested definition).
+  const suppress = await shouldSuppressCatalogSalePrice();
+  const { salePrice } = layerCartPrice({
+    listPrice,
+    catalogSalePrice,
+    suppress,
+    memberSalePrice: null,
+    bulkUnit: null,
+  });
 
   const quote = await getOrCreateQuote();
 

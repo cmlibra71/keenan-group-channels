@@ -5,6 +5,7 @@ import { getSiteConfig, getFeatureFlag, getFooterConfig } from "@/lib/store";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { GstProvider } from "@/lib/gst";
+import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
 import { siteBaseUrl } from "@/lib/seo";
 import "./globals.css";
 
@@ -66,7 +67,7 @@ export default async function RootLayout({
   const storeName = site?.siteName || channel?.name || "Store";
   const logoUrl = site?.logoUrl || null;
   const logoAlt = site?.logoAlt || null;
-  const gstInclusive = cookieStore.get("gst_inclusive")?.value === "true";
+  const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
 
   return (
     <html lang="en" className={`${fraunces.variable} ${plexSans.variable} ${plexMono.variable}`}>

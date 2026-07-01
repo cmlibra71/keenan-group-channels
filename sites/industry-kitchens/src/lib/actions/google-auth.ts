@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { customerService, CHANNEL_ID } from "@/lib/store";
 import { setSession } from "@/lib/auth";
+import { verifyGoogleClaims, type GoogleTokenInfo } from "@/lib/google-claims";
 
 type GoogleSignInResult = {
   error?: string;
@@ -20,16 +21,10 @@ export async function googleSignIn(credential: string): Promise<GoogleSignInResu
     return { error: "Google sign-in is not configured." };
   }
 
-  // Verify the ID token with Google
-  let tokenInfo: {
-    aud: string;
-    email: string;
-    email_verified: string;
-    given_name?: string;
-    family_name?: string;
-    sub: string;
-  };
-
+  // Verify the ID token with Google (network I/O stays here; the trust decision
+  // — audience match + verified email + identity normalization — is the pure
+  // verifyGoogleClaims, lib/google-claims.ts).
+  let tokenInfo: GoogleTokenInfo;
   try {
     const res = await fetch(
       `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`
@@ -42,18 +37,11 @@ export async function googleSignIn(credential: string): Promise<GoogleSignInResu
     return { error: "Failed to verify Google token." };
   }
 
-  // Validate audience matches our client ID
-  if (tokenInfo.aud !== clientId) {
-    return { error: "Token audience mismatch." };
+  const claims = verifyGoogleClaims(tokenInfo, clientId);
+  if (!claims.ok) {
+    return { error: claims.error };
   }
-
-  if (tokenInfo.email_verified !== "true") {
-    return { error: "Google email is not verified." };
-  }
-
-  const email = tokenInfo.email.toLowerCase();
-  const firstName = tokenInfo.given_name || "";
-  const lastName = tokenInfo.family_name || "";
+  const { email, firstName, lastName, sub } = claims.identity;
 
   // Find existing customer by email + channel (returns a snake_case customer row).
   const existing = await customerService.findByEmailAndChannel(email, CHANNEL_ID);
@@ -80,7 +68,7 @@ export async function googleSignIn(credential: string): Promise<GoogleSignInResu
     firstName,
     lastName,
     isActive: true,
-    attributes: { googleSub: tokenInfo.sub },
+    attributes: { googleSub: sub },
   })) as { id: number; email: string; first_name: string; last_name: string };
 
   await setSession(customer.id, customer.email);

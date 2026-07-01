@@ -5,6 +5,7 @@ import { cartService, cartItemService, productService, productVariantService, cu
 import { getFeatureFlag, getActiveSubscription, shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { getCartUuid, setCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
+import { pickBestBulkUnit, layerCartPrice } from "@/lib/pricing/cart-pricing";
 
 async function getOrCreateCart() {
   const uuid = await getCartUuid();
@@ -30,26 +31,15 @@ async function getOrCreateCart() {
  * "price", but percent is handled for forward-compatibility.
  */
 async function bestBulkUnitPrice(productId: number, quantity: number, listPrice: number): Promise<number | null> {
-  // listForParent is now precisely typed (snake_case Row), so no cast is needed —
-  // r.quantity_min / quantity_max / type / amount are all correctly typed.
+  // listForParent is precisely typed (snake_case Row); tier matching is pure —
+  // delegated to pickBestBulkUnit (lib/pricing/cart-pricing.ts).
   const result = await bulkPricingRuleService.listForParent(productId, {
     page: 1,
     limit: 100,
     sort: "quantity_min",
     direction: "asc",
   });
-
-  let best: number | null = null;
-  for (const r of result.data) {
-    const min = Number(r.quantity_min);
-    const max = r.quantity_max == null ? null : Number(r.quantity_max);
-    if (quantity < min || (max != null && quantity > max)) continue;
-    const amt = parseFloat(r.amount);
-    if (!Number.isFinite(amt)) continue;
-    const unit = r.type === "percent" ? listPrice * (1 - amt / 100) : amt;
-    if (Number.isFinite(unit) && (best == null || unit < best)) best = unit;
-  }
-  return best;
+  return pickBestBulkUnit(result.data, quantity, listPrice);
 }
 
 /**
@@ -77,23 +67,20 @@ async function resolveItemPricing(
   let listPrice = product.price;
   // NOTE: getById returns snake_case — read sale_price (reading salePrice silently
   // yielded undefined, so IK was charging RRP instead of its public sale price).
-  let salePrice: string | null = product.sale_price ?? null;
+  let catalogSalePrice: string | null = product.sale_price ?? null;
 
   if (variantId) {
     const variant = (await productVariantService.getById(variantId)) as { price: string | null; sale_price: string | null } | null;
     if (variant?.price) listPrice = variant.price;
-    if (variant?.sale_price) salePrice = variant.sale_price;
+    if (variant?.sale_price) catalogSalePrice = variant.sale_price;
   }
 
   // Channels with member-only cost-plus pricing suppress the shared catalog sale
   // price (it's another channel's public price) AND bulk tiers — list price stays RRP.
   const suppress = await shouldSuppressCatalogSalePrice();
-  if (suppress) {
-    salePrice = null;
-  }
 
-  // Member pricing if enabled and the user has an active subscription. Best price
-  // wins: a genuine channel sale never gets beaten by a higher member price.
+  // Member (cost-plus) price for an active subscriber, if member pricing is enabled.
+  let memberSalePrice: string | null = null;
   const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
   if (memberPricingEnabled) {
     const session = await getSession();
@@ -105,32 +92,19 @@ async function resolveItemPricing(
           const variantResult = variantId ? null : await productVariantService.listForParent(productId, { page: 1, limit: 1, sort: "id", direction: "asc" });
           const pricingVariantId = variantId || (variantResult?.data[0] as { id: number } | undefined)?.id;
           if (pricingVariantId) {
-            const pricing = await getEffectivePrice(pricingVariantId, CHANNEL_ID, customer.customer_group_id);
-            if (pricing.salePrice) {
-              salePrice = salePrice && parseFloat(salePrice) < parseFloat(pricing.salePrice)
-                ? salePrice
-                : pricing.salePrice;
-            }
+            const pricing = await getEffectivePrice(pricingVariantId, CHANNEL_ID, customer.customer_group_id, quantity);
+            if (pricing.salePrice) memberSalePrice = pricing.salePrice;
           }
         }
       }
     }
   }
 
-  // Bulk (quantity-break) pricing — only where the catalog isn't suppressed. At or
-  // above a tier's quantity_min the per-unit price drops to the tier price; best
-  // price wins so an existing sale/member price is never beaten.
-  if (!suppress) {
-    const bulkUnit = await bestBulkUnitPrice(productId, quantity, parseFloat(listPrice));
-    if (bulkUnit != null) {
-      const currentEffective = salePrice != null ? parseFloat(salePrice) : parseFloat(listPrice);
-      if (bulkUnit < currentEffective) {
-        salePrice = String(bulkUnit);
-      }
-    }
-  }
+  // Bulk (quantity-break) tiers — only where the catalog isn't suppressed.
+  const bulkUnit = suppress ? null : await bestBulkUnitPrice(productId, quantity, parseFloat(listPrice));
 
-  return { listPrice, salePrice };
+  // Layer the sources, best-price-wins (pure — see lib/pricing/cart-pricing.ts).
+  return layerCartPrice({ listPrice, catalogSalePrice, suppress, memberSalePrice, bulkUnit });
 }
 
 export async function addToCart(productId: number, variantId?: number | null, quantity: number = 1) {

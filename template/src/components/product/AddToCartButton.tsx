@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { addToCart } from "@/lib/actions/cart";
+import { trackAddedToCart } from "@/components/analytics/klaviyo";
 
 export function AddToCartButton({
   productId,
@@ -10,6 +11,9 @@ export function AddToCartButton({
   size,
   label,
   quantity,
+  productName,
+  price,
+  sku,
 }: {
   productId: number;
   variantId?: number | null;
@@ -17,12 +21,24 @@ export function AddToCartButton({
   size?: "sm";
   label?: string;
   quantity?: number;
+  /** Optional enrichment for the Klaviyo "Added to Cart" event. */
+  productName?: string;
+  price?: number | null;
+  sku?: string | null;
 }) {
   const [isPending, startTransition] = useTransition();
 
   function handleClick() {
     startTransition(async () => {
       await addToCart(productId, variantId, quantity ?? 1);
+      // Fire client-side so browse/cart-abandonment flows see it (server actions can't).
+      trackAddedToCart({
+        id: productId,
+        sku: sku ?? null,
+        name: productName ?? `Product ${productId}`,
+        price: price ?? null,
+        quantity: quantity ?? 1,
+      });
     });
   }
 

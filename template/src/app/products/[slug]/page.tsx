@@ -8,6 +8,7 @@ import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductTabs } from "@/components/product/ProductTabs";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { BrandWarrantyNotes } from "@/components/product/BrandWarrantyNotes";
+import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 
 type ProductBrandMetafields = {
   intro_html?: string;
@@ -117,6 +118,24 @@ export default async function ProductPage({
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+      <ViewedProductTracker
+        product={{
+          id: product.id,
+          sku: product.sku,
+          name: product.name,
+          price:
+            product.salePrice != null
+              ? parseFloat(String(product.salePrice))
+              : product.price != null
+                ? parseFloat(String(product.price))
+                : null,
+          imageUrl:
+            ((product.images as Array<Record<string, unknown>> | undefined)?.[0]?.urlStandard as string) ??
+            ((product.images as Array<Record<string, unknown>> | undefined)?.[0]?.url_standard as string) ??
+            null,
+          categories: breadcrumbs.map((c: { name: string }) => c.name),
+        }}
+      />
       {breadcrumbs.length > 0 ? (
         <nav className="flex flex-wrap items-center gap-1.5 text-sm text-zinc-400 mb-6">
           <Link href="/products" className="hover:text-zinc-600">Products</Link>

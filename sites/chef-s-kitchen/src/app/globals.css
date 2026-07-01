@@ -465,6 +465,10 @@ body {
   @apply p-3 bg-sale-bg text-sale-deep text-sm rounded-btn;
 }
 
+.alert-success {
+  @apply p-3 bg-accent-subtle text-accent-dark text-sm rounded-btn;
+}
+
 /* ═══ NAV LINKS ════════════════════════════════════ */
 
 .nav-link {

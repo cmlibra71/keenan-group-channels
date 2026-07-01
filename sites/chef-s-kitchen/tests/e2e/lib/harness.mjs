@@ -254,6 +254,27 @@ export function assert(cond, msg) {
   if (!cond) throw new Error(msg || "assertion failed");
 }
 
+/**
+ * Mint a customer auth token via the guarded test route. The real reset/email-
+ * change flows only store the token hash, so a test can't read the emailed link —
+ * this returns a fresh plaintext token to drive /account/reset-password/<token>
+ * and /account/verify-email/<token> directly. Test-domain accounts only.
+ */
+export async function mintAuthToken(page, { base, secret, email, type, newEmail }) {
+  if (!secret) throw new Error("E2E_LOGIN_SECRET not set — cannot mint an auth token.");
+  const res = await page.request.post(`${base}/api/test/auth-token`, {
+    data: { secret, email, type, ...(newEmail ? { newEmail } : {}) },
+    headers: { "content-type": "application/json" },
+  });
+  if (!res.ok()) {
+    const bodyText = await res.text().catch(() => "");
+    throw new Error(`mint auth token failed (${res.status()}): ${bodyText.slice(0, 200)}`);
+  }
+  const json = await res.json();
+  if (!json?.token) throw new Error("mint auth token: response had no token");
+  return json.token;
+}
+
 export function ensureDir(dir) {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   return dir;

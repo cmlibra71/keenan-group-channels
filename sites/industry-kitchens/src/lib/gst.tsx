@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useCallback } from "react";
+import { serializeGstCookie } from "@/lib/gst-cookie";
 
 type GstContextValue = {
   /** true → show GST-inclusive prices; false → GST-exclusive (default). */
@@ -31,7 +32,7 @@ export function GstProvider({
     setInclusive((prev) => {
       const next = !prev;
       // Persist for SSR on the next load so prices render without a flash.
-      document.cookie = `gst_inclusive=${next}; path=/; max-age=31536000; samesite=lax`;
+      document.cookie = serializeGstCookie(next);
       return next;
     });
   }, []);

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Package, FileText, MapPin, LogOut, Crown, Trophy, Gift, ArrowRight, Calendar, Ticket } from "lucide-react";
+import { Package, FileText, MapPin, LogOut, Crown, Trophy, Gift, ArrowRight, Calendar, Ticket, KeyRound } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { customerService, getFeatureFlag, getActiveSubscription, getUpcomingDraws, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { LoginForm } from "@/components/auth/LoginForm";
@@ -198,6 +198,16 @@ export default async function AccountPage() {
           <div>
             <h3 className="font-semibold text-text-primary">Account Details</h3>
             <p className="text-sm text-text-secondary">Profile, addresses & contacts</p>
+          </div>
+        </Link>
+        <Link
+          href="/account/security"
+          className="flex items-center gap-4 card-interactive"
+        >
+          <KeyRound className="h-8 w-8 text-text-muted" />
+          <div>
+            <h3 className="font-semibold text-text-primary">Password &amp; Security</h3>
+            <p className="text-sm text-text-secondary">Change password or email</p>
           </div>
         </Link>
         <Link

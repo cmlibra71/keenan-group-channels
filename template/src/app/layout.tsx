@@ -1,10 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
-import { getSiteConfig, getFeatureFlag, getFooterConfig, getTopCategories } from "@/lib/store";
+import { getSiteConfig, getFeatureFlag, getFooterConfig, getTopCategories, getKlaviyoPublicKey } from "@/lib/store";
+import { KlaviyoTracking } from "@/components/analytics/KlaviyoTracking";
 import { siteBaseUrl } from "@/lib/seo";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { GstProvider } from "@/lib/gst";
+import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
 import "./globals.css";
 
 export const dynamic = "force-dynamic";
@@ -31,18 +33,19 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [{ site, channel }, subscriptionsEnabled, footerConfig, topCategories, pricesIncludeTax, cookieStore] = await Promise.all([
+  const [{ site, channel }, subscriptionsEnabled, footerConfig, topCategories, pricesIncludeTax, cookieStore, klaviyoPublicKey] = await Promise.all([
     getSiteConfig(),
     getFeatureFlag("subscriptions_enabled"),
     getFooterConfig(),
     getTopCategories(),
     getFeatureFlag("prices_include_tax"),
     cookies(),
+    getKlaviyoPublicKey(),
   ]);
   const storeName = site?.siteName || channel?.name || "Store";
   const logoUrl = site?.logoUrl || null;
   const logoAlt = site?.logoAlt || null;
-  const gstInclusive = cookieStore.get("gst_inclusive")?.value === "true";
+  const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
 
   return (
     <html lang="en">
@@ -57,6 +60,7 @@ export default async function RootLayout({
           <main className="flex-1">{children}</main>
           <Footer storeName={storeName} config={footerConfig} />
         </GstProvider>
+        <KlaviyoTracking publicKey={klaviyoPublicKey} />
       </body>
     </html>
   );
