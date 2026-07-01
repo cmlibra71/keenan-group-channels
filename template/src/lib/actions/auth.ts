@@ -4,25 +4,8 @@ import { redirect } from "next/navigation";
 import { customerService, CHANNEL_ID } from "@/lib/store";
 import { setSession, clearSession } from "@/lib/auth";
 import { hashPassword, verifyPassword } from "@/lib/password";
-
-// Basic in-memory login throttle (per container). Not a substitute for a shared
-// store across replicas, but it blunts online brute-forcing of a single node.
-const attempts = new Map<string, number[]>();
-const WINDOW_MS = 5 * 60_000;
-const MAX_ATTEMPTS = 10;
-
-function tooManyAttempts(key: string): boolean {
-  const now = Date.now();
-  const recent = (attempts.get(key) || []).filter((t) => now - t < WINDOW_MS);
-  attempts.set(key, recent);
-  return recent.length >= MAX_ATTEMPTS;
-}
-function recordFailure(key: string) {
-  const recent = attempts.get(key) || [];
-  recent.push(Date.now());
-  attempts.set(key, recent);
-  if (attempts.size > 5000) attempts.clear(); // crude bound
-}
+// Shared login throttle so the form login and the account-panel login share ONE keyspace.
+import { tooManyAttempts, recordFailure } from "@/lib/login-throttle";
 
 export async function login(
   _prev: { error?: string } | null,

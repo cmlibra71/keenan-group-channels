@@ -311,15 +311,23 @@ export async function placeOrder(
     console.error("[placeOrder] shipping address insert failed (non-fatal):", e);
   }
 
-  // Enforce + record coupon usage for codes on the cart (couponService.redeem checks caps
-  // atomically, records a redemption, increments current_uses). Over-cap codes are logged, not used.
+  // Enforce + record coupon usage for any codes carried on the cart. couponService.redeem
+  // checks max_uses / max_uses_per_customer atomically (row lock), records a
+  // coupon_redemptions row, and increments current_uses — so a code past its cap is simply
+  // not redeemed (logged) rather than silently over-used. Runs before the Stripe early-return
+  // so every payment method records redemption.
   const couponCodes = (cartWithItems as { coupon_codes?: string[] | null }).coupon_codes ?? [];
   for (const code of couponCodes) {
     if (!code) continue;
     try {
-      await couponService.redeem({ code, orderId: order.id, customerId: session?.customerId ?? null, discountAmount: "0" });
+      await couponService.redeem({
+        code,
+        orderId: order.id,
+        customerId: session?.customerId ?? null,
+        discountAmount: "0",
+      });
     } catch (e) {
-      console.error(`[placeOrder] coupon "" not redeemed:`, e instanceof Error ? e.message : e);
+      console.error(`[placeOrder] coupon "${code}" not redeemed:`, e instanceof Error ? e.message : e);
     }
   }
 

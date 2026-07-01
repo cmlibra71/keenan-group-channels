@@ -19,6 +19,12 @@ async function getStripeProvider(): Promise<StripeSubscriptionProvider> {
   return new StripeSubscriptionProvider(gateway.credentials.secret_key);
 }
 
+// Per-customer in-flight guard (per container): the active/pending check and the
+// Stripe+local create aren't atomic, so two concurrent submits (double-click / retry)
+// could both create a Stripe subscription → double billing. This serializes them on a
+// single node; the second concurrent call bails instead of creating a second sub.
+const subscriptionLocks = new Set<string>();
+
 /**
  * Create a subscription for the current customer.
  * Returns the Stripe client secret for payment confirmation.
@@ -33,6 +39,12 @@ export async function createSubscription(planId: number): Promise<{
   if (!session) {
     return { success: false, error: "Not authenticated" };
   }
+
+  const lockKey = `${CHANNEL_ID}:${session.customerId}`;
+  if (subscriptionLocks.has(lockKey)) {
+    return { success: false, error: "A subscription request is already being processed." };
+  }
+  subscriptionLocks.add(lockKey);
 
   try {
     const plan = await subscriptionPlanService.getById(planId);
@@ -126,6 +138,8 @@ export async function createSubscription(planId: number): Promise<{
       success: false,
       error: err instanceof Error ? err.message : "Failed to create subscription",
     };
+  } finally {
+    subscriptionLocks.delete(lockKey);
   }
 }
 
