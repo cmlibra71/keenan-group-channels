@@ -147,46 +147,64 @@ export async function addToCart(productId: number, variantId?: number | null, qu
 }
 
 export async function updateCartItem(itemId: number, quantity: number) {
-  const uuid = await getCartUuid();
-  if (!uuid) return { error: "No cart" };
+  // Whole body is guarded: a transient DB/pool failure here must never escape as
+  // an unhandled rejection — the caller re-renders the root layout via
+  // revalidatePath, so a throw would surface as the site-wide global-error
+  // boundary ("Something went wrong loading the site"). Return { error } instead;
+  // the client refreshes to re-sync.
+  try {
+    const uuid = await getCartUuid();
+    if (!uuid) return { error: "No cart" };
 
-  const cart = await cartService.getByUuid(uuid);
-  if (!cart) return { error: "Cart not found" };
+    const cart = await cartService.getByUuid(uuid);
+    if (!cart) return { error: "Cart not found" };
 
-  if (quantity <= 0) {
-    await cartItemService.deleteForParent(cart.id, itemId);
-    revalidatePath("/", "layout");
-    return { success: true };
-  }
+    if (quantity <= 0) {
+      // Idempotent: removing an already-deleted line (e.g. rapid minus clicks on
+      // the last unit, or a raced concurrent remove) is a no-op success.
+      await cartItemService.deleteForParent(cart.id, itemId);
+      revalidatePath("/", "layout");
+      return { success: true };
+    }
 
-  // Re-price the line for the new quantity so bulk tiers are applied/removed as
-  // the quantity crosses a break (the stored salePrice carries the effective price).
-  const full = await cartService.getWithItems(cart.id);
-  // getWithItems returns snake_case rows — read product_id / variant_id (reading
-  // the camelCase keys yielded undefined, so re-pricing threw on every change).
-  const item = full?.items.find((i: { id: number }) => i.id === itemId) as
-    | { id: number; product_id: number; variant_id: number | null }
-    | undefined;
+    // Re-price the line for the new quantity so bulk tiers are applied/removed as
+    // the quantity crosses a break (the stored salePrice carries the effective price).
+    const full = await cartService.getWithItems(cart.id);
+    // getWithItems returns snake_case rows — read product_id / variant_id (reading
+    // the camelCase keys yielded undefined, so re-pricing threw on every change).
+    const item = full?.items.find((i: { id: number }) => i.id === itemId) as
+      | { id: number; product_id: number; variant_id: number | null }
+      | undefined;
 
-  if (item) {
+    // Line already gone (raced with a concurrent remove) — nothing to update.
+    if (!item) {
+      revalidatePath("/", "layout");
+      return { success: true };
+    }
+
     // Re-pricing can throw (product lookup); never let it block the quantity
     // change — fall back to updating just the quantity, matching addToCart.
+    let pricing: { listPrice: string; salePrice: string | null } | null = null;
     try {
-      const pricing = await resolveItemPricing(item.product_id, item.variant_id, quantity);
-      await cartItemService.updateForParent(cart.id, itemId, {
-        quantity,
-        listPrice: pricing.listPrice,
-        salePrice: pricing.salePrice,
-      });
+      pricing = await resolveItemPricing(item.product_id, item.variant_id, quantity);
     } catch {
-      await cartItemService.updateForParent(cart.id, itemId, { quantity });
+      pricing = null;
     }
-  } else {
-    await cartItemService.updateForParent(cart.id, itemId, { quantity });
-  }
 
-  revalidatePath("/", "layout");
-  return { success: true };
+    await cartItemService.updateForParent(
+      cart.id,
+      itemId,
+      pricing
+        ? { quantity, listPrice: pricing.listPrice, salePrice: pricing.salePrice }
+        : { quantity }
+    );
+
+    revalidatePath("/", "layout");
+    return { success: true };
+  } catch (e) {
+    console.error("[updateCartItem] failed (non-fatal):", e);
+    return { error: "Could not update cart" };
+  }
 }
 
 export async function removeCartItem(itemId: number) {

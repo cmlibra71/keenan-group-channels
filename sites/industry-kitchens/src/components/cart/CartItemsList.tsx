@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { updateCartItem, removeCartItem } from "@/lib/actions/cart";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { Price } from "@/components/ui/Price";
@@ -33,21 +34,35 @@ export function CartItemsList({ items }: { items: CartItemRow[] }) {
 
 function CartItemRow({ item }: { item: CartItemRow }) {
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
 
   const unitPrice = item.sale_price
     ? parseFloat(item.sale_price)
     : parseFloat(item.list_price);
   const lineTotal = unitPrice * item.quantity;
 
+  // Never let a failed action escape the transition — an unhandled rejection here
+  // escalates to the error boundary and blanks the whole site. On any failure,
+  // refresh to re-sync the cart from the server instead.
   function handleQuantity(newQty: number) {
     startTransition(async () => {
-      await updateCartItem(item.id, newQty);
+      try {
+        const res = await updateCartItem(item.id, newQty);
+        if (res?.error) router.refresh();
+      } catch {
+        router.refresh();
+      }
     });
   }
 
   function handleRemove() {
     startTransition(async () => {
-      await removeCartItem(item.id);
+      try {
+        const res = await removeCartItem(item.id);
+        if (res?.error) router.refresh();
+      } catch {
+        router.refresh();
+      }
     });
   }
 
