@@ -20,6 +20,21 @@ const RichTextBlock: FC<BlockProps> = ({ props }) => (
   </section>
 );
 
+// Faithful reproduction of CD's legacy /pages/[slug] article — keep markup in
+// exact sync with app/pages/[slug]/page.tsx so migrated pages are pixel-identical.
+const ContentPageBlock: FC<BlockProps> = ({ props }) => (
+  <article className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+    <h1 className="heading-serif text-3xl sm:text-4xl text-text-primary mb-4">
+      {str(props.heading)}
+    </h1>
+    {str(props.summary) && (
+      <p className="text-base text-text-secondary leading-relaxed mb-8">{str(props.summary)}</p>
+    )}
+    <RichContent html={str(props.body_html)} stripStyles className="content-prose" />
+    {str(props.updated) && <p className="mt-12 caption">Last updated: {str(props.updated)}</p>}
+  </article>
+);
+
 const RawHtmlBlock: FC<BlockProps> = ({ props }) => (
   <section className="mx-auto max-w-5xl px-4 py-8">
     <RichContent html={str(props.html)} />
@@ -121,6 +136,7 @@ async function ProductListingBlock({ props }: BlockProps) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const BLOCK_COMPONENTS: Record<string, FC<BlockProps> | ((p: BlockProps) => any)> = {
   rich_text: RichTextBlock,
+  content_page: ContentPageBlock,
   raw_html: RawHtmlBlock,
   image: ImageBlock,
   spacer: SpacerBlock,

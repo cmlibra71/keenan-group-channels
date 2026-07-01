@@ -40,11 +40,9 @@ export default async function ContentPage({
 
   const cms = await getCmsPage(slug, draft);
   if (cms) {
-    return (
-      <div className="py-4">
-        <BlockRenderer blocks={cms.blocks as unknown as RenderedBlock[]} draft={draft} />
-      </div>
-    );
+    // No wrapper — the content_page block is a full <article>, so a migrated page
+    // renders pixel-identically to the legacy path.
+    return <BlockRenderer blocks={cms.blocks as unknown as RenderedBlock[]} draft={draft} />;
   }
 
   const page = await getContentPage(slug);

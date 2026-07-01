@@ -42,11 +42,9 @@ export default async function ContentPage({
   // New CMS page (block-composed) takes precedence.
   const cms = await getCmsPage(slug, draft);
   if (cms) {
-    return (
-      <div className="py-4">
-        <BlockRenderer blocks={cms.blocks as unknown as RenderedBlock[]} draft={draft} />
-      </div>
-    );
+    // No wrapper — the content_page block is a full <article>, so a migrated page
+    // renders pixel-identically to the legacy path.
+    return <BlockRenderer blocks={cms.blocks as unknown as RenderedBlock[]} draft={draft} />;
   }
 
   // Legacy fallback — existing content_pages entries render unchanged until migrated.
