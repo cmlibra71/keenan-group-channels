@@ -19,9 +19,13 @@ export type FooterConfig = {
   account?: FooterColumn;
   support?: FooterColumn;
   abn?: string;
+  // When set (from the Navigation editor), these replace the named columns above
+  // so editors can add/rename/reorder any number of footer link columns.
+  columns?: FooterColumn[];
 };
 
-const DEFAULT_FOOTER: Required<Omit<FooterConfig, "membership">> & Pick<FooterConfig, "membership"> = {
+const DEFAULT_FOOTER: Required<Omit<FooterConfig, "membership" | "columns">> &
+  Pick<FooterConfig, "membership"> = {
   blurb:
     "Professional-grade kitchen equipment and supplies for the commercial trade. Wholesale pricing for members.",
   shop: {
@@ -97,6 +101,13 @@ export function Footer({
   const support = cfg.support ?? DEFAULT_FOOTER.support;
   const abn = cfg.abn ?? DEFAULT_FOOTER.abn;
 
+  // Custom columns from the Navigation editor override the named columns.
+  const customColumns = (cfg.columns ?? []).filter((c) => c && c.heading && c.links?.length);
+  const columns: FooterColumn[] =
+    customColumns.length > 0
+      ? customColumns
+      : [shop, ...(subscriptionsEnabled && membership ? [membership] : []), account, support];
+
   return (
     <footer className="mt-20 bg-surface-dark text-white">
       <div className="container-page py-14">
@@ -115,11 +126,10 @@ export function Footer({
 
           {/* Link columns */}
           <div className="md:col-span-8">
-            <div className={`grid grid-cols-2 gap-8 ${subscriptionsEnabled ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
-              <Column column={shop} />
-              {subscriptionsEnabled && membership && <Column column={membership} />}
-              <Column column={account} />
-              <Column column={support} />
+            <div className={`grid grid-cols-2 gap-8 ${columns.length >= 4 ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
+              {columns.map((column, i) => (
+                <Column key={column.heading + i} column={column} />
+              ))}
             </div>
           </div>
         </div>

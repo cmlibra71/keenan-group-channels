@@ -144,6 +144,18 @@ export const getFooterConfig = unstable_cache(
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
 );
 
+// Custom header nav items (Navigation editor → `nav_structure.header`). Empty =
+// the storefront falls back to the category-driven mega-menu.
+export type HeaderNavItem = { label: string; url: string; children?: { label: string; url: string }[] };
+export const getHeaderNav = unstable_cache(
+  async (): Promise<HeaderNavItem[]> => {
+    const nav = (await getChannelSetting("nav_structure")) as { header?: HeaderNavItem[] } | null;
+    return Array.isArray(nav?.header) ? nav!.header : [];
+  },
+  [`header-nav-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
 /** True when Stripe should run in TEST mode for this channel: the portal "Payments
  * test mode" toggle (`payments_test_mode`) OR a non-production NODE_ENV. Delegates to
  * the canonical @keenan/services helper — the single source of truth for every

@@ -4,10 +4,11 @@ import { Search } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
-import { getActiveSubscription, getFeatureFlag, getMegaMenu, drawEntryService, CHANNEL_ID } from "@/lib/store";
+import { getActiveSubscription, getFeatureFlag, getMegaMenu, getHeaderNav, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 import { GstToggle } from "./GstToggle";
 import { MegaMenu } from "./MegaMenu";
+import { CustomNav } from "./CustomNav";
 import { MobileNavDrawer } from "./MobileNavDrawer";
 import { SearchTypeahead } from "../search/SearchTypeahead";
 
@@ -17,7 +18,12 @@ import { SearchTypeahead } from "../search/SearchTypeahead";
  * mega panels. Sticky as a unit.
  */
 export async function Header({ storeName, logoUrl, logoAlt }: { storeName: string; logoUrl?: string | null; logoAlt?: string | null }) {
-  const [cart, quote, megaMenu] = await Promise.all([getCart(), getQuote(), getMegaMenu()]);
+  const [cart, quote, megaMenu, headerNav] = await Promise.all([
+    getCart(),
+    getQuote(),
+    getMegaMenu(),
+    getHeaderNav(),
+  ]);
   const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   // QuoteService.getWithItems types its items loosely (Record<string,unknown>) unlike
   // CartService — precise typing there is a separate cleanup. quantity is runtime-correct.
@@ -82,8 +88,12 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
         </div>
       </div>
 
-      {/* Department nav + mega panels — deep green */}
-      <MegaMenu departments={megaMenu.departments} featured={megaMenu.featured} />
+      {/* Department nav — editor's custom nav when set, else the category mega-menu */}
+      {headerNav.length > 0 ? (
+        <CustomNav items={headerNav} />
+      ) : (
+        <MegaMenu departments={megaMenu.departments} featured={megaMenu.featured} />
+      )}
     </header>
   );
 }
