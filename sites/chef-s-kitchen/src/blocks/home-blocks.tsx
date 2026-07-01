@@ -70,7 +70,12 @@ async function getMembershipContext() {
 }
 
 // ── Hero ────────────────────────────────────────────────────────────────────
-async function HomeHero() {
+// Editable-copy helper: use the block prop when it's a non-empty string, else
+// fall back to the current hard-coded default (so an unedited block is pixel-identical).
+const str = (v: unknown, fallback: string): string =>
+  typeof v === "string" && v.trim() ? v : fallback;
+
+async function HomeHero(props: Record<string, unknown> = {}) {
   const { channel } = await getSiteConfig();
   const { subscriptionsEnabled, plan, planPrice, planBenefits, featuredPrize, featuredDraw } =
     await getMembershipContext();
@@ -80,6 +85,17 @@ async function HomeHero() {
   ]);
 
   if (subscriptionsEnabled && plan) {
+    const eyebrow = str(props.eyebrow, "Members-Only Supply Partner");
+    const headline = str(props.headline, "Professional Culinary Supplies at Prices");
+    const headlineEmphasis = str(props.headline_emphasis, "Reserved for the Trade");
+    const subheadline = str(
+      props.subheadline,
+      "From {price} — access wholesale pricing and priority fulfilment across our full commercial range."
+    ).replace("{price}", `$${planPrice!.toFixed(2)}/${plan.billing_interval}`);
+    const ctaText = str(props.cta_text, "Join & Save");
+    const ctaHref = str(props.cta_href, "/membership");
+    const cta2Text = str(props.cta2_text, "Browse Equipment & Supplies");
+    const cta2Href = str(props.cta2_href, "/search");
     return (
       <section className="relative flex min-h-[520px] items-center overflow-hidden">
         <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/images/hero-bg.webp')" }} />
@@ -88,23 +104,22 @@ async function HomeHero() {
           <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
             <div className="glass self-center p-8 text-white lg:p-10">
               <p className="mb-[18px] text-[11.5px] font-bold uppercase tracking-[0.16em] text-white/85">
-                Members-Only Supply Partner
+                {eyebrow}
               </p>
               <h1 className="hero-title text-white">
-                Professional Culinary Supplies at Prices{" "}
-                <em className="not-italic text-member-bright">Reserved for the Trade</em>
+                {headline}{" "}
+                <em className="not-italic text-member-bright">{headlineEmphasis}</em>
               </h1>
               <p className="mt-[18px] max-w-[44ch] text-base leading-[1.55] text-white/[0.88]">
-                From ${planPrice!.toFixed(2)}/{plan.billing_interval} — access wholesale pricing
-                and priority fulfilment across our full commercial range.
+                {subheadline}
               </p>
               <div className="mt-[26px] flex flex-wrap gap-3">
-                <Link href="/membership" className="btn-primary">
-                  Join &amp; Save
+                <Link href={ctaHref} className="btn-primary">
+                  {ctaText}
                   <ArrowRight className="h-4 w-4" />
                 </Link>
-                <Link href="/search" className="btn-glass">
-                  Browse Equipment &amp; Supplies
+                <Link href={cta2Href} className="btn-glass">
+                  {cta2Text}
                 </Link>
               </div>
             </div>
@@ -180,14 +195,16 @@ async function HomeHero() {
       <div className="relative z-10 container-page w-full py-10">
         <div className="glass max-w-2xl p-8 text-white lg:p-10">
           <p className="mb-[18px] text-[11.5px] font-bold uppercase tracking-[0.16em] text-white/85">
-            Commercial Kitchen Equipment
+            {str(props.eyebrow, "Commercial Kitchen Equipment")}
           </p>
-          <h1 className="hero-title text-white">Welcome to {channel?.name || "our store"}</h1>
+          <h1 className="hero-title text-white">
+            {str(props.headline, `Welcome to ${channel?.name || "our store"}`)}
+          </h1>
           <p className="mt-[18px] max-w-[44ch] text-base leading-[1.55] text-white/[0.88]">
-            Discover our curated range of professional-grade kitchen equipment.
+            {str(props.subheadline, "Discover our curated range of professional-grade kitchen equipment.")}
           </p>
-          <Link href="/products" className="btn-primary mt-[26px]">
-            Browse Equipment
+          <Link href={str(props.cta_href, "/products")} className="btn-primary mt-[26px]">
+            {str(props.cta_text, "Browse Equipment")}
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
@@ -197,15 +214,15 @@ async function HomeHero() {
 }
 
 // ── Shop by category ──────────────────────────────────────────────────────────
-async function ShopByCategory() {
+async function ShopByCategory(props: Record<string, unknown> = {}) {
   const [topCategories, megaMenu] = await Promise.all([getTopCategories(), getMegaMenu()]);
   if (topCategories.length === 0) return null;
   return (
     <section className="container-page section-padding">
       <div className="mb-10 flex items-end justify-between">
         <div>
-          <p className="eyebrow mb-3">Departments</p>
-          <h2 className="section-title">Shop by Category</h2>
+          <p className="eyebrow mb-3">{str(props.eyebrow, "Departments")}</p>
+          <h2 className="section-title">{str(props.heading, "Shop by Category")}</h2>
         </div>
         <Link href="/categories" className="hidden items-center gap-1.5 text-sm font-semibold text-accent transition-colors hover:text-accent-hover sm:inline-flex">
           View All
@@ -273,20 +290,20 @@ async function BrandShowcaseBlock() {
 }
 
 // ── Clearance spotlight ───────────────────────────────────────────────────────
-async function ClearanceSpotlightBlock() {
+async function ClearanceSpotlightBlock(props: Record<string, unknown> = {}) {
   const { products: clearanceProducts } = await getProducts({ limit: 9, onSale: true });
   return (
     <ClearanceSpotlight
       products={clearanceProducts}
-      heading="Last Units"
-      eyebrow="While Stocks Last"
+      heading={str(props.heading, "Last Units")}
+      eyebrow={str(props.eyebrow, "While Stocks Last")}
       pricing={await getListingPricing(clearanceProducts)}
     />
   );
 }
 
 // ── Featured products ─────────────────────────────────────────────────────────
-async function FeaturedProductsBlock() {
+async function FeaturedProductsBlock(props: Record<string, unknown> = {}) {
   const [{ products: featuredProducts }, memberPricingEnabled] = await Promise.all([
     getProducts({ limit: 8, featured: true }),
     getFeatureFlag("member_pricing_enabled"),
@@ -295,8 +312,8 @@ async function FeaturedProductsBlock() {
     <section className="container-page section-padding">
       <div className="flex items-end justify-between mb-10">
         <div>
-          <p className="eyebrow mb-3">Curated Selection</p>
-          <h2 className="section-title">Featured Equipment</h2>
+          <p className="eyebrow mb-3">{str(props.eyebrow, "Curated Selection")}</p>
+          <h2 className="section-title">{str(props.heading, "Featured Equipment")}</h2>
         </div>
         <Link href="/products?filter=featured" className="hidden sm:inline-flex items-center gap-1.5 nav-link">
           View All
@@ -323,20 +340,20 @@ async function DrawSpotlightBlock() {
 }
 
 // ---------------------------------------------------------------------------
-// Block map fragment for the homepage. These are system blocks (own data).
-// `props` is accepted for signature parity with other blocks but unused.
+// Block map fragment for the homepage. System blocks fetch their own live
+// catalog data; editable copy (headings, hero text, CTAs) comes from `props`.
 // ---------------------------------------------------------------------------
 type BlockProps = { props: Record<string, unknown> };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const HOME_BLOCK_COMPONENTS: Record<string, (p: BlockProps) => any> = {
-  home_hero: () => HomeHero(),
+  home_hero: ({ props }) => HomeHero(props),
   trust_bar: () => <TrustBar />,
-  shop_by_category: () => ShopByCategory(),
+  shop_by_category: ({ props }) => ShopByCategory(props),
   membership_value_strip: () => MembershipStripBlock(),
   brand_showcase: () => BrandShowcaseBlock(),
-  clearance_spotlight: () => ClearanceSpotlightBlock(),
-  featured_products: () => FeaturedProductsBlock(),
+  clearance_spotlight: ({ props }) => ClearanceSpotlightBlock(props),
+  featured_products: ({ props }) => FeaturedProductsBlock(props),
   seo_faq: () => SeoFaqBlock(),
   draw_spotlight: () => DrawSpotlightBlock(),
 };
