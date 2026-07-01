@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
+import { draftMode } from "next/headers";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { getBrandBySlug, getProducts, getFeatureFlag } from "@/lib/store";
+import { getBrandBySlug, getProducts, getFeatureFlag, getCmsPage } from "@/lib/store";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
+import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BrandIntro } from "@/components/brand/BrandIntro";
 import { BrandProductLines } from "@/components/brand/BrandProductLines";
 import { BrandIndustryUses } from "@/components/brand/BrandIndustryUses";
@@ -50,8 +52,17 @@ export default async function BrandPage({
   const meta = ((brand.metafields as BrandMetafields | null) ?? {}) as BrandMetafields;
   const pageTitle = (brand.page_title as string | null) || (brand.name as string);
 
+  // Editable CMS zones on every brand page (global brand template) — empty unless set.
+  const { isEnabled: draft } = await draftMode();
+  const brandCms = await getCmsPage("__brand__", draft).catch(() => null);
+  const brandRegion = (r: string): RenderedBlock[] =>
+    ((brandCms?.blocks as unknown as RenderedBlock[]) ?? []).filter((b) => b.region === r);
+  const aboveBrand = brandRegion("above_listing");
+  const belowBrand = brandRegion("below_listing");
+
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+      {aboveBrand.length > 0 && <BlockRenderer blocks={aboveBrand} draft={draft} />}
       {/* Breadcrumbs */}
       <nav className="flex flex-wrap items-center gap-1.5 text-sm text-zinc-400 mb-6">
         <Link href="/brands" className="hover:text-zinc-600">Brands</Link>
@@ -106,6 +117,8 @@ export default async function BrandPage({
 
       {/* Brand FAQ accordion */}
       <BrandFaq items={meta.faq} />
+
+      {belowBrand.length > 0 && <BlockRenderer blocks={belowBrand} draft={draft} />}
     </div>
   );
 }

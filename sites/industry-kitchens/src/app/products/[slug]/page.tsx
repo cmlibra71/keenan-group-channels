@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
+import { draftMode } from "next/headers";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscription, getSubscriptionPlans, customerService, brandService, CHANNEL_ID, getProductBreadcrumbs } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscription, getSubscriptionPlans, customerService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsPage } from "@/lib/store";
 import { getSession } from "@/lib/auth";
 import { ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
+import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductTabs } from "@/components/product/ProductTabs";
 import { ProductGrid } from "@/components/product/ProductGrid";
@@ -115,8 +117,18 @@ export default async function ProductPage({
     fileSize: number | null;
   }[];
 
+  // Editable CMS zones on every product page (global product template) — empty
+  // unless set, so the page renders exactly as before.
+  const { isEnabled: draft } = await draftMode();
+  const productCms = await getCmsPage("__product__", draft).catch(() => null);
+  const prodRegion = (r: string): RenderedBlock[] =>
+    ((productCms?.blocks as unknown as RenderedBlock[]) ?? []).filter((b) => b.region === r);
+  const aboveDetail = prodRegion("above_detail");
+  const belowDetail = prodRegion("below_detail");
+
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+      {aboveDetail.length > 0 && <BlockRenderer blocks={aboveDetail} draft={draft} />}
       {breadcrumbs.length > 0 ? (
         <nav className="flex flex-wrap items-center gap-1.5 text-sm text-zinc-400 mb-6">
           <Link href="/products" className="hover:text-zinc-600">Products</Link>
@@ -181,6 +193,8 @@ export default async function ProductPage({
           <ProductGrid products={relatedProducts} memberPricingAvailable={memberPricingEnabled} />
         </div>
       )}
+
+      {belowDetail.length > 0 && <BlockRenderer blocks={belowDetail} draft={draft} />}
     </div>
   );
 }

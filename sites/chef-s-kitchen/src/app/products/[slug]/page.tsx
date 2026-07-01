@@ -1,12 +1,14 @@
 import { notFound } from "next/navigation";
+import { draftMode } from "next/headers";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, brandService, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, brandService, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice, getCmsPage } from "@/lib/store";
 import { getMemberContext, getListingPricing } from "@/lib/member";
 import { ChevronRight } from "lucide-react";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductTabs } from "@/components/product/ProductTabs";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { BackButton } from "@/components/ui/BackButton";
+import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import type { Metadata } from "next";
 
 export async function generateMetadata({
@@ -177,6 +179,15 @@ export default async function ProductPage({
     fileSize: number | null;
   }[];
 
+  // Editable CMS content zones shown on every product page (global product
+  // template). Empty unless set — so the page renders exactly as before.
+  const { isEnabled: draft } = await draftMode();
+  const productCms = await getCmsPage("__product__", draft).catch(() => null);
+  const prodRegion = (r: string): RenderedBlock[] =>
+    ((productCms?.blocks as unknown as RenderedBlock[]) ?? []).filter((b) => b.region === r);
+  const aboveDetail = prodRegion("above_detail");
+  const belowDetail = prodRegion("below_detail");
+
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
       <script
@@ -199,6 +210,8 @@ export default async function ProductPage({
       ) : (
         <BackButton fallbackHref="/products" fallbackLabel="Back to Products" className="mb-6" />
       )}
+
+      {aboveDetail.length > 0 && <BlockRenderer blocks={aboveDetail} draft={draft} />}
 
       <ProductPageClient
         product={{
@@ -264,6 +277,8 @@ export default async function ProductPage({
           />
         </div>
       )}
+
+      {belowDetail.length > 0 && <BlockRenderer blocks={belowDetail} draft={draft} />}
     </div>
   );
 }

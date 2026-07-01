@@ -113,6 +113,14 @@ export const getChannelSetting = async (key: string): Promise<unknown> => {
   }
 };
 
+// CMS-editable footer content (the `footer` channel setting). Empty object →
+// the Footer component falls back to DEFAULT_FOOTER (current content).
+export const getFooterConfig = unstable_cache(
+  async () => ((await getChannelSetting("footer")) as Record<string, unknown>) ?? {},
+  [`footer-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
 /** True when Stripe should run in TEST mode for this channel: the portal "Payments
  * test mode" toggle (`payments_test_mode`) OR a non-production NODE_ENV. Delegates to
  * the canonical @keenan/services helper — the single source of truth for every

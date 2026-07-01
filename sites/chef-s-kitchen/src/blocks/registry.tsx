@@ -133,6 +133,8 @@ async function ProductListingBlock({ props }: BlockProps) {
 
 // --- the map ----------------------------------------------------------------
 
+import { HOME_BLOCK_COMPONENTS } from "./home-blocks";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const BLOCK_COMPONENTS: Record<string, FC<BlockProps> | ((p: BlockProps) => any)> = {
   rich_text: RichTextBlock,
@@ -143,6 +145,8 @@ export const BLOCK_COMPONENTS: Record<string, FC<BlockProps> | ((p: BlockProps) 
   cta: CtaBlock,
   hero: HeroBlock,
   product_listing: ProductListingBlock,
+  // Homepage section blocks (own data; verbatim markup from the legacy homepage).
+  ...HOME_BLOCK_COMPONENTS,
 };
 
 export const SUPPORTED_BLOCK_TYPES = Object.keys(BLOCK_COMPONENTS);

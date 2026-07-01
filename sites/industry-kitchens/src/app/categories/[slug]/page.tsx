@@ -2,17 +2,39 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ChevronRight, Package } from "lucide-react";
+import { draftMode } from "next/headers";
+import type { Metadata } from "next";
 import {
   getCategoryBySlug,
   getCategoryListing,
   getSubcategories,
   getCategoryBreadcrumbs,
   getFeatureFlag,
+  getCmsCategoryPage,
 } from "@/lib/store";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
 import { RichContent } from "@/components/content/RichContent";
+import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
+
+// Emit category SEO (CMS category-page meta if set, else the category record).
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const category = await getCategoryBySlug(slug);
+  if (!category) return {};
+  const cms = await getCmsCategoryPage(category.id).catch(() => null);
+  const meta = (cms?.page_meta ?? {}) as { meta_title?: string; meta_description?: string };
+  const cat = category as { name: string; page_title?: string | null; meta_description?: string | null };
+  return {
+    title: meta.meta_title || cat.page_title || cat.name,
+    description: meta.meta_description || cat.meta_description || undefined,
+  };
+}
 
 const PER_PAGE = 24;
 const MAX_PAGES = 8; // "Load more" renders cumulatively; hard cap keeps queries sane.
@@ -81,6 +103,14 @@ export default async function CategoryPage({
   const memberPriceMap = await getListingMemberPrices(products);
   const shown = products.length;
   const hasMore = shown < total && page < MAX_PAGES;
+
+  // Editable CMS content zones around the (system) listing — empty unless set.
+  const { isEnabled: draft } = await draftMode();
+  const cmsCat = await getCmsCategoryPage(category.id, draft).catch(() => null);
+  const region = (r: string): RenderedBlock[] =>
+    ((cmsCat?.blocks as unknown as RenderedBlock[]) ?? []).filter((b) => b.region === r);
+  const aboveBlocks = region("above_listing");
+  const belowBlocks = region("below_listing");
 
   const nextPageHref = (() => {
     const next = new URLSearchParams();
@@ -158,6 +188,9 @@ export default async function CategoryPage({
         </div>
       )}
 
+      {/* ═══ CMS: above-listing content (empty unless set) ═══ */}
+      {aboveBlocks.length > 0 && <BlockRenderer blocks={aboveBlocks} draft={draft} />}
+
       {/* ═══ Rail + grid ═══ */}
       <div className="flex gap-6">
         <FilterRail facets={facets} />
@@ -194,6 +227,9 @@ export default async function CategoryPage({
           )}
         </div>
       </div>
+
+      {/* ═══ CMS: below-listing content (empty unless set) ═══ */}
+      {belowBlocks.length > 0 && <BlockRenderer blocks={belowBlocks} draft={draft} />}
     </div>
   );
 }

@@ -1,4 +1,6 @@
 import { notFound, redirect } from "next/navigation";
+import { draftMode } from "next/headers";
+import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { ChevronRight } from "lucide-react";
@@ -8,11 +10,32 @@ import {
   getCategoryBreadcrumbs,
   getFeatureFlag,
   getChannelSetting,
+  getCmsCategoryPage,
 } from "@/lib/store";
 import { getListingPricing } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
 import { RichContent } from "@/components/content/RichContent";
+import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
+
+// Emit category SEO — from the CMS category page's meta if set, else the
+// category record's own fields. (Previously the category page emitted none.)
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const category = await getCategoryBySlug(slug);
+  if (!category) return {};
+  const cms = await getCmsCategoryPage(category.id).catch(() => null);
+  const meta = (cms?.page_meta ?? {}) as { meta_title?: string; meta_description?: string };
+  const cat = category as { name: string; page_title?: string | null; meta_description?: string | null };
+  return {
+    title: meta.meta_title || cat.page_title || cat.name,
+    description: meta.meta_description || cat.meta_description || undefined,
+  };
+}
 
 const PER_PAGE = 24;
 const MAX_PAGES = 8; // "Load more" renders cumulatively; hard cap keeps queries sane.
@@ -89,6 +112,15 @@ export default async function CategoryPage({
   const shown = products.length;
   const hasMore = shown < total && page < MAX_PAGES;
 
+  // Editable CMS content zones around the (system) listing. Empty when no CMS
+  // category page is set — so the page renders exactly as before.
+  const { isEnabled: draft } = await draftMode();
+  const cmsCat = await getCmsCategoryPage(category.id, draft).catch(() => null);
+  const region = (r: string): RenderedBlock[] =>
+    ((cmsCat?.blocks as unknown as RenderedBlock[]) ?? []).filter((b) => b.region === r);
+  const aboveBlocks = region("above_listing");
+  const belowBlocks = region("below_listing");
+
   const nextPageHref = (() => {
     const next = new URLSearchParams();
     if (sp.sub) next.set("sub", sp.sub);
@@ -146,6 +178,9 @@ export default async function CategoryPage({
         </div>
       </section>
 
+      {/* ═══ CMS: above-listing content (empty unless set) ═══ */}
+      {aboveBlocks.length > 0 && <BlockRenderer blocks={aboveBlocks} draft={draft} />}
+
       {/* ═══ Rail + grid ═══ */}
       <div className="container-page py-8">
         <div className="flex gap-6">
@@ -182,6 +217,9 @@ export default async function CategoryPage({
           </div>
         </div>
       </div>
+
+      {/* ═══ CMS: below-listing content (empty unless set) ═══ */}
+      {belowBlocks.length > 0 && <BlockRenderer blocks={belowBlocks} draft={draft} />}
     </div>
   );
 }

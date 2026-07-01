@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import { Fraunces, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
-import { getSiteConfig, getFeatureFlag } from "@/lib/store";
+import { getSiteConfig, getFeatureFlag, getFooterConfig } from "@/lib/store";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { GstProvider } from "@/lib/gst";
@@ -56,10 +56,11 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [{ site, channel }, subscriptionsEnabled, pricesIncludeTax, cookieStore] = await Promise.all([
+  const [{ site, channel }, subscriptionsEnabled, pricesIncludeTax, footerConfig, cookieStore] = await Promise.all([
     getSiteConfig(),
     getFeatureFlag("subscriptions_enabled"),
     getFeatureFlag("prices_include_tax"),
+    getFooterConfig(),
     cookies(),
   ]);
   const storeName = site?.siteName || channel?.name || "Store";
@@ -98,7 +99,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
           <Header storeName={storeName} logoUrl={logoUrl} logoAlt={logoAlt} />
           <main className="flex-1">{children}</main>
-          <Footer storeName={storeName} subscriptionsEnabled={subscriptionsEnabled} />
+          <Footer storeName={storeName} subscriptionsEnabled={subscriptionsEnabled} config={footerConfig} />
         </GstProvider>
       </body>
     </html>
