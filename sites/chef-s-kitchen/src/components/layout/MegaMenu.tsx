@@ -128,8 +128,9 @@ function MegaPanel({ dept, feat }: { dept: MegaMenuNode; feat?: MegaMenuFeatured
             </div>
           ))}
 
-          {/* Featured panel */}
-          <div className="flex flex-col overflow-hidden rounded-card bg-brand-tint">
+          {/* Featured panel — self-start so it stays a compact card (image + copy)
+              instead of stretching to the full mega-menu row height. */}
+          <div className="flex flex-col self-start overflow-hidden rounded-card bg-brand-tint">
             <div className="relative grid h-[120px] place-items-center bg-gradient-to-br from-brand-mid to-brand-deep">
               {(feat?.image_url ?? dept.image_url) && (
                 <Image src={(feat?.image_url ?? dept.image_url)!} alt="" fill sizes="240px" className="object-cover" />
