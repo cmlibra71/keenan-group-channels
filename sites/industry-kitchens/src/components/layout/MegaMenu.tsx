@@ -120,8 +120,8 @@ function MegaPanel({ dept, feat }: { dept: MegaMenuNode; feat?: MegaMenuFeatured
           {/* Featured panel */}
           <div className="flex flex-col overflow-hidden rounded-lg bg-zinc-50">
             <div className="relative grid h-[120px] place-items-center bg-gradient-to-br from-zinc-700 to-zinc-900">
-              {feat?.image_url && (
-                <Image src={feat.image_url} alt="" fill sizes="240px" className="object-cover" />
+              {(feat?.image_url ?? dept.image_url) && (
+                <Image src={(feat?.image_url ?? dept.image_url)!} alt="" fill sizes="240px" className="object-cover" />
               )}
             </div>
             <div className="p-3.5">

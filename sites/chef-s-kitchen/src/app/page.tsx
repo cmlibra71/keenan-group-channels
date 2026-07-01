@@ -206,7 +206,7 @@ export default async function HomePage() {
             </Link>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-            {topCategories.slice(0, 8).map((category: { id: number; name: string; slug: string; imageUrl?: string | null }) => {
+            {topCategories.slice(0, 8).map((category: { id: number; name: string; slug: string; image_url?: string | null }) => {
               const childCount = megaMenu.departments.find((d) => d.id === category.id)?.children.length ?? 0;
               return (
                 <Link
@@ -215,9 +215,9 @@ export default async function HomePage() {
                   className="group overflow-hidden rounded-card border border-border bg-white transition-all duration-200 hover:-translate-y-[3px] hover:border-brand-light hover:shadow-hover"
                 >
                   <div className="relative aspect-[4/3] bg-gradient-to-br from-brand-tint to-steel-200">
-                    {category.imageUrl && (
+                    {category.image_url && (
                       <Image
-                        src={category.imageUrl}
+                        src={category.image_url}
                         alt={category.name}
                         fill
                         sizes="(max-width: 640px) 50vw, 25vw"

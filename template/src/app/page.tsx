@@ -203,16 +203,16 @@ export default async function HomePage() {
             </Link>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-            {topCategories.map((category: { id: number; name: string; slug: string; imageUrl?: string | null }) => (
+            {topCategories.map((category: { id: number; name: string; slug: string; image_url?: string | null }) => (
               <Link
                 key={category.id}
                 href={`/categories/${category.slug}`}
                 className="group relative overflow-hidden rounded-2xl bg-zinc-200 aspect-[4/5] ring-1 ring-transparent hover:ring-amber-400/30 transition-all duration-500"
               >
                 <div className="absolute inset-0 overflow-hidden">
-                  {category.imageUrl ? (
+                  {category.image_url ? (
                     <Image
-                      src={category.imageUrl}
+                      src={category.image_url}
                       alt={category.name}
                       fill
                       sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
