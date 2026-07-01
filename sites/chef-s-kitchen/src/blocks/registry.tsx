@@ -151,6 +151,11 @@ export const BLOCK_COMPONENTS: Record<string, FC<BlockProps> | ((p: BlockProps) 
   // context; listed here so the editor palette/manifest offers them.
   brand_hero: () => null,
   brand_products: () => null,
+  // Product page sections — rendered directly by the product page with live context.
+  product_buybox: () => null,
+  product_links: () => null,
+  product_tabs: () => null,
+  product_related: () => null,
 };
 
 export const SUPPORTED_BLOCK_TYPES = Object.keys(BLOCK_COMPONENTS);

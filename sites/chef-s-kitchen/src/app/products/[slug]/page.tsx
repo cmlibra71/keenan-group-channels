@@ -4,11 +4,16 @@ import Link from "next/link";
 import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, brandService, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice, getCmsPage } from "@/lib/store";
 import { getMemberContext, getListingPricing } from "@/lib/member";
 import { ChevronRight } from "lucide-react";
-import { ProductPageClient } from "@/components/product/ProductPageClient";
-import { ProductTabs } from "@/components/product/ProductTabs";
-import { ProductGrid } from "@/components/product/ProductGrid";
 import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
+import {
+  ProductBuyBox,
+  ProductLinks,
+  ProductTabsBlock,
+  ProductRelated,
+  DEFAULT_PRODUCT_BLOCKS,
+  type ProductPageCtx,
+} from "@/blocks/product-page-blocks";
 import type { Metadata } from "next";
 
 export async function generateMetadata({
@@ -183,10 +188,60 @@ export default async function ProductPage({
   // template). Empty unless set — so the page renders exactly as before.
   const { isEnabled: draft } = await draftMode();
   const productCms = await getCmsPage("__product__", draft).catch(() => null);
-  const prodRegion = (r: string): RenderedBlock[] =>
-    ((productCms?.blocks as unknown as RenderedBlock[]) ?? []).filter((b) => b.region === r);
-  const aboveDetail = prodRegion("above_detail");
-  const belowDetail = prodRegion("below_detail");
+  // Product page content is the __product__ template's `main` block list (editable
+  // in Pages & Content). Defaults to buy-box + links + tabs + related, so an
+  // unedited template renders exactly as before. System blocks get the live context.
+  const prodBlocks = ((productCms?.blocks as unknown as RenderedBlock[]) ?? []).filter(
+    (b) => b.region === "main"
+  );
+  const blocks: RenderedBlock[] =
+    prodBlocks.length > 0 ? prodBlocks : (DEFAULT_PRODUCT_BLOCKS as unknown as RenderedBlock[]);
+
+  const ctx: ProductPageCtx = {
+    buybox: {
+      product: {
+        id: product.id,
+        name: product.name,
+        sku: product.sku,
+        price: product.price,
+        salePrice: product.salePrice,
+        inventoryLevel: product.inventoryLevel ?? 0,
+        inventoryTracking: product.inventoryTracking ?? "none",
+        availability: product.availability ?? "available",
+        descriptionShort: product.descriptionShort,
+        images: product.images,
+        variants: product.variants,
+        options: product.options ?? [],
+        optionValues: product.optionValues ?? [],
+        variantOptionMappings: product.variantOptionMappings ?? [],
+        bulkPricing: suppressCatalogPricing ? [] : (product.bulkPricing ?? []),
+      },
+      memberPrice,
+      memberPriceMap,
+      isMember,
+      membershipTeaser,
+      brandName: brandRow?.name ?? null,
+      reviewSummary,
+    },
+    links: {
+      brandRow:
+        brandRow?.name && brandRow?.slug ? { name: brandRow.name, slug: brandRow.slug } : null,
+      breadcrumbs,
+    },
+    tabs: {
+      description: product.description,
+      warranty: product.warranty ?? null,
+      customFields: product.customFields as Record<string, unknown> | null,
+      reviews,
+      attachments,
+      productId: product.id,
+    },
+    related: {
+      products: relatedProducts,
+      memberPricingAvailable: memberPricingEnabled,
+      pricing: relatedPricing,
+    },
+  };
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
@@ -211,74 +266,20 @@ export default async function ProductPage({
         <BackButton fallbackHref="/products" fallbackLabel="Back to Products" className="mb-6" />
       )}
 
-      {aboveDetail.length > 0 && <BlockRenderer blocks={aboveDetail} draft={draft} />}
-
-      <ProductPageClient
-        product={{
-          id: product.id,
-          name: product.name,
-          sku: product.sku,
-          price: product.price,
-          salePrice: product.salePrice,
-          inventoryLevel: product.inventoryLevel ?? 0,
-          inventoryTracking: product.inventoryTracking ?? "none",
-          availability: product.availability ?? "available",
-          descriptionShort: product.descriptionShort,
-          images: product.images,
-          variants: product.variants,
-          options: product.options ?? [],
-          optionValues: product.optionValues ?? [],
-          variantOptionMappings: product.variantOptionMappings ?? [],
-          bulkPricing: suppressCatalogPricing ? [] : (product.bulkPricing ?? []),
-        }}
-        memberPrice={memberPrice}
-        memberPriceMap={memberPriceMap}
-        isMember={isMember}
-        membershipTeaser={membershipTeaser}
-        brandName={brandRow?.name ?? null}
-        reviewSummary={reviewSummary}
-      />
-
-      {/* Brand / category cross-links (design system) */}
-      <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2">
-        {brandRow?.name && brandRow?.slug && (
-          <Link href={`/brands/${brandRow.slug}`} className="btn-ghost text-[13px]">
-            See all {brandRow.name} products →
-          </Link>
-        )}
-        {breadcrumbs.length > 0 && (
-          <Link
-            href={`/categories/${breadcrumbs[breadcrumbs.length - 1].slug}`}
-            className="btn-ghost text-[13px]"
-          >
-            More {breadcrumbs[breadcrumbs.length - 1].name} →
-          </Link>
-        )}
-      </div>
-
-      {/* Tabbed content section */}
-      <ProductTabs
-        description={product.description}
-        warranty={product.warranty ?? null}
-        customFields={product.customFields as Record<string, unknown> | null}
-        reviews={reviews}
-        attachments={attachments}
-        productId={product.id}
-      />
-
-      {/* Related Products — design product cards w/ member pricing */}
-      {relatedProducts.length > 0 && (
-        <div className="mt-12 border-t border-border pt-8">
-          <h2 className="section-title mb-6">You may also like</h2>
-          <ProductGrid
-            products={relatedProducts}
-            memberPricingAvailable={memberPricingEnabled}
-            {...relatedPricing}
-          />
-        </div>
-      )}
-
-      {belowDetail.length > 0 && <BlockRenderer blocks={belowDetail} draft={draft} />}
+      {blocks.map((b, i) => {
+        switch (b.block_type) {
+          case "product_buybox":
+            return <ProductBuyBox key={i} ctx={ctx} />;
+          case "product_links":
+            return <ProductLinks key={i} ctx={ctx} />;
+          case "product_tabs":
+            return <ProductTabsBlock key={i} ctx={ctx} />;
+          case "product_related":
+            return <ProductRelated key={i} ctx={ctx} />;
+          default:
+            return <BlockRenderer key={i} blocks={[b]} draft={draft} />;
+        }
+      })}
     </div>
   );
 }
