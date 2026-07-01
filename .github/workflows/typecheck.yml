@@ -44,7 +44,13 @@ jobs:
         run: sed -i 's|"file:../keenan-group-services"|"file:./keenan-services-1.0.0.tgz"|' package.json
 
       - name: Install workspace
-        run: npm install
+        run: |
+          # @keenan/services is repacked fresh above, so its tarball hash never
+          # matches the integrity pinned in the committed lockfile (npm pack is not
+          # byte-reproducible). Drop the stale integrity/resolved for that one entry
+          # and let npm recompute it from the on-disk tarball; all other deps stay locked.
+          node -e "const fs=require('fs'),p='package-lock.json',j=JSON.parse(fs.readFileSync(p,'utf8')),e=(j.packages||{})['node_modules/@keenan/services'];if(e){delete e.integrity;delete e.resolved;fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');}"
+          npm install
 
       - name: Typecheck every site + template
         run: |
