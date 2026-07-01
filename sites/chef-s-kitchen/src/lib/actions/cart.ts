@@ -1,5 +1,6 @@
 "use server";
 
+import { cache } from "react";
 import { revalidatePath } from "next/cache";
 import { cartService, cartItemService, productService, productVariantService, customerService, bulkPricingRuleService, getEffectivePrice, CHANNEL_ID } from "@/lib/store";
 import { getFeatureFlag, getActiveSubscription, shouldSuppressCatalogSalePrice } from "@/lib/store";
@@ -211,7 +212,13 @@ export async function removeCartItem(itemId: number) {
   return updateCartItem(itemId, 0);
 }
 
-export async function getCart() {
+// Request-scoped memoisation: the cart is read once per render but consumed by
+// both the layout Header (badge) and the page (cart / checkout), which are two
+// separate component renders in the SAME request. React's cache() dedupes those
+// into a single DB read. It's per-request in-memory only — a fresh request after
+// a mutation still re-reads, so there's no staleness. Not exported (a "use server"
+// module may only export async functions); getCart() is the public entry point.
+const readCart = cache(async () => {
   const uuid = await getCartUuid();
   if (!uuid) return null;
 
@@ -219,4 +226,8 @@ export async function getCart() {
   if (!cart) return null;
 
   return cartService.getWithItems(cart.id);
+});
+
+export async function getCart() {
+  return readCart();
 }
