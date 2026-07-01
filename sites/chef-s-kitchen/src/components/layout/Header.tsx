@@ -18,11 +18,16 @@ import { SearchTypeahead } from "../search/SearchTypeahead";
  * mega panels. Sticky as a unit.
  */
 export async function Header({ storeName, logoUrl, logoAlt }: { storeName: string; logoUrl?: string | null; logoAlt?: string | null }) {
+  // The Header renders in the root layout — ABOVE the page's error boundary — so
+  // any throw here escalates to the site-wide global-error page ("Something went
+  // wrong loading the site"), and it re-runs on every revalidatePath("/", "layout")
+  // from a cart/quote mutation. Degrade gracefully (empty badge / nav) on a
+  // transient DB failure instead of taking down the whole storefront.
   const [cart, quote, megaMenu, headerNav] = await Promise.all([
-    getCart(),
-    getQuote(),
-    getMegaMenu(),
-    getHeaderNav(),
+    getCart().catch(() => null),
+    getQuote().catch(() => null),
+    getMegaMenu().catch(() => ({ departments: [], featured: {} })),
+    getHeaderNav().catch(() => []),
   ]);
   const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   // QuoteService.getWithItems types its items loosely (Record<string,unknown>) unlike
@@ -33,15 +38,15 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
   let entryCount = 0;
   const subscriptionsEnabled = await getFeatureFlag("subscriptions_enabled");
   if (subscriptionsEnabled) {
-    const session = await getSession();
+    const session = await getSession().catch(() => null);
     if (session) {
-      const activeSub = await getActiveSubscription(session.customerId);
+      const activeSub = await getActiveSubscription(session.customerId).catch(() => null);
       isMember = !!activeSub;
       if (isMember) {
         type DrawEntry = {
           entry: { id: number; entryCount: number | null; status: string };
         };
-        const entries = await drawEntryService.getEntriesForCustomer(session.customerId, CHANNEL_ID) as DrawEntry[];
+        const entries = await drawEntryService.getEntriesForCustomer(session.customerId, CHANNEL_ID).catch(() => []) as DrawEntry[];
         entryCount = entries
           .filter((e) => e.entry.status === "active")
           .reduce((sum, e) => sum + (e.entry.entryCount ?? 1), 0);
