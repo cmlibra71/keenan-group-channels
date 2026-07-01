@@ -1,4 +1,6 @@
-import { getProducts, getFeatureFlag } from "@/lib/store";
+import { getProducts, getFeatureFlag, productService, customerService, CHANNEL_ID } from "@/lib/store";
+import { customerGroupService } from "@keenan/services";
+import { getSession } from "@/lib/auth";
 import { getListingPricing } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import Link from "next/link";
@@ -42,8 +44,37 @@ export default async function ProductsPage({
   if (activeFilter === "featured") fetchOptions.featured = true;
   if (activeFilter === "sale") fetchOptions.onSale = true;
 
+  // Category access: a logged-in customer whose group restricts categories only sees
+  // products in its allow-list. resolveAccessibleCategoryIds → null (unrestricted, cached
+  // path), [] ('none', show nothing), or specific ids (restrict → uncached listForChannel).
+  let accessibleCategoryIds: number[] | null = null;
+  const session = await getSession();
+  if (session) {
+    const customer = (await customerService.getById(session.customerId)) as {
+      customer_group_id?: number | null;
+    } | null;
+    if (customer?.customer_group_id) {
+      accessibleCategoryIds = await customerGroupService.resolveAccessibleCategoryIds(
+        customer.customer_group_id
+      );
+    }
+  }
+
+  const productsPromise =
+    accessibleCategoryIds === null
+      ? getProducts(fetchOptions)
+      : accessibleCategoryIds.length === 0
+        ? Promise.resolve({ products: [], total: 0 })
+        : productService.listForChannel(CHANNEL_ID, {
+            page,
+            limit: 24,
+            categoryIds: accessibleCategoryIds,
+            featured: fetchOptions.featured,
+            onSale: fetchOptions.onSale,
+          });
+
   const [{ products, total }, memberPricingEnabled] = await Promise.all([
-    getProducts(fetchOptions),
+    productsPromise,
     getFeatureFlag("member_pricing_enabled"),
   ]);
   const totalPages = Math.ceil(total / 24);

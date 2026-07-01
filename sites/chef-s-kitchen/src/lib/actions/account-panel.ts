@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { customerService, CHANNEL_ID } from "@/lib/store";
 import { getSession, setSession, clearSession } from "@/lib/auth";
 import { hashPassword, verifyPassword } from "@/lib/password";
+import { tooManyAttempts, recordFailure } from "@/lib/login-throttle";
 
 type PanelSession = { customerId: number; email: string; firstName: string; lastName: string };
 
@@ -39,10 +40,17 @@ export async function loginFromPanel(formData: FormData): Promise<{
     return { error: "Email and password are required." };
   }
 
+  // Same throttle + keyspace as the sign-in form action, so this alternate login path
+  // can't be used to bypass the brute-force limit.
+  if (tooManyAttempts(email)) {
+    return { error: "Too many attempts. Please wait a few minutes and try again." };
+  }
+
   const customer = await customerService.findByEmailAndChannel(email, CHANNEL_ID);
 
   const { valid, needsRehash } = await verifyPassword(password, customer?.password_hash);
   if (!customer || !valid) {
+    recordFailure(email);
     return { error: "Invalid email or password." };
   }
   if (needsRehash) {
