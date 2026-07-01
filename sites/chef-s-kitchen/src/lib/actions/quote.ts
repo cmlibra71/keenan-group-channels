@@ -6,6 +6,7 @@ import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
 import { getSession } from "@/lib/auth";
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
 import { slidingWindowAllow } from "@/lib/rate-limit";
+import { sendStaffNotification } from "@/lib/staff-email";
 
 // QuoteService returns snake_case rows (transformRow convention).
 type QuoteRow = { id: number; uuid: string; customer_id?: number | null; [key: string]: unknown };
@@ -168,7 +169,30 @@ export async function acceptQuote(quoteId: number) {
   if (!["quote_available", "open_change_request"].includes(String(q.status))) {
     return { error: "This quote can't be accepted yet." };
   }
-  await quoteService.update(quoteId, { status: "quote_accepted" });
+  // Lifecycle method, NOT a bare status update: stamps accepted_at and writes
+  // the quote.accepted audit row. The generic update() fired no side effects,
+  // which is why acceptances used to be invisible to staff.
+  await quoteService.markAccepted(quoteId);
+
+  // Best-effort staff alert — the acceptance already succeeded; never fail the
+  // customer's action because the notification couldn't send.
+  try {
+    const label = String(q.quote_number ?? `#${quoteId}`);
+    await sendStaffNotification({
+      subject: `Quote ${label} accepted by customer`,
+      heading: "A customer accepted a quote",
+      rows: [
+        ["Quote", label],
+        ["Name", String(q.quote_name ?? "—")],
+        ["Customer email", String(q.email ?? "—")],
+        ["Amount", q.quote_amount == null ? "—" : `$${Number(q.quote_amount).toFixed(2)}`],
+      ],
+      portalPath: `/dashboard/quotes/${quoteId}`,
+      linkLabel: "Open quote in portal",
+    });
+  } catch (e) {
+    console.error("[acceptQuote] staff notification failed (non-fatal):", e);
+  }
   revalidatePath(`/account/quotes/${quoteId}`);
   revalidatePath("/account/quotes");
   return { success: true };

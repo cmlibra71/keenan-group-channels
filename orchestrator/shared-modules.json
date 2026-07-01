@@ -15,6 +15,7 @@
     "lib/image-loader.ts",
     "lib/image-origin.ts",
     "lib/sanitize-html.ts",
+    "lib/staff-email.ts",
     "lib/seo.ts",
     "lib/gst.tsx",
     "lib/gst-cookie.ts",
