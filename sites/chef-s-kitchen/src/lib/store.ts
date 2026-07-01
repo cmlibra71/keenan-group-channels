@@ -1,5 +1,5 @@
 import { unstable_cache } from "next/cache";
-import { initCommerceDb, createChannelStore, getCommerceClient } from "@keenan/services";
+import { initCommerceDb, createChannelStore, getCommerceClient, blogService } from "@keenan/services";
 import {
   channelService,
   siteService,
@@ -117,6 +117,27 @@ export const getChannelSetting = async (key: string): Promise<unknown> => {
 
 // CMS-editable footer content (the `footer` channel setting). Empty object →
 // the Footer component falls back to DEFAULT_FOOTER (current content).
+// ── Blog (relational blog_posts, per-channel) ───────────────────────────────
+export const getBlogPosts = (opts: { page?: number; limit?: number; tag?: string } = {}) =>
+  unstable_cache(
+    async () => blogService.listForChannel(CHANNEL_ID, opts),
+    [`blog-list-${CHANNEL_ID}-${JSON.stringify(opts)}`],
+    { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "blog"] }
+  )();
+
+export const getBlogPostBySlug = (slug: string) =>
+  unstable_cache(
+    async () => blogService.getBySlug(slug, CHANNEL_ID),
+    [`blog-post-${CHANNEL_ID}-${slug}`],
+    { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "blog"] }
+  )();
+
+export const getBlogTags = unstable_cache(
+  async () => blogService.listTagsForChannel(CHANNEL_ID),
+  [`blog-tags-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "blog"] }
+);
+
 export const getFooterConfig = unstable_cache(
   async () => ((await getChannelSetting("footer")) as Record<string, unknown>) ?? {},
   [`footer-${CHANNEL_ID}`],
