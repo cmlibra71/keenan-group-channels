@@ -36,7 +36,13 @@ export type ResolvedStripeGateway = {
 export async function resolveStripeGateway(): Promise<ResolvedStripeGateway> {
   const wantTestMode = await wantsStripeTestMode(CHANNEL_ID);
   try {
-    const setting = await storeSettingsService.getByKey("payment_gateways");
+    // `payment_gateways` is a SENSITIVE setting (it holds secret_key), so the
+    // default read path masks setting_value to "***REDACTED***". This resolver runs
+    // server-side and needs the real gateway array (publishable_key here, and
+    // secret_key via getStripeProvider), so read it unredacted. Without this the
+    // cast below yields a string, `.filter` throws, and every gateway lookup fails
+    // ("Payment is not properly configured").
+    const setting = await storeSettingsService.getByKey("payment_gateways", { includeSensitive: true });
     const gateways = (setting.setting_value as StripeGatewayEntry[]) || [];
     const gateway = selectGateway(enabledStripeGateways(gateways), wantTestMode) ?? null;
     return { gateway, wantTestMode };
