@@ -1,29 +1,18 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { trackStartedCheckout } from "./klaviyo";
-import { ga4BeginCheckout, type Ga4Item } from "./ga4";
+import { ga4ViewCart, type Ga4Item } from "./ga4";
 
 /**
- * Fires the checkout-start signals once when the checkout page mounts — Klaviyo's
- * "Started Checkout" AND GA4's `begin_checkout`. Renders nothing.
+ * Fires GA4 `view_cart` once when the cart page mounts. Renders nothing.
  */
-export function StartedCheckoutTracker({
-  value,
-  itemNames,
-  items,
-}: {
-  value: number;
-  itemNames: string[];
-  items: Record<string, unknown>[];
-}) {
+export function Ga4ViewCart({ value, items }: { value: number; items: Record<string, unknown>[] }) {
   const fired = useRef(false);
   useEffect(() => {
     if (fired.current) return;
     fired.current = true;
-    trackStartedCheckout({ value, itemNames, items });
-    ga4BeginCheckout(items.map(toGa4Item), value);
-  }, [value, itemNames, items]);
+    ga4ViewCart(items.map(toGa4Item), value);
+  }, [value, items]);
   return null;
 }
 

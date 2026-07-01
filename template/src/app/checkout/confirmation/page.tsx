@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { CheckCircle, Building2, FileText, CreditCard } from "lucide-react";
 import { getCheckoutSettings, orderService } from "@/lib/store";
+import { Ga4Purchase, type Ga4PurchaseProps } from "@/components/analytics/Ga4Purchase";
+import type { Ga4Item } from "@/components/analytics/ga4";
 
 export const metadata = {
   title: "Order Confirmed",
@@ -46,8 +48,47 @@ export default async function ConfirmationPage({
 
   const reference = bankDetails?.reference?.trim() || order;
 
+  // Build the GA4 client-side purchase from the order header. The server-side
+  // ga4_sync worker sends the authoritative purchase (with full items); this
+  // client event shares the order-number transaction_id so GA4 dedupes them.
+  let ga4Purchase: Ga4PurchaseProps | null = null;
+  if (order) {
+    try {
+      const res = await orderService.list({
+        page: 1, limit: 1, sort: "id", direction: "desc",
+        filters: { order_number: { type: "eq", value: order } },
+      });
+      const o = res.data[0] as Record<string, unknown> | undefined;
+      if (o) {
+        const num = (v: unknown) => {
+          const n = parseFloat(String(v ?? ""));
+          return Number.isFinite(n) ? n : 0;
+        };
+        const rawItems = Array.isArray(o.items) ? (o.items as Record<string, unknown>[]) : [];
+        const items: Ga4Item[] = rawItems.map((it, index) => ({
+          item_id: String(it.sku ?? it.product_id ?? `item-${index}`),
+          item_name: String(it.name ?? "(unnamed)"),
+          price: num(it.price_inc_tax ?? it.price),
+          quantity: num(it.quantity) || 1,
+          index,
+        }));
+        ga4Purchase = {
+          transactionId: String(o.order_number ?? order),
+          value: num(o.total_inc_tax),
+          tax: num(o.total_tax),
+          shipping: num(o.shipping_cost_inc_tax),
+          currency: String(o.currency_code ?? "AUD"),
+          items,
+        };
+      }
+    } catch {
+      // Non-fatal — the server-side ga4_sync still records the purchase.
+    }
+  }
+
   return (
     <div className="mx-auto max-w-lg px-4 sm:px-6 lg:px-8 py-16 text-center">
+      {ga4Purchase && <Ga4Purchase {...ga4Purchase} />}
       <CheckCircle className="h-16 w-16 text-brand mx-auto" />
 
       <h1 className="page-title mt-6">Order Confirmed</h1>

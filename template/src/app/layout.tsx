@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
-import { getSiteConfig, getFeatureFlag, getFooterConfig, getTopCategories, getKlaviyoPublicKey } from "@/lib/store";
+import { getSiteConfig, getFeatureFlag, getFooterConfig, getTopCategories, getKlaviyoPublicKey, getGa4MeasurementId } from "@/lib/store";
 import { KlaviyoTracking } from "@/components/analytics/KlaviyoTracking";
+import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { siteBaseUrl } from "@/lib/seo";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -33,7 +34,7 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [{ site, channel }, subscriptionsEnabled, footerConfig, topCategories, pricesIncludeTax, cookieStore, klaviyoPublicKey] = await Promise.all([
+  const [{ site, channel }, subscriptionsEnabled, footerConfig, topCategories, pricesIncludeTax, cookieStore, klaviyoPublicKey, ga4MeasurementId] = await Promise.all([
     getSiteConfig(),
     getFeatureFlag("subscriptions_enabled"),
     getFooterConfig(),
@@ -41,6 +42,7 @@ export default async function RootLayout({
     getFeatureFlag("prices_include_tax"),
     cookies(),
     getKlaviyoPublicKey(),
+    getGa4MeasurementId(),
   ]);
   const storeName = site?.siteName || channel?.name || "Store";
   const logoUrl = site?.logoUrl || null;
@@ -61,6 +63,7 @@ export default async function RootLayout({
           <Footer storeName={storeName} config={footerConfig} />
         </GstProvider>
         <KlaviyoTracking publicKey={klaviyoPublicKey} />
+        <GoogleAnalytics measurementId={ga4MeasurementId} />
       </body>
     </html>
   );

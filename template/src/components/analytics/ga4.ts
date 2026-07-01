@@ -1,0 +1,104 @@
+/**
+ * Client-side GA4 ecommerce helpers (gtag.js). Safe to call before the tag loads —
+ * gtag queues onto window.dataLayer and replays once ready. No-ops when GA4 isn't
+ * configured (no measurement id ⇒ no gtag).
+ *
+ * Event names + item fields follow the GA4 recommended ecommerce spec so they
+ * match the server-side Measurement Protocol events (worker) exactly — the
+ * `purchase` transaction_id is shared so GA4 dedupes client + server.
+ */
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+declare global {
+  interface Window {
+    dataLayer?: unknown[];
+    gtag?: (...args: any[]) => void;
+  }
+}
+
+export interface Ga4Item {
+  item_id: string;
+  item_name: string;
+  item_brand?: string;
+  item_category?: string;
+  item_variant?: string;
+  price?: number;
+  quantity?: number;
+  discount?: number;
+  index?: number;
+}
+
+function gtagEvent(name: string, params: Record<string, unknown>): void {
+  if (typeof window === "undefined" || typeof window.gtag !== "function") return;
+  try {
+    window.gtag("event", name, params);
+  } catch {
+    /* never let analytics break the page */
+  }
+}
+
+export function ga4ViewItem(item: Ga4Item, currency = "AUD"): void {
+  gtagEvent("view_item", { currency, value: item.price ?? 0, items: [item] });
+}
+
+export function ga4ViewItemList(items: Ga4Item[], listId?: string, listName?: string): void {
+  gtagEvent("view_item_list", { item_list_id: listId, item_list_name: listName, items });
+}
+
+export function ga4SelectItem(item: Ga4Item, listId?: string, listName?: string): void {
+  gtagEvent("select_item", { item_list_id: listId, item_list_name: listName, items: [item] });
+}
+
+export function ga4AddToCart(item: Ga4Item, currency = "AUD"): void {
+  gtagEvent("add_to_cart", {
+    currency,
+    value: (item.price ?? 0) * (item.quantity ?? 1),
+    items: [item],
+  });
+}
+
+export function ga4RemoveFromCart(item: Ga4Item, currency = "AUD"): void {
+  gtagEvent("remove_from_cart", {
+    currency,
+    value: (item.price ?? 0) * (item.quantity ?? 1),
+    items: [item],
+  });
+}
+
+export function ga4ViewCart(items: Ga4Item[], value: number, currency = "AUD"): void {
+  gtagEvent("view_cart", { currency, value, items });
+}
+
+export function ga4BeginCheckout(items: Ga4Item[], value: number, currency = "AUD"): void {
+  gtagEvent("begin_checkout", { currency, value, items });
+}
+
+export function ga4AddShippingInfo(items: Ga4Item[], value: number, shippingTier?: string, currency = "AUD"): void {
+  gtagEvent("add_shipping_info", { currency, value, shipping_tier: shippingTier, items });
+}
+
+export function ga4AddPaymentInfo(items: Ga4Item[], value: number, paymentType?: string, currency = "AUD"): void {
+  gtagEvent("add_payment_info", { currency, value, payment_type: paymentType, items });
+}
+
+export interface Ga4PurchaseInput {
+  transactionId: string;
+  value: number;
+  tax?: number;
+  shipping?: number;
+  coupon?: string;
+  currency?: string;
+  items: Ga4Item[];
+}
+
+export function ga4Purchase(p: Ga4PurchaseInput): void {
+  gtagEvent("purchase", {
+    transaction_id: p.transactionId,
+    value: p.value,
+    tax: p.tax,
+    shipping: p.shipping,
+    coupon: p.coupon,
+    currency: p.currency ?? "AUD",
+    items: p.items,
+  });
+}

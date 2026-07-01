@@ -172,6 +172,14 @@ export const getKlaviyoPublicKey = unstable_cache(
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
 );
 
+/** GA4 Measurement ID (`G-XXXXXXXX`) for this channel — powers the gtag.js tag +
+ *  client ecommerce funnel. Empty string when GA4 isn't configured (tag omitted). */
+export const getGa4MeasurementId = unstable_cache(
+  async () => getJsonSetting<string>("ga4_measurement_id", ""),
+  [`ga4-measurement-id-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
 // ============================================================================
 // Homepage spotlights (curated product carousels backed by categories whose
 // metafields.is_homepage_spotlight = true).
