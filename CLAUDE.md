@@ -110,9 +110,9 @@ npm run db:studio
 
 The services repo has its own `drizzle.config.ts` and `.env` with `COMMERCE_DATABASE_URL`. Do NOT run commerce migrations from the portal — use `@keenan/services` instead.
 
-After schema changes, rebuild and restart:
+After schema changes, re-link services into channels and restart:
 ```bash
-cd ../keenan-group-services && npm run build
+npm run sync:services   # from the channels root — builds services, packs it, re-extracts the tgz
 # Then restart dev servers
 ```
 
