@@ -46,6 +46,7 @@ export async function placeOrder(
   const state = (formData.get("state") as string)?.trim();
   const postalCode = (formData.get("postalCode") as string)?.trim();
   const country = (formData.get("country") as string)?.trim() || "AU";
+  const phone = (formData.get("phone") as string)?.trim() || "";
   const paymentMethod = (formData.get("paymentMethod") as string)?.trim() || "";
 
   if (!email || !firstName || !lastName || !address1 || !city || !postalCode) {
@@ -56,6 +57,9 @@ export async function placeOrder(
     firstName,
     lastName,
     email,
+    // Store phone under both keys: `telephone` (Zoey convention the backoffice reads) + `phone`.
+    telephone: phone || null,
+    phone: phone || null,
     address1,
     address2: (formData.get("address2") as string)?.trim() || "",
     city,
@@ -291,7 +295,7 @@ export async function placeOrder(
       first_name: firstName,
       last_name: lastName,
       email,
-      phone: (formData.get("phone") as string)?.trim() || null,
+      phone: phone || null,
       company: (formData.get("company") as string)?.trim() || null,
       address1,
       address2: billingAddress.address2 || null,

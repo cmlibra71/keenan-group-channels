@@ -66,6 +66,7 @@ type SavedAddress = {
   stateOrProvince: string;
   postalCode: string;
   countryCode: string;
+  phone?: string | null;
   isDefaultBilling: boolean;
 };
 
@@ -438,6 +439,17 @@ export function CheckoutForm({
                     className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
                   />
                 </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-zinc-700">
+                    Phone (for delivery updates)
+                  </label>
+                  <input
+                    type="tel"
+                    name="phone"
+                    autoComplete="tel"
+                    className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+                  />
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-zinc-700">City</label>
                   <input
@@ -499,6 +511,7 @@ export function CheckoutForm({
                 <input type="hidden" name="state" value={selectedAddress.stateOrProvince} />
                 <input type="hidden" name="postalCode" value={selectedAddress.postalCode} />
                 <input type="hidden" name="country" value={selectedAddress.countryCode} />
+                <input type="hidden" name="phone" value={selectedAddress.phone || ""} />
               </>
             )}
           </div>
