@@ -147,6 +147,10 @@ export const BLOCK_COMPONENTS: Record<string, FC<BlockProps> | ((p: BlockProps) 
   product_listing: ProductListingBlock,
   // Homepage section blocks (own data; verbatim markup from the legacy homepage).
   ...HOME_BLOCK_COMPONENTS,
+  // Brand page sections — rendered directly by the brand page with the live brand
+  // context; listed here so the editor palette/manifest offers them.
+  brand_hero: () => null,
+  brand_products: () => null,
 };
 
 export const SUPPORTED_BLOCK_TYPES = Object.keys(BLOCK_COMPONENTS);

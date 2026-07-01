@@ -1,12 +1,11 @@
 import { notFound } from "next/navigation";
 import { draftMode } from "next/headers";
-import Image from "next/image";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { getBrandBySlug, getProducts, getFeatureFlag, getCmsPage } from "@/lib/store";
 import { getListingPricing } from "@/lib/member";
-import { ProductGrid } from "@/components/product/ProductGrid";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
+import { BrandHero, BrandProducts, DEFAULT_BRAND_BLOCKS } from "@/blocks/brand-page-blocks";
 
 export default async function BrandPage({
   params,
@@ -28,18 +27,25 @@ export default async function BrandPage({
     getProducts({ brandId: brand.id as number, limit: 48 }),
     getFeatureFlag("member_pricing_enabled"),
   ]);
+  const productCtx = {
+    products,
+    memberPricingAvailable: memberPricingEnabled,
+    pricing: await getListingPricing(products),
+  };
 
-  // Editable CMS zones on every brand page (global brand template) — empty unless set.
+  // Brand page content is an ordered block list (the __brand__ template's `main`
+  // region), editable in Pages & Content. Defaults to hero + products when unset,
+  // so an unedited template renders exactly as before.
   const { isEnabled: draft } = await draftMode();
   const brandCms = await getCmsPage("__brand__", draft).catch(() => null);
-  const brandRegion = (r: string): RenderedBlock[] =>
-    ((brandCms?.blocks as unknown as RenderedBlock[]) ?? []).filter((b) => b.region === r);
-  const aboveBrand = brandRegion("above_listing");
-  const belowBrand = brandRegion("below_listing");
+  const mainBlocks = ((brandCms?.blocks as unknown as RenderedBlock[]) ?? []).filter(
+    (b) => b.region === "main"
+  );
+  const blocks: RenderedBlock[] =
+    mainBlocks.length > 0 ? mainBlocks : (DEFAULT_BRAND_BLOCKS as unknown as RenderedBlock[]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-      {aboveBrand.length > 0 && <BlockRenderer blocks={aboveBrand} draft={draft} />}
       {/* Breadcrumbs */}
       <nav className="flex flex-wrap items-center gap-1.5 text-sm text-steel-400 mb-6">
         <Link href="/brands" className="hover:text-steel-500">Brands</Link>
@@ -47,38 +53,11 @@ export default async function BrandPage({
         <span className="text-ink-700">{brand.name as string}</span>
       </nav>
 
-      {/* Hero section */}
-      <div className="mb-10 flex flex-col lg:flex-row gap-8 items-start bg-steel-50 rounded-2xl overflow-hidden">
-        {brand.image_url && (
-          <div className="lg:w-2/5 flex-shrink-0 bg-white rounded-2xl m-3 p-6 relative min-h-[200px]">
-            <Image
-              src={brand.image_url as string}
-              alt={brand.name as string}
-              fill
-              sizes="(max-width: 1024px) 100vw, 40vw"
-              className="object-contain p-6"
-            />
-          </div>
-        )}
-        <div className={`flex-1 py-8 pr-8 text-left ${brand.image_url ? "" : "pl-8"}`}>
-          <h1 className="page-title">{brand.name as string}</h1>
-          <p className="mt-3 text-sm text-steel-500">
-            {total} {total === 1 ? "product" : "products"}
-          </p>
-        </div>
-      </div>
-
-      {/* Products */}
-      {products.length > 0 ? (
-        <div>
-          <h2 className="text-lg font-semibold text-ink-900 mb-4">Products</h2>
-          <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} {...(await getListingPricing(products))} />
-        </div>
-      ) : (
-        <p className="text-steel-500 text-center py-12">No products from this brand yet.</p>
-      )}
-
-      {belowBrand.length > 0 && <BlockRenderer blocks={belowBrand} draft={draft} />}
+      {blocks.map((b, i) => {
+        if (b.block_type === "brand_hero") return <BrandHero key={i} brand={brand} total={total} />;
+        if (b.block_type === "brand_products") return <BrandProducts key={i} {...productCtx} />;
+        return <BlockRenderer key={i} blocks={[b]} draft={draft} />;
+      })}
     </div>
   );
 }
