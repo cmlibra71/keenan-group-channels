@@ -49,6 +49,12 @@
     "app/api/test/login/route.ts",
     "app/robots.ts",
     "app/sitemap.ts",
-    "blocks/BlockRenderer.tsx"
+    "app/render/cms/page/page.tsx",
+    "app/render/cms/session/[id]/page.tsx",
+    "blocks/BlockRenderer.tsx",
+    "blocks/render-bridge.tsx",
+    "lib/cms-render.ts",
+    "lib/design-tokens.ts",
+    "proxy.ts"
   ]
 }

@@ -40,6 +40,9 @@ export async function POST(req: NextRequest) {
   else if (kind === "category" && typeof categoryId === "number")
     purge(`channel-${channelId}-category-${categoryId}`);
   else if (kind === "blog_index") purge("blog");
+  else if (kind === "tokens") purge(`channel-${channelId}-design-tokens`);
+  else if (kind === "product" || kind === "category_layout")
+    purge(`channel-${channelId}-template-${kind}`);
 
   return NextResponse.json({ revalidated: true });
 }

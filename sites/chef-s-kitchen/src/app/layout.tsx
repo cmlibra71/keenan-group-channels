@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { Fraunces, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { getSiteConfig, getFeatureFlag, getFooterConfig } from "@/lib/store";
+import { getPublishedTokenVars } from "@/lib/design-tokens";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { GstProvider } from "@/lib/gst";
@@ -57,12 +58,34 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [{ site, channel }, subscriptionsEnabled, pricesIncludeTax, footerConfig, cookieStore] = await Promise.all([
+  // Chrome-free branch for the portal-embedded CMS render surface (/render/*,
+  // tagged by src/proxy.ts). Same html/fonts/body/providers so components and
+  // the design system behave identically — just no Header/Footer/GTM.
+  const isCmsRender = (await headers()).get("x-cms-render") === "1";
+  if (isCmsRender) {
+    const [pricesIncludeTax, cookieStore] = await Promise.all([
+      getFeatureFlag("prices_include_tax"),
+      cookies(),
+    ]);
+    const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
+    return (
+      <html lang="en" className={`${fraunces.variable} ${plexSans.variable} ${plexMono.variable}`}>
+        <body className="min-h-screen bg-surface-primary text-text-body antialiased">
+          <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
+            {children}
+          </GstProvider>
+        </body>
+      </html>
+    );
+  }
+
+  const [{ site, channel }, subscriptionsEnabled, pricesIncludeTax, footerConfig, cookieStore, tokenVars] = await Promise.all([
     getSiteConfig(),
     getFeatureFlag("subscriptions_enabled"),
     getFeatureFlag("prices_include_tax"),
     getFooterConfig(),
     cookies(),
+    getPublishedTokenVars(),
   ]);
   const storeName = site?.siteName || channel?.name || "Store";
   const logoUrl = site?.logoUrl || null;
@@ -70,7 +93,11 @@ export default async function RootLayout({
   const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
 
   return (
-    <html lang="en" className={`${fraunces.variable} ${plexSans.variable} ${plexMono.variable}`}>
+    <html
+      lang="en"
+      className={`${fraunces.variable} ${plexSans.variable} ${plexMono.variable}`}
+      style={(tokenVars ?? undefined) as React.CSSProperties | undefined}
+    >
       <head>
         {/* Google Tag Manager — inline bootstrap. Rendered as a raw <script>
             inside <head> (not next/script's beforeInteractive, which placed it

@@ -5,12 +5,14 @@
 // surfaced to the portal at /api/blocks/manifest for palette intersection.
 // ============================================================================
 import type { FC } from "react";
+import type { RenderContext } from "@keenan/services";
 import { RichContent } from "@/components/content/RichContent";
 import { BannerBlock } from "@/components/home/BannerBlock";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { getProducts, getCategoryBySlug, getCategoryListing } from "@/lib/store";
 
-type BlockProps = { props: Record<string, unknown> };
+/** ctx is present when rendering a template document (product/category record). */
+type BlockProps = { props: Record<string, unknown>; ctx?: RenderContext };
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 
 // --- content blocks ---------------------------------------------------------
