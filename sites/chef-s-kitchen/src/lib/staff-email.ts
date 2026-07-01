@@ -1,12 +1,15 @@
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
+import { channelSettingsService, CHANNEL_ID } from "@/lib/store";
 
 // Internal staff notifications (quote accepted, new review, …) — NOT customer
 // mail. Customer-facing email lives in @keenan/services with per-channel
 // branding; this is a deliberately plain "something needs your attention in
 // the portal" note to the Keenan team.
 //
-// Recipient comes from STAFF_NOTIFICATIONS_EMAIL. When unset the send is
-// skipped with a warning so customer actions never depend on it. Sends are
+// Recipient resolution: the per-channel `staff_notifications_email` setting
+// (editable at portal Settings → Notifications, no redeploy) wins, then the
+// STAFF_NOTIFICATIONS_EMAIL env var. When neither is set the send is skipped
+// with a warning so customer actions never depend on it. Sends are
 // best-effort: callers must swallow failures (the customer's action already
 // succeeded by the time we notify).
 
@@ -42,9 +45,19 @@ export async function sendStaffNotification({
 }): Promise<void> {
   // EMAIL_GLOBAL_REDIRECT mirrors the @keenan/services test-safety guard: a
   // staging build must never notify the real staff inbox.
-  const to = process.env.EMAIL_GLOBAL_REDIRECT || process.env.STAFF_NOTIFICATIONS_EMAIL;
+  let to = process.env.EMAIL_GLOBAL_REDIRECT || null;
   if (!to) {
-    console.warn(`[staff-email] STAFF_NOTIFICATIONS_EMAIL not set — skipping "${subject}"`);
+    try {
+      const setting = await channelSettingsService.getByKey(CHANNEL_ID, "staff_notifications_email");
+      const value = setting?.setting_value;
+      if (typeof value === "string" && value.trim()) to = value.trim();
+    } catch {
+      // Setting not configured for this channel — fall through to the env var.
+    }
+  }
+  if (!to) to = process.env.STAFF_NOTIFICATIONS_EMAIL || null;
+  if (!to) {
+    console.warn(`[staff-email] no staff notification recipient configured — skipping "${subject}"`);
     return;
   }
 
