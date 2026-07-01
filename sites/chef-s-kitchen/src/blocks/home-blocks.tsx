@@ -24,6 +24,7 @@ import {
   CHANNEL_ID,
   getJsonSetting,
 } from "@/lib/store";
+import { BLOCK_REGISTRY } from "@keenan/services";
 import { getListingPricing } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { TrustBar } from "@/components/home/TrustBar";
@@ -71,9 +72,18 @@ async function getMembershipContext() {
 
 // ── Hero ────────────────────────────────────────────────────────────────────
 // Editable-copy helper: use the block prop when it's a non-empty string, else
-// fall back to the current hard-coded default (so an unedited block is pixel-identical).
+// fall back to the given default.
 const str = (v: unknown, fallback: string): string =>
   typeof v === "string" && v.trim() ? v : fallback;
+
+// `copy(type, key, props)` — prop override, else the registry defaultProps value
+// (the single source of truth for default copy, shared with the portal placeholder).
+const regDefault = (type: string, key: string): string => {
+  const d = BLOCK_REGISTRY[type]?.defaultProps?.[key];
+  return typeof d === "string" ? d : "";
+};
+const copy = (type: string, key: string, props: Record<string, unknown>): string =>
+  str(props[key], regDefault(type, key));
 
 async function HomeHero(props: Record<string, unknown> = {}) {
   const { channel } = await getSiteConfig();
@@ -85,17 +95,17 @@ async function HomeHero(props: Record<string, unknown> = {}) {
   ]);
 
   if (subscriptionsEnabled && plan) {
-    const eyebrow = str(props.eyebrow, "Members-Only Supply Partner");
-    const headline = str(props.headline, "Professional Culinary Supplies at Prices");
-    const headlineEmphasis = str(props.headline_emphasis, "Reserved for the Trade");
-    const subheadline = str(
-      props.subheadline,
-      "From {price} — access wholesale pricing and priority fulfilment across our full commercial range."
-    ).replace("{price}", `$${planPrice!.toFixed(2)}/${plan.billing_interval}`);
-    const ctaText = str(props.cta_text, "Join & Save");
-    const ctaHref = str(props.cta_href, "/membership");
-    const cta2Text = str(props.cta2_text, "Browse Equipment & Supplies");
-    const cta2Href = str(props.cta2_href, "/search");
+    const eyebrow = copy("home_hero", "eyebrow", props);
+    const headline = copy("home_hero", "headline", props);
+    const headlineEmphasis = copy("home_hero", "headline_emphasis", props);
+    const subheadline = copy("home_hero", "subheadline", props).replace(
+      "{price}",
+      `$${planPrice!.toFixed(2)}/${plan.billing_interval}`
+    );
+    const ctaText = copy("home_hero", "cta_text", props);
+    const ctaHref = copy("home_hero", "cta_href", props);
+    const cta2Text = copy("home_hero", "cta2_text", props);
+    const cta2Href = copy("home_hero", "cta2_href", props);
     return (
       <section className="relative flex min-h-[520px] items-center overflow-hidden">
         <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/images/hero-bg.webp')" }} />
@@ -221,8 +231,8 @@ async function ShopByCategory(props: Record<string, unknown> = {}) {
     <section className="container-page section-padding">
       <div className="mb-10 flex items-end justify-between">
         <div>
-          <p className="eyebrow mb-3">{str(props.eyebrow, "Departments")}</p>
-          <h2 className="section-title">{str(props.heading, "Shop by Category")}</h2>
+          <p className="eyebrow mb-3">{copy("shop_by_category", "eyebrow", props)}</p>
+          <h2 className="section-title">{copy("shop_by_category", "heading", props)}</h2>
         </div>
         <Link href="/categories" className="hidden items-center gap-1.5 text-sm font-semibold text-accent transition-colors hover:text-accent-hover sm:inline-flex">
           View All
@@ -295,8 +305,8 @@ async function ClearanceSpotlightBlock(props: Record<string, unknown> = {}) {
   return (
     <ClearanceSpotlight
       products={clearanceProducts}
-      heading={str(props.heading, "Last Units")}
-      eyebrow={str(props.eyebrow, "While Stocks Last")}
+      heading={copy("clearance_spotlight", "heading", props)}
+      eyebrow={copy("clearance_spotlight", "eyebrow", props)}
       pricing={await getListingPricing(clearanceProducts)}
     />
   );
@@ -312,8 +322,8 @@ async function FeaturedProductsBlock(props: Record<string, unknown> = {}) {
     <section className="container-page section-padding">
       <div className="flex items-end justify-between mb-10">
         <div>
-          <p className="eyebrow mb-3">{str(props.eyebrow, "Curated Selection")}</p>
-          <h2 className="section-title">{str(props.heading, "Featured Equipment")}</h2>
+          <p className="eyebrow mb-3">{copy("featured_products", "eyebrow", props)}</p>
+          <h2 className="section-title">{copy("featured_products", "heading", props)}</h2>
         </div>
         <Link href="/products?filter=featured" className="hidden sm:inline-flex items-center gap-1.5 nav-link">
           View All
