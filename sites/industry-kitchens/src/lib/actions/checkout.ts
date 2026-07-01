@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { cartService, cartItemService, orderService, orderItemService, orderShippingAddressService, CHANNEL_ID, getEffectivePrice, productVariantService, channelSettingsService, getCheckoutSettings, paymentService } from "@/lib/store";
+import { cartService, cartItemService, orderService, orderItemService, orderShippingAddressService, CHANNEL_ID, getEffectivePrice, productVariantService, channelSettingsService, getCheckoutSettings, paymentService, couponService } from "@/lib/store";
 import { getFeatureFlag, getActiveSubscription, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
@@ -309,6 +309,18 @@ export async function placeOrder(
     });
   } catch (e) {
     console.error("[placeOrder] shipping address insert failed (non-fatal):", e);
+  }
+
+  // Enforce + record coupon usage for codes on the cart (couponService.redeem checks caps
+  // atomically, records a redemption, increments current_uses). Over-cap codes are logged, not used.
+  const couponCodes = (cartWithItems as { coupon_codes?: string[] | null }).coupon_codes ?? [];
+  for (const code of couponCodes) {
+    if (!code) continue;
+    try {
+      await couponService.redeem({ code, orderId: order.id, customerId: session?.customerId ?? null, discountAmount: "0" });
+    } catch (e) {
+      console.error(`[placeOrder] coupon "" not redeemed:`, e instanceof Error ? e.message : e);
+    }
   }
 
   // For Stripe: create PaymentIntent and return client secret for browser confirmation.
