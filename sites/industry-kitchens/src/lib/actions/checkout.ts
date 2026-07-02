@@ -5,7 +5,7 @@ import { cartService, cartItemService, orderService, orderItemService, orderShip
 import { getFeatureFlag, getActiveSubscription, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
-import { sendOrderConfirmationEmail, wantsStripeTestMode } from "@keenan/services";
+import { sendOrderConfirmationEmail, wantsStripeTestMode, productImageService } from "@keenan/services";
 import { buildLineItems, withShipping, determinePaymentStatus } from "@/lib/checkout/order-draft";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
 import { siteBaseUrl } from "@/lib/seo";
@@ -375,6 +375,11 @@ export async function placeOrder(
     // Resolve the site origin through the shared SEO helper so email links use the exact
     // same precedence as every canonical/OG link (was DB-first here vs env-first in seo.ts).
     const siteUrl = siteBaseUrl(site?.url);
+    // Decorate the email lines with a primary product thumbnail (best-effort).
+    const imageMap = await productImageService
+      .primaryImageUrlsForProducts(fullCart.items.map((i) => i.product_id))
+      .catch(() => new Map<number, string>());
+
     await sendOrderConfirmationEmail({
       to: email,
       orderNumber: order.order_number,
@@ -382,7 +387,13 @@ export async function placeOrder(
       storeName,
       paymentMethod,
       total: String(totalIncTax),
-      items: fullCart.items.map((i) => ({ name: i.product_name, quantity: i.quantity })),
+      items: fullCart.items.map((i) => ({
+        name: i.product_name,
+        quantity: i.quantity,
+        sku: i.product_sku ?? null,
+        imageUrl: imageMap.get(i.product_id) ?? null,
+        url: i.product_slug ? `${siteUrl}/products/${i.product_slug}` : null,
+      })),
       bankDetails: method?.bankDetails ?? null,
       // Use the customer's actual account terms for a net-terms invoice email.
       netTermsDays: paymentMethod === "net_terms" && netTerms ? netTerms.netTermsDays : (method?.netTermsDays ?? null),
