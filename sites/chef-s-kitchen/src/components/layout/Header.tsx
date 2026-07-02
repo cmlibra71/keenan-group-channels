@@ -4,7 +4,14 @@ import { Search } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
-import { getActiveSubscription, getFeatureFlag, getMegaMenu, drawEntryService, CHANNEL_ID } from "@/lib/store";
+import {
+  getActiveSubscription,
+  getFeatureFlag,
+  getMegaMenu,
+  getHeaderNav,
+  drawEntryService,
+  CHANNEL_ID,
+} from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 import { GstToggle } from "./GstToggle";
 import { MegaMenu } from "./MegaMenu";
@@ -17,7 +24,17 @@ import { SearchTypeahead } from "../search/SearchTypeahead";
  * mega panels. Sticky as a unit.
  */
 export async function Header({ storeName, logoUrl, logoAlt }: { storeName: string; logoUrl?: string | null; logoAlt?: string | null }) {
-  const [cart, quote, megaMenu] = await Promise.all([getCart(), getQuote(), getMegaMenu()]);
+  // The Header renders in the root layout — ABOVE the page's error boundary — so
+  // any throw here escalates to the site-wide global-error page ("Something went
+  // wrong loading the site"), and it re-runs on every revalidatePath("/", "layout")
+  // from a cart/quote mutation. Degrade gracefully (empty badge / nav) on a
+  // transient DB failure instead of taking down the whole storefront.
+  const [cart, quote, megaMenu, headerNav] = await Promise.all([
+    getCart().catch(() => null),
+    getQuote().catch(() => null),
+    getMegaMenu().catch(() => ({ departments: [], featured: {} })),
+    getHeaderNav().catch(() => []),
+  ]);
   const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   // QuoteService.getWithItems types its items loosely (Record<string,unknown>) unlike
   // CartService — precise typing there is a separate cleanup. quantity is runtime-correct.
@@ -27,15 +44,15 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
   let entryCount = 0;
   const subscriptionsEnabled = await getFeatureFlag("subscriptions_enabled");
   if (subscriptionsEnabled) {
-    const session = await getSession();
+    const session = await getSession().catch(() => null);
     if (session) {
-      const activeSub = await getActiveSubscription(session.customerId);
+      const activeSub = await getActiveSubscription(session.customerId).catch(() => null);
       isMember = !!activeSub;
       if (isMember) {
         type DrawEntry = {
           entry: { id: number; entryCount: number | null; status: string };
         };
-        const entries = await drawEntryService.getEntriesForCustomer(session.customerId, CHANNEL_ID) as DrawEntry[];
+        const entries = await drawEntryService.getEntriesForCustomer(session.customerId, CHANNEL_ID).catch(() => []) as DrawEntry[];
         entryCount = entries
           .filter((e) => e.entry.status === "active")
           .reduce((sum, e) => sum + (e.entry.entryCount ?? 1), 0);
@@ -84,6 +101,26 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
 
       {/* Department nav + mega panels — deep green */}
       <MegaMenu departments={megaMenu.departments} featured={megaMenu.featured} />
+
+      {/* Portal-managed quick links (Storefront > Navigation) — renders only
+          when configured, so the default CD design is unchanged. */}
+      {headerNav.length > 0 && (
+        <div className="hidden md:block bg-white border-b border-zinc-200">
+          <div className="container-page">
+            <nav className="flex items-center gap-x-5 overflow-x-auto py-2">
+              {headerNav.map((item) => (
+                <Link
+                  key={item.href + item.label}
+                  href={item.href}
+                  className="text-xs font-semibold uppercase tracking-wide text-zinc-600 hover:text-brand whitespace-nowrap transition-colors"
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

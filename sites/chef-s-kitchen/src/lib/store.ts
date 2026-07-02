@@ -126,6 +126,16 @@ export const getFooterConfig = unstable_cache(
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
 );
 
+// Portal-managed header quick links (Storefront > Navigation writes this key).
+// Empty (CD's default) → the header renders no quick-links strip.
+export type HeaderNavItem = { label: string; href: string };
+
+export const getHeaderNav = unstable_cache(
+  async () => ((await getChannelSetting("header_nav")) as HeaderNavItem[] | null) ?? [],
+  [`header-nav-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
 /** True when Stripe should run in TEST mode for this channel: the portal "Payments
  * test mode" toggle (`payments_test_mode`) OR a non-production NODE_ENV. Delegates to
  * the canonical @keenan/services helper — the single source of truth for every

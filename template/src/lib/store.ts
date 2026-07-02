@@ -265,6 +265,15 @@ export const getFooterConfig = unstable_cache(
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
 );
 
+// Portal-managed header quick links (Storefront > Navigation writes this key).
+export type HeaderNavItem = { label: string; href: string };
+
+export const getHeaderNav = unstable_cache(
+  async () => getJsonSetting<HeaderNavItem[]>("header_nav", []),
+  [`header-nav-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
 export const getHomepageSpotlights = unstable_cache(
   async (): Promise<HomepageSpotlight[]> => {
     const rows = (await categoryService.listHomepageSpotlights?.(CHANNEL_ID)) as
