@@ -21,6 +21,8 @@ import {
 } from "./widgets-client";
 import {
   ProductGridWidget,
+  BrandWarrantyWidget,
+  ReviewsPanelWidget,
   BreadcrumbsWidget,
   FilterRailWidget,
   FilterChipsWidget,
@@ -51,4 +53,6 @@ export const WIDGETS: Record<string, WidgetComponent> = {
   listing_grid: ListingGridWidget as unknown as WidgetComponent,
   load_more: LoadMoreWidget as unknown as WidgetComponent,
   hero_side_panel: HeroSidePanelWidget as unknown as WidgetComponent,
+  brand_warranty: BrandWarrantyWidget as unknown as WidgetComponent,
+  reviews_panel: ReviewsPanelWidget as unknown as WidgetComponent,
 };

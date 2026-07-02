@@ -49,6 +49,41 @@ export function buildBindingData(ctx?: RenderContext): AnyRecord {
       .filter(([key]) => key !== "tabs" && key !== "leaseOptions")
       .map(([key, value]) => ({ key, value: String(value ?? "") }));
 
+    // Specifications table rows (ProductTabs contract: humanized label + value)
+    const specs = Object.entries((p.customFields as AnyRecord) ?? {})
+      .filter(
+        ([k, v]) =>
+          k !== "tabs" &&
+          k !== "leaseOptions" &&
+          (typeof v === "string" || typeof v === "number") &&
+          String(v).trim() !== ""
+      )
+      .map(([k, v]) => ({
+        label: k.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        value: String(v),
+      }));
+
+    const attachmentRows = ((extras.attachments as AnyRecord[]) ?? []).map((a) => {
+      const bytes = (a.fileSize as number) ?? 0;
+      const sizeLabel =
+        bytes <= 0
+          ? ""
+          : bytes < 1024
+            ? `${bytes} B`
+            : bytes < 1024 * 1024
+              ? `${(bytes / 1024).toFixed(0)} KB`
+              : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+      return {
+        name: (a.label as string) || (a.fileName as string) || "Download",
+        url: a.url as string,
+        typeLabel: ((a.fileType as string) ?? "").toUpperCase(),
+        sizeLabel,
+      };
+    });
+
+    const crumbs = (extras.breadcrumbs as AnyRecord[]) ?? [];
+    const lastCrumb = crumbs.length > 0 ? crumbs[crumbs.length - 1] : null;
+
     return {
       product: {
         id: p.id,
@@ -68,7 +103,14 @@ export function buildBindingData(ctx?: RenderContext): AnyRecord {
           alt: (img.description as string) ?? "",
         })),
         customFields,
+        specs,
+        hasSpecs: specs.length > 0,
+        attachments: attachmentRows,
+        hasAttachments: attachmentRows.length > 0,
       },
+      lastCrumb: lastCrumb
+        ? { name: lastCrumb.name ?? "", slug: lastCrumb.slug ?? "" }
+        : { name: "", slug: "" },
       brand: { name: brandRow?.name ?? null, slug: brandRow?.slug ?? null },
       reviews: { avg: reviewSummary?.avg ?? 0, count: reviewSummary?.count ?? 0 },
       breadcrumbs: (extras.breadcrumbs as AnyRecord[]) ?? [],

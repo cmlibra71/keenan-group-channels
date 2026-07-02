@@ -35,6 +35,11 @@ import { ProductPurchaseProvider, type PurchaseProduct } from "@/components/prod
 import { buildBindingData } from "@/blocks/binding-data";
 import { buildConditionContext } from "@/lib/condition-context";
 import { buildPartialResolver } from "@/blocks/partials";
+import { TabsShell } from "@/components/product/TabsShell";
+import { WIDGETS } from "@/blocks/widgets";
+import { TemplateRenderer } from "@/blocks/TemplateRenderer";
+import { effectiveSubBlocks } from "@/blocks/BlockRenderer";
+import { parseKtl, evaluateKtl, evaluateConditions, sanitizeConditions } from "@keenan/services";
 
 type BlockProps = { props: Record<string, unknown>; ctx?: RenderContext };
 
@@ -246,10 +251,73 @@ async function ProductLinksBlock({ ctx }: BlockProps) {
 
 // ── Tabs (description / specs / reviews / attachments) ──────────────────────
 
-async function ProductTabsBlock({ ctx }: BlockProps) {
+async function ProductTabsBlock({ props, ctx }: BlockProps) {
   const product = productOf(ctx);
   if (!product) return null;
   const extras = extrasOf(ctx);
+
+  // CMS v2.1: each sub-block IS a tab — label = tab name, hide/conditions
+  // remove it, template tabs whose render is empty are dropped (matches the
+  // legacy conditional tabs). The interactive bar stays component-owned.
+  const storedTabs = props.subBlocks;
+  const tabsV2 =
+    process.env.CMS_V2_DISABLED !== "1" &&
+    ((Array.isArray(storedTabs) && storedTabs.length > 0) ||
+      ctx?.draft === true ||
+      process.env.CMS_V2_FORCE === "1");
+  if (tabsV2) {
+    const def = BLOCK_REGISTRY.product_tabs;
+    const [data, condCtx, resolvePartial] = await Promise.all([
+      Promise.resolve(buildBindingData(ctx)),
+      buildConditionContext(ctx),
+      buildPartialResolver(ctx),
+    ]);
+    const reviewCount = (extras.reviews as unknown[] | undefined)?.length ?? 0;
+    const tabs: { key: string; label: string; node: React.ReactNode }[] = [];
+    for (const sb of effectiveSubBlocks(props, def?.subBlockSchema, "chef-s-kitchen")) {
+      if (sb.hidden && !ctx?.draft) continue;
+      if (!evaluateConditions(sanitizeConditions(sb.conditions), condCtx)) continue;
+      let label = sb.label ?? sb.key;
+      if (sb.kind === "widget" && sb.widget) {
+        const Widget = WIDGETS[sb.widget.name];
+        if (!Widget) continue;
+        if (sb.widget.name === "reviews_panel") label = `${label} (${reviewCount})`;
+        tabs.push({ key: sb.id, label, node: <Widget attrs={sb.widget.attrs ?? {}} ctx={ctx} /> });
+        continue;
+      }
+      const source = sb.template ?? "";
+      // drop tabs that render nothing (e.g. no description / no downloads)
+      try {
+        const segments = evaluateKtl(parseKtl(source), { data, resolvePartial });
+        const hasContent = segments.some(
+          (s) => s.kind !== "html" || s.html.trim().length > 0
+        );
+        if (!hasContent) continue;
+      } catch {
+        if (!ctx?.draft) continue;
+      }
+      tabs.push({
+        key: sb.id,
+        label,
+        node: (
+          <TemplateRenderer
+            template={source}
+            data={data}
+            ctx={ctx}
+            channelKey="chef-s-kitchen"
+            resolvePartial={resolvePartial}
+            draft={ctx?.draft ?? false}
+          />
+        ),
+      });
+    }
+    if (tabs.length === 0) return null;
+    return (
+      <div className={CONTAINER}>
+        <TabsShell tabs={tabs} />
+      </div>
+    );
+  }
   const [reviews, attachments, brandRow] = await Promise.all([
     extras.reviews ?? getProductReviews(product.id).catch(() => []),
     extras.attachments ?? getProductAttachments(product.id).catch(() => []),

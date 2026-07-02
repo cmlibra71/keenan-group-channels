@@ -31,6 +31,7 @@ import { SeoFaq } from "@/components/home/SeoFaq";
 import { MembershipValueStrip } from "@/components/home/MembershipValueStrip";
 import { DrawSpotlight } from "@/components/home/DrawSpotlight";
 import { StatsBanner } from "@/components/home/StatsBanner";
+import { ClearanceRail } from "@/components/home/ClearanceSpotlight";
 import { TemplateRenderer } from "@/blocks/TemplateRenderer";
 import { WIDGETS } from "@/blocks/widgets";
 import { effectiveSubBlocks } from "@/blocks/BlockRenderer";
@@ -465,8 +466,29 @@ async function BrandShowcaseBlock() {
 }
 
 // ── Clearance spotlight ───────────────────────────────────────────────────────
-async function ClearanceSpotlightBlock(props: Record<string, unknown> = {}) {
+async function ClearanceSpotlightBlock(props: Record<string, unknown> = {}, ctx?: RenderContext) {
   const { products: clearanceProducts } = await getProducts({ limit: 9, onSale: true });
+
+  // CMS v2.1: editable heading template + component-owned rail.
+  if (homeV2On(props, ctx)) {
+    const env = await homeV2Env("clearance_spotlight", props, {
+      props: {
+        eyebrow: copy("clearance_spotlight", "eyebrow", props),
+        heading: copy("clearance_spotlight", "heading", props),
+      },
+    });
+    const pricing = await getListingPricing(clearanceProducts);
+    return (
+      <section className="section-bordered">
+        <div className="container-page section-padding">
+          {env.subBlocks.map((sb) => (
+            <div key={sb.id}>{renderHomeSub(env, sb)}</div>
+          ))}
+          <ClearanceRail products={clearanceProducts as never} pricing={pricing} />
+        </div>
+      </section>
+    );
+  }
   return (
     <ClearanceSpotlight
       products={clearanceProducts}
@@ -544,7 +566,7 @@ export const HOME_BLOCK_COMPONENTS: Record<string, (p: BlockProps) => any> = {
   shop_by_category: ({ props }) => ShopByCategory(props),
   membership_value_strip: () => MembershipStripBlock(),
   brand_showcase: () => BrandShowcaseBlock(),
-  clearance_spotlight: ({ props }) => ClearanceSpotlightBlock(props),
+  clearance_spotlight: ({ props, ctx }) => ClearanceSpotlightBlock(props, ctx),
   featured_products: ({ props, ctx }) => FeaturedProductsBlock(props, ctx),
   seo_faq: () => SeoFaqBlock(),
   draw_spotlight: () => DrawSpotlightBlock(),

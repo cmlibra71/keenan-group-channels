@@ -143,6 +143,84 @@ async function fetchGridProducts(
   return [];
 }
 
+/** Grid of cards rendered from the shared product_card partial — each card in
+ *  its own lightweight purchase provider. Reused by product_grid/listing_grid
+ *  widgets and the brand page. */
+export async function CardPartialGrid({
+  products,
+  ctx,
+  cardKey = "product_card",
+  cardTemplate,
+  eyebrow = null,
+  clearance = false,
+  narrow = false,
+  pricing,
+  memberPricingEnabled,
+  gridClassName,
+}: {
+  products: AnyRecord[];
+  ctx?: RenderContext;
+  cardKey?: string;
+  cardTemplate?: string | null;
+  eyebrow?: string | null;
+  clearance?: boolean;
+  narrow?: boolean;
+  pricing?: { memberPriceMap?: Record<number, number>; isMember?: boolean; planPrice?: string | null };
+  memberPricingEnabled?: boolean;
+  gridClassName?: string;
+}) {
+  if (products.length === 0) return null;
+  const [cardSource, resolvePartial, pricingResolved, mpe] = await Promise.all([
+    cardTemplate ? Promise.resolve(cardTemplate) : getPartialSource(cardKey, ctx),
+    buildPartialResolver(ctx),
+    pricing !== undefined
+      ? Promise.resolve(pricing)
+      : getListingPricing(products as never)
+          .then((p) => p as unknown as Record<string, unknown>)
+          .catch(() => ({}) as Record<string, unknown>),
+    memberPricingEnabled !== undefined
+      ? Promise.resolve(memberPricingEnabled)
+      : getFeatureFlag("member_pricing_enabled").catch(() => false),
+  ]);
+  if (!cardSource) return null;
+
+  const memberPriceMap = (pricingResolved.memberPriceMap ?? {}) as Record<number, number>;
+  const isMember = (pricingResolved.isMember as boolean) ?? false;
+  const planPrice = (pricingResolved.planPrice as string | null) ?? null;
+
+  return (
+    <div
+      className={
+        gridClassName ??
+        `grid grid-cols-2 gap-3 sm:gap-4 ${narrow ? "md:grid-cols-2 lg:grid-cols-3" : "md:grid-cols-3 lg:grid-cols-4"}`
+      }
+    >
+      {products.map((p) => {
+        const memberPrice = mpe ? memberPriceMap[p.id as number] ?? null : null;
+        return (
+          <ProductPurchaseProvider
+            key={p.id as number}
+            product={cardPurchaseProduct(p)}
+            memberPrice={memberPrice}
+            isMember={isMember}
+            membershipTeaser={planPrice ? { fromPrice: parseFloat(planPrice).toFixed(2) } : null}
+          >
+            <TemplateRenderer
+              template={cardSource}
+              data={{ product: cardData(p, { eyebrow, clearance }) }}
+              ctx={ctx}
+              seedKey={`partial/${cardKey}`}
+              channelKey="chef-s-kitchen"
+              resolvePartial={resolvePartial}
+              draft={ctx?.draft ?? false}
+            />
+          </ProductPurchaseProvider>
+        );
+      })}
+    </div>
+  );
+}
+
 export async function ProductGridWidget({
   attrs,
   ctx,
@@ -364,5 +442,28 @@ export function LoadMoreWidget({ ctx }: { attrs: Record<string, unknown>; ctx?: 
         Load more ({listing.total - shown} remaining)
       </Link>
     </div>
+  );
+}
+
+// ── Product-tab widgets ──────────────────────────────────────────────────────
+
+import { BrandWarranty } from "@/components/product/WarrantyDirectory";
+import { ReviewsSection } from "@/components/product/ProductTabs";
+
+export function BrandWarrantyWidget({ ctx }: { attrs: Record<string, unknown>; ctx?: RenderContext }) {
+  if (ctx?.record?.kind !== "product") return null;
+  const extras = (ctx.record.extras ?? {}) as { brandRow?: { name?: string | null } | null };
+  return <BrandWarranty brand={extras.brandRow?.name ?? null} />;
+}
+
+export function ReviewsPanelWidget({ ctx }: { attrs: Record<string, unknown>; ctx?: RenderContext }) {
+  if (ctx?.record?.kind !== "product") return null;
+  const product = ctx.record.product as { id: number };
+  const extras = (ctx.record.extras ?? {}) as { reviews?: unknown[] };
+  return (
+    <ReviewsSection
+      reviews={(extras.reviews ?? []) as never}
+      productId={product.id}
+    />
   );
 }

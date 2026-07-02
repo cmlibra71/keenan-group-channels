@@ -11,6 +11,7 @@ import { effectiveSubBlocks } from "@/blocks/BlockRenderer";
 import { BLOCK_REGISTRY } from "@keenan/services";
 import { buildPartialResolver } from "@/blocks/partials";
 import imageLoader from "@/lib/image-loader";
+import { CardPartialGrid } from "@/blocks/widgets-server";
 
 export default async function BrandPage({
   params,
@@ -71,7 +72,26 @@ export default async function BrandPage({
           }
           return <BrandHero key={i} brand={brand} total={total} />;
         }
-        if (b.block_type === "brand_products") return <BrandProducts key={i} {...productCtx} />;
+        if (b.block_type === "brand_products") {
+          const v2 =
+            process.env.CMS_V2_DISABLED !== "1" &&
+            ((Array.isArray(b.props?.subBlocks) && (b.props!.subBlocks as unknown[]).length > 0) ||
+              draft ||
+              process.env.CMS_V2_FORCE === "1");
+          if (v2) {
+            return (
+              <BrandProductsV2
+                key={i}
+                props={b.props ?? {}}
+                products={products as never}
+                pricing={productCtx.pricing}
+                memberPricingEnabled={memberPricingEnabled}
+                draft={draft}
+              />
+            );
+          }
+          return <BrandProducts key={i} {...productCtx} />;
+        }
         return <BlockRenderer key={i} blocks={[b]} draft={draft} />;
       })}
     </div>
@@ -125,5 +145,50 @@ async function BrandHeroV2({
         )
       )}
     </>
+  );
+}
+
+
+/** CMS v2.1 brand products — editable heading + the shared card partial grid. */
+async function BrandProductsV2({
+  props,
+  products,
+  pricing,
+  memberPricingEnabled,
+  draft,
+}: {
+  props: Record<string, unknown>;
+  products: Record<string, unknown>[];
+  pricing: { memberPriceMap?: Record<number, number>; isMember?: boolean; planPrice?: string | null };
+  memberPricingEnabled: boolean;
+  draft: boolean;
+}) {
+  const def = BLOCK_REGISTRY.brand_products;
+  const subBlocks = effectiveSubBlocks(props, def?.subBlockSchema, "chef-s-kitchen");
+  const resolvePartial = await buildPartialResolver(undefined);
+  if (products.length === 0) {
+    return <p className="text-steel-500 text-center py-12">No products from this brand yet.</p>;
+  }
+  return (
+    <div>
+      {subBlocks.map((sb) =>
+        sb.hidden ? null : (
+          <TemplateRenderer
+            key={sb.id}
+            template={sb.template ?? ""}
+            data={{ props }}
+            seedKey="brand/products_heading"
+            channelKey="chef-s-kitchen"
+            resolvePartial={resolvePartial}
+            draft={draft}
+          />
+        )
+      )}
+      <CardPartialGrid
+        products={products}
+        pricing={pricing}
+        memberPricingEnabled={memberPricingEnabled}
+      />
+    </div>
   );
 }
