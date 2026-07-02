@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Package } from "lucide-react";
 import { getSession } from "@/lib/auth";
-import { orderService, CHANNEL_ID } from "@/lib/store";
+import { orderService, customerService, CHANNEL_ID, getGuestOrdersForEmail } from "@/lib/store";
+import { deniedForUnverifiedSelfRegistration } from "@/lib/checkout/net-terms-policy";
 import { Price } from "@/components/ui/Price";
 
 // orderService returns snake_case keys (transformRow).
@@ -37,7 +38,30 @@ export default async function OrdersPage() {
     },
   });
 
-  const customerOrders = data as unknown as OrderRecord[];
+  const accountOrders = data as unknown as OrderRecord[];
+
+  // Also surface orders placed as a GUEST under this account's email (e.g. a
+  // checkout done before signing in), matched on the normalized inbox. Gated the
+  // same way as net terms: an unverified self-registration must not see orders
+  // billed to an email it hasn't proven it owns.
+  let guestOrders: OrderRecord[] = [];
+  try {
+    const customer = (await customerService.getById(session.customerId)) as
+      | { metafields?: Record<string, unknown> | null }
+      | null;
+    if (!deniedForUnverifiedSelfRegistration(customer?.metafields)) {
+      guestOrders = (await getGuestOrdersForEmail(session.email)) as unknown as OrderRecord[];
+    }
+  } catch {
+    // best-effort — never block the page on the guest-order lookup
+  }
+
+  // Merge (dedupe by id; guest orders have no customer_id so they can't overlap)
+  // and re-sort newest-first.
+  const seen = new Set(accountOrders.map((o) => o.id));
+  const customerOrders = [...accountOrders, ...guestOrders.filter((o) => !seen.has(o.id))].sort(
+    (a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+  );
 
   if (customerOrders.length === 0) {
     return (
