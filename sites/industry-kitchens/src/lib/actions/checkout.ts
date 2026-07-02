@@ -392,6 +392,7 @@ export async function placeOrder(
         quantity: i.quantity,
         sku: i.product_sku ?? null,
         imageUrl: imageMap.get(i.product_id) ?? null,
+        url: i.product_slug ? `${siteUrl}/products/${i.product_slug}` : null,
       })),
       bankDetails: method?.bankDetails ?? null,
       // Use the customer's actual account terms for a net-terms invoice email.
