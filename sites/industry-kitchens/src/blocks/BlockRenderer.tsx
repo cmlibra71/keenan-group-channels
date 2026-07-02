@@ -133,3 +133,180 @@ export function BlockRenderer({
     </>
   );
 }
+
+// ============================================================================
+// SubBlockRenderer (CMS v2) — renders a templatable block's sub-blocks:
+// KTL templates + locked widgets in a responsive grid (props.layout), each
+// sub-block condition-gated and edit-marked. Fork block components (e.g.
+// product_overview) call this AFTER building binding data + the condition
+// context, wrapped in whatever state provider the widgets need.
+//
+// Kill switch: CMS_V2_DISABLED=1 makes this return null — callers fall back
+// to their legacy compiled component.
+// ============================================================================
+import {
+  containerLayoutToClasses,
+  itemLayoutToClasses,
+  evaluateConditions,
+  sanitizeConditions,
+  getSeedTemplate,
+  type ConditionContext,
+  type SubBlockInstance,
+  type SubBlockSchemaEntry,
+  type ContainerLayout,
+  type ItemLayout,
+} from "@keenan/services";
+import { TemplateRenderer } from "./TemplateRenderer";
+import { WIDGETS } from "./widgets";
+
+export interface SubBlockRenderProps {
+  /** the block's stored props (subBlocks/layout read from here) */
+  props: Record<string, unknown>;
+  /** dev-defined decomposition — used when props.subBlocks is absent/empty */
+  schema?: SubBlockSchemaEntry[];
+  /** container layout fallback when props.layout is absent (def.defaultProps.layout) */
+  defaultLayout?: Record<string, unknown>;
+  /** seed-template key prefix is embedded in schema entries; channelKey resolves them */
+  channelKey: string;
+  data: Record<string, unknown>;
+  ctx?: RenderContext;
+  condCtx: ConditionContext;
+  draft?: boolean;
+  editHooks?: boolean;
+  /** parent block marker ("region:index") for sub-block edit markers */
+  blockMarker?: string;
+  resolvePartial?: Parameters<typeof TemplateRenderer>[0]["resolvePartial"];
+}
+
+/** Materialize the effective sub-block list: stored props win; otherwise the
+ *  schema seeds (with per-channel seed templates) render the default design. */
+export function effectiveSubBlocks(
+  props: Record<string, unknown>,
+  schema: SubBlockSchemaEntry[] | undefined,
+  channelKey: string
+): SubBlockInstance[] {
+  const stored = props.subBlocks;
+  if (Array.isArray(stored) && stored.length > 0) {
+    return stored as SubBlockInstance[];
+  }
+  return (schema ?? []).map((entry) => ({
+    id: `schema-${entry.key}`,
+    key: entry.key,
+    kind: entry.kind,
+    label: entry.label,
+    template:
+      entry.kind === "template" && entry.seedTemplate
+        ? getSeedTemplate(channelKey, entry.seedTemplate) ?? ""
+        : undefined,
+    widget: entry.widget ? { name: entry.widget.name, attrs: entry.widget.attrs } : undefined,
+    layout: entry.defaultLayout,
+    group: entry.defaultGroup,
+  }));
+}
+
+export function SubBlockRenderer({
+  props,
+  schema,
+  defaultLayout,
+  channelKey,
+  data,
+  ctx,
+  condCtx,
+  draft = false,
+  editHooks = false,
+  blockMarker,
+  resolvePartial,
+}: SubBlockRenderProps) {
+  if (process.env.CMS_V2_DISABLED === "1") return null;
+
+  const subBlocks = effectiveSubBlocks(props, schema, channelKey);
+  if (subBlocks.length === 0) return null;
+
+  const schemaByKey = new Map((schema ?? []).map((s) => [s.key, s]));
+  const containerClasses = containerLayoutToClasses(
+    (props.layout as ContainerLayout | undefined) ?? (defaultLayout as ContainerLayout | undefined)
+  ).join(" ");
+
+  const renderContent = (sb: SubBlockInstance): React.ReactNode => {
+    const schemaEntry = schemaByKey.get(sb.key);
+    if (sb.kind === "widget" && sb.widget) {
+      const Widget = WIDGETS[sb.widget.name];
+      return Widget ? (
+        <Widget attrs={sb.widget.attrs ?? {}} ctx={ctx} />
+      ) : draft ? (
+        <div className="rounded border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          widget “{sb.widget.name}” isn’t available on this site
+        </div>
+      ) : null;
+    }
+    if (sb.kind === "template") {
+      return (
+        <TemplateRenderer
+          template={sb.template ?? ""}
+          data={data}
+          ctx={ctx}
+          seedKey={schemaEntry?.seedTemplate}
+          channelKey={channelKey}
+          resolvePartial={resolvePartial}
+          draft={draft}
+        />
+      );
+    }
+    return null;
+  };
+
+  const itemClassesFor = (sb: SubBlockInstance): string =>
+    itemLayoutToClasses(
+      (sb.layout as ItemLayout | undefined) ??
+        (schemaByKey.get(sb.key)?.defaultLayout as ItemLayout | undefined)
+    ).join(" ");
+
+  // Partition into cells: CONSECUTIVE sub-blocks sharing a `group` share ONE
+  // grid cell (stacked in flow — reproduces e.g. the legacy sticky buy column).
+  type Cell = { group: string | null; members: Array<{ sb: SubBlockInstance; index: number }> };
+  const cells: Cell[] = [];
+  subBlocks.forEach((sb, index) => {
+    if (sb.hidden && !draft) return;
+    if (!evaluateConditions(sanitizeConditions(sb.conditions), condCtx)) return;
+    const group = sb.group ?? null;
+    const last = cells[cells.length - 1];
+    if (group && last && last.group === group) {
+      last.members.push({ sb, index });
+    } else {
+      cells.push({ group, members: [{ sb, index }] });
+    }
+  });
+
+  return (
+    <div className={containerClasses}>
+      {cells.map((cell, c) => {
+        const lead = cell.members[0].sb;
+        const cellClasses = itemClassesFor(lead);
+        const rendered = cell.members
+          .map(({ sb, index }) => {
+            const content = renderContent(sb);
+            if (content == null) return null;
+            return (
+              <div
+                key={sb.id || index}
+                className={sb.hidden && draft ? "opacity-40" : undefined}
+                data-cms-subblock={
+                  editHooks && blockMarker ? `${blockMarker}:${index}` : undefined
+                }
+                data-cms-subblock-key={editHooks ? sb.key : undefined}
+              >
+                {content}
+              </div>
+            );
+          })
+          .filter(Boolean);
+        if (rendered.length === 0) return null;
+        return (
+          <div key={cell.group ?? lead.id ?? c} className={cellClasses}>
+            {rendered}
+          </div>
+        );
+      })}
+    </div>
+  );
+}

@@ -29,7 +29,11 @@ import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductTabs } from "@/components/product/ProductTabs";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { BackButton } from "@/components/ui/BackButton";
-import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
+import { BlockRenderer, SubBlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
+import { BLOCK_REGISTRY } from "@keenan/services";
+import { ProductPurchaseProvider, type PurchaseProduct } from "@/components/product/ProductPurchaseProvider";
+import { buildBindingData } from "@/blocks/binding-data";
+import { buildConditionContext } from "@/lib/condition-context";
 
 type BlockProps = { props: Record<string, unknown>; ctx?: RenderContext };
 
@@ -321,8 +325,106 @@ async function ProductSlotBlock({ props, ctx }: BlockProps) {
   );
 }
 
+// ── CMS v2: the decomposed product overview ─────────────────────────────────
+// Sub-blocks (gallery widget / title / description / purchase panel templates)
+// render through SubBlockRenderer inside the ProductPurchaseProvider, so the
+// split pieces share ONE variant/options/quantity state with the legacy path.
+
+async function ProductOverviewBlock({ props, ctx }: BlockProps) {
+  const product = productOf(ctx);
+  if (!product) return null;
+  const extras = extrasOf(ctx);
+
+  // member pricing — same fallback chain as ProductBuyboxBlock
+  let {
+    memberPrice = null,
+    memberPriceMap,
+    isMember,
+    membershipTeaser = null,
+    suppressCatalogPricing,
+  } = extras;
+  if (memberPriceMap === undefined) {
+    memberPriceMap = {};
+    const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
+    const memberCtx = await getMemberContext();
+    isMember = memberCtx.isMember;
+    if (memberPricingEnabled && memberCtx.customerGroupId) {
+      membershipTeaser = {
+        fromPrice: memberCtx.planPrice ? parseFloat(memberCtx.planPrice).toFixed(2) : null,
+      };
+      const variants = product.variants ?? [];
+      const pricingResults = await Promise.all(
+        variants.map((v: { id: number }) =>
+          getEffectivePrice(v.id, CHANNEL_ID, memberCtx.customerGroupId)
+        )
+      );
+      for (let i = 0; i < variants.length; i++) {
+        if (pricingResults[i].salePrice) {
+          memberPriceMap[variants[i].id] = parseFloat(pricingResults[i].salePrice as string);
+        }
+      }
+      const defaultVariant = variants[0];
+      if (defaultVariant && memberPriceMap[defaultVariant.id] != null) {
+        memberPrice = memberPriceMap[defaultVariant.id];
+      }
+    }
+  }
+  if (suppressCatalogPricing === undefined) {
+    suppressCatalogPricing = await shouldSuppressCatalogSalePrice();
+  }
+
+  const purchaseProduct: PurchaseProduct = {
+    id: product.id,
+    name: product.name,
+    sku: product.sku,
+    price: product.price,
+    salePrice: product.salePrice,
+    inventoryLevel: product.inventoryLevel ?? 0,
+    inventoryTracking: product.inventoryTracking ?? "none",
+    availability: product.availability ?? "available",
+    descriptionShort: product.descriptionShort,
+    images: product.images,
+    variants: product.variants,
+    options: product.options ?? [],
+    optionValues: product.optionValues ?? [],
+    variantOptionMappings: product.variantOptionMappings ?? [],
+    bulkPricing: suppressCatalogPricing ? [] : (product.bulkPricing ?? []),
+  };
+
+  const def = BLOCK_REGISTRY.product_overview;
+  const [data, condCtx] = await Promise.all([
+    Promise.resolve(buildBindingData(ctx)),
+    buildConditionContext(ctx),
+  ]);
+
+  return (
+    <div className={CONTAINER}>
+      <ProductPurchaseProvider
+        product={purchaseProduct}
+        memberPrice={memberPrice}
+        memberPriceMap={memberPriceMap}
+        isMember={isMember ?? false}
+        membershipTeaser={membershipTeaser}
+      >
+        <SubBlockRenderer
+          props={props}
+          schema={def?.subBlockSchema}
+          defaultLayout={def?.defaultProps?.layout as Record<string, unknown> | undefined}
+          channelKey="chef-s-kitchen"
+          data={data}
+          ctx={ctx}
+          condCtx={condCtx}
+          draft={ctx?.draft ?? false}
+          editHooks={ctx?.draft ?? false}
+        />
+      </ProductPurchaseProvider>
+    </div>
+  );
+}
+
 export const PRODUCT_BLOCK_COMPONENTS = {
   breadcrumbs: BreadcrumbsBlock,
+  product_overview: ProductOverviewBlock,
   product_buybox: ProductBuyboxBlock,
   product_links: ProductLinksBlock,
   product_tabs: ProductTabsBlock,

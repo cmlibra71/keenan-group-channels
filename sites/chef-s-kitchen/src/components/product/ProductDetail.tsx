@@ -1,6 +1,15 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+// ============================================================================
+// ProductDetail — the buy panel (price card, bulk tiers, option selectors,
+// quantity, CTAs, trust row, mobile buy bar).
+//
+// CMS v2 refactor: ALL state and derived values now come from
+// ProductPurchaseProvider (one implementation shared with the v2 widgets).
+// The JSX below is verbatim from the pre-provider version — pixel parity is
+// the contract; do not restyle here without a parity gate.
+// ============================================================================
+
 import Link from "next/link";
 import { AddToCartButton } from "./AddToCartButton";
 import { AddToQuoteButton } from "./AddToQuoteButton";
@@ -8,189 +17,29 @@ import { OptionSelector } from "./OptionSelector";
 import { Price } from "@/components/ui/Price";
 import { PriceBlock } from "@/components/ui/PriceBlock";
 import { Minus, Plus, Truck, ShieldCheck, PackageCheck } from "lucide-react";
+import { useProductPurchase } from "./ProductPurchaseProvider";
 
-type Variant = {
-  id: number;
-  sku: string | null;
-  price: string | null;
-  salePrice: string | null;
-  imageUrl: string | null;
-  optionDisplayName: string | null;
-  purchasingDisabled: boolean | null;
-  inventoryLevel: number | null;
-};
+export function ProductDetail() {
+  const {
+    product,
+    isMember,
+    membershipTeaser,
+    selectedOptions,
+    selectOption,
+    quantity,
+    setQuantity,
+    useGroupedMode,
+    disabledValuesPerOption,
+    activeMemberPrice: memberPrice,
+    displayPrice,
+    displaySalePrice,
+    inStock,
+    purchasingDisabled,
+    allOptionsSelected,
+    cartVariantId,
+  } = useProductPurchase();
 
-type Option = {
-  id: number;
-  displayName: string;
-  type: string;
-  sortOrder: number | null;
-  isRequired: boolean | null;
-};
-
-type OptionValue = {
-  id: number;
-  optionId: number;
-  label: string;
-  valueData: unknown;
-  sortOrder: number | null;
-};
-
-type VariantOptionMapping = {
-  id: number;
-  variantId: number;
-  optionId: number;
-  optionValueId: number;
-};
-
-type BulkPricingRule = {
-  id: number;
-  quantityMin: number;
-  quantityMax: number | null;
-  type: string;
-  amount: string;
-};
-
-export function ProductDetail({
-  productId,
-  price,
-  salePrice,
-  inventoryLevel,
-  inventoryTracking,
-  availability,
-  variants,
-  options = [],
-  optionValues = [],
-  variantOptionMappings = [],
-  bulkPricing = [],
-  onVariantChange,
-  memberPrice,
-  isMember,
-  membershipTeaser,
-}: {
-  productId: number;
-  price: string;
-  salePrice: string | null;
-  inventoryLevel: number;
-  inventoryTracking: string;
-  availability: string;
-  variants: Variant[];
-  options?: Option[];
-  optionValues?: OptionValue[];
-  variantOptionMappings?: VariantOptionMapping[];
-  bulkPricing?: BulkPricingRule[];
-  onVariantChange?: (variantId: number | null) => void;
-  memberPrice?: number | null;
-  isMember?: boolean;
-  /** Generic membership pitch for non-members — never carries the exact member price. */
-  membershipTeaser?: { fromPrice: string | null } | null;
-}) {
-  const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
-  const [quantity, setQuantity] = useState(1);
-  const [selectedOptions, setSelectedOptions] = useState<Record<number, number>>({});
-
-  const useGroupedMode = options.length > 0 && variantOptionMappings.length > 0;
-
-  // Build variant lookup: sorted "optionId:valueId,..." → variant
-  const variantLookup = useMemo(() => {
-    if (!useGroupedMode) return new Map<string, Variant>();
-    const map = new Map<string, Variant>();
-    // Group mappings by variantId
-    const byVariant = new Map<number, VariantOptionMapping[]>();
-    for (const m of variantOptionMappings) {
-      const arr = byVariant.get(m.variantId) || [];
-      arr.push(m);
-      byVariant.set(m.variantId, arr);
-    }
-    for (const [variantId, mappings] of byVariant) {
-      const key = mappings
-        .map((m) => `${m.optionId}:${m.optionValueId}`)
-        .sort()
-        .join(",");
-      const variant = variants.find((v) => v.id === variantId);
-      if (variant) map.set(key, variant);
-    }
-    return map;
-  }, [useGroupedMode, variantOptionMappings, variants]);
-
-  // Get matched variant from current selections
-  const matchedVariant = useMemo(() => {
-    if (!useGroupedMode) return null;
-    if (Object.keys(selectedOptions).length !== options.length) return null;
-    const key = Object.entries(selectedOptions)
-      .map(([optId, valId]) => `${optId}:${valId}`)
-      .sort()
-      .join(",");
-    return variantLookup.get(key) ?? null;
-  }, [useGroupedMode, selectedOptions, options.length, variantLookup]);
-
-  // Compute which values are available per option
-  const disabledValuesPerOption = useMemo(() => {
-    if (!useGroupedMode) return new Map<number, Set<number>>();
-    const result = new Map<number, Set<number>>();
-
-    for (const option of options) {
-      const disabled = new Set<number>();
-      const valuesForOption = optionValues.filter((v) => v.optionId === option.id);
-      // For each value of this option, check if any variant exists
-      // that matches the current selections for OTHER options + this value
-      const otherSelections = { ...selectedOptions };
-      delete otherSelections[option.id];
-
-      for (const val of valuesForOption) {
-        const testSelections = { ...otherSelections, [option.id]: val.id };
-        // Check if any variant matches this combination (partial match ok)
-        const hasMatch = [...variantLookup.entries()].some(([key]) => {
-          return Object.entries(testSelections).every(([optId, valId]) =>
-            key.includes(`${optId}:${valId}`)
-          );
-        });
-        if (!hasMatch) disabled.add(val.id);
-      }
-      result.set(option.id, disabled);
-    }
-    return result;
-  }, [useGroupedMode, options, optionValues, selectedOptions, variantLookup]);
-
-  const handleOptionSelect = (optionId: number, valueId: number) => {
-    setSelectedOptions((prev) => ({ ...prev, [optionId]: valueId }));
-  };
-
-  // Determine active variant for display
-  const activeVariant = useGroupedMode ? matchedVariant : variants.find((v) => v.id === selectedVariantId);
-
-  // Notify parent when active variant changes
-  const activeVariantId = activeVariant?.id ?? null;
-  useEffect(() => {
-    onVariantChange?.(activeVariantId);
-  }, [activeVariantId, onVariantChange]);
-
-  const displayPrice = activeVariant?.price
-    ? parseFloat(activeVariant.price)
-    : parseFloat(price);
-  const displaySalePrice = activeVariant?.salePrice
-    ? parseFloat(activeVariant.salePrice)
-    : activeVariant
-      ? null
-      : salePrice
-        ? parseFloat(salePrice)
-        : null;
-
-  const inStock = (() => {
-    if (availability === "disabled") return false;
-    if (inventoryTracking === "none") return true;
-    if (activeVariant) {
-      return (activeVariant.inventoryLevel ?? 0) > 0;
-    }
-    return inventoryLevel > 0;
-  })();
-
-  const purchasingDisabled = activeVariant?.purchasingDisabled ?? false;
-
-  // In grouped mode, require all options selected before enabling cart
-  const allOptionsSelected = useGroupedMode
-    ? Object.keys(selectedOptions).length === options.length && matchedVariant !== null
-    : true;
+  const { id: productId, options, optionValues, bulkPricing } = product;
 
   return (
     <div>
@@ -263,7 +112,7 @@ export function ProductDetail({
                 values={optionValues.filter((v) => v.optionId === option.id)}
                 selectedValueId={selectedOptions[option.id] ?? null}
                 disabledValueIds={disabledValuesPerOption.get(option.id) ?? new Set()}
-                onSelect={handleOptionSelect}
+                onSelect={selectOption}
               />
             ))}
           </div>
@@ -298,20 +147,20 @@ export function ProductDetail({
             <>
               <AddToCartButton
                 productId={productId}
-                variantId={useGroupedMode ? (matchedVariant?.id ?? null) : selectedVariantId}
+                variantId={cartVariantId}
                 quantity={quantity}
                 disabled={!inStock || purchasingDisabled || !allOptionsSelected}
               />
               <AddToQuoteButton
                 productId={productId}
-                variantId={useGroupedMode ? (matchedVariant?.id ?? null) : selectedVariantId}
+                variantId={cartVariantId}
                 disabled={useGroupedMode && !allOptionsSelected}
               />
             </>
           ) : (
             <AddToQuoteButton
               productId={productId}
-              variantId={useGroupedMode ? (matchedVariant?.id ?? null) : selectedVariantId}
+              variantId={cartVariantId}
               disabled={useGroupedMode && !allOptionsSelected}
               label="Add to Quote — request pricing"
             />
@@ -351,7 +200,7 @@ export function ProductDetail({
           </div>
           <AddToCartButton
             productId={productId}
-            variantId={useGroupedMode ? (matchedVariant?.id ?? null) : selectedVariantId}
+            variantId={cartVariantId}
             quantity={quantity}
             size="sm"
             disabled={!inStock || purchasingDisabled || !allOptionsSelected}
@@ -361,3 +210,7 @@ export function ProductDetail({
     </div>
   );
 }
+
+// Link import kept out of the refactor scope on purpose — some branches of the
+// legacy JSX referenced it; keeping the import list stable avoids churn.
+void Link;
