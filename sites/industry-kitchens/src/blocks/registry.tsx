@@ -148,6 +148,7 @@ async function ProductListingBlock({ props }: BlockProps) {
 
 import { CATEGORY_BLOCK_COMPONENTS } from "./category-blocks";
 import { PRODUCT_BLOCK_COMPONENTS } from "./product-blocks";
+import { HOME_BLOCK_COMPONENTS } from "./home-blocks";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const BLOCK_COMPONENTS: Record<string, FC<BlockProps> | ((p: BlockProps) => any)> = {
@@ -164,6 +165,9 @@ export const BLOCK_COMPONENTS: Record<string, FC<BlockProps> | ((p: BlockProps) 
   ...CATEGORY_BLOCK_COMPONENTS,
   // Product-template blocks (render the RenderContext product record).
   ...PRODUCT_BLOCK_COMPONENTS,
+  // Homepage section blocks (render via HomeSections — byte-identical to the
+  // legacy homepage_sections settings model).
+  ...HOME_BLOCK_COMPONENTS,
 };
 
 export const SUPPORTED_BLOCK_TYPES = Object.keys(BLOCK_COMPONENTS);
