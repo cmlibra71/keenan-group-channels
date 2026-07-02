@@ -217,6 +217,47 @@ export async function getSitemapProducts(
   }));
 }
 
+/**
+ * Guest orders (customer_id IS NULL) on this channel whose billing email matches
+ * `email`, so a signed-in customer sees the orders they placed as a guest. Match
+ * is normalized: case-insensitive, `+tag` suffix stripped, and dots stripped in
+ * the local part for gmail/googlemail — so chris+test@gmail.com, chris.t@gmail.com
+ * and chris@gmail.com all resolve to the same inbox. Returns the same shape as the
+ * order list rows. Callers MUST gate this on the account being trustworthy for the
+ * email (see the orders page: unverified self-registrations are excluded) — the
+ * match is on the email string alone.
+ */
+export async function getGuestOrdersForEmail(
+  email: string
+): Promise<Array<{ id: number; order_number: string; status: string; total_inc_tax: string; created_at: string | Date | null }>> {
+  const sql = getCommerceClient();
+  if (!sql || !email) return [];
+  const target = normalizeEmailForMatch(email);
+  if (!target) return [];
+  const rows = await sql<{ id: number; order_number: string; status: string; total_inc_tax: string; created_at: string | Date | null }[]>`
+    SELECT id, order_number, status, total_inc_tax, created_at
+    FROM orders
+    WHERE customer_id IS NULL
+      AND channel_id = ${CHANNEL_ID}
+      AND CASE
+        WHEN split_part(lower(billing_address->>'email'), '@', 2) IN ('gmail.com','googlemail.com')
+        THEN regexp_replace(split_part(split_part(lower(billing_address->>'email'), '@', 1), '+', 1), '\\.', '', 'g')
+        ELSE split_part(split_part(lower(billing_address->>'email'), '@', 1), '+', 1)
+      END || '@' || split_part(lower(billing_address->>'email'), '@', 2) = ${target}
+    ORDER BY id DESC
+    LIMIT 50`;
+  return rows;
+}
+
+/** Normalize an email for inbox-equivalent matching (mirrors the SQL above). */
+function normalizeEmailForMatch(email: string): string {
+  const [rawLocal, rawDomain] = email.toLowerCase().trim().split("@");
+  if (!rawDomain) return "";
+  let local = rawLocal.split("+")[0];
+  if (rawDomain === "gmail.com" || rawDomain === "googlemail.com") local = local.replace(/\./g, "");
+  return `${local}@${rawDomain}`;
+}
+
 // ============================================================================
 // Re-export services for direct access
 // ============================================================================
