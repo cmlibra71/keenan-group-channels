@@ -56,6 +56,8 @@ export function sanitizeKtlHtml(html: string): string {
       // inert buttons only — event handlers never survive sanitization, and
       // interactive behavior comes from locked widgets, not template markup
       "button",
+      // minimal inline-SVG subset for icons (DOMPurify sanitizes SVG vectors)
+      "svg", "path", "circle", "line", "polyline", "polygon", "rect",
       "ktl-w", "ktl-rich",
     ],
     ALLOWED_ATTR: [
@@ -65,6 +67,9 @@ export function sanitizeKtlHtml(html: string): string {
       "class", "style", "color", "face",
       "aria-label", "aria-hidden", "role",
       "disabled", "type",
+      "viewBox", "d", "fill", "stroke", "stroke-width", "stroke-linecap",
+      "stroke-linejoin", "cx", "cy", "r", "x", "y", "x1", "y1", "x2", "y2",
+      "points", "rx", "xmlns",
       "data-w", "data-r",
     ],
     FORBID_TAGS: ["script", "iframe", "object", "embed", "form", "input", "style", "link", "base"],

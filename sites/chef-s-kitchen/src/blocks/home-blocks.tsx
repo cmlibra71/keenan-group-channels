@@ -24,7 +24,6 @@ import {
   CHANNEL_ID,
   getJsonSetting,
 } from "@/lib/store";
-import { BLOCK_REGISTRY } from "@keenan/services";
 import { getListingPricing } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { TrustBar } from "@/components/home/TrustBar";
@@ -32,6 +31,17 @@ import { SeoFaq } from "@/components/home/SeoFaq";
 import { MembershipValueStrip } from "@/components/home/MembershipValueStrip";
 import { DrawSpotlight } from "@/components/home/DrawSpotlight";
 import { StatsBanner } from "@/components/home/StatsBanner";
+import { TemplateRenderer } from "@/blocks/TemplateRenderer";
+import { WIDGETS } from "@/blocks/widgets";
+import { effectiveSubBlocks } from "@/blocks/BlockRenderer";
+import {
+  BLOCK_REGISTRY,
+  evaluateConditions,
+  sanitizeConditions,
+  type SubBlockInstance,
+} from "@keenan/services";
+import { buildConditionContext } from "@/lib/condition-context";
+import { buildPartialResolver } from "@/blocks/partials";
 import { BrandShowcase } from "@/components/home/BrandShowcase";
 import { ClearanceSpotlight } from "@/components/home/ClearanceSpotlight";
 
@@ -85,6 +95,127 @@ const regDefault = (type: string, key: string): string => {
 const copy = (type: string, key: string, props: Record<string, unknown>): string =>
   str(props[key], regDefault(type, key));
 
+
+// ── CMS v2 helpers (home blocks are custom compositions) ────────────────────
+
+const homeV2On = (props: Record<string, unknown>): boolean =>
+  process.env.CMS_V2_DISABLED !== "1" &&
+  ((Array.isArray(props.subBlocks) && (props.subBlocks as unknown[]).length > 0) ||
+    process.env.CMS_V2_FORCE === "1");
+
+type HomeV2Env = {
+  subBlocks: SubBlockInstance[];
+  data: Record<string, unknown>;
+  condCtx: Awaited<ReturnType<typeof buildConditionContext>>;
+  resolvePartial: Awaited<ReturnType<typeof buildPartialResolver>>;
+};
+
+async function homeV2Env(
+  blockType: string,
+  props: Record<string, unknown>,
+  data: Record<string, unknown>
+): Promise<HomeV2Env> {
+  const def = BLOCK_REGISTRY[blockType];
+  const [condCtx, resolvePartial] = await Promise.all([
+    buildConditionContext(undefined),
+    buildPartialResolver(undefined),
+  ]);
+  return {
+    subBlocks: effectiveSubBlocks(props, def?.subBlockSchema, "chef-s-kitchen"),
+    data,
+    condCtx,
+    resolvePartial,
+  };
+}
+
+function renderHomeSub(env: HomeV2Env, sb: SubBlockInstance): React.ReactNode {
+  if (sb.hidden) return null;
+  if (!evaluateConditions(sanitizeConditions(sb.conditions), env.condCtx)) return null;
+  if (sb.kind === "widget" && sb.widget) {
+    const Widget = WIDGETS[sb.widget.name];
+    return Widget ? <Widget attrs={sb.widget.attrs ?? {}} /> : null;
+  }
+  return (
+    <TemplateRenderer
+      template={sb.template ?? ""}
+      data={env.data}
+      channelKey="chef-s-kitchen"
+      resolvePartial={env.resolvePartial}
+    />
+  );
+}
+
+/** Locked hero side panel: the members-draw prize card (or plan benefits) +
+ *  stats banner — data machinery, placeable but not code-editable. */
+export async function HeroSidePanelWidget() {
+  const { planBenefits, featuredPrize, featuredDraw } = await getMembershipContext();
+  const [productCount, brandCount] = await Promise.all([
+    productChannelAssignmentService.countForChannel(CHANNEL_ID),
+    productChannelAssignmentService.countBrandsForChannel(CHANNEL_ID),
+  ]);
+  return (
+    <div className="flex flex-col gap-[18px] self-center">
+      {featuredPrize ? (
+        <Link
+          href="/membership#draws"
+          className="group ml-auto block w-full max-w-[430px] rounded-panel border border-white/[0.14] bg-[rgba(20,16,18,.46)] p-7 text-white backdrop-blur-[14px] transition-colors hover:border-member/40"
+        >
+          <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.18em] text-member">
+            Members-Only Draw
+          </p>
+          <div className="flex items-start gap-5">
+            <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-card border border-white/5 bg-ink-800">
+              {featuredPrize.imageUrl ? (
+                <Image
+                  src={featuredPrize.imageUrl}
+                  alt={featuredPrize.name}
+                  fill
+                  sizes="96px"
+                  className="object-contain transition-transform duration-500 group-hover:scale-105"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center">
+                  <Crown className="h-8 w-8 text-member/30" />
+                </div>
+              )}
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold leading-snug text-white">{featuredPrize.name}</h3>
+              {featuredPrize.value && parseFloat(featuredPrize.value) > 0 && (
+                <p className="mt-2 text-2xl font-bold text-member-bright">
+                  ${parseFloat(featuredPrize.value).toLocaleString("en-AU", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </p>
+              )}
+              {featuredDraw?.scheduled_at && (
+                <p className="mt-3 inline-flex items-center gap-2 rounded-full border border-member/30 bg-member/15 px-3 py-1">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-member" />
+                  <span className="text-xs font-semibold tracking-wide text-member-bright">
+                    Next Draw: {new Date(featuredDraw.scheduled_at).toLocaleDateString("en-AU", { day: "numeric", month: "long" })}
+                  </span>
+                </p>
+              )}
+            </div>
+          </div>
+        </Link>
+      ) : (
+        <div className="ml-auto w-full max-w-[430px] rounded-panel border border-white/[0.14] bg-[rgba(20,16,18,.46)] px-7 py-[26px] text-white backdrop-blur-[14px]">
+          <Crown className="mb-2 h-[22px] w-[22px] text-member" />
+          <h3 className="heading-serif mb-3.5 text-[21px] text-white">Member Benefits</h3>
+          <ul>
+            {planBenefits.slice(0, 4).map((b, i) => (
+              <li key={i} className="flex items-center gap-[11px] py-2 text-[13.5px] text-white/90">
+                <span className={`h-0.5 w-4 shrink-0 ${i === 1 ? "bg-accent-bright" : "bg-member"}`} />
+                {b}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <StatsBanner productCount={productCount} brandCount={brandCount} />
+    </div>
+  );
+}
+
 async function HomeHero(props: Record<string, unknown> = {}) {
   const { channel } = await getSiteConfig();
   const { subscriptionsEnabled, plan, planPrice, planBenefits, featuredPrize, featuredDraw } =
@@ -106,6 +237,38 @@ async function HomeHero(props: Record<string, unknown> = {}) {
     const ctaHref = copy("home_hero", "cta_href", props);
     const cta2Text = copy("home_hero", "cta2_text", props);
     const cta2Href = copy("home_hero", "cta2_href", props);
+
+    // CMS v2 (custom composition): editable copy-panel template + locked side
+    // panel, inside the component-owned section/backdrop/grid. Copy values
+    // resolve into bindings so existing per-field edits keep working.
+    if (homeV2On(props)) {
+      const env = await homeV2Env("home_hero", props, {
+        hero: {
+          eyebrow,
+          headline,
+          headlineEmphasis,
+          subheadline,
+          ctaText,
+          ctaHref,
+          cta2Text,
+          cta2Href,
+        },
+      });
+      const copySb = env.subBlocks.find((sb) => sb.key === "hero_copy");
+      const sideSb = env.subBlocks.find((sb) => sb.key === "hero_side");
+      return (
+        <section className="relative flex min-h-[520px] items-center overflow-hidden">
+          <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/images/hero-bg.webp')" }} />
+          <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(20,22,20,.78)_0%,rgba(28,30,28,.5)_50%,rgba(20,22,20,.62)_100%)]" />
+          <div className="relative z-10 container-page w-full py-10">
+            <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+              {copySb && renderHomeSub(env, copySb)}
+              {sideSb && renderHomeSub(env, sideSb)}
+            </div>
+          </div>
+        </section>
+      );
+    }
     return (
       <section className="relative flex min-h-[520px] items-center overflow-hidden">
         <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/images/hero-bg.webp')" }} />
@@ -314,6 +477,23 @@ async function ClearanceSpotlightBlock(props: Record<string, unknown> = {}) {
 
 // ── Featured products ─────────────────────────────────────────────────────────
 async function FeaturedProductsBlock(props: Record<string, unknown> = {}) {
+  // CMS v2: heading template + product grid via the shared card partial.
+  if (homeV2On(props)) {
+    const env = await homeV2Env("featured_products", props, {
+      featured: {
+        eyebrow: copy("featured_products", "eyebrow", props),
+        heading: copy("featured_products", "heading", props),
+      },
+    });
+    return (
+      <section className="container-page section-padding">
+        {env.subBlocks.map((sb) => (
+          <div key={sb.id}>{renderHomeSub(env, sb)}</div>
+        ))}
+      </section>
+    );
+  }
+
   const [{ products: featuredProducts }, memberPricingEnabled] = await Promise.all([
     getProducts({ limit: 8, featured: true }),
     getFeatureFlag("member_pricing_enabled"),

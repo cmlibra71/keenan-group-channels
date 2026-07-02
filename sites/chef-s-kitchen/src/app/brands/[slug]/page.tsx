@@ -6,6 +6,11 @@ import { getBrandBySlug, getProducts, getFeatureFlag, getCmsPage } from "@/lib/s
 import { getListingPricing } from "@/lib/member";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BrandHero, BrandProducts, DEFAULT_BRAND_BLOCKS } from "@/blocks/brand-page-blocks";
+import { TemplateRenderer } from "@/blocks/TemplateRenderer";
+import { effectiveSubBlocks } from "@/blocks/BlockRenderer";
+import { BLOCK_REGISTRY } from "@keenan/services";
+import { buildPartialResolver } from "@/blocks/partials";
+import imageLoader from "@/lib/image-loader";
 
 export default async function BrandPage({
   params,
@@ -54,10 +59,71 @@ export default async function BrandPage({
       </nav>
 
       {blocks.map((b, i) => {
-        if (b.block_type === "brand_hero") return <BrandHero key={i} brand={brand} total={total} />;
+        if (b.block_type === "brand_hero") {
+          // CMS v2: templated brand hero when the doc carries edited
+          // sub-blocks (or CMS_V2_FORCE); the page supplies brand bindings.
+          const v2 =
+            process.env.CMS_V2_DISABLED !== "1" &&
+            ((Array.isArray(b.props?.subBlocks) && (b.props!.subBlocks as unknown[]).length > 0) ||
+              process.env.CMS_V2_FORCE === "1");
+          if (v2) {
+            return <BrandHeroV2 key={i} props={b.props ?? {}} brand={brand} total={total} draft={draft} />;
+          }
+          return <BrandHero key={i} brand={brand} total={total} />;
+        }
         if (b.block_type === "brand_products") return <BrandProducts key={i} {...productCtx} />;
         return <BlockRenderer key={i} blocks={[b]} draft={draft} />;
       })}
     </div>
+  );
+}
+
+
+/** CMS v2 brand hero — sub-block templates with page-supplied brand bindings. */
+async function BrandHeroV2({
+  props,
+  brand,
+  total,
+  draft,
+}: {
+  props: Record<string, unknown>;
+  brand: { id: number; name: string; slug: string; image_url: string | null };
+  total: number;
+  draft: boolean;
+}) {
+  const def = BLOCK_REGISTRY.brand_hero;
+  const subBlocks = effectiveSubBlocks(props, def?.subBlockSchema, "chef-s-kitchen");
+  const resolvePartial = await buildPartialResolver(undefined);
+  const widths = [400, 600, 1024] as const;
+  const data = {
+    brand: {
+      name: brand.name,
+      slug: brand.slug,
+      image: brand.image_url ? imageLoader({ src: brand.image_url, width: 600, quality: 80 }) : null,
+      imageSrcset: brand.image_url
+        ? widths
+            .map((w) => `${imageLoader({ src: brand.image_url as string, width: w, quality: 80 })} ${w}w`)
+            .join(", ")
+        : null,
+      productCountLabel: `${total} ${total === 1 ? "product" : "products"}`,
+    },
+    settings: { channelName: "Chef's Depot", membershipFromPrice: null },
+  };
+  return (
+    <>
+      {subBlocks.map((sb) =>
+        sb.hidden ? null : (
+          <TemplateRenderer
+            key={sb.id}
+            template={sb.template ?? ""}
+            data={data}
+            seedKey="brand/hero"
+            channelKey="chef-s-kitchen"
+            resolvePartial={resolvePartial}
+            draft={draft}
+          />
+        )
+      )}
+    </>
   );
 }

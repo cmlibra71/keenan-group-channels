@@ -28,6 +28,7 @@ import {
   ListingGridWidget,
   LoadMoreWidget,
 } from "./widgets-server";
+import { HeroSidePanelWidget } from "./home-blocks";
 
 export type WidgetComponent = FC<{ attrs: Record<string, unknown>; ctx?: RenderContext }>;
 
@@ -49,4 +50,5 @@ export const WIDGETS: Record<string, WidgetComponent> = {
   sort_select: SortSelectWidget as unknown as WidgetComponent,
   listing_grid: ListingGridWidget as unknown as WidgetComponent,
   load_more: LoadMoreWidget as unknown as WidgetComponent,
+  hero_side_panel: HeroSidePanelWidget as unknown as WidgetComponent,
 };
