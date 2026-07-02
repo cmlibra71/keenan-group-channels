@@ -32,7 +32,13 @@ import { ProductTabs } from "@/components/product/ProductTabs";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { BrandWarrantyNotes } from "@/components/product/BrandWarrantyNotes";
 import { BackButton } from "@/components/ui/BackButton";
-import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
+import { BlockRenderer, SubBlockRenderer, effectiveSubBlocks, type RenderedBlock } from "@/blocks/BlockRenderer";
+import { BLOCK_REGISTRY } from "@keenan/services";
+import { ProductPurchaseProvider, type PurchaseProduct } from "@/components/product/ProductPurchaseProvider";
+import { buildBindingData } from "@/blocks/binding-data";
+import { buildConditionContext } from "@/lib/condition-context";
+import { buildPartialResolver, CHANNEL_KEY } from "@/blocks/partials";
+import { CardPartialGrid } from "@/blocks/widgets-server";
 
 type BlockProps = { props: Record<string, unknown>; ctx?: RenderContext };
 
@@ -251,10 +257,41 @@ async function ProductTabsBlock({ ctx }: BlockProps) {
 
 // ── Related products ─────────────────────────────────────────────────────────
 
-async function ProductRelatedBlock({ ctx }: BlockProps) {
+async function ProductRelatedBlock({ props, ctx }: BlockProps) {
   const product = productOf(ctx);
   if (!product) return null;
   const extras = extrasOf(ctx);
+
+  const storedSubBlocks = props.subBlocks;
+  const useV2 =
+    process.env.CMS_V2_DISABLED !== "1" &&
+    ((Array.isArray(storedSubBlocks) && storedSubBlocks.length > 0) ||
+      ctx?.draft === true ||
+      process.env.CMS_V2_FORCE === "1");
+  if (useV2) {
+    const def = BLOCK_REGISTRY.product_related;
+    const [data, condCtx, resolvePartial] = await Promise.all([
+      Promise.resolve(buildBindingData(ctx)),
+      buildConditionContext(ctx),
+      buildPartialResolver(ctx),
+    ]);
+    return (
+      <div className={`${CONTAINER} pb-8`}>
+        <SubBlockRenderer
+          props={props}
+          schema={def?.subBlockSchema}
+          defaultLayout={def?.defaultProps?.layout as Record<string, unknown> | undefined}
+          channelKey={CHANNEL_KEY}
+          data={data}
+          ctx={ctx}
+          condCtx={condCtx}
+          draft={ctx?.draft ?? false}
+          editHooks={ctx?.draft ?? false}
+          resolvePartial={resolvePartial}
+        />
+      </div>
+    );
+  }
   const relatedProducts =
     extras.relatedProducts ??
     (await getRelatedProducts(product.id, product.categoryIds ?? []).catch(() => []));
@@ -289,7 +326,66 @@ async function ProductSlotBlock({ props, ctx }: BlockProps) {
   );
 }
 
+// ── CMS v2.1: decomposed product overview (gallery/title/description/panel) ─
+
+async function ProductOverviewBlock({ props, ctx }: BlockProps) {
+  const product = productOf(ctx);
+  if (!product) return null;
+  const extras = extrasOf(ctx);
+
+  const purchaseProduct: PurchaseProduct = {
+    id: product.id,
+    name: product.name,
+    sku: product.sku,
+    price: product.price,
+    salePrice: product.salePrice,
+    inventoryLevel: product.inventoryLevel ?? 0,
+    inventoryTracking: product.inventoryTracking ?? "none",
+    availability: product.availability ?? "available",
+    descriptionShort: product.descriptionShort,
+    images: product.images,
+    variants: product.variants,
+    options: product.options ?? [],
+    optionValues: product.optionValues ?? [],
+    variantOptionMappings: product.variantOptionMappings ?? [],
+    bulkPricing: product.bulkPricing ?? [],
+  };
+
+  const def = BLOCK_REGISTRY.product_overview;
+  const [data, condCtx, resolvePartial] = await Promise.all([
+    Promise.resolve(buildBindingData(ctx)),
+    buildConditionContext(ctx),
+    buildPartialResolver(ctx),
+  ]);
+
+  return (
+    <div className={CONTAINER}>
+      <ProductPurchaseProvider
+        product={purchaseProduct}
+        memberPrice={extras.memberPrice ?? null}
+        memberPriceMap={extras.memberPriceMap ?? {}}
+        isMember={extras.isMember ?? false}
+        membershipTeaser={extras.membershipTeaser ?? null}
+      >
+        <SubBlockRenderer
+          props={props}
+          schema={def?.subBlockSchema}
+          defaultLayout={def?.defaultProps?.layout as Record<string, unknown> | undefined}
+          channelKey={CHANNEL_KEY}
+          data={data}
+          ctx={ctx}
+          condCtx={condCtx}
+          draft={ctx?.draft ?? false}
+          editHooks={ctx?.draft ?? false}
+          resolvePartial={resolvePartial}
+        />
+      </ProductPurchaseProvider>
+    </div>
+  );
+}
+
 export const PRODUCT_BLOCK_COMPONENTS = {
+  product_overview: ProductOverviewBlock,
   breadcrumbs: BreadcrumbsBlock,
   product_buybox: ProductBuyboxBlock,
   product_warranty_notes: ProductWarrantyNotesBlock,

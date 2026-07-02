@@ -1,90 +1,22 @@
 "use client";
 
-import { useState } from "react";
+// ============================================================================
+// ProductPageClient — legacy monolithic product overview (gallery + details).
+// CMS v2.1 refactor: state lives in ProductPurchaseProvider (shared with the
+// v2 widgets); JSX is verbatim pre-refactor markup. Public props unchanged.
+// ============================================================================
+
 import { ProductImageGallery, type ProductImage } from "./ProductImageGallery";
 import { ProductDetail } from "./ProductDetail";
 import { RichContent } from "@/components/content/RichContent";
+import {
+  ProductPurchaseProvider,
+  useProductPurchase,
+  type PurchaseProduct,
+} from "./ProductPurchaseProvider";
 
-type Variant = {
-  id: number;
-  sku: string | null;
-  price: string | null;
-  salePrice: string | null;
-  imageUrl: string | null;
-  optionDisplayName: string | null;
-  purchasingDisabled: boolean | null;
-  inventoryLevel: number | null;
-};
-
-type Option = {
-  id: number;
-  displayName: string;
-  type: string;
-  sortOrder: number | null;
-  isRequired: boolean | null;
-};
-
-type OptionValue = {
-  id: number;
-  optionId: number;
-  label: string;
-  valueData: unknown;
-  sortOrder: number | null;
-};
-
-type VariantOptionMapping = {
-  id: number;
-  variantId: number;
-  optionId: number;
-  optionValueId: number;
-};
-
-type BulkPricingRule = {
-  id: number;
-  quantityMin: number;
-  quantityMax: number | null;
-  type: string;
-  amount: string;
-};
-
-export function ProductPageClient({
-  product,
-  memberPrice,
-  memberPriceMap,
-  isMember,
-  membershipTeaser,
-}: {
-  product: {
-    id: number;
-    name: string;
-    sku: string | null;
-    price: string;
-    salePrice: string | null;
-    inventoryLevel: number | null;
-    inventoryTracking: string | null;
-    availability: string | null;
-    descriptionShort: string | null;
-    images: ProductImage[];
-    variants: Variant[];
-    options: Option[];
-    optionValues: OptionValue[];
-    variantOptionMappings: VariantOptionMapping[];
-    bulkPricing: BulkPricingRule[];
-  };
-  memberPrice?: number | null;
-  memberPriceMap?: Record<number, number>;
-  isMember?: boolean;
-  membershipTeaser?: { fromPrice: string | null } | null;
-}) {
-  const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
-
-  const selectedVariant = product.variants.find((v) => v.id === selectedVariantId);
-  const variantImageUrl = selectedVariant?.imageUrl ?? null;
-
-  // Resolve member price for the currently selected variant
-  const activeMemberPrice = selectedVariantId && memberPriceMap?.[selectedVariantId] != null
-    ? memberPriceMap[selectedVariantId]
-    : memberPrice ?? null;
+function ProductOverviewInner() {
+  const { product, variantImageUrl } = useProductPurchase();
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
@@ -113,24 +45,36 @@ export function ProductPageClient({
           </div>
         )}
 
-        <ProductDetail
-          productId={product.id}
-          price={product.price}
-          salePrice={product.salePrice}
-          inventoryLevel={product.inventoryLevel ?? 0}
-          inventoryTracking={product.inventoryTracking ?? "none"}
-          availability={product.availability ?? "available"}
-          variants={product.variants}
-          options={product.options}
-          optionValues={product.optionValues}
-          variantOptionMappings={product.variantOptionMappings}
-          bulkPricing={product.bulkPricing}
-          onVariantChange={setSelectedVariantId}
-          memberPrice={activeMemberPrice}
-          isMember={isMember}
-          membershipTeaser={membershipTeaser}
-        />
+        <ProductDetail />
       </div>
     </div>
   );
 }
+
+export function ProductPageClient({
+  product,
+  memberPrice,
+  memberPriceMap,
+  isMember,
+  membershipTeaser,
+}: {
+  product: PurchaseProduct;
+  memberPrice?: number | null;
+  memberPriceMap?: Record<number, number>;
+  isMember?: boolean;
+  membershipTeaser?: { fromPrice: string | null } | null;
+}) {
+  return (
+    <ProductPurchaseProvider
+      product={product}
+      memberPrice={memberPrice ?? null}
+      memberPriceMap={memberPriceMap ?? {}}
+      isMember={isMember ?? false}
+      membershipTeaser={membershipTeaser ?? null}
+    >
+      <ProductOverviewInner />
+    </ProductPurchaseProvider>
+  );
+}
+
+export type { ProductImage };
