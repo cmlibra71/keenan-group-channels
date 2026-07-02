@@ -147,6 +147,7 @@ async function ProductListingBlock({ props }: BlockProps) {
 // --- the map ----------------------------------------------------------------
 
 import { CATEGORY_BLOCK_COMPONENTS } from "./category-blocks";
+import { PRODUCT_BLOCK_COMPONENTS } from "./product-blocks";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const BLOCK_COMPONENTS: Record<string, FC<BlockProps> | ((p: BlockProps) => any)> = {
@@ -161,6 +162,8 @@ export const BLOCK_COMPONENTS: Record<string, FC<BlockProps> | ((p: BlockProps) 
   product_listing: ProductListingBlock,
   // Category-template blocks (render the RenderContext category record).
   ...CATEGORY_BLOCK_COMPONENTS,
+  // Product-template blocks (render the RenderContext product record).
+  ...PRODUCT_BLOCK_COMPONENTS,
 };
 
 export const SUPPORTED_BLOCK_TYPES = Object.keys(BLOCK_COMPONENTS);

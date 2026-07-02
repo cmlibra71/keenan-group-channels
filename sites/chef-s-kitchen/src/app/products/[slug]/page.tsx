@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { draftMode } from "next/headers";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, brandService, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice, getCmsPage } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, brandService, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice, getCmsPage, getCmsTemplate } from "@/lib/store";
+import type { RenderContext } from "@keenan/services";
 import { getMemberContext, getListingPricing } from "@/lib/member";
 import { ChevronRight } from "lucide-react";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
@@ -187,6 +188,51 @@ export default async function ProductPage({
     ((productCms?.blocks as unknown as RenderedBlock[]) ?? []).filter((b) => b.region === r);
   const aboveDetail = prodRegion("above_detail");
   const belowDetail = prodRegion("below_detail");
+
+  // ═══ CMS product TEMPLATE path (kill switch: flag off → legacy) ═══
+  // The whole page as a block document (breadcrumbs / slots / buybox / links /
+  // tabs / related); this route stays the data + SEO owner — JSON-LD stays
+  // here, and the heavy queries above feed the blocks via RenderContext extras.
+  if (await getFeatureFlag("cms_product_template_enabled")) {
+    const template = await getCmsTemplate("product", draft).catch(() => null);
+    if (template && template.blocks.length > 0) {
+      const context: RenderContext = {
+        draft,
+        record: {
+          kind: "product",
+          product: product as unknown as Record<string, unknown>,
+          extras: {
+            reviews,
+            reviewSummary,
+            attachments,
+            relatedProducts,
+            relatedPricing: relatedPricing as unknown as Record<string, unknown>,
+            brandRow,
+            breadcrumbs,
+            memberPrice,
+            memberPriceMap,
+            isMember,
+            membershipTeaser,
+            memberPricingEnabled,
+            suppressCatalogPricing,
+          },
+        },
+      };
+      return (
+        <div>
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
+          />
+          <BlockRenderer
+            blocks={template.blocks as unknown as RenderedBlock[]}
+            draft={draft}
+            context={context}
+          />
+        </div>
+      );
+    }
+  }
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
