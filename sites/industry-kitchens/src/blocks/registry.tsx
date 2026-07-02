@@ -5,12 +5,14 @@
 // surfaced to the portal at /api/blocks/manifest for palette intersection.
 // ============================================================================
 import type { FC } from "react";
+import type { RenderContext } from "@keenan/services";
 import { RichContent } from "@/components/content/RichContent";
 import { BannerBlock } from "@/components/home/BannerBlock";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { getProducts, getCategoryBySlug, getCategoryListing } from "@/lib/store";
 
-type BlockProps = { props: Record<string, unknown> };
+/** ctx is present when rendering a template document (product/category record). */
+type BlockProps = { props: Record<string, unknown>; ctx?: RenderContext };
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 
 // --- content blocks ---------------------------------------------------------
@@ -144,6 +146,10 @@ async function ProductListingBlock({ props }: BlockProps) {
 
 // --- the map ----------------------------------------------------------------
 
+import { CATEGORY_BLOCK_COMPONENTS } from "./category-blocks";
+import { PRODUCT_BLOCK_COMPONENTS } from "./product-blocks";
+import { HOME_BLOCK_COMPONENTS } from "./home-blocks";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const BLOCK_COMPONENTS: Record<string, FC<BlockProps> | ((p: BlockProps) => any)> = {
   rich_text: RichTextBlock,
@@ -155,6 +161,13 @@ export const BLOCK_COMPONENTS: Record<string, FC<BlockProps> | ((p: BlockProps) 
   hero: HeroBlock,
   banner: BannerAdapter,
   product_listing: ProductListingBlock,
+  // Category-template blocks (render the RenderContext category record).
+  ...CATEGORY_BLOCK_COMPONENTS,
+  // Product-template blocks (render the RenderContext product record).
+  ...PRODUCT_BLOCK_COMPONENTS,
+  // Homepage section blocks (render via HomeSections — byte-identical to the
+  // legacy homepage_sections settings model).
+  ...HOME_BLOCK_COMPONENTS,
 };
 
 export const SUPPORTED_BLOCK_TYPES = Object.keys(BLOCK_COMPONENTS);

@@ -95,6 +95,9 @@ export const {
   getContentPage,
   getCmsPage,
   getCmsCategoryPage,
+  getCmsTemplate,
+  getDesignTokens,
+  getDraftDesignTokens,
   getCheckoutSettings,
   calculateShipping,
 } = _store;

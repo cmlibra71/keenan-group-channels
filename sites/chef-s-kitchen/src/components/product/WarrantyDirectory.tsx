@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { Search, ExternalLink } from "lucide-react";
 
 type WarrantyEntry = {
@@ -24,15 +25,15 @@ const WARRANTY_DATA: WarrantyEntry[] = [
   { brand: "Asahi (FSM-PL)", claimAction: "Book a Service", claimUrl: "https://fsmpl.com.au/service/", warranty: "R2B: 13m parts + 13m labour", registration: "\u2014", service: "Return to base", equipment: "Rice cookers" },
   { brand: "Atlas (FSM-PL)", claimAction: "Book a Service", claimUrl: "https://fsmpl.com.au/service/", warranty: "15-year components (rust/corrosion)", registration: "\u2014", service: "Install/environmental damage excluded", equipment: "Shelving components" },
   { brand: "Australian Bakery & Pizza (ABP Atlas)", claimAction: "Warranty Info", warranty: "Per ABP Atlas T&Cs", registration: "\u2014", service: "Via authorised service agents; environmental/transit damage excluded", equipment: "Bakery equipment, sheeters, ovens" },
-  { brand: "B+S", claimAction: "Start Claim", claimUrl: "https://www.?"  , warranty: "Rapid 24m; K+ 18m; Black 24m; Verro 24m (reverts to 12m P&L without activation form)", registration: "Registration required", service: "On-site AU-wide via agents; travel >100 km chargeable; 8am\u20134pm AEDST", equipment: "Asian cooking, induction, fryers" },
-  { brand: "BakerMAX (FED)", claimAction: "Start Claim", claimUrl: "https://?"  , warranty: "12m P&L", registration: "\u2014", service: "On-site metro where available; some R2B", equipment: "Bakery line" },
+  { brand: "B+S", claimAction: "Start Claim",  warranty: "Rapid 24m; K+ 18m; Black 24m; Verro 24m (reverts to 12m P&L without activation form)", registration: "Registration required", service: "On-site AU-wide via agents; travel >100 km chargeable; 8am\u20134pm AEDST", equipment: "Asian cooking, induction, fryers" },
+  { brand: "BakerMAX (FED)", claimAction: "Start Claim",  warranty: "12m P&L", registration: "\u2014", service: "On-site metro where available; some R2B", equipment: "Bakery line" },
   { brand: "BenchFoods (Commercial Dehydrators)", claimAction: "Warranty Info", warranty: "5 years", registration: "\u2014", service: "AU-wide; local tech reimbursed if no BenchFoods tech nearby", equipment: "Commercial dehydrators" },
   { brand: "Benchstar (FED)", claimAction: "Start Claim", warranty: "12m P&L", registration: "\u2014", service: "On-site metro where available; some R2B", equipment: "Benchtop equipment" },
   { brand: "Birko / Zip Taps", claimAction: "Book a Service", warranty: "12m P&L", registration: "Registration recommended", service: "On-site; mileage/travel charges may apply; filter cartridge life excluded", equipment: "Boiling water units, chilled water systems" },
   { brand: "Blue Seal (Moffat)", claimAction: "Start Claim", claimUrl: "https://www.mfrbrands.com.au/service-and-warranty/warranty-claim/", warranty: "24m P&L (products from 1 Sep 2024); 12m prior", registration: "\u2014", service: "On-site metro; regional $2.13/km round trip", equipment: "Cooking equipment" },
   { brand: "Bonn (FSM-PL)", claimAction: "Book a Service", claimUrl: "https://fsmpl.com.au/service/", warranty: "Performance models: 24m parts / 13m labour. Light duty (CM-902T): 13m parts / 13m labour. All R2B except CM-2100G & CM-1401TG (on-site).", registration: "\u2014", service: "R2B standard; on-site for large units \u226450 km from service agent", equipment: "Commercial microwaves" },
-  { brand: "Bromic Heating", claimAction: "Start Claim", claimUrl: "https://www.?"  , warranty: "Product-line dependent (see bromic.com.au/warranty)", registration: "\u2014", service: "Via Bromic AU network", equipment: "Outdoor heaters, heating panels" },
-  { brand: "Bromic Refrigeration", claimAction: "Start Claim", claimUrl: "https://www.?"  , warranty: "5yr (60m) P&L \u2014 Extra Care warranty, entire range. Spare parts: 3m (if installed by licensed tech).", registration: "No registration required \u2014 automatic from purchase date", service: "On-site via AU-wide technician network; after-hours available (Bromic covers standard call-out + parts; customer pays after-hours surcharge)", equipment: "Refrigeration \u2014 full commercial range" },
+  { brand: "Bromic Heating", claimAction: "Start Claim",  warranty: "Product-line dependent (see bromic.com.au/warranty)", registration: "\u2014", service: "Via Bromic AU network", equipment: "Outdoor heaters, heating panels" },
+  { brand: "Bromic Refrigeration", claimAction: "Start Claim",  warranty: "5yr (60m) P&L \u2014 Extra Care warranty, entire range. Spare parts: 3m (if installed by licensed tech).", registration: "No registration required \u2014 automatic from purchase date", service: "On-site via AU-wide technician network; after-hours available (Bromic covers standard call-out + parts; customer pays after-hours surcharge)", equipment: "Refrigeration \u2014 full commercial range" },
   { brand: "Carpigiani (Majors Group / Freezo)", claimAction: "Contact Distributor", warranty: "12m from date of delivery", registration: "\u2014", service: "Gelato & batch freezers via Majors Group. Soft serve machines via Freezo. Contact relevant distributor for service.", equipment: "Gelato, batch freezers, soft serve" },
   { brand: "Cleveland (Comcater)", claimAction: "Start Claim", claimUrl: "https://www.comcater.com.au/service-support/", warranty: "12m P&L", registration: "\u2014", service: "On-site metro; regional travel charges", equipment: "Steamers, kettles" },
   { brand: "Cobra (Moffat)", claimAction: "Start Claim", claimUrl: "https://www.mfrbrands.com.au/service-and-warranty/warranty-claim/", warranty: "24m P&L (products from 1 Sep 2024); 12m prior", registration: "\u2014", service: "On-site metro; regional $2.13/km round trip", equipment: "Cooking line" },
@@ -44,7 +45,7 @@ const WARRANTY_DATA: WarrantyEntry[] = [
   { brand: "Edlund (FSM-PL)", claimAction: "Book a Service", claimUrl: "https://fsmpl.com.au/service/", warranty: "13m P&L (excl. Crown Punch)", registration: "\u2014", service: "On-site \u226450 km; otherwise charges/R2B", equipment: "Prep tools & equipment" },
   { brand: "Electrolux Professional", claimAction: "Start Claim", claimUrl: "https://www.electroluxprofessional.com/au/support/warranty/", warranty: "24m P&L (AU online store purchases). Confirm warranty period with your distributor for dealer-purchased units.", registration: "\u2014", service: "On-site via Electrolux Professional AU-wide network. Proof of purchase required. Nationwide coverage.", equipment: "Cooking, refrigeration, dishwashing, laundry" },
   { brand: "EMAINOX (FSM-PL)", claimAction: "Book a Service", claimUrl: "https://fsmpl.com.au/service/", warranty: "13m P&L", registration: "\u2014", service: "On-site \u226450 km; otherwise charges/R2B", equipment: "Display & service" },
-  { brand: "Eswood (Middleby)", claimAction: "Book Warranty Service", claimUrl: "https://www.?"  , warranty: "12m P&L", registration: "Registration available", service: "On-site; travel charged >100 km from metro/provider (8\u20134)", equipment: "Dishwashers" },
+  { brand: "Eswood (Middleby)", claimAction: "Book Warranty Service",  warranty: "12m P&L", registration: "Registration available", service: "On-site; travel charged >100 km from metro/provider (8\u20134)", equipment: "Dishwashers" },
   { brand: "EuroChef", claimAction: "Contact Us", warranty: "12m standard; 90 days commercial use; some models 24m", registration: "\u2014", service: "Service via 13 13 49; regional travel may apply", equipment: "Cooking equipment, induction" },
   { brand: "Euroquip / Moretti Forni", claimAction: "Find a Dealer", warranty: "24m standard; Serie S / Neapolis / Serie T 60m", registration: "\u2014", service: "Via authorised Euroquip dealers AU-wide", equipment: "Conveyor ovens, deck ovens, pizza ovens" },
   { brand: "Exquisite", claimAction: "Contact Us", warranty: "Varies by model (see pricelist)", registration: "\u2014", service: "Email warranty@exquisiteaust.com.au with model, serial, address, fault description", equipment: "Refrigeration, display" },
@@ -148,6 +149,100 @@ const WARRANTY_DATA: WarrantyEntry[] = [
   { brand: "Zanussi (Luus)", claimAction: "Start Claim", warranty: "12m P&L standard; 24m with registration within 30 days", registration: "Registration for 24m", service: "On-site within 50km CBD or 30km from service agent; outside: customer returns or travel fee", equipment: "Magistar, Rapido, EVO700/900, Modular" },
 ];
 
+/**
+ * Loose brand match between a product's brand ("Blue Seal") and a directory
+ * entry ("Blue Seal (Moffat)", "Adande / Stoddart"): either name containing
+ * the other counts, checked per segment of compound entries.
+ */
+function matchesBrand(entry: WarrantyEntry, brand: string): boolean {
+  const b = brand.trim().toLowerCase();
+  if (!b) return false;
+  const e = entry.brand.toLowerCase();
+  if (e.includes(b)) return true;
+  return e
+    .split(/[(/]/)
+    .map((seg) => seg.replace(/\)/g, "").trim())
+    .some((seg) => seg.length > 2 && b.includes(seg));
+}
+
+function EntryCard({ entry }: { entry: WarrantyEntry }) {
+  return (
+    <div className="card p-4 space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <h4 className="font-medium text-text-primary">{entry.brand}</h4>
+        {entry.claimUrl ? (
+          <a
+            href={entry.claimUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-medium text-accent hover:text-accent-hover whitespace-nowrap inline-flex items-center gap-1"
+          >
+            {entry.claimAction}
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        ) : (
+          <span className="text-xs text-text-secondary whitespace-nowrap">{entry.claimAction}</span>
+        )}
+      </div>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+        <dt className="text-text-muted font-medium">Warranty</dt>
+        <dd className="text-text-body">{entry.warranty}</dd>
+        <dt className="text-text-muted font-medium">Registration</dt>
+        <dd className="text-text-body">{entry.registration}</dd>
+        <dt className="text-text-muted font-medium">Service</dt>
+        <dd className="text-text-body">{entry.service}</dd>
+        <dt className="text-text-muted font-medium">Equipment</dt>
+        <dd className="text-text-secondary">{entry.equipment}</dd>
+      </dl>
+    </div>
+  );
+}
+
+/**
+ * Product-page mode: warranty details for THIS product's brand only, with a
+ * link out to the full directory. Rendering the entire 149-brand "Start Claim"
+ * table on every product read as "this product starts a claim process" —
+ * the full table now lives on /warranty.
+ */
+export function BrandWarranty({ brand }: { brand: string | null }) {
+  const matches = useMemo(
+    () => (brand ? WARRANTY_DATA.filter((e) => matchesBrand(e, brand)) : []),
+    [brand]
+  );
+
+  return (
+    <div>
+      <h3 className="text-lg font-semibold text-text-primary mb-1">Warranty &amp; Service</h3>
+      {matches.length > 0 ? (
+        <>
+          <p className="text-sm text-text-secondary mb-4">
+            Manufacturer warranty, registration and service details for {brand}.
+          </p>
+          <div className="space-y-3 max-w-2xl">
+            {matches.map((entry) => (
+              <EntryCard key={entry.brand} entry={entry} />
+            ))}
+          </div>
+        </>
+      ) : (
+        <p className="text-sm text-text-secondary mb-4 max-w-2xl">
+          Warranty for this product is handled by the manufacturer. Call 1800 431 323 or
+          email{" "}
+          <a href="mailto:cs@chefsdepot.com.au" className="text-accent hover:text-accent-hover">
+            cs@chefsdepot.com.au
+          </a>{" "}
+          and our team will connect you with the right service department.
+        </p>
+      )}
+      <p className="mt-4 text-sm">
+        <Link href="/warranty" className="text-accent hover:text-accent-hover font-medium">
+          View the full warranty &amp; service directory &rarr;
+        </Link>
+      </p>
+    </div>
+  );
+}
+
 export function WarrantyDirectory() {
   const [search, setSearch] = useState("");
 
@@ -233,34 +328,7 @@ export function WarrantyDirectory() {
       {/* Mobile cards */}
       <div className="lg:hidden space-y-3">
         {filtered.map((entry) => (
-          <div key={entry.brand} className="card p-4 space-y-2">
-            <div className="flex items-start justify-between gap-2">
-              <h4 className="font-medium text-text-primary">{entry.brand}</h4>
-              {entry.claimUrl ? (
-                <a
-                  href={entry.claimUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs font-medium text-accent hover:text-accent-hover whitespace-nowrap inline-flex items-center gap-1"
-                >
-                  {entry.claimAction}
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              ) : (
-                <span className="text-xs text-text-secondary whitespace-nowrap">{entry.claimAction}</span>
-              )}
-            </div>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-              <dt className="text-text-muted font-medium">Warranty</dt>
-              <dd className="text-text-body">{entry.warranty}</dd>
-              <dt className="text-text-muted font-medium">Registration</dt>
-              <dd className="text-text-body">{entry.registration}</dd>
-              <dt className="text-text-muted font-medium">Service</dt>
-              <dd className="text-text-body">{entry.service}</dd>
-              <dt className="text-text-muted font-medium">Equipment</dt>
-              <dd className="text-text-secondary">{entry.equipment}</dd>
-            </dl>
-          </div>
+          <EntryCard key={entry.brand} entry={entry} />
         ))}
       </div>
 

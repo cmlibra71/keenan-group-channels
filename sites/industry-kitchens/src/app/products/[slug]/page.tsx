@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { draftMode } from "next/headers";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscription, getSubscriptionPlans, customerService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsPage } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscription, getSubscriptionPlans, customerService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsPage, getCmsTemplate } from "@/lib/store";
+import type { RenderContext } from "@keenan/services";
 import { getSession } from "@/lib/auth";
 import { ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
@@ -125,6 +126,43 @@ export default async function ProductPage({
     ((productCms?.blocks as unknown as RenderedBlock[]) ?? []).filter((b) => b.region === r);
   const aboveDetail = prodRegion("above_detail");
   const belowDetail = prodRegion("below_detail");
+
+  // ═══ CMS product TEMPLATE path (kill switch: flag off → legacy) ═══
+  // The whole page as a block document; this route stays the data owner — the
+  // heavy queries above feed the blocks via RenderContext extras.
+  if (await getFeatureFlag("cms_product_template_enabled")) {
+    const template = await getCmsTemplate("product", draft).catch(() => null);
+    if (template && template.blocks.length > 0) {
+      const context: RenderContext = {
+        draft,
+        record: {
+          kind: "product",
+          product: product as unknown as Record<string, unknown>,
+          extras: {
+            reviews,
+            attachments,
+            relatedProducts,
+            brandMeta,
+            breadcrumbs,
+            memberPrice,
+            memberPriceMap,
+            isMember,
+            membershipTeaser,
+            memberPricingEnabled,
+          },
+        },
+      };
+      return (
+        <div>
+          <BlockRenderer
+            blocks={template.blocks as unknown as RenderedBlock[]}
+            draft={draft}
+            context={context}
+          />
+        </div>
+      );
+    }
+  }
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">

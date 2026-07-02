@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { reviewService, productService, CHANNEL_ID } from "@/lib/store";
+import { sendStaffNotification } from "@/lib/staff-email";
 
 export async function submitReview(
   productId: number,
@@ -32,6 +33,25 @@ export async function submitReview(
     authorName: data.authorName.trim(),
     status: "pending",
   });
+
+  // Reviews sit invisible in the pending moderation queue until someone looks —
+  // tell staff one arrived. Best-effort: the review is already saved.
+  try {
+    await sendStaffNotification({
+      subject: `New product review pending approval (${data.rating}/5)`,
+      heading: "A customer submitted a product review",
+      rows: [
+        ["Rating", `${data.rating}/5`],
+        ["Title", data.title.trim() || "—"],
+        ["Author", data.authorName.trim()],
+        ["Review", data.text.trim().slice(0, 300)],
+      ],
+      portalPath: "/dashboard/products/reviews?status=pending",
+      linkLabel: "Moderate reviews",
+    });
+  } catch (e) {
+    console.error("[submitReview] staff notification failed (non-fatal):", e);
+  }
 
   revalidatePath("/", "layout");
   return { success: true };

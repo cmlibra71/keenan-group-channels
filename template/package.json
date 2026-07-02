@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1006.0",
+    "@aws-sdk/client-ses": "^3.946.0",
     "@keenan/services": "*",
     "isomorphic-dompurify": "^3.18.0",
     "lucide-react": "^0.556.0",

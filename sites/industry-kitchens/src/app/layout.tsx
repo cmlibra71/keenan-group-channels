@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { getSiteConfig, getFeatureFlag, getFooterConfig, getHeaderNav, getHeaderConfig } from "@/lib/store";
+import { getPublishedTokenVars } from "@/lib/design-tokens";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { SpecialistButton } from "@/components/layout/SpecialistButton";
@@ -36,6 +37,27 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Chrome-free branch for the portal-embedded CMS render surface (/render/*,
+  // tagged by src/proxy.ts). Same html/body/providers so client components and
+  // styling behave identically — just no Header/Footer/SpecialistButton.
+  const isCmsRender = (await headers()).get("x-cms-render") === "1";
+  if (isCmsRender) {
+    const [pricesIncludeTax, cookieStore] = await Promise.all([
+      getFeatureFlag("prices_include_tax"),
+      cookies(),
+    ]);
+    const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
+    return (
+      <html lang="en">
+        <body className="min-h-screen bg-white text-zinc-900 antialiased">
+          <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
+            {children}
+          </GstProvider>
+        </body>
+      </html>
+    );
+  }
+
   const [
     { site, channel },
     subscriptionsEnabled,
@@ -44,6 +66,7 @@ export default async function RootLayout({
     headerConfig,
     pricesIncludeTax,
     cookieStore,
+    tokenVars,
   ] = await Promise.all([
     getSiteConfig(),
     getFeatureFlag("subscriptions_enabled"),
@@ -52,6 +75,7 @@ export default async function RootLayout({
     getHeaderConfig(),
     getFeatureFlag("prices_include_tax"),
     cookies(),
+    getPublishedTokenVars(),
   ]);
   const storeName = site?.siteName || channel?.name || "Store";
   const logoUrl = site?.logoUrl || null;
@@ -59,7 +83,7 @@ export default async function RootLayout({
   const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
 
   return (
-    <html lang="en">
+    <html lang="en" style={(tokenVars ?? undefined) as React.CSSProperties | undefined}>
       <body className="min-h-screen flex flex-col bg-white text-zinc-900 antialiased">
         <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
           <Header

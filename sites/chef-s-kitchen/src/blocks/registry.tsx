@@ -5,11 +5,13 @@
 // surfaced to the portal at /api/blocks/manifest for palette intersection.
 // ============================================================================
 import type { FC } from "react";
+import type { RenderContext } from "@keenan/services";
 import { RichContent } from "@/components/content/RichContent";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { getProducts, getCategoryBySlug, getCategoryListing } from "@/lib/store";
 
-type BlockProps = { props: Record<string, unknown> };
+/** ctx is present when rendering a template document (product/category record). */
+type BlockProps = { props: Record<string, unknown>; ctx?: RenderContext };
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 
 // --- content blocks ---------------------------------------------------------
@@ -134,6 +136,8 @@ async function ProductListingBlock({ props }: BlockProps) {
 // --- the map ----------------------------------------------------------------
 
 import { HOME_BLOCK_COMPONENTS } from "./home-blocks";
+import { CATEGORY_BLOCK_COMPONENTS } from "./category-blocks";
+import { PRODUCT_BLOCK_COMPONENTS } from "./product-blocks";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const BLOCK_COMPONENTS: Record<string, FC<BlockProps> | ((p: BlockProps) => any)> = {
@@ -151,11 +155,11 @@ export const BLOCK_COMPONENTS: Record<string, FC<BlockProps> | ((p: BlockProps) 
   // context; listed here so the editor palette/manifest offers them.
   brand_hero: () => null,
   brand_products: () => null,
-  // Product page sections — rendered directly by the product page with live context.
-  product_buybox: () => null,
-  product_links: () => null,
-  product_tabs: () => null,
-  product_related: () => null,
+  // Category-template blocks (render the RenderContext category record).
+  ...CATEGORY_BLOCK_COMPONENTS,
+  // Product-template blocks (real RenderContext components — these override the
+  // route-rendered stubs so the render surface and product template work).
+  ...PRODUCT_BLOCK_COMPONENTS,
 };
 
 export const SUPPORTED_BLOCK_TYPES = Object.keys(BLOCK_COMPONENTS);

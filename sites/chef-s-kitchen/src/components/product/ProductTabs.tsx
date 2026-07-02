@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { RichContent } from "@/components/content/RichContent";
-import { WarrantyDirectory } from "./WarrantyDirectory";
+import { BrandWarranty } from "./WarrantyDirectory";
 import { submitReview } from "@/lib/actions/reviews";
 import { Star, FileText, Download } from "lucide-react";
 
@@ -32,6 +32,7 @@ type Tab = {
 export function ProductTabs({
   description,
   warranty,
+  brandName = null,
   customFields,
   reviews,
   attachments = [],
@@ -39,6 +40,7 @@ export function ProductTabs({
 }: {
   description: string | null;
   warranty: string | null;
+  brandName?: string | null;
   customFields: Record<string, unknown> | null;
   reviews: Review[];
   attachments?: Attachment[];
@@ -138,7 +140,7 @@ export function ProductTabs({
                 />
               </div>
             )}
-            <WarrantyDirectory />
+            <BrandWarranty brand={brandName} />
           </div>
         )}
 

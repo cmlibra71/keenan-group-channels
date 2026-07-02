@@ -5,6 +5,8 @@ import { quoteService, quoteItemService, productService, productVariantService, 
 import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
 import { getSession } from "@/lib/auth";
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
+import { slidingWindowAllow } from "@/lib/rate-limit";
+import { sendStaffNotification } from "@/lib/staff-email";
 
 // QuoteService returns snake_case rows (transformRow convention).
 type QuoteRow = { id: number; uuid: string; customer_id?: number | null; [key: string]: unknown };
@@ -167,7 +169,30 @@ export async function acceptQuote(quoteId: number) {
   if (!["quote_available", "open_change_request"].includes(String(q.status))) {
     return { error: "This quote can't be accepted yet." };
   }
-  await quoteService.update(quoteId, { status: "quote_accepted" });
+  // Lifecycle method, NOT a bare status update: stamps accepted_at and writes
+  // the quote.accepted audit row. The generic update() fired no side effects,
+  // which is why acceptances used to be invisible to staff.
+  await quoteService.markAccepted(quoteId);
+
+  // Best-effort staff alert — the acceptance already succeeded; never fail the
+  // customer's action because the notification couldn't send.
+  try {
+    const label = String(q.quote_number ?? `#${quoteId}`);
+    await sendStaffNotification({
+      subject: `Quote ${label} accepted by customer`,
+      heading: "A customer accepted a quote",
+      rows: [
+        ["Quote", label],
+        ["Name", String(q.quote_name ?? "—")],
+        ["Customer email", String(q.email ?? "—")],
+        ["Amount", q.quote_amount == null ? "—" : `$${Number(q.quote_amount).toFixed(2)}`],
+      ],
+      portalPath: `/dashboard/quotes/${quoteId}`,
+      linkLabel: "Open quote in portal",
+    });
+  } catch (e) {
+    console.error("[acceptQuote] staff notification failed (non-fatal):", e);
+  }
   revalidatePath(`/account/quotes/${quoteId}`);
   revalidatePath("/account/quotes");
   return { success: true };
@@ -177,6 +202,12 @@ export async function acceptQuote(quoteId: number) {
 export async function duplicateQuote(quoteId: number) {
   const session = await getSession();
   if (!session?.customerId) return { error: "Please sign in." };
+  // Guard against a spammed "Duplicate" button (or a direct action call that
+  // bypasses the client-side disabled state) creating unbounded quotes. Per-customer
+  // sliding window — generous for real use, fatal to abuse.
+  if (!slidingWindowAllow(`quote-duplicate:${session.customerId}`, { windowMs: 60_000, max: 5 })) {
+    return { error: "You've duplicated several quotes just now. Please wait a minute before duplicating again." };
+  }
   const q = (await quoteService.getWithItems(quoteId)) as
     | (QuoteRow & { email?: string | null; items?: Array<Record<string, unknown>> })
     | null;

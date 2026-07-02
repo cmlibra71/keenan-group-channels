@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { cookies } from "next/headers";
-import { getSiteConfig, getFeatureFlag, getFooterConfig, getTopCategories, getKlaviyoPublicKey } from "@/lib/store";
+import { cookies, headers } from "next/headers";
+import { getSiteConfig, getFeatureFlag, getFooterConfig, getTopCategories, getKlaviyoPublicKey, getGa4MeasurementId } from "@/lib/store";
+import { getPublishedTokenVars } from "@/lib/design-tokens";
 import { KlaviyoTracking } from "@/components/analytics/KlaviyoTracking";
+import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { siteBaseUrl } from "@/lib/seo";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -33,7 +35,28 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [{ site, channel }, subscriptionsEnabled, footerConfig, topCategories, pricesIncludeTax, cookieStore, klaviyoPublicKey] = await Promise.all([
+  // Chrome-free branch for the portal-embedded CMS render surface (/render/*,
+  // tagged by src/proxy.ts). Same html/body/providers so client components and
+  // styling behave identically — just no Header/Footer/analytics.
+  const isCmsRender = (await headers()).get("x-cms-render") === "1";
+  if (isCmsRender) {
+    const [pricesIncludeTax, cookieStore] = await Promise.all([
+      getFeatureFlag("prices_include_tax"),
+      cookies(),
+    ]);
+    const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
+    return (
+      <html lang="en">
+        <body className="min-h-screen bg-white text-zinc-900 antialiased">
+          <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
+            {children}
+          </GstProvider>
+        </body>
+      </html>
+    );
+  }
+
+  const [{ site, channel }, subscriptionsEnabled, footerConfig, topCategories, pricesIncludeTax, cookieStore, klaviyoPublicKey, ga4MeasurementId, tokenVars] = await Promise.all([
     getSiteConfig(),
     getFeatureFlag("subscriptions_enabled"),
     getFooterConfig(),
@@ -41,6 +64,8 @@ export default async function RootLayout({
     getFeatureFlag("prices_include_tax"),
     cookies(),
     getKlaviyoPublicKey(),
+    getGa4MeasurementId(),
+    getPublishedTokenVars(),
   ]);
   const storeName = site?.siteName || channel?.name || "Store";
   const logoUrl = site?.logoUrl || null;
@@ -48,7 +73,7 @@ export default async function RootLayout({
   const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
 
   return (
-    <html lang="en">
+    <html lang="en" style={(tokenVars ?? undefined) as React.CSSProperties | undefined}>
       <body className="min-h-screen flex flex-col bg-white text-zinc-900 antialiased">
         <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
           <Header
@@ -61,6 +86,7 @@ export default async function RootLayout({
           <Footer storeName={storeName} config={footerConfig} />
         </GstProvider>
         <KlaviyoTracking publicKey={klaviyoPublicKey} />
+        <GoogleAnalytics measurementId={ga4MeasurementId} />
       </body>
     </html>
   );

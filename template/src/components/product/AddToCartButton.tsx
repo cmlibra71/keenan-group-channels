@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { addToCart } from "@/lib/actions/cart";
 import { trackAddedToCart } from "@/components/analytics/klaviyo";
+import { ga4AddToCart } from "@/components/analytics/ga4";
 
 export function AddToCartButton({
   productId,
@@ -37,6 +38,12 @@ export function AddToCartButton({
         sku: sku ?? null,
         name: productName ?? `Product ${productId}`,
         price: price ?? null,
+        quantity: quantity ?? 1,
+      });
+      ga4AddToCart({
+        item_id: sku ?? String(productId),
+        item_name: productName ?? `Product ${productId}`,
+        price: price ?? undefined,
         quantity: quantity ?? 1,
       });
     });
