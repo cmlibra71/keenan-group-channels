@@ -44,6 +44,33 @@ function contextSatisfies(
   return context?.record?.kind === requires;
 }
 
+// Universal design-control consumption (props.design, validated against the
+// registry's SECTION_DESIGN): background = a design-token colour behind the
+// section, spacing_y = extra vertical space around it. Applied as a wrapper so
+// EVERY block honours the portal's Design tab with no per-component work;
+// absent/empty design renders exactly as before.
+const SPACING_CLASS: Record<string, string> = {
+  sm: "py-4",
+  md: "py-10",
+  lg: "py-20",
+};
+
+function designWrapperProps(
+  props: Record<string, unknown> | undefined
+): { style?: React.CSSProperties; className?: string } | null {
+  const design = props?.design as
+    | { spacing_y?: string; background?: string }
+    | undefined;
+  if (!design || typeof design !== "object") return null;
+  const className = design.spacing_y ? SPACING_CLASS[design.spacing_y] : undefined;
+  const style =
+    design.background && /^[a-zA-Z0-9_-]+$/.test(design.background)
+      ? { backgroundColor: `var(--color-${design.background})` }
+      : undefined;
+  if (!className && !style) return null;
+  return { style, className };
+}
+
 export function BlockRenderer({
   blocks,
   draft = false,
@@ -64,14 +91,21 @@ export function BlockRenderer({
         regionCounts[region] = indexInRegion + 1;
         const markerKey = `${region}:${indexInRegion}`;
 
-        const wrap = (node: React.ReactNode) =>
-          editHooks ? (
-            <div key={i} data-cms-block={markerKey} data-cms-block-type={block.block_type}>
+        const design = designWrapperProps(block.props);
+        const wrap = (node: React.ReactNode) => {
+          if (!editHooks && !design) return node;
+          return (
+            <div
+              key={i}
+              data-cms-block={editHooks ? markerKey : undefined}
+              data-cms-block-type={editHooks ? block.block_type : undefined}
+              style={design?.style}
+              className={design?.className}
+            >
               {node}
             </div>
-          ) : (
-            node
           );
+        };
 
         if (block.is_visible === false && !draft) return null;
 
