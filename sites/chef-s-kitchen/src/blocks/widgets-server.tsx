@@ -11,13 +11,17 @@ import "server-only";
 // ============================================================================
 
 import type { RenderContext } from "@keenan/services";
+import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import {
   getProducts,
   getCategoryBySlug,
   getCategoryListing,
+  getCategoryBreadcrumbs,
   getRelatedProducts,
   getFeatureFlag,
 } from "@/lib/store";
+import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
 import { getListingPricing } from "@/lib/member";
 import {
   ProductPurchaseProvider,
@@ -207,6 +211,158 @@ export async function ProductGridWidget({
           </ProductPurchaseProvider>
         );
       })}
+    </div>
+  );
+}
+
+
+// ── Category widgets (URL-state components + listing grid via the card) ─────
+
+type CategoryExtrasShape = {
+  listing?: { products: AnyRecord[]; total: number; facets?: unknown };
+  pricing?: Record<string, unknown>;
+  memberPricingEnabled?: boolean;
+  breadcrumbs?: Array<{ id: number; name: string; slug: string }>;
+  hasMore?: boolean;
+  nextPageHref?: string;
+};
+
+function categoryExtras(ctx?: RenderContext): CategoryExtrasShape {
+  return ctx?.record?.kind === "category"
+    ? ((ctx.record.extras ?? {}) as CategoryExtrasShape)
+    : {};
+}
+
+export async function BreadcrumbsWidget({ ctx }: { attrs: Record<string, unknown>; ctx?: RenderContext }) {
+  if (ctx?.record?.kind !== "category") return null;
+  const category = ctx.record.category as AnyRecord;
+  const extras = categoryExtras(ctx);
+  const breadcrumbs =
+    extras.breadcrumbs ??
+    ((await getCategoryBreadcrumbs((category.path_ids as number[]) || []).catch(() => [])) as Array<{
+      id: number;
+      name: string;
+      slug: string;
+    }>);
+  return (
+    <nav className="mb-3 flex flex-wrap items-center gap-1.5 text-[13px] text-white/70">
+      <Link href="/" className="transition-colors hover:text-white">Home</Link>
+      {breadcrumbs.slice(0, -1).map((crumb) => (
+        <span key={crumb.id} className="flex items-center gap-1.5">
+          <ChevronRight className="h-3 w-3" />
+          <Link href={`/categories/${crumb.slug}`} className="transition-colors hover:text-white">
+            {crumb.name}
+          </Link>
+        </span>
+      ))}
+      <ChevronRight className="h-3 w-3" />
+      <span className="text-white">{category.name as string}</span>
+    </nav>
+  );
+}
+
+export function FilterRailWidget({ ctx }: { attrs: Record<string, unknown>; ctx?: RenderContext }) {
+  const extras = categoryExtras(ctx);
+  if (!extras.listing?.facets) return null;
+  return <FilterRail facets={extras.listing.facets as never} />;
+}
+
+export function FilterChipsWidget({ ctx }: { attrs: Record<string, unknown>; ctx?: RenderContext }) {
+  const extras = categoryExtras(ctx);
+  if (!extras.listing?.facets) return null;
+  return <FilterChips facets={extras.listing.facets as never} />;
+}
+
+export function SortSelectWidget() {
+  return <SortSelect />;
+}
+
+/** The category listing grid — same card-partial pipeline as product_grid. */
+export async function ListingGridWidget({
+  attrs,
+  ctx,
+}: {
+  attrs: Record<string, unknown>;
+  ctx?: RenderContext;
+}) {
+  if (ctx?.record?.kind !== "category") return null;
+  const category = ctx.record.category as AnyRecord;
+  const extras = categoryExtras(ctx);
+
+  let listing = extras.listing;
+  if (!listing) {
+    try {
+      listing = (await getCategoryListing(category.id as number, { page: 1, limit: 24 })) as {
+        products: AnyRecord[];
+        total: number;
+      };
+    } catch {
+      return null;
+    }
+  }
+  const products = listing.products ?? [];
+  if (products.length === 0) return null;
+
+  const cardKey = str(attrs.card) || "product_card";
+  const detached = str(attrs.card_template);
+  const [cardSource, resolvePartial, pricing, memberPricingEnabled] = await Promise.all([
+    detached ? Promise.resolve(detached) : getPartialSource(cardKey, ctx),
+    buildPartialResolver(ctx),
+    extras.pricing !== undefined
+      ? Promise.resolve(extras.pricing as Record<string, unknown>)
+      : (getListingPricing(products as never) as Promise<unknown> as Promise<
+          Record<string, unknown>
+        >).catch(() => ({}) as Record<string, unknown>),
+    extras.memberPricingEnabled !== undefined
+      ? Promise.resolve(extras.memberPricingEnabled)
+      : getFeatureFlag("member_pricing_enabled").catch(() => false),
+  ]);
+  if (!cardSource) return null;
+
+  const memberPriceMap = (pricing.memberPriceMap ?? {}) as Record<number, number>;
+  const isMember = (pricing.isMember as boolean) ?? false;
+  const planPrice = (pricing.planPrice as string | null) ?? null;
+  const eyebrow = (category.name as string) ?? null;
+
+  // narrow: 3-up beside the filter rail (the legacy listing layout)
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {products.map((p) => {
+        const memberPrice = memberPricingEnabled ? memberPriceMap[p.id as number] ?? null : null;
+        return (
+          <ProductPurchaseProvider
+            key={p.id as number}
+            product={cardPurchaseProduct(p)}
+            memberPrice={memberPrice}
+            isMember={isMember}
+            membershipTeaser={planPrice ? { fromPrice: parseFloat(planPrice).toFixed(2) } : null}
+          >
+            <TemplateRenderer
+              template={cardSource}
+              data={{ product: cardData(p, { eyebrow, clearance: false }) }}
+              ctx={ctx}
+              seedKey={`partial/${cardKey}`}
+              channelKey="chef-s-kitchen"
+              resolvePartial={resolvePartial}
+              draft={ctx?.draft ?? false}
+            />
+          </ProductPurchaseProvider>
+        );
+      })}
+    </div>
+  );
+}
+
+export function LoadMoreWidget({ ctx }: { attrs: Record<string, unknown>; ctx?: RenderContext }) {
+  const extras = categoryExtras(ctx);
+  const listing = extras.listing;
+  if (!extras.hasMore || !extras.nextPageHref || !listing) return null;
+  const shown = listing.products?.length ?? 0;
+  return (
+    <div className="mt-10 text-center">
+      <Link href={extras.nextPageHref} scroll={false} className="btn-secondary">
+        Load more ({listing.total - shown} remaining)
+      </Link>
     </div>
   );
 }

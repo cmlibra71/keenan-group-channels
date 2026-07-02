@@ -53,6 +53,9 @@ export function sanitizeKtlHtml(html: string): string {
       "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption", "colgroup", "col",
       "img", "figure", "figcaption",
       "section", "article", "nav", "aside", "header", "footer",
+      // inert buttons only — event handlers never survive sanitization, and
+      // interactive behavior comes from locked widgets, not template markup
+      "button",
       "ktl-w", "ktl-rich",
     ],
     ALLOWED_ATTR: [
@@ -61,6 +64,7 @@ export function sanitizeKtlHtml(html: string): string {
       "colspan", "rowspan", "align", "valign",
       "class", "style", "color", "face",
       "aria-label", "aria-hidden", "role",
+      "disabled", "type",
       "data-w", "data-r",
     ],
     FORBID_TAGS: ["script", "iframe", "object", "embed", "form", "input", "style", "link", "base"],

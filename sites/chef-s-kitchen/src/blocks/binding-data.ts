@@ -83,7 +83,10 @@ export function buildBindingData(ctx?: RenderContext): AnyRecord {
   if (ctx?.record?.kind === "category") {
     const c = ctx.record.category as AnyRecord;
     const extras = (ctx.record.extras ?? {}) as AnyRecord;
-    const listing = extras.listing as { total?: number } | undefined;
+    const listing = extras.listing as { total?: number; products?: unknown[] } | undefined;
+    const total = listing?.total ?? 0;
+    const shown = listing?.products?.length ?? 0;
+    const crumbs = (extras.breadcrumbs as AnyRecord[]) ?? [];
     return {
       category: {
         id: c.id,
@@ -96,8 +99,13 @@ export function buildBindingData(ctx?: RenderContext): AnyRecord {
         slug: s.slug ?? "",
         imageUrl: (s.imageUrl as string) ?? null,
       })),
-      breadcrumbs: (extras.breadcrumbs as AnyRecord[]) ?? [],
-      listing: { total: listing?.total ?? 0 },
+      // parents only — the current category renders from category.name
+      breadcrumbs: crumbs.slice(0, -1),
+      listing: {
+        total,
+        totalLabel: `${total} product${total === 1 ? "" : "s"}`,
+        showingRange: `1–${shown}`,
+      },
       settings: { channelName: "Chef's Depot", membershipFromPrice: null },
     };
   }

@@ -19,7 +19,15 @@ import {
   MobileBuyBarWidget,
   ReviewStarsWidget,
 } from "./widgets-client";
-import { ProductGridWidget } from "./widgets-server";
+import {
+  ProductGridWidget,
+  BreadcrumbsWidget,
+  FilterRailWidget,
+  FilterChipsWidget,
+  SortSelectWidget,
+  ListingGridWidget,
+  LoadMoreWidget,
+} from "./widgets-server";
 
 export type WidgetComponent = FC<{ attrs: Record<string, unknown>; ctx?: RenderContext }>;
 
@@ -35,4 +43,10 @@ export const WIDGETS: Record<string, WidgetComponent> = {
   mobile_buy_bar: MobileBuyBarWidget,
   review_stars: ReviewStarsWidget,
   product_grid: ProductGridWidget as unknown as WidgetComponent,
+  breadcrumbs: BreadcrumbsWidget as unknown as WidgetComponent,
+  filter_rail: FilterRailWidget as unknown as WidgetComponent,
+  filter_chips: FilterChipsWidget as unknown as WidgetComponent,
+  sort_select: SortSelectWidget as unknown as WidgetComponent,
+  listing_grid: ListingGridWidget as unknown as WidgetComponent,
+  load_more: LoadMoreWidget as unknown as WidgetComponent,
 };
