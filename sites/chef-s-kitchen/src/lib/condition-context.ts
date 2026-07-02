@@ -36,6 +36,15 @@ export async function buildConditionContext(ctx?: RenderContext): Promise<Condit
     ].filter((n): n is number => typeof n === "number");
   }
 
+  // Preview-as (render surfaces): the portal's simulated customer wins —
+  // there is no real storefront session on the render surface anyway.
+  if (ctx?.simulatedCustomer) {
+    base.signedIn = ctx.simulatedCustomer.signedIn ?? false;
+    base.isMember = ctx.simulatedCustomer.member ?? false;
+    base.customerGroupId = ctx.simulatedCustomer.customerGroupId ?? null;
+    return base;
+  }
+
   try {
     const [session, memberCtx] = await Promise.all([
       getSession().catch(() => null),
