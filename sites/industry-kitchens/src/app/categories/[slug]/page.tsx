@@ -11,7 +11,9 @@ import {
   getCategoryBreadcrumbs,
   getFeatureFlag,
   getCmsCategoryPage,
+  getCmsTemplate,
 } from "@/lib/store";
+import type { RenderContext } from "@keenan/services";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
@@ -122,6 +124,42 @@ export default async function CategoryPage({
     next.set("page", String(page + 1));
     return `/categories/${slug}?${next.toString()}`;
   })();
+
+  // ═══ CMS category-layout TEMPLATE path (kill switch: flag off → legacy) ═══
+  // The whole page as a block document (category_header / category_slot /
+  // category_listing …); this route stays the data owner — the heavy queries
+  // above are passed to the blocks via RenderContext extras.
+  if (await getFeatureFlag("cms_category_layout_enabled")) {
+    const template = await getCmsTemplate("category_layout", draft).catch(() => null);
+    if (template && template.blocks.length > 0) {
+      const context: RenderContext = {
+        draft,
+        record: {
+          kind: "category",
+          category: category as unknown as Record<string, unknown>,
+          extras: {
+            listing: { products, total, facets },
+            memberPriceMap,
+            memberPricingEnabled,
+            breadcrumbs,
+            subcategories,
+            page,
+            hasMore,
+            nextPageHref,
+          },
+        },
+      };
+      return (
+        <div>
+          <BlockRenderer
+            blocks={template.blocks as unknown as RenderedBlock[]}
+            draft={draft}
+            context={context}
+          />
+        </div>
+      );
+    }
+  }
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
