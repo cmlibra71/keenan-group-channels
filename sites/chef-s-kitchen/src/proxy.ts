@@ -15,9 +15,11 @@ export default function proxy(req: NextRequest) {
 
   const res = NextResponse.next({ request: { headers: requestHeaders } });
   const portalOrigin = process.env.PORTAL_ORIGIN || "https://keenan-group.com.au";
+  // Allow any localhost port in dev (the portal can run on 3000/3210/…); prod
+  // is locked to PORTAL_ORIGIN. localhost:* is dev-only-reachable, so safe.
   res.headers.set(
     "Content-Security-Policy",
-    `frame-ancestors 'self' ${portalOrigin} http://localhost:3000`
+    `frame-ancestors 'self' ${portalOrigin} http://localhost:*`
   );
   res.headers.set("X-Robots-Tag", "noindex, nofollow");
   return res;
