@@ -39,6 +39,7 @@ import {
   evaluateConditions,
   sanitizeConditions,
   type SubBlockInstance,
+  type RenderContext,
 } from "@keenan/services";
 import { buildConditionContext } from "@/lib/condition-context";
 import { buildPartialResolver } from "@/blocks/partials";
@@ -98,9 +99,10 @@ const copy = (type: string, key: string, props: Record<string, unknown>): string
 
 // ── CMS v2 helpers (home blocks are custom compositions) ────────────────────
 
-const homeV2On = (props: Record<string, unknown>): boolean =>
+const homeV2On = (props: Record<string, unknown>, ctx?: RenderContext): boolean =>
   process.env.CMS_V2_DISABLED !== "1" &&
   ((Array.isArray(props.subBlocks) && (props.subBlocks as unknown[]).length > 0) ||
+    ctx?.draft === true ||
     process.env.CMS_V2_FORCE === "1");
 
 type HomeV2Env = {
@@ -216,7 +218,7 @@ export async function HeroSidePanelWidget() {
   );
 }
 
-async function HomeHero(props: Record<string, unknown> = {}) {
+async function HomeHero(props: Record<string, unknown> = {}, ctx?: RenderContext) {
   const { channel } = await getSiteConfig();
   const { subscriptionsEnabled, plan, planPrice, planBenefits, featuredPrize, featuredDraw } =
     await getMembershipContext();
@@ -241,7 +243,7 @@ async function HomeHero(props: Record<string, unknown> = {}) {
     // CMS v2 (custom composition): editable copy-panel template + locked side
     // panel, inside the component-owned section/backdrop/grid. Copy values
     // resolve into bindings so existing per-field edits keep working.
-    if (homeV2On(props)) {
+    if (homeV2On(props, ctx)) {
       const env = await homeV2Env("home_hero", props, {
         hero: {
           eyebrow,
@@ -476,9 +478,9 @@ async function ClearanceSpotlightBlock(props: Record<string, unknown> = {}) {
 }
 
 // ── Featured products ─────────────────────────────────────────────────────────
-async function FeaturedProductsBlock(props: Record<string, unknown> = {}) {
+async function FeaturedProductsBlock(props: Record<string, unknown> = {}, ctx?: RenderContext) {
   // CMS v2: heading template + product grid via the shared card partial.
-  if (homeV2On(props)) {
+  if (homeV2On(props, ctx)) {
     const env = await homeV2Env("featured_products", props, {
       featured: {
         eyebrow: copy("featured_products", "eyebrow", props),
@@ -533,17 +535,17 @@ async function DrawSpotlightBlock() {
 // Block map fragment for the homepage. System blocks fetch their own live
 // catalog data; editable copy (headings, hero text, CTAs) comes from `props`.
 // ---------------------------------------------------------------------------
-type BlockProps = { props: Record<string, unknown> };
+type BlockProps = { props: Record<string, unknown>; ctx?: RenderContext };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const HOME_BLOCK_COMPONENTS: Record<string, (p: BlockProps) => any> = {
-  home_hero: ({ props }) => HomeHero(props),
+  home_hero: ({ props, ctx }) => HomeHero(props, ctx),
   trust_bar: () => <TrustBar />,
   shop_by_category: ({ props }) => ShopByCategory(props),
   membership_value_strip: () => MembershipStripBlock(),
   brand_showcase: () => BrandShowcaseBlock(),
   clearance_spotlight: ({ props }) => ClearanceSpotlightBlock(props),
-  featured_products: ({ props }) => FeaturedProductsBlock(props),
+  featured_products: ({ props, ctx }) => FeaturedProductsBlock(props, ctx),
   seo_faq: () => SeoFaqBlock(),
   draw_spotlight: () => DrawSpotlightBlock(),
 };

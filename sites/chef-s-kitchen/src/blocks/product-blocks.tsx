@@ -289,6 +289,7 @@ async function ProductRelatedBlock({ props, ctx }: BlockProps) {
   const useV2 =
     process.env.CMS_V2_DISABLED !== "1" &&
     ((Array.isArray(storedSubBlocks) && storedSubBlocks.length > 0) ||
+      ctx?.draft === true ||
       process.env.CMS_V2_FORCE === "1");
   if (useV2) {
     const def = BLOCK_REGISTRY.product_related;

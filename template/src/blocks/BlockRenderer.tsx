@@ -18,6 +18,7 @@
 // ============================================================================
 import { BLOCK_REGISTRY, type RenderContext } from "@keenan/services";
 import { BLOCK_COMPONENTS } from "./registry";
+import { GenericTemplatableBlock, blockRendersV2 } from "./TemplatableBlock";
 
 export interface RenderedBlock {
   block_type: string;
@@ -120,6 +121,22 @@ export function BlockRenderer({
                 />
               )
             : null;
+        }
+
+        // CMS v2.1: generic code-editable path — every templatable grid block
+        // renders its sub-block templates when the doc carries them (or in any
+        // draft/editor context). selfManagedV2 blocks keep their own component.
+        if (blockRendersV2(def, block.props, context)) {
+          return wrap(
+            <GenericTemplatableBlock
+              key={editHooks ? undefined : i}
+              type={block.block_type}
+              props={block.props ?? {}}
+              ctx={context}
+              editHooks={editHooks}
+              blockMarker={markerKey}
+            />
+          );
         }
 
         const Cmp = BLOCK_COMPONENTS[block.block_type];

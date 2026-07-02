@@ -17,7 +17,7 @@ import { CHANNEL_ID } from "@/lib/channel";
 // channelKey drives which seed generation backs missing partials. Prefer the
 // explicit env; fall back to the well-known CHANNEL_ID mapping so a fork
 // without CHANNEL_KEY set still seeds ITS OWN design, not the template's.
-const CHANNEL_KEY =
+export const CHANNEL_KEY =
   process.env.CHANNEL_KEY ??
   ({ 1: "industry-kitchens", 2: "chef-s-kitchen" } as Record<number, string>)[CHANNEL_ID] ??
   "template";

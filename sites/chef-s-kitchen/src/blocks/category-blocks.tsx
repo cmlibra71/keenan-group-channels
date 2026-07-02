@@ -76,9 +76,10 @@ function extrasOf(ctx?: RenderContext): CategoryExtras {
 
 // ── CMS v2 helpers (custom compositions render sub-blocks in slots) ─────────
 
-const CMS_V2_ON = (props: Record<string, unknown>): boolean =>
+const CMS_V2_ON = (props: Record<string, unknown>, ctx?: RenderContext): boolean =>
   process.env.CMS_V2_DISABLED !== "1" &&
   ((Array.isArray(props.subBlocks) && (props.subBlocks as unknown[]).length > 0) ||
+    ctx?.draft === true ||
     process.env.CMS_V2_FORCE === "1");
 
 type V2Env = {
@@ -134,7 +135,7 @@ async function CategoryHeaderBlock({ props, ctx }: BlockProps) {
 
   // CMS v2: editable title/description/count templates + breadcrumbs widget
   // inside the component-owned branded section (custom composition).
-  if (CMS_V2_ON(props)) {
+  if (CMS_V2_ON(props, ctx)) {
     const env = await v2Env("category_header", props, ctx);
     return (
       <section className="relative overflow-hidden bg-gradient-to-br from-brand-mid to-brand-deep">
@@ -220,7 +221,7 @@ async function CategoryListingBlock({ props, ctx }: BlockProps) {
 
   // CMS v2: the rail + right-column arrangement stays component-owned; the
   // rail slot takes the filter_rail sub-block, everything else stacks right.
-  if (CMS_V2_ON(props)) {
+  if (CMS_V2_ON(props, ctx)) {
     const env = await v2Env("category_listing", props, ctx);
     const rail = env.subBlocks.find((sb) => sb.key === "filter_rail");
     const rest = env.subBlocks.filter((sb) => sb.key !== "filter_rail");
