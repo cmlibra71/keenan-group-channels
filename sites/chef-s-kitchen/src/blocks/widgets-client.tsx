@@ -48,11 +48,26 @@ export const ProductGalleryWidget: WidgetComponent = () => {
   );
 };
 
-export const PriceWidget: WidgetComponent = () => {
+export const PriceWidget: WidgetComponent = ({ attrs }) => {
   const purchase = useProductPurchaseOptional();
   if (!purchase) return <NoProvider name="price" />;
   const { displayPrice, displaySalePrice, activeMemberPrice, isMember, membershipTeaser } =
     purchase;
+  // size="card": the LISTING-card pricing look (bare PriceBlock, RRP not sale
+  // — the save badge carries the discount), verbatim from ProductCard.tsx.
+  if (attrs.size === "card") {
+    return displayPrice > 0 ? (
+      <PriceBlock
+        rrp={displayPrice}
+        memberPrice={activeMemberPrice}
+        isMember={isMember}
+        planPrice={membershipTeaser?.fromPrice}
+        size="card"
+      />
+    ) : (
+      <p className="text-sm font-semibold text-text-secondary">Call for Price</p>
+    );
+  }
   return (
     <div className="mt-5 rounded-[12px] border border-border border-l-4 border-l-member bg-steel-50 p-5">
       {displayPrice === 0 ? (

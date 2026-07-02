@@ -166,6 +166,8 @@ export async function resolveSessionRender(claims: RenderClaims): Promise<Resolv
   );
   // preview-as: display conditions evaluate against the simulated customer
   if (payload.simulatedCustomer) context.simulatedCustomer = payload.simulatedCustomer;
+  // partial-editor preview: draft partial sources override published ones
+  if (payload.draftPartials) context.draftPartials = payload.draftPartials;
 
   // session payloads may carry their own draft tokens (design-system preview)
   const tokenVars = payload.draftTokens

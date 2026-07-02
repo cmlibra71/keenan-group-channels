@@ -57,7 +57,7 @@ export function sanitizeKtlHtml(html: string): string {
     ],
     ALLOWED_ATTR: [
       "href", "title", "target", "rel", "name",
-      "src", "alt", "width", "height", "loading",
+      "src", "srcset", "sizes", "alt", "width", "height", "loading", "decoding",
       "colspan", "rowspan", "align", "valign",
       "class", "style", "color", "face",
       "aria-label", "aria-hidden", "role",

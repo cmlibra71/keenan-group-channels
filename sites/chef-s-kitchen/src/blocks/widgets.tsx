@@ -19,6 +19,7 @@ import {
   MobileBuyBarWidget,
   ReviewStarsWidget,
 } from "./widgets-client";
+import { ProductGridWidget } from "./widgets-server";
 
 export type WidgetComponent = FC<{ attrs: Record<string, unknown>; ctx?: RenderContext }>;
 
@@ -33,4 +34,5 @@ export const WIDGETS: Record<string, WidgetComponent> = {
   stock_status: StockStatusWidget,
   mobile_buy_bar: MobileBuyBarWidget,
   review_stars: ReviewStarsWidget,
+  product_grid: ProductGridWidget as unknown as WidgetComponent,
 };

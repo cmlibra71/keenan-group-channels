@@ -34,6 +34,7 @@ import { BLOCK_REGISTRY } from "@keenan/services";
 import { ProductPurchaseProvider, type PurchaseProduct } from "@/components/product/ProductPurchaseProvider";
 import { buildBindingData } from "@/blocks/binding-data";
 import { buildConditionContext } from "@/lib/condition-context";
+import { buildPartialResolver } from "@/blocks/partials";
 
 type BlockProps = { props: Record<string, unknown>; ctx?: RenderContext };
 
@@ -277,10 +278,42 @@ async function ProductTabsBlock({ ctx }: BlockProps) {
 
 // ── Related products ─────────────────────────────────────────────────────────
 
-async function ProductRelatedBlock({ ctx }: BlockProps) {
+async function ProductRelatedBlock({ props, ctx }: BlockProps) {
   const product = productOf(ctx);
   if (!product) return null;
   const extras = extrasOf(ctx);
+
+  // CMS v2 path — ONLY when the doc explicitly carries edited sub-blocks (or
+  // CMS_V2_FORCE locally). Existing live docs keep the legacy compiled grid.
+  const storedSubBlocks = props.subBlocks;
+  const useV2 =
+    process.env.CMS_V2_DISABLED !== "1" &&
+    ((Array.isArray(storedSubBlocks) && storedSubBlocks.length > 0) ||
+      process.env.CMS_V2_FORCE === "1");
+  if (useV2) {
+    const def = BLOCK_REGISTRY.product_related;
+    const [data, condCtx, resolvePartial] = await Promise.all([
+      Promise.resolve(buildBindingData(ctx)),
+      buildConditionContext(ctx),
+      buildPartialResolver(ctx),
+    ]);
+    return (
+      <div className={`${CONTAINER} pb-8`}>
+        <SubBlockRenderer
+          props={props}
+          schema={def?.subBlockSchema}
+          defaultLayout={def?.defaultProps?.layout as Record<string, unknown> | undefined}
+          channelKey="chef-s-kitchen"
+          data={data}
+          ctx={ctx}
+          condCtx={condCtx}
+          draft={ctx?.draft ?? false}
+          editHooks={ctx?.draft ?? false}
+          resolvePartial={resolvePartial}
+        />
+      </div>
+    );
+  }
   const relatedProducts =
     extras.relatedProducts ??
     (await getRelatedProducts(product.id, product.categoryIds ?? []).catch(() => []));
@@ -392,9 +425,10 @@ async function ProductOverviewBlock({ props, ctx }: BlockProps) {
   };
 
   const def = BLOCK_REGISTRY.product_overview;
-  const [data, condCtx] = await Promise.all([
+  const [data, condCtx, resolvePartial] = await Promise.all([
     Promise.resolve(buildBindingData(ctx)),
     buildConditionContext(ctx),
+    buildPartialResolver(ctx),
   ]);
 
   return (
@@ -416,6 +450,7 @@ async function ProductOverviewBlock({ props, ctx }: BlockProps) {
           condCtx={condCtx}
           draft={ctx?.draft ?? false}
           editHooks={ctx?.draft ?? false}
+          resolvePartial={resolvePartial}
         />
       </ProductPurchaseProvider>
     </div>
