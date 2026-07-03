@@ -148,6 +148,11 @@ function PanelLoginForm({
             required
             className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
           />
+          <p className="mt-1 text-right">
+            <Link href="/account/forgot-password" className="text-sm text-zinc-500 hover:text-zinc-900 hover:underline">
+              Forgot password?
+            </Link>
+          </p>
         </div>
         <button
           type="submit"

@@ -284,6 +284,11 @@ function QuotePanelLogin({
             required
             className="mt-1 block w-full input"
           />
+          <p className="mt-1 text-right">
+            <Link href="/account/forgot-password" className="text-sm text-text-secondary hover:text-text-primary hover:underline">
+              Forgot password?
+            </Link>
+          </p>
         </div>
         <button
           type="submit"
