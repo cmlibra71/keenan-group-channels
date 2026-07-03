@@ -60,13 +60,20 @@ export async function addToQuote(productId: number, variantId?: number | null) {
 
   const quote = await getOrCreateQuote();
 
-  // Pre-link quote to customer if logged in
+  // Pre-link quote to customer if logged in. Best-effort convenience only — it must
+  // never block adding the item. A stale/invalid session (e.g. a deleted customer)
+  // would otherwise throw an FK ValidationError and 500 the whole add-to-quote,
+  // leaving the quote empty with no feedback.
   const session = await getSession();
   if (session && !quote.customer_id) {
-    await quoteService.update(quote.id, {
-      customerId: session.customerId,
-      email: session.email,
-    });
+    try {
+      await quoteService.update(quote.id, {
+        customerId: session.customerId,
+        email: session.email,
+      });
+    } catch (e) {
+      console.error("[addToQuote] customer link failed (non-fatal):", e);
+    }
   }
 
   const existing = await quoteItemService.findByProductVariant(quote.id, productId, variantId) as {

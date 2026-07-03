@@ -45,15 +45,27 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
 
   function handleQuantity(newQty: number) {
     startTransition(async () => {
-      await updateQuoteItem(item.id, newQty);
-      onMutate?.();
+      // Never let a thrown action escape the transition (it would kill the click
+      // and can escalate to the error boundary). Always re-sync from the server.
+      try {
+        await updateQuoteItem(item.id, newQty);
+      } catch {
+        /* fall through — onMutate re-fetches the true state */
+      } finally {
+        await onMutate?.();
+      }
     });
   }
 
   function handleRemove() {
     startTransition(async () => {
-      await removeQuoteItem(item.id);
-      onMutate?.();
+      try {
+        await removeQuoteItem(item.id);
+      } catch {
+        /* fall through */
+      } finally {
+        await onMutate?.();
+      }
     });
   }
 
