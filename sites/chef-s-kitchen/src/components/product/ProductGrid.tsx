@@ -1,4 +1,5 @@
 import { ProductCard } from "./ProductCard";
+import { Ga4ViewItemList } from "@/components/analytics/Ga4ViewItemList";
 
 interface ProductWithImage {
   id: number;
@@ -27,6 +28,8 @@ export function ProductGrid({
   eyebrow,
   clearance,
   narrow,
+  listId,
+  listName,
 }: {
   products: ProductWithImage[];
   memberPricingAvailable?: boolean;
@@ -39,6 +42,9 @@ export function ProductGrid({
   clearance?: boolean;
   /** 3-up max — used beside the category filter rail. */
   narrow?: boolean;
+  /** GA4 list identity for view_item_list / select_item (e.g. category slug + name). */
+  listId?: string;
+  listName?: string;
 }) {
   if (products.length === 0) {
     return (
@@ -54,7 +60,19 @@ export function ProductGrid({
         narrow ? "md:grid-cols-2 lg:grid-cols-3" : "md:grid-cols-3 lg:grid-cols-4"
       }`}
     >
-      {products.map((product) => (
+      <Ga4ViewItemList
+        listId={listId}
+        listName={listName}
+        items={products.map((p, index) => ({
+          item_id: p.sku ?? String(p.id),
+          item_name: p.name,
+          item_brand: p.brandName ?? undefined,
+          price: parseFloat(p.salePrice ?? p.price) || undefined,
+          quantity: 1,
+          index,
+        }))}
+      />
+      {products.map((product, index) => (
         <ProductCard
           key={product.id}
           id={product.id}
@@ -73,6 +91,9 @@ export function ProductGrid({
           availability={product.availability}
           inventoryLevel={product.inventoryLevel}
           inventoryTracking={product.inventoryTracking}
+          listId={listId}
+          listName={listName}
+          listIndex={index}
         />
       ))}
     </div>

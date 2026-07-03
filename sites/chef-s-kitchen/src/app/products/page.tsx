@@ -107,7 +107,7 @@ export default async function ProductsPage({
       {products.length === 0 ? (
         <p className="text-text-secondary text-center section-padding">No products found.</p>
       ) : (
-        <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} {...(await getListingPricing(products))} />
+        <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} {...(await getListingPricing(products))} listId="all_products" listName="All Products" />
       )}
 
       {/* Pagination */}

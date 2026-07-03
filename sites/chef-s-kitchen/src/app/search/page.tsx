@@ -241,6 +241,8 @@ export default async function SearchPage({
                 products={results.products}
                 memberPricingAvailable={memberPricingEnabled}
                 {...(await getListingPricing(results.products))}
+                listId="search_results"
+                listName="Search Results"
               />
 
               {/* Pagination */}

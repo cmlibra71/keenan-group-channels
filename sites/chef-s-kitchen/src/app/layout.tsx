@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { cookies, headers } from "next/headers";
 import { Fraunces, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
-import { getSiteConfig, getFeatureFlag, getFooterConfig } from "@/lib/store";
+import { getSiteConfig, getFeatureFlag, getFooterConfig, getGa4MeasurementId } from "@/lib/store";
 import { getPublishedTokenVars } from "@/lib/design-tokens";
+import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { GstProvider } from "@/lib/gst";
@@ -79,13 +80,14 @@ export default async function RootLayout({
     );
   }
 
-  const [{ site, channel }, subscriptionsEnabled, pricesIncludeTax, footerConfig, cookieStore, tokenVars] = await Promise.all([
+  const [{ site, channel }, subscriptionsEnabled, pricesIncludeTax, footerConfig, cookieStore, tokenVars, ga4MeasurementId] = await Promise.all([
     getSiteConfig(),
     getFeatureFlag("subscriptions_enabled"),
     getFeatureFlag("prices_include_tax"),
     getFooterConfig(),
     cookies(),
     getPublishedTokenVars(),
+    getGa4MeasurementId(),
   ]);
   const storeName = site?.siteName || channel?.name || "Store";
   const logoUrl = site?.logoUrl || null;
@@ -129,6 +131,9 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
           <main className="flex-1">{children}</main>
           <Footer storeName={storeName} subscriptionsEnabled={subscriptionsEnabled} config={footerConfig} />
         </GstProvider>
+        {/* GA4 gtag — direct, alongside GTM. Both share window.dataLayer (standard
+            coexistence); the ecommerce funnel fires via gtag from the components. */}
+        <GoogleAnalytics measurementId={ga4MeasurementId} />
       </body>
     </html>
   );

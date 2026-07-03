@@ -55,6 +55,7 @@ export function ProductPageClient({
   membershipTeaser,
   brandName,
   reviewSummary,
+  categoryName,
 }: {
   product: {
     id: number;
@@ -79,6 +80,8 @@ export function ProductPageClient({
   membershipTeaser?: { fromPrice: string | null } | null;
   brandName?: string | null;
   reviewSummary?: { avg: number; count: number } | null;
+  /** Analytics enrichment for add-to-cart events (GA4 + Klaviyo). */
+  categoryName?: string;
 }) {
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
 
@@ -145,6 +148,10 @@ export function ProductPageClient({
           memberPrice={activeMemberPrice}
           isMember={isMember}
           membershipTeaser={membershipTeaser}
+          productName={product.name}
+          productSku={product.sku}
+          brandName={brandName ?? undefined}
+          categoryName={categoryName}
         />
       </div>
     </div>

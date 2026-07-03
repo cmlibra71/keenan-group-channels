@@ -7,6 +7,7 @@ import { getMemberContext, getListingPricing } from "@/lib/member";
 import { ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
+import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 import {
   ProductBuyBox,
   ProductLinks,
@@ -223,6 +224,7 @@ export default async function ProductPage({
       membershipTeaser,
       brandName: brandRow?.name ?? null,
       reviewSummary,
+      categoryName: breadcrumbs[breadcrumbs.length - 1]?.name,
     },
     links: {
       brandRow:
@@ -279,6 +281,25 @@ export default async function ProductPage({
             type="application/ld+json"
             dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
           />
+          <ViewedProductTracker
+            product={{
+              id: product.id,
+              sku: product.sku,
+              name: product.name,
+              price:
+                product.salePrice != null
+                  ? parseFloat(String(product.salePrice))
+                  : product.price != null
+                    ? parseFloat(String(product.price))
+                    : null,
+              imageUrl:
+                ((product.images as Array<Record<string, unknown>> | undefined)?.[0]?.urlStandard as string) ??
+                ((product.images as Array<Record<string, unknown>> | undefined)?.[0]?.url_standard as string) ??
+                null,
+              categories: breadcrumbs.map((c: { name: string }) => c.name),
+              brand: brandRow?.name ?? null,
+            }}
+          />
           <BlockRenderer
             blocks={template.blocks as unknown as RenderedBlock[]}
             draft={draft}
@@ -294,6 +315,25 @@ export default async function ProductPage({
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
+      />
+      <ViewedProductTracker
+        product={{
+          id: product.id,
+          sku: product.sku,
+          name: product.name,
+          price:
+            product.salePrice != null
+              ? parseFloat(String(product.salePrice))
+              : product.price != null
+                ? parseFloat(String(product.price))
+                : null,
+          imageUrl:
+            ((product.images as Array<Record<string, unknown>> | undefined)?.[0]?.urlStandard as string) ??
+            ((product.images as Array<Record<string, unknown>> | undefined)?.[0]?.url_standard as string) ??
+            null,
+          categories: breadcrumbs.map((c: { name: string }) => c.name),
+          brand: brandRow?.name ?? null,
+        }}
       />
       {/* Breadcrumbs */}
       {breadcrumbs.length > 0 ? (

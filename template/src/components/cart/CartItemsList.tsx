@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { updateCartItem, removeCartItem } from "@/lib/actions/cart";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { Price } from "@/components/ui/Price";
+import { ga4AddToCart, ga4RemoveFromCart, type Ga4Item } from "@/components/analytics/ga4";
 
 type CartItemRow = {
   id: number;
@@ -49,6 +50,17 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
     : parseFloat(item.list_price);
   const lineTotal = unitPrice * item.quantity;
 
+  // GA4 add/remove_from_cart carry the CHANGED quantity, not the line total.
+  function ga4Item(qty: number): Ga4Item {
+    return {
+      item_id: item.variant_sku ?? item.product_sku ?? String(item.product_id),
+      item_name: item.product_name,
+      item_variant: item.variant_option_name ?? undefined,
+      price: unitPrice,
+      quantity: qty,
+    };
+  }
+
   // Never let a failed action escape the transition — an unhandled rejection here
   // escalates to the error boundary and blanks the whole site. On any failure,
   // refresh to re-sync the cart from the server instead.
@@ -60,6 +72,11 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
           router.refresh();
           return;
         }
+        // Fire GA4 with the delta (the +/− adjusters change one unit at a time,
+        // but guard for any step size). newQty <= 0 removes the whole line.
+        const delta = Math.max(0, newQty) - item.quantity;
+        if (delta > 0) ga4AddToCart(ga4Item(delta));
+        else if (delta < 0) ga4RemoveFromCart(ga4Item(-delta));
         // Re-sync the popout's client-state cart (no-op on the /cart page).
         await onMutate?.();
       } catch {
@@ -76,6 +93,7 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
           router.refresh();
           return;
         }
+        ga4RemoveFromCart(ga4Item(item.quantity));
         await onMutate?.();
       } catch {
         router.refresh();

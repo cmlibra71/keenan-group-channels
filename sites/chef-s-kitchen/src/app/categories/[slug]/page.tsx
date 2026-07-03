@@ -241,6 +241,8 @@ export default async function CategoryPage({
               {...pricing}
               eyebrow={category.name}
               narrow
+              listId={category.slug}
+              listName={category.name}
             />
 
             {/* Load more */}

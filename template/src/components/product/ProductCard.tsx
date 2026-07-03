@@ -1,7 +1,10 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
 import { Package } from "lucide-react";
 import { Price } from "@/components/ui/Price";
+import { ga4SelectItem } from "@/components/analytics/ga4";
 
 interface ProductCardProps {
   name: string;
@@ -13,16 +16,38 @@ interface ProductCardProps {
   memberPricingAvailable?: boolean;
   /** Active member's price for this product — renders the member layout. */
   memberPrice?: number | null;
+  /** GA4 select_item context (all optional — card works without analytics). */
+  productId?: number;
+  listId?: string;
+  listName?: string;
+  listIndex?: number;
 }
 
-export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName, memberPricingAvailable, memberPrice }: ProductCardProps) {
+export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName, memberPricingAvailable, memberPrice, productId, listId, listName, listIndex }: ProductCardProps) {
   const displayPrice = parseFloat(price);
   const displaySalePrice = salePrice ? parseFloat(salePrice) : null;
   const showMemberPrice =
     memberPrice != null && displayPrice > 0 && memberPrice < (displaySalePrice ?? displayPrice);
 
+  // Non-blocking: gtag queues the event; navigation proceeds immediately.
+  function handleSelect() {
+    if (productId == null) return;
+    ga4SelectItem(
+      {
+        item_id: String(productId),
+        item_name: name,
+        item_brand: brandName,
+        price: (displaySalePrice ?? displayPrice) || undefined,
+        quantity: 1,
+        index: listIndex,
+      },
+      listId,
+      listName
+    );
+  }
+
   return (
-    <Link href={`/products/${slug}`} className="group block">
+    <Link href={`/products/${slug}`} className="group block" onClick={handleSelect}>
       <div className="relative aspect-square overflow-hidden rounded-lg bg-zinc-100">
         {imageUrl ? (
           <Image

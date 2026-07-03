@@ -15,6 +15,8 @@ export function AddToCartButton({
   productName,
   price,
   sku,
+  brandName,
+  categoryName,
 }: {
   productId: number;
   variantId?: number | null;
@@ -22,10 +24,12 @@ export function AddToCartButton({
   size?: "sm";
   label?: string;
   quantity?: number;
-  /** Optional enrichment for the Klaviyo "Added to Cart" event. */
+  /** Optional enrichment for the Klaviyo "Added to Cart" / GA4 add_to_cart events. */
   productName?: string;
   price?: number | null;
   sku?: string | null;
+  brandName?: string;
+  categoryName?: string;
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -43,6 +47,8 @@ export function AddToCartButton({
       ga4AddToCart({
         item_id: sku ?? String(productId),
         item_name: productName ?? `Product ${productId}`,
+        item_brand: brandName,
+        item_category: categoryName,
         price: price ?? undefined,
         quantity: quantity ?? 1,
       });

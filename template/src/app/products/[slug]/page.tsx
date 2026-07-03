@@ -37,10 +37,11 @@ export default async function ProductPage({
     getProductAttachments(product.id),
     getRelatedProducts(product.id, product.categoryIds ?? []),
     product.brandId != null
-      ? (brandService.getById(product.brandId) as Promise<{ metafields: ProductBrandMetafields | null } | null>)
+      ? (brandService.getById(product.brandId) as Promise<{ name: string | null; metafields: ProductBrandMetafields | null } | null>)
       : Promise.resolve(null),
   ]);
   const brandMeta = (brandRow?.metafields ?? {}) as ProductBrandMetafields;
+  const brandName = brandRow?.name ?? undefined;
 
   // Breadcrumb trail scoped to this channel's own category tree. A product's
   // category assignments can span other channels' trees, so resolving through
@@ -164,6 +165,7 @@ export default async function ProductPage({
                 ((product.images as Array<Record<string, unknown>> | undefined)?.[0]?.url_standard as string) ??
                 null,
               categories: breadcrumbs.map((c: { name: string }) => c.name),
+              brand: brandName ?? null,
             }}
           />
           <BlockRenderer
@@ -194,6 +196,7 @@ export default async function ProductPage({
             ((product.images as Array<Record<string, unknown>> | undefined)?.[0]?.url_standard as string) ??
             null,
           categories: breadcrumbs.map((c: { name: string }) => c.name),
+          brand: brandName ?? null,
         }}
       />
       {breadcrumbs.length > 0 ? (
@@ -234,6 +237,8 @@ export default async function ProductPage({
         memberPriceMap={memberPriceMap}
         isMember={isMember}
         membershipTeaser={membershipTeaser}
+        brandName={brandName}
+        categoryName={breadcrumbs[breadcrumbs.length - 1]?.name}
       />
 
       {/* Brand-specific warranty / installation notes (conditional) */}
@@ -257,7 +262,7 @@ export default async function ProductPage({
       {relatedProducts.length > 0 && (
         <div className="mt-12 border-t border-zinc-200 pt-8">
           <h2 className="text-2xl font-bold text-zinc-900 mb-6">Related Products</h2>
-          <ProductGrid products={relatedProducts} memberPricingAvailable={memberPricingEnabled} />
+          <ProductGrid products={relatedProducts} memberPricingAvailable={memberPricingEnabled} listId="related_products" listName="Related Products" />
         </div>
       )}
     </div>

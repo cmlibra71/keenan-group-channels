@@ -6,6 +6,7 @@ import { placeOrder, confirmStripePayment } from "@/lib/actions/checkout";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
 import { Price } from "@/components/ui/Price";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
+import { ga4AddShippingInfo, ga4AddPaymentInfo, rowToGa4Item } from "@/components/analytics/ga4";
 
 declare global {
   interface Window {
@@ -33,6 +34,10 @@ type CartItem = {
   quantity: number;
   list_price: string;
   sale_price: string | null;
+  // Present on the runtime cart rows (getWithItems) — used for GA4 item ids.
+  product_id?: number;
+  product_sku?: string | null;
+  variant_sku?: string | null;
 };
 
 type Country = {
@@ -305,8 +310,59 @@ export function CheckoutForm({
     }
   }, [selectedAddressId, selectedAddress, shippingEnabled, calculateShippingCost]);
 
+  // ── GA4 funnel (single-page checkout) ──────────────────────────────────────
+  // add_shipping_info fires once when the shipping cost resolves;
+  // add_payment_info when a payment method is chosen (once per method).
+  // Both also fire on submit as a fallback so the defaults are still captured.
+  const shippingInfoFired = useRef(false);
+  const paymentInfoFired = useRef<string | null>(null);
+
+  const fireShippingInfo = useCallback(
+    (cost: number | null) => {
+      if (shippingInfoFired.current) return;
+      shippingInfoFired.current = true;
+      const free =
+        cost === 0 ||
+        qualifiesForFreeDelivery({
+          enabled: !!freeShippingEnabled,
+          isMember: !!isMember,
+          amount: subtotal,
+          threshold: freeShippingThreshold,
+        });
+      ga4AddShippingInfo(
+        items.map((it, i) => rowToGa4Item(it as unknown as Record<string, unknown>, i)),
+        subtotal,
+        free ? "Free Delivery" : "Standard Delivery"
+      );
+    },
+    [items, subtotal, freeShippingEnabled, isMember, freeShippingThreshold]
+  );
+
+  const firePaymentInfo = useCallback(
+    (methodId: string) => {
+      if (!methodId || paymentInfoFired.current === methodId) return;
+      paymentInfoFired.current = methodId;
+      ga4AddPaymentInfo(
+        items.map((it, i) => rowToGa4Item(it as unknown as Record<string, unknown>, i)),
+        subtotal,
+        methodId
+      );
+    },
+    [items, subtotal]
+  );
+
+  useEffect(() => {
+    if (shippingCost !== null) fireShippingInfo(shippingCost);
+  }, [shippingCost, fireShippingInfo]);
+
   return (
-    <form action={formAction}>
+    <form
+      action={formAction}
+      onSubmit={() => {
+        fireShippingInfo(shippingCost);
+        firePaymentInfo(selectedPaymentMethod);
+      }}
+    >
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
         <div className="lg:col-span-3 space-y-6">
           {/* Contact */}
@@ -546,7 +602,10 @@ export function CheckoutForm({
                         name="paymentMethod"
                         value={method.id}
                         checked={selectedPaymentMethod === method.id}
-                        onChange={() => setSelectedPaymentMethod(method.id)}
+                        onChange={() => {
+                          setSelectedPaymentMethod(method.id);
+                          firePaymentInfo(method.id);
+                        }}
                         className="mt-0.5"
                       />
                       <div>

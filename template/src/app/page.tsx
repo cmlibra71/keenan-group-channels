@@ -275,7 +275,7 @@ export default async function HomePage() {
             View all &rarr;
           </Link>
         </div>
-        <ProductGrid products={featuredProducts} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(featuredProducts)} />
+        <ProductGrid products={featuredProducts} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(featuredProducts)} listId="featured" listName="Featured Products" />
       </section>
 
       {/* Draw Spotlight */}

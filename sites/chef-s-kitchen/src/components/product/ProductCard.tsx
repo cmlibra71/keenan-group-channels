@@ -1,9 +1,12 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
 import { Package } from "lucide-react";
 import { PriceBlock } from "@/components/ui/PriceBlock";
 import { AddToCartButton } from "./AddToCartButton";
 import { AddToQuoteButton } from "./AddToQuoteButton";
+import { ga4SelectItem } from "@/components/analytics/ga4";
 
 /**
  * Design-system product card: white 1:1 image stage, corner badges (max two),
@@ -30,6 +33,10 @@ export interface ProductCardProps {
   availability?: string | null;
   inventoryLevel?: number | null;
   inventoryTracking?: string | null;
+  /** GA4 select_item context (all optional — card works without analytics). */
+  listId?: string;
+  listName?: string;
+  listIndex?: number;
 }
 
 export function ProductCard({
@@ -49,6 +56,9 @@ export function ProductCard({
   availability,
   inventoryLevel,
   inventoryTracking,
+  listId,
+  listName,
+  listIndex,
 }: ProductCardProps) {
   const rrp = parseFloat(price);
   const sale = salePrice ? parseFloat(salePrice) : null;
@@ -59,10 +69,26 @@ export function ProductCard({
   const lowStock = tracked && (inventoryLevel ?? 0) > 0 && (inventoryLevel ?? 0) <= 3;
   const outOfStock = availability === "disabled" || (tracked && (inventoryLevel ?? 0) <= 0);
 
+  // Non-blocking: gtag queues the event; navigation proceeds immediately.
+  function handleSelect() {
+    ga4SelectItem(
+      {
+        item_id: sku ?? String(id),
+        item_name: name,
+        item_brand: brandName ?? undefined,
+        price: (sale ?? rrp) || undefined,
+        quantity: 1,
+        index: listIndex,
+      },
+      listId,
+      listName
+    );
+  }
+
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-card border border-border bg-white shadow-sm transition-all duration-200 hover:-translate-y-[3px] hover:border-brand-light hover:shadow-hover">
       {/* Image stage — uniform white 1:1 */}
-      <Link href={`/products/${slug}`} className="relative block aspect-square bg-white">
+      <Link href={`/products/${slug}`} className="relative block aspect-square bg-white" onClick={handleSelect}>
         {imageUrl ? (
           <Image
             src={imageUrl}
@@ -97,7 +123,7 @@ export function ProductCard({
         {eyebrow && (
           <p className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.1em] text-steel-400">{eyebrow}</p>
         )}
-        <Link href={`/products/${slug}`} className="block">
+        <Link href={`/products/${slug}`} className="block" onClick={handleSelect}>
           <h3 className="line-clamp-2 min-h-[2.5rem] text-[13.5px] font-medium leading-snug text-ink-800 transition-colors duration-200 group-hover:text-accent">
             {name}
           </h3>
@@ -123,7 +149,15 @@ export function ProductCard({
         <div className="mt-3 flex flex-col gap-2">
           {hasPrice && !outOfStock ? (
             <>
-              <AddToCartButton productId={id} size="sm" />
+              <AddToCartButton
+                productId={id}
+                size="sm"
+                productName={name}
+                sku={sku}
+                price={sale ?? rrp}
+                brandName={brandName ?? undefined}
+                categoryName={eyebrow ?? undefined}
+              />
               <AddToQuoteButton productId={id} size="sm" />
             </>
           ) : outOfStock ? (
