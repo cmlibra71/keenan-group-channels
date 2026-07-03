@@ -2,8 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Package } from "lucide-react";
 import { getSession } from "@/lib/auth";
-import { orderService, customerService, CHANNEL_ID, getGuestOrdersForEmail } from "@/lib/store";
-import { deniedForUnverifiedSelfRegistration } from "@/lib/checkout/net-terms-policy";
+import { orderService, CHANNEL_ID, getGuestOrdersForEmail } from "@/lib/store";
 import { Price } from "@/components/ui/Price";
 
 // orderService returns snake_case keys (transformRow).
@@ -41,17 +40,16 @@ export default async function OrdersPage() {
   const accountOrders = data as unknown as OrderRecord[];
 
   // Also surface orders placed as a GUEST under this account's email (e.g. a
-  // checkout done before signing in), matched on the normalized inbox. Gated the
-  // same way as net terms: an unverified self-registration must not see orders
-  // billed to an email it hasn't proven it owns.
+  // checkout done before creating the account), matched on the normalized inbox.
+  // This is deliberately NOT gated on the net-terms `email_verified` check: that
+  // gate exists to stop an unverified self-registration from buying on someone
+  // else's B2B *credit* (see net-terms.ts), whereas this is read-only order
+  // history. Self-service registration currently never verifies the sign-up email,
+  // so gating here permanently hid every self-registered customer's own guest
+  // orders from them (the reported bug). The financial net-terms gate is untouched.
   let guestOrders: OrderRecord[] = [];
   try {
-    const customer = (await customerService.getById(session.customerId)) as
-      | { metafields?: Record<string, unknown> | null }
-      | null;
-    if (!deniedForUnverifiedSelfRegistration(customer?.metafields)) {
-      guestOrders = (await getGuestOrdersForEmail(session.email)) as unknown as OrderRecord[];
-    }
+    guestOrders = (await getGuestOrdersForEmail(session.email)) as unknown as OrderRecord[];
   } catch {
     // best-effort — never block the page on the guest-order lookup
   }
