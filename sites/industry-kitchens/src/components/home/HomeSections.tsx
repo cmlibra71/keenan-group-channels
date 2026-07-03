@@ -8,6 +8,7 @@ import { CustomerLogos } from "./CustomerLogos";
 import { HomepageSpotlight } from "./HomepageSpotlight";
 import { ClearanceSpotlight } from "./ClearanceSpotlight";
 import { BannerCarousel } from "./BannerCarousel";
+import { Ga4Promotion } from "@/components/analytics/Ga4Promotion";
 
 type CarouselData = {
   products: Awaited<ReturnType<typeof import("@/lib/store").getProducts>>["products"];
@@ -353,17 +354,31 @@ export function HomeSections({
               />
             );
           case "image_banner":
-            return <ImageBanner key={i} {...section} />;
+            return (
+              <Ga4Promotion key={i} promotion={{ creative_name: "image_banner", creative_slot: `home_image_banner_${i}`, promotion_name: (("alt" in section && section.alt) || "Image banner") as string }}>
+                <ImageBanner {...section} />
+              </Ga4Promotion>
+            );
           case "banner_carousel":
             return (
-              <BannerCarousel key={i} slides={section.slides} variant={section.variant} />
+              <Ga4Promotion key={i} promotion={{ creative_name: "banner_carousel", creative_slot: `home_banner_carousel_${i}`, promotion_name: "Banner carousel" }}>
+                <BannerCarousel slides={section.slides} variant={section.variant} />
+              </Ga4Promotion>
             );
           case "logo_strip":
             return <LogoStrip key={i} heading={section.heading} logos={section.logos} />;
           case "promo_tiles":
-            return <PromoTiles key={i} tiles={section.tiles} />;
+            return (
+              <Ga4Promotion key={i} promotion={{ creative_name: "promo_tiles", creative_slot: `home_promo_tiles_${i}`, promotion_name: "Promo tiles" }}>
+                <PromoTiles tiles={section.tiles} />
+              </Ga4Promotion>
+            );
           case "split_promos":
-            return <SplitPromos key={i} items={section.items} />;
+            return (
+              <Ga4Promotion key={i} promotion={{ creative_name: "split_promos", creative_slot: `home_split_promos_${i}`, promotion_name: "Split promos" }}>
+                <SplitPromos items={section.items} />
+              </Ga4Promotion>
+            );
           case "category_buttons":
             return (
               <CategoryButtons

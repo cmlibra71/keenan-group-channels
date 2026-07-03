@@ -34,6 +34,15 @@ import { DrawSpotlight } from "@/components/home/DrawSpotlight";
 import { StatsBanner } from "@/components/home/StatsBanner";
 import { BrandShowcase } from "@/components/home/BrandShowcase";
 import { ClearanceSpotlight } from "@/components/home/ClearanceSpotlight";
+import { Ga4Promotion } from "@/components/analytics/Ga4Promotion";
+import type { Ga4Promo } from "@/components/analytics/ga4";
+import type { ReactNode } from "react";
+
+/** Wrap a homepage promo creative in GA4 view/select_promotion tracking.
+ *  Null blocks (disabled membership/draw) render nothing and fire no event. */
+function promo(node: ReactNode, meta: Ga4Promo): ReactNode {
+  return node ? <Ga4Promotion promotion={meta}>{node}</Ga4Promotion> : null;
+}
 
 // ---------------------------------------------------------------------------
 // Shared membership/draw data (cached underneath, so per-block fetch is cheap).
@@ -357,15 +366,19 @@ type BlockProps = { props: Record<string, unknown> };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const HOME_BLOCK_COMPONENTS: Record<string, (p: BlockProps) => any> = {
-  home_hero: ({ props }) => HomeHero(props),
+  home_hero: async ({ props }) =>
+    promo(await HomeHero(props), { creative_name: "home_hero", creative_slot: "home_hero", promotion_name: "Homepage hero" }),
   trust_bar: () => <TrustBar />,
   shop_by_category: ({ props }) => ShopByCategory(props),
-  membership_value_strip: () => MembershipStripBlock(),
+  membership_value_strip: async () =>
+    promo(await MembershipStripBlock(), { creative_name: "membership_value_strip", creative_slot: "home_membership", promotion_name: "Membership" }),
   brand_showcase: () => BrandShowcaseBlock(),
-  clearance_spotlight: ({ props }) => ClearanceSpotlightBlock(props),
+  clearance_spotlight: async ({ props }) =>
+    promo(await ClearanceSpotlightBlock(props), { creative_name: "clearance_spotlight", creative_slot: "home_clearance", promotion_name: "Clearance Specials" }),
   featured_products: ({ props }) => FeaturedProductsBlock(props),
   seo_faq: () => SeoFaqBlock(),
-  draw_spotlight: () => DrawSpotlightBlock(),
+  draw_spotlight: async () =>
+    promo(await DrawSpotlightBlock(), { creative_name: "draw_spotlight", creative_slot: "home_draw", promotion_name: "Prize Draw" }),
 };
 
 // Default homepage block order (the current section order) — used to seed the

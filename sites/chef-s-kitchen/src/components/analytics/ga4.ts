@@ -132,3 +132,20 @@ export function ga4Purchase(p: Ga4PurchaseInput): void {
     items: p.items,
   });
 }
+
+/** Internal-promotion creative (hero banner, clearance spotlight, promo tile…). */
+export interface Ga4Promo {
+  promotion_id?: string;
+  promotion_name?: string;
+  creative_name?: string;
+  creative_slot?: string;
+  items?: Ga4Item[];
+}
+
+export function ga4ViewPromotion(p: Ga4Promo): void {
+  gtagEvent("view_promotion", { ...p });
+}
+
+export function ga4SelectPromotion(p: Ga4Promo): void {
+  gtagEvent("select_promotion", { ...p });
+}
