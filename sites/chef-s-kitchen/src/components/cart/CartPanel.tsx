@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
@@ -23,6 +23,17 @@ export function CartPanel() {
       });
     }
   }, [isOpen]);
+
+  // Re-fetch the cart into panel state after a mutation (+/- / remove). The panel
+  // holds items in client state, so a server action's revalidatePath alone does NOT
+  // update this view — without this callback the quantity never changes on screen
+  // and the buttons look dead. Kept OUT of startTransition so the whole panel
+  // doesn't flash its loading spinner on every click (the row shows its own pending
+  // state instead).
+  const refreshCart = useCallback(async () => {
+    const data = await getCart();
+    setCart(data);
+  }, []);
 
   const items = cart?.items ?? [];
   const subtotal = parseFloat(cart?.base_amount ?? "0");
@@ -53,7 +64,7 @@ export function CartPanel() {
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto px-6 py-4">
-        <CartItemsList items={items} />
+        <CartItemsList items={items} onMutate={refreshCart} />
       </div>
 
       {/* Footer */}

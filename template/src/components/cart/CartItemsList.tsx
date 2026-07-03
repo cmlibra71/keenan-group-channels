@@ -22,17 +22,25 @@ type CartItemRow = {
   variant_option_name: string | null;
 };
 
-export function CartItemsList({ items }: { items: CartItemRow[] }) {
+export function CartItemsList({
+  items,
+  onMutate,
+}: {
+  items: CartItemRow[];
+  // Called after a successful mutation so a client-state consumer (the cart popout)
+  // can re-fetch. Omitted on the /cart page, which re-renders via revalidatePath.
+  onMutate?: () => void | Promise<void>;
+}) {
   return (
     <div className="divide-y divide-zinc-200">
       {items.map((item) => (
-        <CartItemRow key={item.id} item={item} />
+        <CartItemRow key={item.id} item={item} onMutate={onMutate} />
       ))}
     </div>
   );
 }
 
-function CartItemRow({ item }: { item: CartItemRow }) {
+function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => void | Promise<void> }) {
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -48,7 +56,12 @@ function CartItemRow({ item }: { item: CartItemRow }) {
     startTransition(async () => {
       try {
         const res = await updateCartItem(item.id, newQty);
-        if (res?.error) router.refresh();
+        if (res?.error) {
+          router.refresh();
+          return;
+        }
+        // Re-sync the popout's client-state cart (no-op on the /cart page).
+        await onMutate?.();
       } catch {
         router.refresh();
       }
@@ -59,7 +72,11 @@ function CartItemRow({ item }: { item: CartItemRow }) {
     startTransition(async () => {
       try {
         const res = await removeCartItem(item.id);
-        if (res?.error) router.refresh();
+        if (res?.error) {
+          router.refresh();
+          return;
+        }
+        await onMutate?.();
       } catch {
         router.refresh();
       }
