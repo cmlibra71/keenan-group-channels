@@ -13,6 +13,7 @@ import { siteBaseUrl } from "@/lib/seo";
 import {
   sendPasswordResetEmail,
   sendEmailChangeVerificationEmail,
+  resolveEmailBranding,
   wantsStripeTestMode,
 } from "@keenan/services";
 
@@ -54,10 +55,12 @@ function isValidEmail(email: string): boolean {
 /** Assemble this channel's email branding + link base + test-mode flag. */
 async function emailContext() {
   const { site, channel } = await getSiteConfig();
-  const storeName = site?.siteName || channel?.name || "Keenan Group";
   const siteUrl = siteBaseUrl(site?.url);
-  const branding = {
-    storeName,
+  // Central template: sites row + Email Templates overrides (channel_settings
+  // `email_template`), resolved by @keenan/services so every sender matches.
+  const resolved = await resolveEmailBranding(CHANNEL_ID).catch(() => undefined);
+  const branding = resolved ?? {
+    storeName: site?.siteName || channel?.name || "Keenan Group",
     logoUrl: site?.logoUrl ?? null,
     logoAlt: site?.logoAlt ?? null,
     siteUrl,

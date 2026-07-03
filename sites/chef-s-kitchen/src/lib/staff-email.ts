@@ -1,4 +1,5 @@
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
+import { brandedEmailLayout, brandedButton } from "@keenan/services";
 import { channelSettingsService, CHANNEL_ID } from "@/lib/store";
 
 // Internal staff notifications (quote accepted, new review, …) — NOT customer
@@ -65,18 +66,22 @@ export async function sendStaffNotification({
   const tableRows = rows
     .map(
       ([label, value]) =>
-        `<tr><td style="padding:6px 16px 6px 0;color:#6b7280;white-space:nowrap;vertical-align:top;">${escapeHtml(label)}</td>` +
-        `<td style="padding:6px 0;color:#111827;">${escapeHtml(value)}</td></tr>`
+        `<tr><td style="padding:6px 16px 6px 0;color:#64748b;font-size:14px;white-space:nowrap;vertical-align:top;">${escapeHtml(label)}</td>` +
+        `<td style="padding:6px 0;color:#1e293b;font-size:14px;">${escapeHtml(value)}</td></tr>`
     )
     .join("");
 
-  const html = `
-    <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;">
-      <h2 style="color:#111827;font-size:18px;margin:0 0 16px;">${escapeHtml(heading)}</h2>
-      <table style="border-collapse:collapse;font-size:14px;margin:0 0 24px;">${tableRows}</table>
-      <a href="${link}" style="display:inline-block;background:#111827;color:#ffffff;padding:10px 20px;border-radius:6px;font-size:14px;text-decoration:none;">${escapeHtml(linkLabel)}</a>
-      <p style="color:#9ca3af;font-size:12px;margin:24px 0 0;">Automated notification from the storefront — Keenan Group portal.</p>
-    </div>`;
+  // Staff mail rides the canonical layout with NO branding — Keenan Group header,
+  // not the storefront's, since it's an internal "look at the portal" note.
+  const content = `
+    <h1 style="margin: 0 0 16px 0; color: #1e293b; font-size: 22px; font-weight: 700; text-align: center;">${escapeHtml(heading)}</h1>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:0 auto 24px auto;">${tableRows}</table>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+      <tr><td align="center" style="padding: 8px 0;">${brandedButton(escapeHtml(linkLabel), link)}</td></tr>
+    </table>
+    <p style="margin: 24px 0 0 0; color: #94a3b8; font-size: 12px; text-align: center;">Automated notification from the storefront.</p>`;
+
+  const html = brandedEmailLayout(subject, content);
 
   const text =
     `${heading}\n\n` +

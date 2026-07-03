@@ -5,7 +5,7 @@ import { cartService, cartItemService, orderService, orderItemService, orderShip
 import { getFeatureFlag, getActiveSubscription, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
-import { sendOrderConfirmationEmail, wantsStripeTestMode, productImageService } from "@keenan/services";
+import { sendOrderConfirmationEmail, resolveEmailBranding, wantsStripeTestMode, productImageService } from "@keenan/services";
 import { buildLineItems, withShipping, determinePaymentStatus } from "@/lib/checkout/order-draft";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
 import { siteBaseUrl } from "@/lib/seo";
@@ -371,7 +371,10 @@ export async function placeOrder(
   try {
     const method = checkoutSettings.paymentMethods.find((m) => m.id === paymentMethod);
     const { site, channel } = await getSiteConfig();
-    const storeName = site?.siteName || channel?.name || undefined;
+    // Central template: sites row + Email Templates overrides (channel_settings
+    // `email_template`), resolved by @keenan/services so every sender matches.
+    const branding = await resolveEmailBranding(CHANNEL_ID).catch(() => undefined);
+    const storeName = branding?.storeName || site?.siteName || channel?.name || undefined;
     // Resolve the site origin through the shared SEO helper so email links use the exact
     // same precedence as every canonical/OG link (was DB-first here vs env-first in seo.ts).
     const siteUrl = siteBaseUrl(site?.url);
@@ -398,9 +401,11 @@ export async function placeOrder(
       // Use the customer's actual account terms for a net-terms invoice email.
       netTermsDays: paymentMethod === "net_terms" && netTerms ? netTerms.netTermsDays : (method?.netTermsDays ?? null),
       siteUrl,
-      logoUrl: site?.logoUrl ?? null,
-      logoAlt: site?.logoAlt ?? null,
-      fromEmail: site?.fromEmail ?? null,
+      logoUrl: branding?.logoUrl ?? site?.logoUrl ?? null,
+      logoAlt: branding?.logoAlt ?? site?.logoAlt ?? null,
+      fromEmail: branding?.fromEmail ?? site?.fromEmail ?? null,
+      brandColor: branding?.brandColor ?? null,
+      footerText: branding?.footerText ?? null,
       testMode: isTestMode,
     });
   } catch (e) {
