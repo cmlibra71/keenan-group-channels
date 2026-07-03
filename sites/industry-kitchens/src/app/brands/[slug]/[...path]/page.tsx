@@ -83,7 +83,7 @@ export default async function BrandCategoryPage({
       </div>
 
       {products.length > 0 ? (
-        <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(products)} />
+        <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(products)} listId={`brand_${brand.slug ?? brand.id}`} listName={String(brand.name ?? "")} />
       ) : (
         <p className="text-zinc-500 text-center py-12">
           {category

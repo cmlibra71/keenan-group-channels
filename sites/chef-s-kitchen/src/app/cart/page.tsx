@@ -6,6 +6,7 @@ import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription, getCheckou
 import { CartItemsList } from "@/components/cart/CartItemsList";
 import { CartSummary } from "@/components/cart/CartSummary";
 import { MembershipCartUpsell } from "@/components/cart/MembershipCartUpsell";
+import { Ga4ViewCart } from "@/components/analytics/Ga4ViewCart";
 
 export const metadata = {
   title: "Cart",
@@ -81,6 +82,7 @@ export default async function CartPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
+      <Ga4ViewCart value={total} items={items as Record<string, unknown>[]} />
       <h1 className="page-title mb-8">Your Cart</h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

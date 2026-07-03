@@ -47,7 +47,7 @@ export function BrandProducts({
   return products.length > 0 ? (
     <div>
       <h2 className="text-lg font-semibold text-ink-900 mb-4">Products</h2>
-      <ProductGrid products={products} memberPricingAvailable={memberPricingAvailable} {...pricing} />
+      <ProductGrid products={products} memberPricingAvailable={memberPricingAvailable} {...pricing} listId="brand_products" listName="Brand Products" />
     </div>
   ) : (
     <p className="text-steel-500 text-center py-12">No products from this brand yet.</p>

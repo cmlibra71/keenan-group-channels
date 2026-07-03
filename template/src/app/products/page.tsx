@@ -108,7 +108,7 @@ export default async function ProductsPage({
       {products.length === 0 ? (
         <p className="text-zinc-500 text-center py-16">No products found.</p>
       ) : (
-        <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={memberPriceMap} />
+        <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={memberPriceMap} listId="all_products" listName="All Products" />
       )}
 
       {/* Pagination */}

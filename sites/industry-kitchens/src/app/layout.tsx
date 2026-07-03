@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { cookies, headers } from "next/headers";
-import { getSiteConfig, getFeatureFlag, getFooterConfig, getHeaderNav, getHeaderConfig } from "@/lib/store";
+import { getSiteConfig, getFeatureFlag, getFooterConfig, getHeaderNav, getHeaderConfig, getGa4MeasurementId } from "@/lib/store";
 import { getPublishedTokenVars } from "@/lib/design-tokens";
+import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { SpecialistButton } from "@/components/layout/SpecialistButton";
@@ -67,6 +68,7 @@ export default async function RootLayout({
     pricesIncludeTax,
     cookieStore,
     tokenVars,
+    ga4MeasurementId,
   ] = await Promise.all([
     getSiteConfig(),
     getFeatureFlag("subscriptions_enabled"),
@@ -76,6 +78,7 @@ export default async function RootLayout({
     getFeatureFlag("prices_include_tax"),
     cookies(),
     getPublishedTokenVars(),
+    getGa4MeasurementId(),
   ]);
   const storeName = site?.siteName || channel?.name || "Store";
   const logoUrl = site?.logoUrl || null;
@@ -97,6 +100,7 @@ export default async function RootLayout({
           <Footer storeName={storeName} config={footerConfig} />
           <SpecialistButton phone={headerConfig.phone} />
         </GstProvider>
+        <GoogleAnalytics measurementId={ga4MeasurementId} />
       </body>
     </html>
   );

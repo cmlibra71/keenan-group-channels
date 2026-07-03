@@ -11,6 +11,7 @@ import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductTabs } from "@/components/product/ProductTabs";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { BrandWarrantyNotes } from "@/components/product/BrandWarrantyNotes";
+import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 
 type ProductBrandMetafields = {
   intro_html?: string;
@@ -36,10 +37,11 @@ export default async function ProductPage({
     getProductAttachments(product.id),
     getRelatedProducts(product.id, product.categoryIds ?? []),
     product.brandId != null
-      ? (brandService.getById(product.brandId) as Promise<{ metafields: ProductBrandMetafields | null } | null>)
+      ? (brandService.getById(product.brandId) as Promise<{ name: string | null; metafields: ProductBrandMetafields | null } | null>)
       : Promise.resolve(null),
   ]);
   const brandMeta = (brandRow?.metafields ?? {}) as ProductBrandMetafields;
+  const brandName = brandRow?.name ?? undefined;
 
   // Breadcrumb trail scoped to this channel's own category tree. A product's
   // category assignments can span other channels' trees, so resolving through
@@ -154,6 +156,25 @@ export default async function ProductPage({
       };
       return (
         <div>
+          <ViewedProductTracker
+            product={{
+              id: product.id,
+              sku: product.sku,
+              name: product.name,
+              price:
+                product.salePrice != null
+                  ? parseFloat(String(product.salePrice))
+                  : product.price != null
+                    ? parseFloat(String(product.price))
+                    : null,
+              imageUrl:
+                ((product.images as Array<Record<string, unknown>> | undefined)?.[0]?.urlStandard as string) ??
+                ((product.images as Array<Record<string, unknown>> | undefined)?.[0]?.url_standard as string) ??
+                null,
+              categories: breadcrumbs.map((c: { name: string }) => c.name),
+              brand: brandName ?? null,
+            }}
+          />
           <BlockRenderer
             blocks={template.blocks as unknown as RenderedBlock[]}
             draft={draft}
@@ -166,6 +187,25 @@ export default async function ProductPage({
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+      <ViewedProductTracker
+        product={{
+          id: product.id,
+          sku: product.sku,
+          name: product.name,
+          price:
+            product.salePrice != null
+              ? parseFloat(String(product.salePrice))
+              : product.price != null
+                ? parseFloat(String(product.price))
+                : null,
+          imageUrl:
+            ((product.images as Array<Record<string, unknown>> | undefined)?.[0]?.urlStandard as string) ??
+            ((product.images as Array<Record<string, unknown>> | undefined)?.[0]?.url_standard as string) ??
+            null,
+          categories: breadcrumbs.map((c: { name: string }) => c.name),
+          brand: brandName ?? null,
+        }}
+      />
       {aboveDetail.length > 0 && <BlockRenderer blocks={aboveDetail} draft={draft} />}
       {breadcrumbs.length > 0 ? (
         <nav className="flex flex-wrap items-center gap-1.5 text-sm text-zinc-400 mb-6">
@@ -205,6 +245,8 @@ export default async function ProductPage({
         memberPriceMap={memberPriceMap}
         isMember={isMember}
         membershipTeaser={membershipTeaser}
+        brandName={brandName}
+        categoryName={breadcrumbs[breadcrumbs.length - 1]?.name}
       />
 
       {/* Brand-specific warranty / installation notes (conditional) */}
@@ -228,7 +270,7 @@ export default async function ProductPage({
       {relatedProducts.length > 0 && (
         <div className="mt-12 border-t border-zinc-200 pt-8">
           <h2 className="text-2xl font-bold text-zinc-900 mb-6">Related Products</h2>
-          <ProductGrid products={relatedProducts} memberPricingAvailable={memberPricingEnabled} />
+          <ProductGrid products={relatedProducts} memberPricingAvailable={memberPricingEnabled} listId="related_products" listName="Related Products" />
         </div>
       )}
 

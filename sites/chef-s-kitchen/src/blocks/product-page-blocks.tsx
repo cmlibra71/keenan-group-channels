@@ -54,7 +54,7 @@ export function ProductRelated({ ctx }: { ctx: ProductPageCtx }) {
   return (
     <div className="mt-12 border-t border-border pt-8">
       <h2 className="section-title mb-6">You may also like</h2>
-      <ProductGrid products={products} memberPricingAvailable={memberPricingAvailable} {...pricing} />
+      <ProductGrid products={products} memberPricingAvailable={memberPricingAvailable} {...pricing} listId="related_products" listName="Related Products" />
     </div>
   );
 }

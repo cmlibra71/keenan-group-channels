@@ -330,7 +330,7 @@ async function FeaturedProductsBlock(props: Record<string, unknown> = {}) {
           <ChevronRight className="h-3 w-3" />
         </Link>
       </div>
-      <ProductGrid products={featuredProducts} memberPricingAvailable={memberPricingEnabled} {...(await getListingPricing(featuredProducts))} />
+      <ProductGrid products={featuredProducts} memberPricingAvailable={memberPricingEnabled} {...(await getListingPricing(featuredProducts))} listId="featured" listName="Featured Products" />
     </section>
   );
 }

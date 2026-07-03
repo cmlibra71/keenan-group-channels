@@ -184,6 +184,8 @@ async function CategoryListingBlock({ ctx }: BlockProps) {
             {...(pricing as object)}
             eyebrow={category.name}
             narrow
+            listId={category.slug}
+            listName={category.name}
           />
 
           {hasMore && extras.nextPageHref && (

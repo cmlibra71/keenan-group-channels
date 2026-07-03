@@ -117,6 +117,14 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
   if (!product) return null;
   const extras = extrasOf(ctx);
 
+  // Analytics enrichment (GA4/Klaviyo add_to_cart): brand + leaf category.
+  const [buyboxCrumbs, buyboxBrandRow] = await Promise.all([
+    crumbsFor(product, extras),
+    product.brandId != null
+      ? ((brandService.getById(product.brandId).catch(() => null)) as Promise<{ name: string | null } | null>)
+      : Promise.resolve(null),
+  ]);
+
   let {
     memberPrice = null,
     memberPriceMap,
@@ -193,6 +201,8 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
         memberPriceMap={memberPriceMap}
         isMember={isMember}
         membershipTeaser={membershipTeaser}
+        brandName={buyboxBrandRow?.name ?? undefined}
+        categoryName={buyboxCrumbs[buyboxCrumbs.length - 1]?.name}
       />
     </div>
   );
@@ -267,7 +277,7 @@ async function ProductRelatedBlock({ ctx }: BlockProps) {
     <div className={`${CONTAINER} pb-8`}>
       <div className="mt-12 border-t border-zinc-200 pt-8">
         <h2 className="text-2xl font-bold text-zinc-900 mb-6">Related Products</h2>
-        <ProductGrid products={relatedProducts as never} memberPricingAvailable={memberPricingEnabled} />
+        <ProductGrid products={relatedProducts as never} memberPricingAvailable={memberPricingEnabled} listId="related_products" listName="Related Products" />
       </div>
     </div>
   );

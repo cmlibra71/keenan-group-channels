@@ -65,6 +65,10 @@ export function ProductDetail({
   memberPrice,
   isMember,
   membershipTeaser,
+  productName,
+  productSku,
+  brandName,
+  categoryName,
 }: {
   productId: number;
   price: string;
@@ -82,6 +86,11 @@ export function ProductDetail({
   isMember?: boolean;
   /** Generic membership pitch for non-members — never carries the exact member price. */
   membershipTeaser?: { fromPrice: string | null } | null;
+  /** Analytics enrichment for the add-to-cart events (GA4 + Klaviyo). */
+  productName?: string;
+  productSku?: string | null;
+  brandName?: string;
+  categoryName?: string;
 }) {
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
   const [selectedOptions, setSelectedOptions] = useState<Record<number, number>>({});
@@ -304,6 +313,11 @@ export function ProductDetail({
           productId={productId}
           variantId={useGroupedMode ? (matchedVariant?.id ?? null) : selectedVariantId}
           disabled={!inStock || purchasingDisabled || !allOptionsSelected || displayPrice === 0}
+          productName={productName}
+          sku={activeVariant?.sku ?? productSku}
+          price={displaySalePrice ?? displayPrice}
+          brandName={brandName}
+          categoryName={categoryName}
         />
         <AddToQuoteButton
           productId={productId}

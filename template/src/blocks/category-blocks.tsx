@@ -201,6 +201,8 @@ async function CategoryListingBlock({ ctx }: BlockProps) {
             products={products as never}
             memberPricingAvailable={memberPricingEnabled}
             memberPriceMap={memberPriceMap}
+            listId={category.slug}
+            listName={category.name}
           />
 
           {hasMore && extras.nextPageHref && (

@@ -219,6 +219,8 @@ export default async function CategoryPage({
             products={products}
             memberPricingAvailable={memberPricingEnabled}
             memberPriceMap={memberPriceMap}
+            listId={category.slug}
+            listName={category.name}
           />
 
           {/* Load more */}

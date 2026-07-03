@@ -106,7 +106,7 @@ export default async function BrandPage({
       {products.length > 0 ? (
         <div className="mt-12">
           <h2 className="text-lg font-semibold text-zinc-900 mb-4">Products</h2>
-          <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(products)} />
+          <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(products)} listId={`brand_${brand.slug ?? brand.id}`} listName={String(brand.name ?? "")} />
         </div>
       ) : (
         <p className="text-zinc-500 text-center py-12">No products from this brand yet.</p>

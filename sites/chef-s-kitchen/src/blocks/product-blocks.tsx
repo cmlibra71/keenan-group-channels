@@ -169,6 +169,9 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
         : null;
   }
 
+  // Analytics enrichment (GA4/Klaviyo add_to_cart): leaf category.
+  const buyboxCrumbs = await crumbsFor(product, extras);
+
   return (
     <div className={CONTAINER}>
       <ProductPageClient
@@ -195,6 +198,7 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
         membershipTeaser={membershipTeaser}
         brandName={brandRow?.name ?? null}
         reviewSummary={reviewSummary ?? null}
+        categoryName={buyboxCrumbs[buyboxCrumbs.length - 1]?.name}
       />
     </div>
   );
@@ -299,6 +303,8 @@ async function ProductRelatedBlock({ ctx }: BlockProps) {
           products={relatedProducts as never}
           memberPricingAvailable={memberPricingEnabled}
           {...(relatedPricing as object)}
+          listId="related_products"
+          listName="Related Products"
         />
       </div>
     </div>
