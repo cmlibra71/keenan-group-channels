@@ -49,8 +49,17 @@ export function rowToGa4Item(raw: Record<string, unknown>, index: number): Ga4It
   };
 }
 
-function gtagEvent(name: string, params: Record<string, unknown>): void {
-  if (typeof window === "undefined" || typeof window.gtag !== "function") return;
+function gtagEvent(name: string, params: Record<string, unknown>, attempt = 0): void {
+  if (typeof window === "undefined") return;
+  if (typeof window.gtag !== "function") {
+    // Mount-time events (view_item / view_cart / begin_checkout) race Next's
+    // afterInteractive gtag init on a fresh page load — retry until the tag is
+    // ready (~10s cap) so they aren't silently dropped. Sending only after the
+    // init script ran also guarantees config-before-event ordering. If GA4 is
+    // not configured on this channel, gtag never appears and this no-ops out.
+    if (attempt < 40) setTimeout(() => gtagEvent(name, params, attempt + 1), 250);
+    return;
+  }
   try {
     window.gtag("event", name, params);
   } catch {
