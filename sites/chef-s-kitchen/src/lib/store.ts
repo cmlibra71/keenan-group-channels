@@ -231,9 +231,9 @@ export async function getSitemapProducts(
  * is normalized: case-insensitive, `+tag` suffix stripped, and dots stripped in
  * the local part for gmail/googlemail — so chris+test@gmail.com, chris.t@gmail.com
  * and chris@gmail.com all resolve to the same inbox. Returns the same shape as the
- * order list rows. Callers MUST gate this on the account being trustworthy for the
- * email (see the orders page: unverified self-registrations are excluded) — the
- * match is on the email string alone.
+ * order list rows. Match is on the email string alone, so use this ONLY for
+ * read-only order history — never to grant a financial entitlement (e.g. B2B net
+ * terms, which stays gated on `email_verified`; see net-terms.ts).
  */
 export async function getGuestOrdersForEmail(
   email: string
