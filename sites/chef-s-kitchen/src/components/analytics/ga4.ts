@@ -3,9 +3,10 @@
  * gtag queues onto window.dataLayer and replays once ready. No-ops when GA4 isn't
  * configured (no measurement id ⇒ no gtag).
  *
- * Event names + item fields follow the GA4 recommended ecommerce spec so they
- * match the server-side Measurement Protocol events (worker) exactly — the
- * `purchase` transaction_id is shared so GA4 dedupes client + server.
+ * Event names + item fields follow the GA4 recommended ecommerce spec. NOTE:
+ * GA4 does NOT deduplicate `purchase` by transaction_id (that was Universal
+ * Analytics) — enable exactly ONE purchase source per channel (the storefront
+ * client owns it here; keep the worker server-side MP purchase OFF).
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */

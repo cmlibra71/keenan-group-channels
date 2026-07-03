@@ -48,9 +48,9 @@ export default async function ConfirmationPage({
 
   const reference = bankDetails?.reference?.trim() || order;
 
-  // Build the GA4 client-side purchase from the order header. The server-side
-  // ga4_sync worker sends the authoritative purchase (with full items); this
-  // client event shares the order-number transaction_id so GA4 dedupes them.
+  // Build the GA4 client-side purchase from the order header. This client event
+  // is the sole purchase source — GA4 does NOT dedupe by transaction_id, so the
+  // channel must keep the worker server-side MP purchase OFF or it double-counts.
   let ga4Purchase: Ga4PurchaseProps | null = null;
   if (order) {
     try {
