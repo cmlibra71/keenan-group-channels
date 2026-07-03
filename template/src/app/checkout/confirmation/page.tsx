@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { CheckCircle, Building2, FileText, CreditCard } from "lucide-react";
-import { getCheckoutSettings, orderService } from "@/lib/store";
+import { getCheckoutSettings, orderService, orderItemService } from "@/lib/store";
 import { Ga4Purchase, type Ga4PurchaseProps } from "@/components/analytics/Ga4Purchase";
 import type { Ga4Item } from "@/components/analytics/ga4";
 
@@ -64,7 +64,23 @@ export default async function ConfirmationPage({
           const n = parseFloat(String(v ?? ""));
           return Number.isFinite(n) ? n : 0;
         };
-        const rawItems = Array.isArray(o.items) ? (o.items as Record<string, unknown>[]) : [];
+        // list() returns the order header only (no line items), so fetch them
+        // explicitly — otherwise the client purchase ships with an empty items
+        // array. Relying on ga4_sync alone is fragile: a still-pending order
+        // (webhook in flight) is skipped server-side, leaving GA4 with a
+        // product-less purchase.
+        let rawItems: Record<string, unknown>[] = [];
+        try {
+          const itemRes = await orderItemService.listForParent(Number(o.id), {
+            page: 1,
+            limit: 200,
+            sort: "id",
+            direction: "asc",
+          });
+          rawItems = (itemRes.data ?? []) as Record<string, unknown>[];
+        } catch {
+          // header-only fallback; ga4_sync still records the authoritative purchase
+        }
         const items: Ga4Item[] = rawItems.map((it, index) => ({
           item_id: String(it.sku ?? it.product_id ?? `item-${index}`),
           item_name: String(it.name ?? "(unnamed)"),
