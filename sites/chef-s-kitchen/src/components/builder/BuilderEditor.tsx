@@ -18,6 +18,51 @@ import "grapesjs/dist/css/grapes.min.css";
 
 type TokenColor = { id: string; label: string; value: string };
 
+// Product-template widgets: draggable blocks that export a data-kg-widget marker.
+// In the canvas they show a labelled placeholder (the real widgets are async
+// server components rendered live on the storefront via BuilderRenderer →
+// BlockRenderer); editors position and freeform-style around them.
+const PRODUCT_WIDGETS: { key: string; label: string }[] = [
+  { key: "product_buybox", label: "Buy box (gallery + price + add to cart)" },
+  { key: "product_tabs", label: "Description / specs / reviews" },
+  { key: "product_related", label: "Related products" },
+  { key: "product_links", label: "Brand / category links" },
+];
+
+function productWidgetsPlugin(editor: Editor) {
+  for (const { key, label } of PRODUCT_WIDGETS) {
+    editor.DomComponents.addType(key, {
+      isComponent: (el) =>
+        (el as HTMLElement)?.getAttribute?.("data-kg-widget") === key ? { type: key } : undefined,
+      model: {
+        defaults: {
+          tagName: "div",
+          attributes: { "data-kg-widget": key },
+          editable: false,
+          droppable: false,
+        },
+      },
+      view: {
+        onRender(props: { el: HTMLElement }) {
+          const el = props?.el ?? (this as unknown as { el: HTMLElement }).el;
+          const store = el as HTMLElement & { __kg?: boolean };
+          if (store.__kg) return;
+          store.__kg = true;
+          el.innerHTML =
+            `<div style="padding:20px;border:1px dashed #9aa2ad;border-radius:8px;` +
+            `color:#5b6470;font:14px/1.5 system-ui,sans-serif;text-align:center;background:#f7f8fa">` +
+            `◱ ${label}<br><span style="font-size:12px;opacity:.7">renders live on the storefront</span></div>`;
+        },
+      },
+    });
+    editor.BlockManager.add(key, {
+      label,
+      category: "Product",
+      content: `<div data-kg-widget="${key}"></div>`,
+    });
+  }
+}
+
 export default function BuilderEditor({
   initialProject,
   tokenColors = [],
@@ -36,6 +81,7 @@ export default function BuilderEditor({
       height: "100vh",
       storageManager: false, // saving goes through postMessage → portal, not GrapesJS storage
       fromElement: false,
+      plugins: [productWidgetsPlugin], // registered before any loadProjectData (order-safe)
       // Design-token color swatches so freeform styling stays on-brand.
       colorPicker: { appendTo: "parent" },
       styleManager: {
