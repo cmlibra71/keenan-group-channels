@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getSession } from "@/lib/auth";
-import { customerService } from "@/lib/store";
+import { contactService } from "@/lib/store";
 import { ChangePasswordForm } from "@/components/account/ChangePasswordForm";
 import { ChangeEmailForm } from "@/components/account/ChangeEmailForm";
 
@@ -14,7 +14,7 @@ export default async function SecurityPage() {
   const session = await getSession();
   if (!session) redirect("/account");
 
-  const customer = (await customerService.getById(session.customerId).catch(() => null)) as {
+  const customer = (await contactService.getById(session.contactId).catch(() => null)) as {
     email: string;
   } | null;
 

@@ -5,11 +5,63 @@ import { getSession } from "@/lib/auth";
 import {
   getFeatureFlag,
   getPartnerOffers,
-  partnerDiscountCodeService,
-  getActiveSubscription,
+  getActiveSubscriptionForContact,
   CHANNEL_ID,
 } from "@/lib/store";
+import { getCommerceClient } from "@keenan/services";
 import { CopyCodeButton } from "./CopyCodeButton";
+
+// Discount-code row shape mirroring partnerDiscountCodeService.getForCustomer,
+// but keyed by CONTACT (identity unification): the query matches contact-keyed
+// rows directly, plus this contact's legacy customer-keyed rows through the
+// customer_contact_map bridge (pre-cutover members keep their codes).
+type ContactCode = {
+  code: { id: number; code: string };
+  offerTitle: string;
+  partnerName: string | null;
+  partnerLogo: string | null;
+  discountType: string;
+  discountValue: string | null;
+  externalUrl: string | null;
+};
+
+async function getCodesForContact(contactId: number): Promise<ContactCode[]> {
+  const sql = getCommerceClient();
+  if (!sql) return [];
+  const rows = await sql<
+    {
+      id: number;
+      code: string;
+      offer_title: string;
+      partner_name: string | null;
+      partner_logo: string | null;
+      discount_type: string;
+      discount_value: string | null;
+      external_url: string | null;
+    }[]
+  >`
+    SELECT pdc.id, pdc.code, po.title AS offer_title, po.partner_name, po.partner_logo,
+           po.discount_type, po.discount_value, po.external_url
+    FROM partner_discount_codes pdc
+    JOIN partner_offers po ON po.id = pdc.partner_offer_id
+    WHERE po.channel_id = ${CHANNEL_ID}
+      AND pdc.status = 'active'
+      AND (
+        pdc.contact_id = ${contactId}
+        OR pdc.customer_id IN (
+          SELECT customer_id FROM customer_contact_map WHERE contact_id = ${contactId}
+        )
+      )`;
+  return rows.map((r) => ({
+    code: { id: r.id, code: r.code },
+    offerTitle: r.offer_title,
+    partnerName: r.partner_name,
+    partnerLogo: r.partner_logo,
+    discountType: r.discount_type,
+    discountValue: r.discount_value,
+    externalUrl: r.external_url,
+  }));
+}
 
 export const metadata = {
   title: "Partner Offers",
@@ -23,7 +75,7 @@ export default async function PartnerOffersPage() {
   if (!session) redirect("/account");
 
   const [subscription, allOffers] = await Promise.all([
-    getActiveSubscription(session.customerId),
+    getActiveSubscriptionForContact(session.contactId),
     getPartnerOffers(),
   ]);
 
@@ -111,10 +163,7 @@ export default async function PartnerOffersPage() {
     );
   }
 
-  const codes = await partnerDiscountCodeService.getForCustomer(
-    session.customerId,
-    CHANNEL_ID
-  );
+  const codes = await getCodesForContact(session.contactId);
 
   // Group codes by partner name
   const grouped = codes.reduce<Record<string, typeof codes>>((acc, item) => {
@@ -150,7 +199,7 @@ export default async function PartnerOffersPage() {
                       {item.partnerLogo && (
                         <img
                           src={item.partnerLogo}
-                          alt={item.partnerName}
+                          alt={item.partnerName ?? ""}
                           className="h-10 w-10 rounded object-contain"
                         />
                       )}

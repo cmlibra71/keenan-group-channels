@@ -1,59 +1,31 @@
-import { scrypt, randomBytes, timingSafeEqual, createHash, type ScryptOptions } from "node:crypto";
+// ============================================================================
+// Password hashing/verification — thin re-export of the ONE shared
+// implementation in @keenan/services (identity unification).
+//
+// Contacts carry password hashes in three coexisting formats (copied VERBATIM
+// from the legacy customers rows during the migration):
+//   - bcrypt      `$2a$/$2b$/$2y$…`   — the storage format going forward
+//   - scrypt      `scrypt$<salt>$<hash>` — this repo's pre-cutover format
+//   - legacy      64-hex unsalted SHA-256 — Zoey-era imports
+//
+// verifyStoredPassword multiplexes all three and reports needsRehash=true for
+// the non-bcrypt formats so login flows transparently upgrade the hash.
+// hashPasswordForStorage produces bcrypt (cost 12).
+//
+// The old local names (hashPassword / verifyPassword) are kept as aliases so
+// existing call sites and tests keep compiling; new code may import either.
+// ============================================================================
 
-// Hand-rolled promise wrapper: util.promisify's emitted overload for scrypt drops
-// the optional `options` arg, so passing work-factor PARAMS tripped "expected 3 args".
-const scryptAsync = (password: string, salt: string, keylen: number, options: ScryptOptions): Promise<Buffer> =>
-  new Promise((resolve, reject) =>
-    scrypt(password, salt, keylen, options, (err, derivedKey) => (err ? reject(err) : resolve(derivedKey)))
-  );
+import { verifyStoredPassword, hashPasswordForStorage } from "@keenan/services";
 
-// Salted, work-factored scrypt. Stored as `scrypt$<saltHex>$<hashHex>`.
-const PREFIX = "scrypt$";
-const KEYLEN = 64;
-const PARAMS = { N: 16384, r: 8, p: 1 } as const;
+export { verifyStoredPassword, hashPasswordForStorage };
 
-/** Hash a password for storage (scrypt + random per-user salt). */
-export async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16).toString("hex");
-  const derived = (await scryptAsync(password, salt, KEYLEN, PARAMS)) as Buffer;
-  return `${PREFIX}${salt}$${derived.toString("hex")}`;
-}
-
-/** Legacy hash format produced by the old unsalted SHA-256 (hex digest). */
-function legacySha256(password: string): string {
-  return createHash("sha256").update(password).digest("hex");
-}
-
-function safeEqualHex(aHex: string, bHex: string): boolean {
-  let a: Buffer, b: Buffer;
-  try {
-    a = Buffer.from(aHex, "hex");
-    b = Buffer.from(bHex, "hex");
-  } catch {
-    return false;
-  }
-  return a.length === b.length && a.length > 0 && timingSafeEqual(a, b);
-}
+/** Hash a password for storage (bcrypt via @keenan/services). */
+export const hashPassword = hashPasswordForStorage;
 
 /**
- * Verify a password against a stored hash. Supports the new scrypt format and
- * the legacy unsalted SHA-256 (64 hex chars). When a legacy hash verifies,
- * `needsRehash` is true so the caller can transparently upgrade it on login.
+ * Verify a password against a stored hash (bcrypt / scrypt$ / legacy sha256).
+ * `needsRehash` is true when the stored hash is not bcrypt, so the caller can
+ * transparently upgrade it on a successful login.
  */
-export async function verifyPassword(
-  password: string,
-  stored: string | null | undefined
-): Promise<{ valid: boolean; needsRehash: boolean }> {
-  if (!stored) return { valid: false, needsRehash: false };
-
-  if (stored.startsWith(PREFIX)) {
-    const [, salt, hashHex] = stored.split("$");
-    if (!salt || !hashHex) return { valid: false, needsRehash: false };
-    const derived = (await scryptAsync(password, salt, KEYLEN, PARAMS)) as Buffer;
-    return { valid: safeEqualHex(derived.toString("hex"), hashHex), needsRehash: false };
-  }
-
-  // Legacy unsalted SHA-256.
-  const valid = safeEqualHex(legacySha256(password), stored);
-  return { valid, needsRehash: valid };
-}
+export const verifyPassword = verifyStoredPassword;

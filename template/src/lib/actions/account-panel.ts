@@ -1,31 +1,32 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { customerService, CHANNEL_ID } from "@/lib/store";
+import { contactService, CHANNEL_ID } from "@/lib/store";
 import { getSession, setSession, clearSession } from "@/lib/auth";
-import { hashPassword, verifyPassword } from "@/lib/password";
+import { verifyPassword } from "@/lib/password";
+import { createAccountlessContact, EmailTakenError, type LoginCandidate } from "@/lib/contact-auth";
 import { tooManyAttempts, recordFailure } from "@/lib/login-throttle";
 
-type PanelSession = { customerId: number; email: string; firstName: string; lastName: string };
+type PanelSession = { contactId: number; email: string; firstName: string; lastName: string };
 
 export async function getSessionInfo() {
   const session = await getSession();
   if (!session) return null;
 
   // getById goes through transformRow → snake_case keys.
-  const customer = (await customerService.getById(session.customerId)) as {
-    first_name: string;
-    last_name: string;
+  const contact = (await contactService.getById(session.contactId)) as {
+    first_name: string | null;
+    last_name: string | null;
     email: string;
   } | null;
 
-  if (!customer) return null;
+  if (!contact) return null;
 
   return {
-    customerId: session.customerId,
-    email: customer.email,
-    firstName: customer.first_name,
-    lastName: customer.last_name,
+    contactId: session.contactId,
+    email: contact.email,
+    firstName: contact.first_name ?? "",
+    lastName: contact.last_name ?? "",
   };
 }
 
@@ -46,30 +47,31 @@ export async function loginFromPanel(formData: FormData): Promise<{
     return { error: "Too many attempts. Please wait a few minutes and try again." };
   }
 
-  const customer = await customerService.findByEmailAndChannel(email, CHANNEL_ID);
+  const candidate = (await contactService.findLoginCandidate(email, CHANNEL_ID)) as LoginCandidate | null;
 
-  const { valid, needsRehash } = await verifyPassword(password, customer?.password_hash);
-  if (!customer || !valid) {
+  const { valid, needsRehash } = await verifyPassword(password, candidate?.password_hash);
+  if (!candidate || !valid) {
     recordFailure(email);
     return { error: "Invalid email or password." };
   }
   if (needsRehash) {
     try {
-      await customerService.update(customer.id, { passwordHash: await hashPassword(password) });
+      // contactService.update hashes plaintext `password` to bcrypt itself.
+      await contactService.update(candidate.id, { password });
     } catch {
       /* non-fatal */
     }
   }
 
-  await setSession(customer.id, customer.email);
+  await setSession(candidate.id, candidate.email);
   revalidatePath("/", "layout");
 
   return {
     session: {
-      customerId: customer.id,
-      email: customer.email,
-      firstName: customer.first_name ?? "",
-      lastName: customer.last_name ?? "",
+      contactId: candidate.id,
+      email: candidate.email,
+      firstName: candidate.first_name ?? "",
+      lastName: candidate.last_name ?? "",
     },
   };
 }
@@ -91,32 +93,37 @@ export async function registerFromPanel(formData: FormData): Promise<{
     return { error: "Password must be at least 8 characters." };
   }
 
-  const existing = await customerService.findByEmailAndChannel(email, CHANNEL_ID);
-  if (existing) {
+  // Same copy for B2B-owned and accountless-taken emails (enumeration safety).
+  if (!(await contactService.isEmailAvailableForChannel(email, CHANNEL_ID))) {
     return { error: "An account with this email already exists." };
   }
 
-  const passwordHash = await hashPassword(password);
+  let contact;
+  try {
+    contact = await createAccountlessContact({
+      email,
+      password,
+      firstName,
+      lastName,
+      // Same unverified marker as the form register — see lib/actions/auth.ts.
+      metafields: { self_registered: true, email_verified: false },
+    });
+  } catch (e) {
+    if (e instanceof EmailTakenError) {
+      return { error: "An account with this email already exists." };
+    }
+    throw e;
+  }
 
-  // create goes through transformRow → snake_case keys.
-  const customer = (await customerService.create({
-    originChannelId: CHANNEL_ID,
-    email,
-    passwordHash,
-    firstName,
-    lastName,
-    isActive: true,
-  })) as { id: number; email: string; first_name: string; last_name: string };
-
-  await setSession(customer.id, customer.email);
+  await setSession(contact.id, contact.email);
   revalidatePath("/", "layout");
 
   return {
     session: {
-      customerId: customer.id,
-      email: customer.email,
-      firstName: customer.first_name ?? "",
-      lastName: customer.last_name ?? "",
+      contactId: contact.id,
+      email: contact.email,
+      firstName: contact.first_name ?? "",
+      lastName: contact.last_name ?? "",
     },
   };
 }

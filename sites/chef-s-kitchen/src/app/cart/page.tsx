@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription, getCheckoutSettings, channelSettingsService, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, channelSettingsService, CHANNEL_ID } from "@/lib/store";
 import { CartItemsList } from "@/components/cart/CartItemsList";
 import { CartSummary } from "@/components/cart/CartSummary";
 import { MembershipCartUpsell } from "@/components/cart/MembershipCartUpsell";
@@ -67,7 +67,7 @@ export default async function CartPage() {
   if (subscriptionsEnabled) {
     const session = await getSession();
     if (session) {
-      const activeSub = await getActiveSubscription(session.customerId);
+      const activeSub = await getActiveSubscriptionForContact(session.contactId);
       isMember = !!activeSub;
     }
     if (!isMember) {

@@ -30,7 +30,7 @@ declare global {
 }
 
 type SessionInfo = {
-  customerId: number;
+  contactId: number;
   email: string;
   firstName: string;
   lastName: string;

@@ -13,7 +13,7 @@ import { usePanelContext } from "@/components/ui/PanelContext";
 type QuoteData = Awaited<ReturnType<typeof getQuote>>;
 
 type SessionInfo = {
-  customerId: number;
+  contactId: number;
   email: string;
   firstName: string;
   lastName: string;

@@ -1,8 +1,13 @@
-import { customerService, customerAddressService } from "@/lib/store";
+import { contactService, customerAddressService } from "@/lib/store";
 
 /**
  * A member must have company + phone + a default billing address before the
  * onboarding step counts as complete. Reads return snake_case (transformRow).
+ *
+ * Identity unification: keyed by CONTACT id. Contacts have no `company`
+ * column — company lives under attributes.company — so the returned `customer`
+ * record materialises `company` at the top level to keep the profile pages'
+ * `customer?.company` reads working unchanged.
  */
 export type MembershipProfile = {
   customer: Record<string, unknown> | null;
@@ -12,18 +17,22 @@ export type MembershipProfile = {
 };
 
 export async function getMembershipProfile(
-  customerId: number
+  contactId: number
 ): Promise<MembershipProfile> {
-  const customer = await customerService.getById(customerId).catch(() => null);
+  const contact = (await contactService.getById(contactId).catch(() => null)) as
+    | Record<string, unknown>
+    | null;
+  const customer: Record<string, unknown> | null = contact
+    ? {
+        ...contact,
+        company:
+          ((contact.attributes as Record<string, unknown> | null)?.company as string | undefined) ??
+          null,
+      }
+    : null;
   let addresses: Record<string, unknown>[] = [];
   try {
-    const list = await customerAddressService.listForParent(customerId, {
-      page: 1,
-      limit: 50,
-      sort: "id",
-      direction: "desc",
-    });
-    addresses = (list as { data: Record<string, unknown>[] }).data ?? [];
+    addresses = await customerAddressService.listForContact(contactId);
   } catch {
     addresses = [];
   }

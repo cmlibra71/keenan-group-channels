@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Check, Gift, ShoppingBag } from "lucide-react";
 import { getSession } from "@/lib/auth";
-import { getActiveSubscription, getFeatureFlag } from "@/lib/store";
+import { getActiveSubscriptionForContact, getFeatureFlag } from "@/lib/store";
 import { getMembershipProfile } from "@/lib/membership";
 
 export const metadata = {
@@ -13,11 +13,11 @@ export default async function MembershipWelcomePage() {
   const session = await getSession();
   if (!session) redirect("/account");
 
-  const activeSub = await getActiveSubscription(session.customerId);
+  const activeSub = await getActiveSubscriptionForContact(session.contactId);
   if (!activeSub) redirect("/membership");
 
   // Required onboarding: members must have business + billing details on file.
-  const { complete } = await getMembershipProfile(session.customerId);
+  const { complete } = await getMembershipProfile(session.contactId);
   if (!complete) redirect("/account/membership/complete-profile");
 
   const drawsEnabled = await getFeatureFlag("draws_enabled");

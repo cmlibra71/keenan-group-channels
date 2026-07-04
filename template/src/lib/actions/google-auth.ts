@@ -1,14 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { customerService, CHANNEL_ID } from "@/lib/store";
+import { contactService, CHANNEL_ID } from "@/lib/store";
 import { setSession } from "@/lib/auth";
 import { verifyGoogleClaims, type GoogleTokenInfo } from "@/lib/google-claims";
+import { createAccountlessContact, mergeContactMetafields, EmailTakenError, type LoginCandidate } from "@/lib/contact-auth";
 
 type GoogleSignInResult = {
   error?: string;
   session?: {
-    customerId: number;
+    contactId: number;
     email: string;
     firstName: string;
     lastName: string;
@@ -43,17 +44,29 @@ export async function googleSignIn(credential: string): Promise<GoogleSignInResu
   }
   const { email, firstName, lastName, sub } = claims.identity;
 
-  // Find existing customer by email + channel (returns a snake_case customer row).
-  const existing = await customerService.findByEmailAndChannel(email, CHANNEL_ID);
+  // Resolve the login contact for (email, channel) — accountless shopper first,
+  // then the canonical B2B row (snake_case row or null; never inactive).
+  const existing = (await contactService.findLoginCandidate(email, CHANNEL_ID)) as LoginCandidate | null;
 
   if (existing) {
-    // Existing customer — log them in (email-based account linking)
+    // Existing contact — log them in (email-based account linking). Google just
+    // proved the bearer owns this inbox, so stamp email_verified=true (a merge —
+    // other metafield keys, incl. self_registered, are preserved). This is what
+    // upgrades a self-registered contact into net-terms eligibility.
+    if (existing.metafields?.email_verified !== true) {
+      try {
+        await mergeContactMetafields(existing.id, { email_verified: true });
+      } catch (e) {
+        console.error("[googleSignIn] email_verified stamp failed (non-fatal):", e);
+      }
+    }
+
     await setSession(existing.id, existing.email);
     revalidatePath("/", "layout");
 
     return {
       session: {
-        customerId: existing.id,
+        contactId: existing.id,
         email: existing.email,
         firstName: existing.first_name ?? "",
         lastName: existing.last_name ?? "",
@@ -61,25 +74,39 @@ export async function googleSignIn(credential: string): Promise<GoogleSignInResu
     };
   }
 
-  // New customer — create account without password
-  const customer = (await customerService.create({
-    originChannelId: CHANNEL_ID,
-    email,
-    firstName,
-    lastName,
-    isActive: true,
-    attributes: { googleSub: sub },
-  })) as { id: number; email: string; first_name: string; last_name: string };
+  // New person — create an accountless contact with no password. No
+  // self_registered marker: Google verified inbox ownership at creation, so the
+  // fail-closed net-terms policy (which targets unproven self-registrations)
+  // does not apply. email_verified recorded for consistency.
+  let contact;
+  try {
+    contact = await createAccountlessContact({
+      email,
+      firstName,
+      lastName,
+      attributes: { googleSub: sub },
+      metafields: { email_verified: true },
+    });
+  } catch (e) {
+    if (e instanceof EmailTakenError) {
+      // The accountless (channel, email) slot is occupied but wasn't a login
+      // candidate — an INACTIVE (deactivated) contact, or a concurrent
+      // registration race. Fail closed with a neutral message rather than
+      // surfacing an unhandled error.
+      return { error: "We couldn't sign you in with Google. Please sign in with your email and password, or contact support." };
+    }
+    throw e;
+  }
 
-  await setSession(customer.id, customer.email);
+  await setSession(contact.id, contact.email);
   revalidatePath("/", "layout");
 
   return {
     session: {
-      customerId: customer.id,
-      email: customer.email,
-      firstName: customer.first_name,
-      lastName: customer.last_name,
+      contactId: contact.id,
+      email: contact.email,
+      firstName: contact.first_name ?? "",
+      lastName: contact.last_name ?? "",
     },
   };
 }

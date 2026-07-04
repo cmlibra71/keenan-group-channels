@@ -36,7 +36,15 @@ function fromBase64Url(str: string): ArrayBuffer {
   return bytes.buffer as ArrayBuffer;
 }
 
-export type SessionPayload = { customerId: number; email: string };
+// v2 (identity unification): the session subject is a CONTACT id (contacts are
+// THE person — storefront shoppers and B2B people alike). v1 tokens carried a
+// legacy `customerId`; verifySessionToken REJECTS anything without v === 2, so
+// every pre-cutover cookie is simply "logged out". Deliberate: customer ids and
+// contact ids are separate numeric sequences, so honouring an old token would
+// silently log the bearer in as whichever CONTACT happens to share the number.
+export type SessionPayload = { contactId: number; email: string };
+
+const SESSION_VERSION = 2;
 
 export type SignOpts = { secret: string; channelId: number; maxAgeSeconds: number; now: number };
 export type VerifyOpts = { secret: string; channelId: number; now: number };
@@ -46,6 +54,7 @@ export async function signSessionToken(payload: SessionPayload, opts: SignOpts):
   // Bind the token to THIS channel so a session minted on one storefront can't be
   // replayed against another (the cookie name is shared across channels).
   const data = JSON.stringify({
+    v: SESSION_VERSION,
     ...payload,
     channelId: opts.channelId,
     exp: opts.now + opts.maxAgeSeconds * 1000,
@@ -73,8 +82,12 @@ export async function verifySessionToken(token: string, opts: VerifyOpts): Promi
     // logged-out). Legacy tokens minted before channel-binding carry no
     // channelId; require a re-login rather than silently honouring them.
     if (payload.channelId !== opts.channelId) return null;
+    // Reject pre-identity-unification (v1, customerId-subject) tokens — see the
+    // SessionPayload note. A re-login mints a v2 contact-subject token.
+    if (payload.v !== SESSION_VERSION) return null;
+    if (typeof payload.contactId !== "number") return null;
 
-    return { customerId: payload.customerId, email: payload.email };
+    return { contactId: payload.contactId, email: payload.email };
   } catch {
     return null;
   }

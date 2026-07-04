@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
-import { customerService } from "@/lib/store";
+import { contactService } from "@/lib/store";
 import { ChangePasswordForm } from "@/components/account/ChangePasswordForm";
 import { ChangeEmailForm } from "@/components/account/ChangeEmailForm";
 
@@ -13,7 +13,7 @@ export default async function SecurityPage() {
   const session = await getSession();
   if (!session) redirect("/account");
 
-  const customer = (await customerService.getById(session.customerId)) as {
+  const customer = (await contactService.getById(session.contactId)) as {
     email: string;
   } | null;
 

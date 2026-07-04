@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getSession } from "@/lib/auth";
-import { customerService, customerAddressService, getCheckoutSettings } from "@/lib/store";
+import { contactService, customerAddressService, getCheckoutSettings } from "@/lib/store";
 import { ProfileEditForm } from "@/components/account/ProfileEditForm";
 import { AddressBook, type Address } from "@/components/account/AddressBook";
 import { AccountContacts } from "@/components/account/AccountContacts";
@@ -14,15 +14,23 @@ export default async function ProfilePage() {
   const session = await getSession();
   if (!session) redirect("/account");
 
-  const [customer, addressList, checkoutSettings] = await Promise.all([
-    customerService.getById(session.customerId).catch(() => null),
-    customerAddressService
-      .listForParent(session.customerId, { page: 1, limit: 50, sort: "id", direction: "desc" })
-      .catch(() => ({ data: [] as Record<string, unknown>[] })),
+  const [contact, addressRows, checkoutSettings] = await Promise.all([
+    contactService.getById(session.contactId).catch(() => null),
+    customerAddressService.listForContact(session.contactId).catch(() => [] as Record<string, unknown>[]),
     getCheckoutSettings(),
   ]);
+  // Contacts have no company column (identity unification) — company lives
+  // under attributes.company; materialise it so the form reads stay simple.
+  const customer: Record<string, unknown> | null = contact
+    ? {
+        ...(contact as Record<string, unknown>),
+        company:
+          (((contact as Record<string, unknown>).attributes as Record<string, unknown> | null)
+            ?.company as string | undefined) ?? "",
+      }
+    : null;
 
-  const addresses: Address[] = ((addressList as { data: Record<string, unknown>[] }).data ?? []).map(
+  const addresses: Address[] = (addressRows ?? []).map(
     (a) => ({
       id: a.id as number,
       firstName: (a.first_name as string) || "",

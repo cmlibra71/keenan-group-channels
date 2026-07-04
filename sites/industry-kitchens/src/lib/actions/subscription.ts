@@ -6,7 +6,7 @@ import {
   CHANNEL_ID,
   subscriptionPlanService,
   subscriptionService,
-  customerService,
+  contactService,
 } from "@/lib/store";
 import { StripeSubscriptionProvider, wantsStripeTestMode } from "@keenan/services";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
@@ -40,7 +40,7 @@ export async function createSubscription(planId: number): Promise<{
     return { success: false, error: "Not authenticated" };
   }
 
-  const lockKey = `${CHANNEL_ID}:${session.customerId}`;
+  const lockKey = `${CHANNEL_ID}:${session.contactId}`;
   if (subscriptionLocks.has(lockKey)) {
     return { success: false, error: "A subscription request is already being processed." };
   }
@@ -52,14 +52,14 @@ export async function createSubscription(planId: number): Promise<{
       return { success: false, error: "Plan not found" };
     }
 
-    const customer = await customerService.getById(session.customerId);
-    if (!customer) {
+    const contact = await contactService.getById(session.contactId);
+    if (!contact) {
       return { success: false, error: "Customer not found" };
     }
 
-    // Check for existing active subscription
-    const existing = await subscriptionService.getActiveForCustomer(
-      session.customerId,
+    // Check for existing active subscription (contact-keyed — identity unification)
+    const existing = await subscriptionService.getActiveForContact(
+      session.contactId,
       CHANNEL_ID
     );
     if (existing) {
@@ -67,8 +67,8 @@ export async function createSubscription(planId: number): Promise<{
     }
 
     // Check for pending subscription that hasn't been activated yet
-    const allSubs = await subscriptionService.listForCustomer(
-      session.customerId,
+    const allSubs = await subscriptionService.listForContact(
+      session.contactId,
       CHANNEL_ID
     );
     const pendingSub = allSubs.find((s) => s.status === "pending");
@@ -78,13 +78,16 @@ export async function createSubscription(planId: number): Promise<{
 
     const stripeProvider = await getStripeProvider();
 
-    // Get or create Stripe customer
+    // Get or create Stripe customer. Metadata keys are unchanged for existing
+    // Stripe-side reporting; since identity unification the numeric subject is
+    // the CONTACT id (mirrored under contact_id for clarity).
     const stripeCustomerId = await stripeProvider.getOrCreateCustomer(
-      customer.email as string,
-      `${customer.first_name || ""} ${customer.last_name || ""}`.trim() || undefined,
+      contact.email as string,
+      `${contact.first_name || ""} ${contact.last_name || ""}`.trim() || undefined,
       {
         channel_id: String(CHANNEL_ID),
-        customer_id: String(session.customerId),
+        customer_id: String(session.contactId),
+        contact_id: String(session.contactId),
       }
     );
 
@@ -109,16 +112,18 @@ export async function createSubscription(planId: number): Promise<{
         trialPeriodDays: (plan.trial_period_days as number) || 0,
         metadata: {
           channel_id: String(CHANNEL_ID),
-          customer_id: String(session.customerId),
+          customer_id: String(session.contactId),
+          contact_id: String(session.contactId),
           plan_id: String(planId),
         },
       }
     );
 
     // Create local subscription record
+    // contact_id is the subject (identity unification); customer_id no longer written.
     const localSub = await subscriptionService.create({
       channelId: CHANNEL_ID,
-      customerId: session.customerId,
+      contactId: session.contactId,
       planId: planId,
       status: "pending",
       stripeSubscriptionId: stripeSub.subscriptionId,
@@ -158,8 +163,8 @@ export async function createBillingPortalSession(returnUrl: string): Promise<{
   }
 
   try {
-    const sub = await subscriptionService.getActiveForCustomer(
-      session.customerId,
+    const sub = await subscriptionService.getActiveForContact(
+      session.contactId,
       CHANNEL_ID
     );
     if (!sub?.stripe_customer_id) {
@@ -194,8 +199,8 @@ export async function cancelSubscription(): Promise<{
   }
 
   try {
-    const sub = await subscriptionService.getActiveForCustomer(
-      session.customerId,
+    const sub = await subscriptionService.getActiveForContact(
+      session.contactId,
       CHANNEL_ID
     );
     if (!sub) {

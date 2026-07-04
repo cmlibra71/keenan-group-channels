@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { customerService, customerAuthTokenService, CHANNEL_ID } from "@/lib/store";
+import { contactService, customerAuthTokenService, CHANNEL_ID } from "@/lib/store";
 
 // Guarded test-only helper that MINTS a customer auth token (password reset /
 // email change) and returns the plaintext, so the E2E suite can drive the
@@ -52,8 +52,11 @@ export async function POST(request: NextRequest) {
       { status: 403 }
     );
   }
-  if (type !== "password_reset" && type !== "email_change") {
-    return NextResponse.json({ error: "type must be password_reset or email_change." }, { status: 400 });
+  if (type !== "password_reset" && type !== "email_change" && type !== "account_activation") {
+    return NextResponse.json(
+      { error: "type must be password_reset, email_change or account_activation." },
+      { status: 400 }
+    );
   }
   // An email_change token must also target a test-domain address.
   if (type === "email_change" && (!newEmail || !newEmail.endsWith(`@${domain}`))) {
@@ -63,15 +66,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const customer = (await customerService.findByEmailAndChannel(email, CHANNEL_ID)) as {
+  // Identity unification: tokens are contact-subject, matching the live flows.
+  const contact = (await contactService.findLoginCandidate(email, CHANNEL_ID)) as {
     id: number;
   } | null;
-  if (!customer) {
-    return NextResponse.json({ error: "Test customer not found." }, { status: 404 });
+  if (!contact) {
+    return NextResponse.json({ error: "Test contact not found." }, { status: 404 });
   }
 
   const { token } = await customerAuthTokenService.createToken({
-    customerId: customer.id,
+    contactId: contact.id,
     type,
     payload: type === "email_change" ? { newEmail } : undefined,
   });

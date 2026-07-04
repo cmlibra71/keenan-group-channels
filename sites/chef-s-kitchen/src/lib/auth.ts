@@ -27,16 +27,18 @@ export async function verifyToken(token: string): Promise<SessionPayload | null>
   return verifySessionToken(token, { secret: getSecret(), channelId: CHANNEL_ID, now: Date.now() });
 }
 
-export async function getSession(): Promise<{ customerId: number; email: string } | null> {
+// Session subject is a CONTACT id (identity unification, session v2). Old
+// customerId-subject cookies fail verification and read as logged-out.
+export async function getSession(): Promise<{ contactId: number; email: string } | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
   return verifyToken(token);
 }
 
-export async function setSession(customerId: number, email: string): Promise<void> {
+export async function setSession(contactId: number, email: string): Promise<void> {
   const cookieStore = await cookies();
-  const token = await signToken({ customerId, email });
+  const token = await signToken({ contactId, email });
   cookieStore.set(SESSION_COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

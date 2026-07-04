@@ -6,7 +6,7 @@ import {
   getUpcomingDraws,
   getPartnerOffers,
   getFeatureFlag,
-  getActiveSubscription,
+  getActiveSubscriptionForContact,
   getCheckoutSettings,
   prizeService,
   CHANNEL_ID,
@@ -48,7 +48,7 @@ export default async function MembershipLandingPage() {
   // need /account/register (otherwise the subscribe page bounces them to /account
   // with no context); already-subscribed users get a "Manage Membership" link.
   const session = await getSession();
-  const activeSub = session ? await getActiveSubscription(session.customerId) : null;
+  const activeSub = session ? await getActiveSubscriptionForContact(session.contactId) : null;
   const joinHref = !session
     ? "/account/register"
     : activeSub

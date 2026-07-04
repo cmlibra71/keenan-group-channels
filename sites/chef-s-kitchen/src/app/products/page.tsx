@@ -1,4 +1,4 @@
-import { getProducts, getFeatureFlag, productService, customerService, CHANNEL_ID } from "@/lib/store";
+import { getProducts, getFeatureFlag, productService, contactService, CHANNEL_ID } from "@/lib/store";
 import { customerGroupService } from "@keenan/services";
 import { getSession } from "@/lib/auth";
 import { getListingPricing } from "@/lib/member";
@@ -50,7 +50,7 @@ export default async function ProductsPage({
   let accessibleCategoryIds: number[] | null = null;
   const session = await getSession();
   if (session) {
-    const customer = (await customerService.getById(session.customerId)) as {
+    const customer = (await contactService.getById(session.contactId)) as {
       customer_group_id?: number | null;
     } | null;
     if (customer?.customer_group_id) {

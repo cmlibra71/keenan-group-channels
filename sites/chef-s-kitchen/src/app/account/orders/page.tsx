@@ -23,16 +23,17 @@ export default async function OrdersPage() {
   const session = await getSession();
   if (!session) redirect("/account");
 
-  // Scope to THIS customer (and channel, defence-in-depth). Both are registered
-  // filters on OrderService; without the customer_id filter the list would return
-  // channel-wide orders.
+  // Scope to THIS contact (and channel, defence-in-depth). Both are registered
+  // filters on OrderService; without the contact_id filter the list would return
+  // channel-wide orders. contact_id is the identity-unification subject; legacy
+  // customer-keyed orders were contact_id-backfilled in the migration.
   const { data } = await orderService.list({
     page: 1,
     limit: 50,
     sort: "created_at",
     direction: "desc",
     filters: {
-      customer_id: { type: "eq", value: session.customerId },
+      contact_id: { type: "eq", value: session.contactId },
       channel_id: { type: "eq", value: CHANNEL_ID },
     },
   });
@@ -54,7 +55,7 @@ export default async function OrdersPage() {
     // best-effort — never block the page on the guest-order lookup
   }
 
-  // Merge (dedupe by id; guest orders have no customer_id so they can't overlap)
+  // Merge (dedupe by id; guest orders have no contact_id so they can't overlap)
   // and re-sort newest-first.
   const seen = new Set(accountOrders.map((o) => o.id));
   const customerOrders = [...accountOrders, ...guestOrders.filter((o) => !seen.has(o.id))].sort(

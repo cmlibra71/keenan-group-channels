@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Crown, ArrowRight } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscription, getCheckoutSettings, customerAddressService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, customerAddressService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
 import { gstSplit } from "@keenan/services/calc";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
@@ -48,17 +48,14 @@ export default async function CheckoutPage() {
   // GST display amount via gstSplit (single source of tax math — services D4).
   const gstAmount = Math.round(gstSplit(subtotal, pricesIncludeTax).tax * 100) / 100;
 
-  // Load saved addresses for logged-in customers
+  // Load saved addresses for the logged-in contact (identity unification —
+  // listForContact also covers legacy customer-keyed rows via the migration's
+  // contact_id backfill).
   let savedAddresses: { id: number; firstName: string; lastName: string; address1: string; address2?: string; city: string; stateOrProvince: string; postalCode: string; countryCode: string; isDefaultBilling: boolean }[] = [];
   if (session) {
     try {
-      const result = await customerAddressService.listForParent(session.customerId, {
-        page: 1,
-        limit: 20,
-        sort: "id",
-        direction: "desc",
-      });
-      savedAddresses = result.data.map((a: Record<string, unknown>) => ({
+      const rows = await customerAddressService.listForContact(session.contactId);
+      savedAddresses = rows.slice(0, 20).map((a: Record<string, unknown>) => ({
         id: a.id as number,
         firstName: (a.first_name || a.firstName || "") as string,
         lastName: (a.last_name || a.lastName || "") as string,
@@ -98,7 +95,7 @@ export default async function CheckoutPage() {
   const subscriptionsEnabled = await getFeatureFlag("subscriptions_enabled");
   if (subscriptionsEnabled) {
     if (session) {
-      const activeSub = await getActiveSubscription(session.customerId);
+      const activeSub = await getActiveSubscriptionForContact(session.contactId);
       isMember = !!activeSub;
     }
     if (isMember) {

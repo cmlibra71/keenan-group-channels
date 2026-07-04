@@ -4,7 +4,7 @@ import { Check, AlertTriangle, Clock } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import {
   getSubscriptionPlans,
-  getActiveSubscription,
+  getActiveSubscriptionForContact,
   getFeatureFlag,
   subscriptionService,
   drawEntryService,
@@ -26,7 +26,7 @@ export default async function MembershipPage() {
 
   const [plans, activeSub] = await Promise.all([
     getSubscriptionPlans(),
-    getActiveSubscription(session.customerId),
+    getActiveSubscriptionForContact(session.contactId),
   ]);
 
   // If user has active subscription, show status
@@ -34,7 +34,7 @@ export default async function MembershipPage() {
     const drawsEnabled = await getFeatureFlag("draws_enabled");
     let totalEntries = 0;
     if (drawsEnabled) {
-      const entries = await drawEntryService.getEntriesForCustomer(session.customerId, CHANNEL_ID);
+      const entries = await drawEntryService.getEntriesForContact(session.contactId, CHANNEL_ID);
       totalEntries = entries?.length ?? 0;
     }
 
@@ -131,7 +131,7 @@ export default async function MembershipPage() {
   }
 
   // Check if this is a returning member (has previous subscriptions)
-  const previousSubs = await subscriptionService.listForCustomer(session.customerId, CHANNEL_ID);
+  const previousSubs = await subscriptionService.listForContact(session.contactId, CHANNEL_ID);
   const isReturningMember = previousSubs.length > 0;
 
   // Show available plans

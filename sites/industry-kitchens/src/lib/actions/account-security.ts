@@ -2,13 +2,14 @@
 
 import { redirect } from "next/navigation";
 import {
-  customerService,
+  contactService,
   customerAuthTokenService,
   getSiteConfig,
   CHANNEL_ID,
 } from "@/lib/store";
 import { getSession, setSession } from "@/lib/auth";
-import { hashPassword, verifyPassword } from "@/lib/password";
+import { verifyPassword } from "@/lib/password";
+import { mergeContactMetafields } from "@/lib/contact-auth";
 import { siteBaseUrl } from "@/lib/seo";
 import {
   sendPasswordResetEmail,
@@ -20,6 +21,13 @@ import {
 // Self-service password + email management. These are pure, channel-agnostic auth
 // flows shared byte-identically across template + every site (see
 // orchestrator/shared-modules.json) — no per-channel Stripe/design wiring lives here.
+//
+// Identity unification: every flow is keyed by CONTACT id. requestPasswordReset
+// resolves its subject with contactService.findLoginCandidate, which also reaches
+// B2B contacts — a B2B person with no password yet gets an ACTIVATION token
+// (type "account_activation") instead of a reset token; consuming it sets their
+// first password AND stamps metafields.email_verified=true (the emailed link
+// proves inbox ownership, which is what gates email-matched net terms).
 //
 // Design invariants:
 //   - Enumeration-safe: request* actions ALWAYS return the same neutral success,
@@ -94,18 +102,28 @@ export async function requestPasswordReset(
     return { success: true, message: NEUTRAL_RESET_MESSAGE };
   }
 
-  const customer = await customerService.findByEmailAndChannel(email, CHANNEL_ID);
-  if (customer) {
+  const candidate = (await contactService.findLoginCandidate(email, CHANNEL_ID)) as {
+    id: number;
+    email: string;
+    password_hash: string | null;
+    first_name?: string | null;
+    last_name?: string | null;
+  } | null;
+  if (candidate) {
     try {
+      // A contact with no password yet (B2B pre-activation, or Google-only) is
+      // ACTIVATING, not resetting — separate token type, and the page shows
+      // "Set your password" (via ?welcome=1) instead of reset copy.
+      const isActivation = !candidate.password_hash;
       const { token } = await customerAuthTokenService.createToken({
-        customerId: customer.id,
-        type: "password_reset",
+        contactId: candidate.id,
+        type: isActivation ? "account_activation" : "password_reset",
       });
       const { branding, siteUrl, testMode } = await emailContext();
       await sendPasswordResetEmail({
-        to: customer.email,
-        resetUrl: `${siteUrl}/account/reset-password/${token}`,
-        customerName: displayName(customer),
+        to: candidate.email,
+        resetUrl: `${siteUrl}/account/reset-password/${token}${isActivation ? "?welcome=1" : ""}`,
+        customerName: displayName(candidate),
         branding,
         testMode,
       });
@@ -118,7 +136,13 @@ export async function requestPasswordReset(
   return { success: true, message: NEUTRAL_RESET_MESSAGE };
 }
 
-/** Step 2 of forgotten-password: consume the token and set a new password. */
+/**
+ * Step 2 of forgotten-password: consume the token and set a new password.
+ * Accepts BOTH token types — a reset for a contact with a password, an
+ * activation for one without. Activation additionally stamps
+ * metafields.email_verified=true: following the emailed link proved the person
+ * controls the inbox.
+ */
 export async function resetPassword(
   _prev: ActionResult | null,
   formData: FormData
@@ -135,21 +159,35 @@ export async function resetPassword(
     return { error: "Passwords do not match." };
   }
 
-  const consumed = await customerAuthTokenService.consumeToken(token, "password_reset");
-  if (!consumed || consumed.customerId == null) {
+  // consumeToken filters by type in its atomic UPDATE, so probing the wrong type
+  // does NOT burn the token — trying both is safe.
+  let isActivation = false;
+  let consumed = await customerAuthTokenService.consumeToken(token, "password_reset");
+  if (!consumed) {
+    consumed = await customerAuthTokenService.consumeToken(token, "account_activation");
+    isActivation = !!consumed;
+  }
+  if (!consumed || consumed.contactId == null) {
     return { error: "This reset link is invalid or has expired. Please request a new one." };
   }
 
-  const passwordHash = await hashPassword(password);
-  await customerService.update(consumed.customerId, { passwordHash });
+  // contactService.update hashes plaintext `password` to bcrypt itself.
+  await contactService.update(consumed.contactId, { password });
+  if (isActivation) {
+    try {
+      await mergeContactMetafields(consumed.contactId, { email_verified: true });
+    } catch (e) {
+      console.error("[resetPassword] email_verified stamp failed (non-fatal):", e);
+    }
+  }
 
-  // Log the customer in on THIS device (other devices' cookies persist to expiry —
+  // Log the contact in on THIS device (other devices' cookies persist to expiry —
   // see the stateless-session note in auth.ts).
-  const customer = await customerService.getById(consumed.customerId) as {
+  const contact = (await contactService.getById(consumed.contactId)) as {
     email: string;
   } | null;
-  if (customer) {
-    await setSession(consumed.customerId, customer.email);
+  if (contact) {
+    await setSession(consumed.contactId, contact.email);
   }
   redirect("/account");
 }
@@ -172,16 +210,16 @@ export async function changePassword(
   }
   if (password !== confirm) return { error: "New passwords do not match." };
 
-  const customer = await customerService.getById(session.customerId) as {
+  const contact = (await contactService.getById(session.contactId)) as {
     password_hash: string | null;
   } | null;
-  const { valid } = await verifyPassword(current, customer?.password_hash);
-  if (!customer || !valid) {
+  const { valid } = await verifyPassword(current, contact?.password_hash);
+  if (!contact || !valid) {
     return { error: "Your current password is incorrect." };
   }
 
-  await customerService.update(session.customerId, { passwordHash: await hashPassword(password) });
-  await setSession(session.customerId, session.email); // refresh this device's cookie
+  await contactService.update(session.contactId, { password });
+  await setSession(session.contactId, session.email); // refresh this device's cookie
   return { success: true, message: "Your password has been updated." };
 }
 
@@ -209,26 +247,26 @@ export async function requestEmailChange(
 
   // Re-verify the password so a stolen session cookie can't silently move the
   // account's email (which would let an attacker take over the login).
-  const customer = await customerService.getById(session.customerId) as {
+  const contact = (await contactService.getById(session.contactId)) as {
     password_hash: string | null;
     first_name?: string | null;
     last_name?: string | null;
   } | null;
-  const { valid } = await verifyPassword(current, customer?.password_hash);
-  if (!customer || !valid) {
+  const { valid } = await verifyPassword(current, contact?.password_hash);
+  if (!contact || !valid) {
     return { error: "Your password is incorrect." };
   }
 
-  if (tooManyAttempts(`email-change:${session.customerId}`)) {
+  if (tooManyAttempts(`email-change:${session.contactId}`)) {
     return { success: true, message: NEUTRAL_EMAIL_CHANGE_MESSAGE };
   }
 
   // Enumeration-safe: only mint + send when the address is actually free, but
   // always return the same message. A real collision is also re-checked at confirm.
-  if (await customerService.isEmailAvailableForChannel(newEmail, CHANNEL_ID)) {
+  if (await contactService.isEmailAvailableForChannel(newEmail, CHANNEL_ID)) {
     try {
       const { token } = await customerAuthTokenService.createToken({
-        customerId: session.customerId,
+        contactId: session.contactId,
         type: "email_change",
         payload: { newEmail },
       });
@@ -236,7 +274,7 @@ export async function requestEmailChange(
       await sendEmailChangeVerificationEmail({
         to: newEmail,
         verifyUrl: `${siteUrl}/account/verify-email/${token}`,
-        customerName: displayName(customer),
+        customerName: displayName(contact),
         branding,
         testMode,
       });
@@ -255,7 +293,9 @@ export async function requestEmailChange(
  */
 export async function confirmEmailChange(token: string): Promise<ActionResult> {
   const consumed = await customerAuthTokenService.consumeToken(token?.trim(), "email_change");
-  if (!consumed || consumed.customerId == null) {
+  // contactId-subject only: pre-cutover tokens (customerId-subject) are not
+  // honoured — the bearer just requests a fresh link.
+  if (!consumed || consumed.contactId == null) {
     return { error: "This confirmation link is invalid or has expired." };
   }
 
@@ -266,21 +306,28 @@ export async function confirmEmailChange(token: string): Promise<ActionResult> {
 
   // Guard the race between request and confirm — the address may have been taken
   // by another registration in the interim.
-  if (!(await customerService.isEmailAvailableForChannel(newEmail, CHANNEL_ID))) {
+  if (!(await contactService.isEmailAvailableForChannel(newEmail, CHANNEL_ID))) {
     return { error: "That email address is no longer available." };
   }
 
-  const customer = await customerService.getById(consumed.customerId) as {
+  const contact = (await contactService.getById(consumed.contactId)) as {
     metafields?: Record<string, unknown> | null;
   } | null;
-  if (!customer) {
+  if (!contact) {
     return { error: "This confirmation link is invalid or has expired." };
   }
 
-  const metafields = { ...((customer.metafields as Record<string, unknown>) || {}), email_verified: true };
-  await customerService.update(consumed.customerId, { email: newEmail, metafields });
+  const metafields = { ...((contact.metafields as Record<string, unknown>) || {}), email_verified: true };
+  try {
+    await contactService.update(consumed.contactId, { email: newEmail, metafields });
+  } catch (e) {
+    // e.g. the (account_id, email) unique tripped for a B2B contact whose account
+    // already has another contact on that address.
+    console.error("[confirmEmailChange] email update failed:", e);
+    return { error: "That email address is no longer available." };
+  }
 
   // The session HMAC embeds the email — re-issue so the current device stays valid.
-  await setSession(consumed.customerId, newEmail);
+  await setSession(consumed.contactId, newEmail);
   return { success: true, message: "Your email address has been updated.", };
 }
