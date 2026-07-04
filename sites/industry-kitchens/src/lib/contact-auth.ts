@@ -20,13 +20,13 @@
 // ============================================================================
 
 import { getCommerceClient, hashPasswordForStorage } from "@keenan/services";
-import type { JSONValue } from "postgres";
 import { CHANNEL_ID } from "./channel";
 
-// postgres.js types sql.json's parameter as its recursive JSONValue, which
-// Record<string, unknown> doesn't structurally satisfy — the runtime just
-// JSON.stringifies, so a plain object bag is safe to cast.
-const asJson = (v: Record<string, unknown>): JSONValue => v as unknown as JSONValue;
+// jsonb columns are bound as a JSON string + explicit ::jsonb cast. postgres.js
+// sql.json() proved unreliable across the driver version this repo pins (it
+// tried to Buffer-serialize the object and threw "string argument… received an
+// instance of Object"), so we stringify ourselves — bulletproof and explicit.
+const asJsonText = (v: Record<string, unknown>): string => JSON.stringify(v ?? {});
 
 /** Snake_case contact row shape as returned by contactService.findLoginCandidate. */
 export type LoginCandidate = {
@@ -90,7 +90,7 @@ export async function createAccountlessContact(
       ) VALUES (
         NULL, ${CHANNEL_ID}, ${input.email}, ${passwordHash},
         ${input.firstName ?? null}, ${input.lastName ?? null}, true,
-        ${sql.json(asJson(input.attributes ?? {}))}, ${sql.json(asJson(input.metafields ?? {}))}
+        ${asJsonText(input.attributes ?? {})}::jsonb, ${asJsonText(input.metafields ?? {})}::jsonb
       )
       RETURNING id, email, first_name, last_name`;
     return row;
@@ -114,7 +114,7 @@ export async function mergeContactMetafields(
   // jsonb || merges top-level keys atomically (no read-modify-write race).
   await sql`
     UPDATE contacts
-    SET metafields = coalesce(metafields, '{}'::jsonb) || ${sql.json(asJson(patch))},
+    SET metafields = coalesce(metafields, '{}'::jsonb) || ${asJsonText(patch)}::jsonb,
         updated_at = now()
     WHERE id = ${contactId}`;
 }
