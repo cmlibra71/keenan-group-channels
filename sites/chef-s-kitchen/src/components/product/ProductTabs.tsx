@@ -270,7 +270,7 @@ function StarPicker({
 
 // -- Reviews Section ----------------------------------------------------------
 
-function ReviewsSection({
+export function ReviewsSection({
   reviews,
   productId,
 }: {

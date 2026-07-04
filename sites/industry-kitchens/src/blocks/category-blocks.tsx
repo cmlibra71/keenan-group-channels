@@ -24,7 +24,19 @@ import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
 import { RichContent } from "@/components/content/RichContent";
-import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
+import { BlockRenderer, effectiveSubBlocks, type RenderedBlock } from "@/blocks/BlockRenderer";
+import { TemplateRenderer } from "@/blocks/TemplateRenderer";
+import { WIDGETS } from "@/blocks/widgets";
+import {
+  BLOCK_REGISTRY,
+  evaluateConditions,
+  sanitizeConditions,
+  type SubBlockInstance,
+  type ConditionContext,
+} from "@keenan/services";
+import { buildBindingData } from "@/blocks/binding-data";
+import { buildConditionContext } from "@/lib/condition-context";
+import { buildPartialResolver, CHANNEL_KEY } from "@/blocks/partials";
 
 type BlockProps = { props: Record<string, unknown>; ctx?: RenderContext };
 
@@ -64,6 +76,55 @@ function extrasOf(ctx?: RenderContext): CategoryExtras {
   return (ctx?.record?.kind === "category" ? (ctx.record.extras as CategoryExtras) : undefined) ?? {};
 }
 
+
+// ── CMS v2 helpers (custom compositions render sub-blocks in slots) ─────────
+
+const CMS_V2_ON = (props: Record<string, unknown>, ctx?: RenderContext): boolean =>
+  process.env.CMS_V2_DISABLED !== "1" &&
+  ((Array.isArray(props.subBlocks) && (props.subBlocks as unknown[]).length > 0) ||
+    ctx?.draft === true ||
+    process.env.CMS_V2_FORCE === "1");
+
+type V2Env = {
+  subBlocks: SubBlockInstance[];
+  data: Record<string, unknown>;
+  condCtx: ConditionContext;
+  resolvePartial: Awaited<ReturnType<typeof buildPartialResolver>>;
+};
+
+async function v2Env(blockType: string, props: Record<string, unknown>, ctx?: RenderContext): Promise<V2Env> {
+  const def = BLOCK_REGISTRY[blockType];
+  const [condCtx, resolvePartial] = await Promise.all([
+    buildConditionContext(ctx),
+    buildPartialResolver(ctx),
+  ]);
+  return {
+    subBlocks: effectiveSubBlocks(props, def?.subBlockSchema, CHANNEL_KEY),
+    data: buildBindingData(ctx),
+    condCtx,
+    resolvePartial,
+  };
+}
+
+function renderSub(env: V2Env, sb: SubBlockInstance, ctx?: RenderContext): React.ReactNode {
+  if (sb.hidden && !ctx?.draft) return null;
+  if (!evaluateConditions(sanitizeConditions(sb.conditions), env.condCtx)) return null;
+  if (sb.kind === "widget" && sb.widget) {
+    const Widget = WIDGETS[sb.widget.name];
+    return Widget ? <Widget attrs={sb.widget.attrs ?? {}} ctx={ctx} /> : null;
+  }
+  return (
+    <TemplateRenderer
+      template={sb.template ?? ""}
+      data={env.data}
+      ctx={ctx}
+      channelKey={CHANNEL_KEY}
+      resolvePartial={env.resolvePartial}
+      draft={ctx?.draft ?? false}
+    />
+  );
+}
+
 const PER_PAGE = 24;
 const CONTAINER = "mx-auto max-w-7xl px-4 sm:px-6 lg:px-8";
 
@@ -73,6 +134,46 @@ async function CategoryHeaderBlock({ props, ctx }: BlockProps) {
   const category = categoryOf(ctx);
   if (!category) return null;
   const extras = extrasOf(ctx);
+
+  // CMS v2.1: editable title/description/count inside the component-owned
+  // zinc header box; breadcrumbs stay a locked widget; subcategories grid
+  // stays component-owned.
+  if (CMS_V2_ON(props, ctx)) {
+    const env = await v2Env("category_header", props, ctx);
+    const crumbSb = env.subBlocks.find((sb) => sb.key === "header_breadcrumbs");
+    const rest = env.subBlocks.filter((sb) => sb.key !== "header_breadcrumbs");
+    const breadcrumbs =
+      extras.breadcrumbs ??
+      ((await getCategoryBreadcrumbs(category.path_ids || []).catch(() => [])) as Array<{
+        id: number;
+        name: string;
+        slug: string;
+      }>);
+    return (
+      <div className={`${CONTAINER} pt-8`}>
+        <div className="mb-8 rounded-2xl bg-zinc-50 px-6 py-8 sm:px-8">
+          {crumbSb && !crumbSb.hidden && (
+            <nav className="mb-3 flex flex-wrap items-center gap-1.5 text-sm text-zinc-400">
+              <Link href="/categories" className="hover:text-zinc-600">Categories</Link>
+              {breadcrumbs.slice(0, -1).map((crumb) => (
+                <span key={crumb.id} className="flex items-center gap-1.5">
+                  <ChevronRight className="h-3.5 w-3.5" />
+                  <Link href={`/categories/${crumb.slug}`} className="hover:text-zinc-600">{crumb.name}</Link>
+                </span>
+              ))}
+              <ChevronRight className="h-3.5 w-3.5" />
+              <span className="text-zinc-700">{category.name}</span>
+            </nav>
+          )}
+          {rest.map((sb) => (
+            <div key={sb.id} data-cms-subblock-key={ctx?.draft ? sb.key : undefined}>
+              {renderSub(env, sb, ctx)}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   const [breadcrumbs, total, subcategories] = await Promise.all([
     extras.breadcrumbs ??
@@ -151,10 +252,37 @@ async function CategoryHeaderBlock({ props, ctx }: BlockProps) {
 
 // ── Product listing (filter rail + toolbar + grid + load-more) ──────────────
 
-async function CategoryListingBlock({ ctx }: BlockProps) {
+async function CategoryListingBlock({ props, ctx }: BlockProps) {
   const category = categoryOf(ctx);
   if (!category) return null;
   const extras = extrasOf(ctx);
+
+  // CMS v2.1: rail + column arrangement stays component-owned; toolbar is an
+  // editable template; rail/grid/load-more render as locked widgets.
+  if (CMS_V2_ON(props, ctx)) {
+    const env = await v2Env("category_listing", props, ctx);
+    const rail = env.subBlocks.find((sb) => sb.key === "filter_rail");
+    const rest = env.subBlocks.filter((sb) => sb.key !== "filter_rail");
+    const facets = extras.listing?.facets;
+    return (
+      <div className={`${CONTAINER} pb-8`}>
+        <div className="flex gap-6">
+          {rail && !rail.hidden && facets ? <FilterRail facets={facets as never} /> : null}
+          <div className="min-w-0 flex-1">
+            {rest.map((sb) => {
+              // load_more / filter widgets have no template impls here yet —
+              // render toolbar template + listing grid; others no-op safely.
+              return (
+                <div key={sb.id} data-cms-subblock-key={ctx?.draft ? sb.key : undefined}>
+                  {renderSub(env, sb, ctx)}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   let listing = extras.listing;
   let memberPriceMap = extras.memberPriceMap;

@@ -224,7 +224,6 @@ export default async function ProductPage({
       membershipTeaser,
       brandName: brandRow?.name ?? null,
       reviewSummary,
-      categoryName: breadcrumbs[breadcrumbs.length - 1]?.name,
     },
     links: {
       brandRow:
@@ -250,8 +249,23 @@ export default async function ProductPage({
   // The whole page as a block document (breadcrumbs / slots / buybox / links /
   // tabs / related); this route stays the data + SEO owner — JSON-LD stays
   // here, and the heavy queries above feed the blocks via RenderContext extras.
-  if (await getFeatureFlag("cms_product_template_enabled")) {
-    const template = await getCmsTemplate("product", draft).catch(() => null);
+  // CMS v2 local-testing override: render the v2 decomposed composition
+  // (schema-default sub-blocks) instead of the stored template doc. Env-only —
+  // never set in production; lets the v2 path be exercised without touching
+  // the shared database.
+  const forceV2 = process.env.CMS_V2_FORCE === "1";
+  if (forceV2 || (await getFeatureFlag("cms_product_template_enabled"))) {
+    const template = forceV2
+      ? {
+          blocks: [
+            { block_type: "breadcrumbs", region: "main", props: {} },
+            { block_type: "product_overview", region: "main", props: {} },
+            { block_type: "product_links", region: "main", props: {} },
+            { block_type: "product_tabs", region: "main", props: {} },
+            { block_type: "product_related", region: "main", props: {} },
+          ] as unknown as RenderedBlock[],
+        }
+      : await getCmsTemplate("product", draft).catch(() => null);
     if (template && template.blocks.length > 0) {
       const context: RenderContext = {
         draft,

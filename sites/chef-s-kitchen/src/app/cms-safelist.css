@@ -1,0 +1,23 @@
+/* ============================================================================
+   CMS v2 safelist — every class the layout manager can emit (closed enums in
+   @keenan/services cms/layout.ts) plus a curated utility band for editor-
+   authored template markup. Tailwind v4 @source inline() forces generation
+   even though these names never appear statically in source files.
+   Imported by each fork's globals.css. Keep in sync with allLayoutClasses().
+   ========================================================================= */
+@source inline("{,md:,lg:}grid grid-cols-1");
+@source inline("{,md:,lg:}grid-cols-{1,2,3,4,5,6}");
+@source inline("{,md:,lg:}col-span-{1,2,3,4,5,6} {,md:,lg:}col-span-full");
+@source inline("{,md:,lg:}row-span-{1,2,3,4,5,6}");
+@source inline("{,md:,lg:}order-{1,2,3,4,5,6,7,8,9,10,11,12}");
+@source inline("{,md:,lg:}gap-x-{0,4,8,12} {,md:,lg:}gap-y-{0,4,8,12}");
+@source inline("{,md:,lg:}items-{start,center,stretch}");
+@source inline("{,md:,lg:}self-{start,center,end}");
+@source inline("{,md:,lg:}{hidden,block}");
+@source inline("lg:sticky lg:top-[150px] lg:self-start");
+/* editor-authored template utility band (spacing/typography/flex basics) */
+@source inline("{,md:,lg:}flex {,md:,lg:}flex-{row,col,wrap} {,md:,lg:}justify-{start,center,between,end}");
+@source inline("{,md:,lg:}text-{xs,sm,base,lg,xl,2xl,3xl} {,md:,lg:}font-{medium,semibold,bold}");
+@source inline("{,md:,lg:}{mt,mb,ml,mr,mx,my,pt,pb,pl,pr,px,py}-{0,1,2,3,4,5,6,8,10,12,16}");
+@source inline("{,md:,lg:}{w,h}-full text-center text-left text-right uppercase lowercase italic underline");
+@source inline("rounded rounded-md rounded-lg rounded-full border border-2");

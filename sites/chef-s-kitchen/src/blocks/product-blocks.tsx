@@ -29,7 +29,17 @@ import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductTabs } from "@/components/product/ProductTabs";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { BackButton } from "@/components/ui/BackButton";
-import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
+import { BlockRenderer, SubBlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
+import { BLOCK_REGISTRY } from "@keenan/services";
+import { ProductPurchaseProvider, type PurchaseProduct } from "@/components/product/ProductPurchaseProvider";
+import { buildBindingData } from "@/blocks/binding-data";
+import { buildConditionContext } from "@/lib/condition-context";
+import { buildPartialResolver } from "@/blocks/partials";
+import { TabsShell } from "@/components/product/TabsShell";
+import { WIDGETS } from "@/blocks/widgets";
+import { TemplateRenderer } from "@/blocks/TemplateRenderer";
+import { effectiveSubBlocks } from "@/blocks/BlockRenderer";
+import { parseKtl, evaluateKtl, evaluateConditions, sanitizeConditions } from "@keenan/services";
 
 type BlockProps = { props: Record<string, unknown>; ctx?: RenderContext };
 
@@ -198,7 +208,6 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
         membershipTeaser={membershipTeaser}
         brandName={brandRow?.name ?? null}
         reviewSummary={reviewSummary ?? null}
-        categoryName={buyboxCrumbs[buyboxCrumbs.length - 1]?.name}
       />
     </div>
   );
@@ -245,10 +254,73 @@ async function ProductLinksBlock({ ctx }: BlockProps) {
 
 // ── Tabs (description / specs / reviews / attachments) ──────────────────────
 
-async function ProductTabsBlock({ ctx }: BlockProps) {
+async function ProductTabsBlock({ props, ctx }: BlockProps) {
   const product = productOf(ctx);
   if (!product) return null;
   const extras = extrasOf(ctx);
+
+  // CMS v2.1: each sub-block IS a tab — label = tab name, hide/conditions
+  // remove it, template tabs whose render is empty are dropped (matches the
+  // legacy conditional tabs). The interactive bar stays component-owned.
+  const storedTabs = props.subBlocks;
+  const tabsV2 =
+    process.env.CMS_V2_DISABLED !== "1" &&
+    ((Array.isArray(storedTabs) && storedTabs.length > 0) ||
+      ctx?.draft === true ||
+      process.env.CMS_V2_FORCE === "1");
+  if (tabsV2) {
+    const def = BLOCK_REGISTRY.product_tabs;
+    const [data, condCtx, resolvePartial] = await Promise.all([
+      Promise.resolve(buildBindingData(ctx)),
+      buildConditionContext(ctx),
+      buildPartialResolver(ctx),
+    ]);
+    const reviewCount = (extras.reviews as unknown[] | undefined)?.length ?? 0;
+    const tabs: { key: string; label: string; node: React.ReactNode }[] = [];
+    for (const sb of effectiveSubBlocks(props, def?.subBlockSchema, "chef-s-kitchen")) {
+      if (sb.hidden && !ctx?.draft) continue;
+      if (!evaluateConditions(sanitizeConditions(sb.conditions), condCtx)) continue;
+      let label = sb.label ?? sb.key;
+      if (sb.kind === "widget" && sb.widget) {
+        const Widget = WIDGETS[sb.widget.name];
+        if (!Widget) continue;
+        if (sb.widget.name === "reviews_panel") label = `${label} (${reviewCount})`;
+        tabs.push({ key: sb.id, label, node: <Widget attrs={sb.widget.attrs ?? {}} ctx={ctx} /> });
+        continue;
+      }
+      const source = sb.template ?? "";
+      // drop tabs that render nothing (e.g. no description / no downloads)
+      try {
+        const segments = evaluateKtl(parseKtl(source), { data, resolvePartial });
+        const hasContent = segments.some(
+          (s) => s.kind !== "html" || s.html.trim().length > 0
+        );
+        if (!hasContent) continue;
+      } catch {
+        if (!ctx?.draft) continue;
+      }
+      tabs.push({
+        key: sb.id,
+        label,
+        node: (
+          <TemplateRenderer
+            template={source}
+            data={data}
+            ctx={ctx}
+            channelKey="chef-s-kitchen"
+            resolvePartial={resolvePartial}
+            draft={ctx?.draft ?? false}
+          />
+        ),
+      });
+    }
+    if (tabs.length === 0) return null;
+    return (
+      <div className={CONTAINER}>
+        <TabsShell tabs={tabs} />
+      </div>
+    );
+  }
   const [reviews, attachments, brandRow] = await Promise.all([
     extras.reviews ?? getProductReviews(product.id).catch(() => []),
     extras.attachments ?? getProductAttachments(product.id).catch(() => []),
@@ -277,10 +349,43 @@ async function ProductTabsBlock({ ctx }: BlockProps) {
 
 // ── Related products ─────────────────────────────────────────────────────────
 
-async function ProductRelatedBlock({ ctx }: BlockProps) {
+async function ProductRelatedBlock({ props, ctx }: BlockProps) {
   const product = productOf(ctx);
   if (!product) return null;
   const extras = extrasOf(ctx);
+
+  // CMS v2 path — ONLY when the doc explicitly carries edited sub-blocks (or
+  // CMS_V2_FORCE locally). Existing live docs keep the legacy compiled grid.
+  const storedSubBlocks = props.subBlocks;
+  const useV2 =
+    process.env.CMS_V2_DISABLED !== "1" &&
+    ((Array.isArray(storedSubBlocks) && storedSubBlocks.length > 0) ||
+      ctx?.draft === true ||
+      process.env.CMS_V2_FORCE === "1");
+  if (useV2) {
+    const def = BLOCK_REGISTRY.product_related;
+    const [data, condCtx, resolvePartial] = await Promise.all([
+      Promise.resolve(buildBindingData(ctx)),
+      buildConditionContext(ctx),
+      buildPartialResolver(ctx),
+    ]);
+    return (
+      <div className={`${CONTAINER} pb-8`}>
+        <SubBlockRenderer
+          props={props}
+          schema={def?.subBlockSchema}
+          defaultLayout={def?.defaultProps?.layout as Record<string, unknown> | undefined}
+          channelKey="chef-s-kitchen"
+          data={data}
+          ctx={ctx}
+          condCtx={condCtx}
+          draft={ctx?.draft ?? false}
+          editHooks={ctx?.draft ?? false}
+          resolvePartial={resolvePartial}
+        />
+      </div>
+    );
+  }
   const relatedProducts =
     extras.relatedProducts ??
     (await getRelatedProducts(product.id, product.categoryIds ?? []).catch(() => []));
@@ -327,8 +432,108 @@ async function ProductSlotBlock({ props, ctx }: BlockProps) {
   );
 }
 
+// ── CMS v2: the decomposed product overview ─────────────────────────────────
+// Sub-blocks (gallery widget / title / description / purchase panel templates)
+// render through SubBlockRenderer inside the ProductPurchaseProvider, so the
+// split pieces share ONE variant/options/quantity state with the legacy path.
+
+async function ProductOverviewBlock({ props, ctx }: BlockProps) {
+  const product = productOf(ctx);
+  if (!product) return null;
+  const extras = extrasOf(ctx);
+
+  // member pricing — same fallback chain as ProductBuyboxBlock
+  let {
+    memberPrice = null,
+    memberPriceMap,
+    isMember,
+    membershipTeaser = null,
+    suppressCatalogPricing,
+  } = extras;
+  if (memberPriceMap === undefined) {
+    memberPriceMap = {};
+    const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
+    const memberCtx = await getMemberContext();
+    isMember = memberCtx.isMember;
+    if (memberPricingEnabled && memberCtx.customerGroupId) {
+      membershipTeaser = {
+        fromPrice: memberCtx.planPrice ? parseFloat(memberCtx.planPrice).toFixed(2) : null,
+      };
+      const variants = product.variants ?? [];
+      const pricingResults = await Promise.all(
+        variants.map((v: { id: number }) =>
+          getEffectivePrice(v.id, CHANNEL_ID, memberCtx.customerGroupId)
+        )
+      );
+      for (let i = 0; i < variants.length; i++) {
+        if (pricingResults[i].salePrice) {
+          memberPriceMap[variants[i].id] = parseFloat(pricingResults[i].salePrice as string);
+        }
+      }
+      const defaultVariant = variants[0];
+      if (defaultVariant && memberPriceMap[defaultVariant.id] != null) {
+        memberPrice = memberPriceMap[defaultVariant.id];
+      }
+    }
+  }
+  if (suppressCatalogPricing === undefined) {
+    suppressCatalogPricing = await shouldSuppressCatalogSalePrice();
+  }
+
+  const purchaseProduct: PurchaseProduct = {
+    id: product.id,
+    name: product.name,
+    sku: product.sku,
+    price: product.price,
+    salePrice: product.salePrice,
+    inventoryLevel: product.inventoryLevel ?? 0,
+    inventoryTracking: product.inventoryTracking ?? "none",
+    availability: product.availability ?? "available",
+    descriptionShort: product.descriptionShort,
+    images: product.images,
+    variants: product.variants,
+    options: product.options ?? [],
+    optionValues: product.optionValues ?? [],
+    variantOptionMappings: product.variantOptionMappings ?? [],
+    bulkPricing: suppressCatalogPricing ? [] : (product.bulkPricing ?? []),
+  };
+
+  const def = BLOCK_REGISTRY.product_overview;
+  const [data, condCtx, resolvePartial] = await Promise.all([
+    Promise.resolve(buildBindingData(ctx)),
+    buildConditionContext(ctx),
+    buildPartialResolver(ctx),
+  ]);
+
+  return (
+    <div className={CONTAINER}>
+      <ProductPurchaseProvider
+        product={purchaseProduct}
+        memberPrice={memberPrice}
+        memberPriceMap={memberPriceMap}
+        isMember={isMember ?? false}
+        membershipTeaser={membershipTeaser}
+      >
+        <SubBlockRenderer
+          props={props}
+          schema={def?.subBlockSchema}
+          defaultLayout={def?.defaultProps?.layout as Record<string, unknown> | undefined}
+          channelKey="chef-s-kitchen"
+          data={data}
+          ctx={ctx}
+          condCtx={condCtx}
+          draft={ctx?.draft ?? false}
+          editHooks={ctx?.draft ?? false}
+          resolvePartial={resolvePartial}
+        />
+      </ProductPurchaseProvider>
+    </div>
+  );
+}
+
 export const PRODUCT_BLOCK_COMPONENTS = {
   breadcrumbs: BreadcrumbsBlock,
+  product_overview: ProductOverviewBlock,
   product_buybox: ProductBuyboxBlock,
   product_links: ProductLinksBlock,
   product_tabs: ProductTabsBlock,

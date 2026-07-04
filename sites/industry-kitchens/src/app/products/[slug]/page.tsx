@@ -245,8 +245,6 @@ export default async function ProductPage({
         memberPriceMap={memberPriceMap}
         isMember={isMember}
         membershipTeaser={membershipTeaser}
-        brandName={brandName}
-        categoryName={breadcrumbs[breadcrumbs.length - 1]?.name}
       />
 
       {/* Brand-specific warranty / installation notes (conditional) */}

@@ -75,3 +75,38 @@ export function ClearanceSpotlight({
     </section>
   );
 }
+
+/** The scroll rail alone (CMS v2.1 — heading renders as an editable template). */
+export function ClearanceRail({
+  products,
+  pricing,
+}: {
+  products: RowProduct[];
+  pricing?: Pick<ProductCardProps, "isMember" | "planPrice"> & {
+    memberPriceMap?: Record<number, number>;
+  };
+}) {
+  if (products.length === 0) return null;
+  return (
+    <div className="-mx-6 flex snap-x snap-mandatory gap-4 overflow-x-auto px-6 pb-2 [scrollbar-width:thin]">
+      {products.slice(0, 10).map((product) => (
+        <div key={product.id} className="w-[240px] flex-none snap-start sm:w-[260px]">
+          <ProductCard
+            id={product.id}
+            name={product.name}
+            slug={product.urlPath || String(product.id)}
+            sku={product.sku}
+            price={product.price}
+            salePrice={product.salePrice}
+            imageUrl={product.thumbnailImage?.urlThumbnail || product.thumbnailImage?.urlStandard}
+            brandName={product.brandName}
+            memberPrice={pricing?.memberPriceMap?.[product.id] ?? null}
+            isMember={pricing?.isMember}
+            planPrice={pricing?.planPrice}
+            clearance
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
