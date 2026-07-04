@@ -136,7 +136,7 @@ export async function resetPassword(
   }
 
   const consumed = await customerAuthTokenService.consumeToken(token, "password_reset");
-  if (!consumed) {
+  if (!consumed || consumed.customerId == null) {
     return { error: "This reset link is invalid or has expired. Please request a new one." };
   }
 
