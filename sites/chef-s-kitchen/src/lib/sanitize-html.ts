@@ -31,3 +31,48 @@ export function sanitizeHtml(html: string): string {
     ALLOW_DATA_ATTR: false,
   });
 }
+
+/**
+ * Sanitize KTL template output (CMS v2). Identical policy to sanitizeHtml plus
+ * structural section tags and the two INERT sentinel elements the
+ * TemplateRenderer plants where locked widgets / rich bindings get spliced
+ * back in as React components:
+ *   <ktl-w data-w="i"></ktl-w>   <ktl-rich data-r="i"></ktl-rich>
+ * The WHOLE assembled string is sanitized once (not per segment) so author
+ * markup that WRAPS a widget stays balanced — DOMPurify would otherwise
+ * auto-close tags at segment boundaries and break the structure.
+ */
+export function sanitizeKtlHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: [
+      "p", "br", "hr", "div", "span",
+      "b", "i", "em", "strong", "u", "s", "strike", "small", "sub", "sup", "mark", "font",
+      "a", "ul", "ol", "li", "dl", "dt", "dd",
+      "blockquote", "pre", "code",
+      "h1", "h2", "h3", "h4", "h5", "h6",
+      "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption", "colgroup", "col",
+      "img", "figure", "figcaption",
+      "section", "article", "nav", "aside", "header", "footer",
+      // inert buttons only — event handlers never survive sanitization, and
+      // interactive behavior comes from locked widgets, not template markup
+      "button",
+      // minimal inline-SVG subset for icons (DOMPurify sanitizes SVG vectors)
+      "svg", "path", "circle", "line", "polyline", "polygon", "rect",
+      "ktl-w", "ktl-rich",
+    ],
+    ALLOWED_ATTR: [
+      "href", "title", "target", "rel", "name",
+      "src", "srcset", "sizes", "alt", "width", "height", "loading", "decoding",
+      "colspan", "rowspan", "align", "valign",
+      "class", "style", "color", "face",
+      "aria-label", "aria-hidden", "role",
+      "disabled", "type",
+      "viewBox", "d", "fill", "stroke", "stroke-width", "stroke-linecap",
+      "stroke-linejoin", "cx", "cy", "r", "x", "y", "x1", "y1", "x2", "y2",
+      "points", "rx", "xmlns",
+      "data-w", "data-r",
+    ],
+    FORBID_TAGS: ["script", "iframe", "object", "embed", "form", "input", "style", "link", "base"],
+    ALLOW_DATA_ATTR: false,
+  });
+}

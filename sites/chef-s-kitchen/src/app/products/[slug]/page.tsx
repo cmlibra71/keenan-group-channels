@@ -7,7 +7,6 @@ import { getMemberContext, getListingPricing } from "@/lib/member";
 import { ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
-import { BuilderRenderer } from "@/blocks/BuilderRenderer";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 import {
   ProductBuyBox,
@@ -225,7 +224,6 @@ export default async function ProductPage({
       membershipTeaser,
       brandName: brandRow?.name ?? null,
       reviewSummary,
-      categoryName: breadcrumbs[breadcrumbs.length - 1]?.name,
     },
     links: {
       brandRow:
@@ -247,85 +245,27 @@ export default async function ProductPage({
     },
   };
 
-  // ═══ GrapesJS visual-builder TEMPLATE path (flag: grapesjs_product_template_enabled) ═══
-  // Precedence: grapesjs → v1 blocks → legacy. Renders the exported HTML/CSS and
-  // splices the LIVE product components at data-kg-widget markers via the SAME
-  // RenderContext (checkout logic unchanged). Route stays the SEO/JSON-LD owner.
-  if (
-    process.env.CMS_BUILDER_FORCE === "product" ||
-    (await getFeatureFlag("grapesjs_product_template_enabled"))
-  ) {
-    const gTemplate = await getCmsTemplate("product", draft).catch(() => null);
-    const g = gTemplate as unknown as {
-      builder_kind?: string;
-      builder_html?: string | null;
-      builder_css?: string | null;
-    } | null;
-    if (g && g.builder_kind === "grapesjs" && g.builder_html) {
-      const context: RenderContext = {
-        draft,
-        record: {
-          kind: "product",
-          product: product as unknown as Record<string, unknown>,
-          extras: {
-            reviews,
-            reviewSummary,
-            attachments,
-            relatedProducts,
-            relatedPricing: relatedPricing as unknown as Record<string, unknown>,
-            brandRow,
-            breadcrumbs,
-            memberPrice,
-            memberPriceMap,
-            isMember,
-            membershipTeaser,
-            memberPricingEnabled,
-            suppressCatalogPricing,
-          },
-        },
-      };
-      return (
-        <div>
-          <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
-          />
-          <ViewedProductTracker
-            product={{
-              id: product.id,
-              sku: product.sku,
-              name: product.name,
-              price:
-                product.salePrice != null
-                  ? parseFloat(String(product.salePrice))
-                  : product.price != null
-                    ? parseFloat(String(product.price))
-                    : null,
-              imageUrl:
-                ((product.images as Array<Record<string, unknown>> | undefined)?.[0]?.urlStandard as string) ??
-                ((product.images as Array<Record<string, unknown>> | undefined)?.[0]?.url_standard as string) ??
-                null,
-              categories: breadcrumbs.map((c: { name: string }) => c.name),
-              brand: brandRow?.name ?? null,
-            }}
-          />
-          <BuilderRenderer
-            html={g.builder_html}
-            css={g.builder_css ?? ""}
-            ctx={context}
-            draft={draft}
-          />
-        </div>
-      );
-    }
-  }
-
   // ═══ CMS product TEMPLATE path (kill switch: flag off → legacy) ═══
   // The whole page as a block document (breadcrumbs / slots / buybox / links /
   // tabs / related); this route stays the data + SEO owner — JSON-LD stays
   // here, and the heavy queries above feed the blocks via RenderContext extras.
-  if (await getFeatureFlag("cms_product_template_enabled")) {
-    const template = await getCmsTemplate("product", draft).catch(() => null);
+  // CMS v2 local-testing override: render the v2 decomposed composition
+  // (schema-default sub-blocks) instead of the stored template doc. Env-only —
+  // never set in production; lets the v2 path be exercised without touching
+  // the shared database.
+  const forceV2 = process.env.CMS_V2_FORCE === "1";
+  if (forceV2 || (await getFeatureFlag("cms_product_template_enabled"))) {
+    const template = forceV2
+      ? {
+          blocks: [
+            { block_type: "breadcrumbs", region: "main", props: {} },
+            { block_type: "product_overview", region: "main", props: {} },
+            { block_type: "product_links", region: "main", props: {} },
+            { block_type: "product_tabs", region: "main", props: {} },
+            { block_type: "product_related", region: "main", props: {} },
+          ] as unknown as RenderedBlock[],
+        }
+      : await getCmsTemplate("product", draft).catch(() => null);
     if (template && template.blocks.length > 0) {
       const context: RenderContext = {
         draft,
