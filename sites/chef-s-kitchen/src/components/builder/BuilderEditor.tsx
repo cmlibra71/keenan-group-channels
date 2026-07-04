@@ -116,8 +116,8 @@ export default function BuilderEditor({
           /* keep current canvas */
         }
       } else if (t === "builder:flush") {
+        // Portal serializes save→publish off this message; no separate ack.
         post("builder:save", snapshot());
-        post("builder:saved", {});
       }
     };
     window.addEventListener("message", onMsg);
