@@ -255,7 +255,7 @@ export async function requestEmailChange(
  */
 export async function confirmEmailChange(token: string): Promise<ActionResult> {
   const consumed = await customerAuthTokenService.consumeToken(token?.trim(), "email_change");
-  if (!consumed) {
+  if (!consumed || consumed.customerId == null) {
     return { error: "This confirmation link is invalid or has expired." };
   }
 
