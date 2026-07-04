@@ -4,7 +4,7 @@ import { Phone, Mail } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
-import { getActiveSubscription, getFeatureFlag, getMegaMenu, drawEntryService, CHANNEL_ID } from "@/lib/store";
+import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import type { HeaderNavItem, HeaderConfig } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 import { HeaderSearch } from "./HeaderSearch";
@@ -47,14 +47,14 @@ export async function Header({
   if (subscriptionsEnabled) {
     const session = await getSession().catch(() => null);
     if (session) {
-      const activeSub = await getActiveSubscription(session.customerId).catch(() => null);
+      const activeSub = await getActiveSubscriptionForContact(session.contactId).catch(() => null);
       isMember = !!activeSub;
       if (isMember) {
         type DrawEntry = {
           entry: { id: number; entryCount: number | null; status: string };
         };
         const entries = (await drawEntryService
-          .getEntriesForCustomer(session.customerId, CHANNEL_ID)
+          .getEntriesForContact(session.contactId, CHANNEL_ID)
           .catch(() => [])) as DrawEntry[];
         entryCount = entries
           .filter((e) => e.entry.status === "active")

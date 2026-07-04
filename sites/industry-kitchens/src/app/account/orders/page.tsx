@@ -23,16 +23,17 @@ export default async function OrdersPage() {
   const session = await getSession();
   if (!session) redirect("/account");
 
-  // Scope to THIS customer (and channel, defence-in-depth). Both are registered
-  // filters on OrderService; without the customer_id filter the list would return
-  // channel-wide orders.
+  // Scope to THIS contact (and channel, defence-in-depth). Both are registered
+  // filters on OrderService; without the contact_id filter the list would return
+  // channel-wide orders. contact_id is the identity-unification subject; legacy
+  // customer-keyed orders were contact_id-backfilled in the migration.
   const { data } = await orderService.list({
     page: 1,
     limit: 50,
     sort: "created_at",
     direction: "desc",
     filters: {
-      customer_id: { type: "eq", value: session.customerId },
+      contact_id: { type: "eq", value: session.contactId },
       channel_id: { type: "eq", value: CHANNEL_ID },
     },
   });

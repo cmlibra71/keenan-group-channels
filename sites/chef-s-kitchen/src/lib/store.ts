@@ -23,6 +23,7 @@ import {
   customerService,
   customerAuthTokenService,
   accountService,
+  contactService,
   orderService,
   orderItemService,
   orderShippingAddressService,
@@ -104,6 +105,13 @@ export const {
 } = _store;
 
 export type { MegaMenuNode, MegaMenuFeatured, ContentPage } from "@keenan/services";
+
+// Contact-keyed active subscription (identity unification: the session subject
+// is a CONTACT id, so the member badge / pricing / checkout all key off it).
+// The channel store's getActiveSubscription remains customer-keyed for legacy
+// callers; storefront code should use this.
+export const getActiveSubscriptionForContact = (contactId: number) =>
+  subscriptionService.getActiveForContact(contactId, CHANNEL_ID);
 
 // ============================================================================
 // Channel settings (raw + typed accessors)
@@ -226,7 +234,8 @@ export async function getSitemapProducts(
 }
 
 /**
- * Guest orders (customer_id IS NULL) on this channel whose billing email matches
+ * Guest orders (no customer_id AND no contact_id) on this channel whose billing
+ * email matches
  * `email`, so a signed-in customer sees the orders they placed as a guest. Match
  * is normalized: case-insensitive, `+tag` suffix stripped, and dots stripped in
  * the local part for gmail/googlemail — so chris+test@gmail.com, chris.t@gmail.com
@@ -246,6 +255,7 @@ export async function getGuestOrdersForEmail(
     SELECT id, order_number, status, total_inc_tax, created_at
     FROM orders
     WHERE customer_id IS NULL
+      AND contact_id IS NULL
       AND channel_id = ${CHANNEL_ID}
       AND CASE
         WHEN split_part(lower(billing_address->>'email'), '@', 2) IN ('gmail.com','googlemail.com')
@@ -293,6 +303,7 @@ export {
   customerService,
   customerAuthTokenService,
   accountService,
+  contactService,
   customerAddressService,
   orderService,
   orderItemService,

@@ -1,0 +1,126 @@
+// ============================================================================
+// Contact-keyed address CRUD (identity unification).
+//
+// customer_addresses rows are owned by EITHER a legacy customer_id or a
+// contact_id (one-of, DB CHECK). Reads go through
+// customerAddressService.listForContact (legacy rows carry contact_id from the
+// migration backfill), but the service's WRITE paths are still nested under the
+// customers table (createForParent/updateForParent validate a customers parent
+// and key their default-flag clearing on customer_id) — unusable for a
+// contact-subject session. These raw postgres.js helpers are the contact-keyed
+// write path: every mutation is guarded by `AND contact_id = <owner>` in the
+// statement itself, and default billing/shipping stays exclusive per contact.
+// ============================================================================
+
+import { getCommerceClient } from "@keenan/services";
+
+export type ContactAddressData = {
+  firstName: string;
+  lastName: string;
+  company: string;
+  phone: string;
+  address1: string;
+  address2: string;
+  city: string;
+  stateOrProvince: string;
+  postalCode: string;
+  country: string;
+  countryCode: string;
+  isDefaultBilling: boolean;
+  isDefaultShipping: boolean;
+};
+
+function client() {
+  const sql = getCommerceClient();
+  if (!sql) throw new Error("Commerce database is not initialised.");
+  return sql;
+}
+
+/** Clear default flags on the contact's OTHER addresses so defaults stay exclusive. */
+async function clearDefaults(
+  contactId: number,
+  opts: { billing?: boolean; shipping?: boolean; exceptId?: number }
+): Promise<void> {
+  const sql = client();
+  if (opts.billing) {
+    await sql`
+      UPDATE customer_addresses SET is_default_billing = false
+      WHERE contact_id = ${contactId}
+        AND (${opts.exceptId ?? null}::int IS NULL OR id <> ${opts.exceptId ?? null})`;
+  }
+  if (opts.shipping) {
+    await sql`
+      UPDATE customer_addresses SET is_default_shipping = false
+      WHERE contact_id = ${contactId}
+        AND (${opts.exceptId ?? null}::int IS NULL OR id <> ${opts.exceptId ?? null})`;
+  }
+}
+
+export async function createAddressForContact(
+  contactId: number,
+  d: ContactAddressData
+): Promise<void> {
+  const sql = client();
+  await clearDefaults(contactId, { billing: d.isDefaultBilling, shipping: d.isDefaultShipping });
+  await sql`
+    INSERT INTO customer_addresses (
+      contact_id, first_name, last_name, company, phone,
+      address1, address2, city, state_or_province, postal_code,
+      country, country_code, is_default_billing, is_default_shipping
+    ) VALUES (
+      ${contactId}, ${d.firstName}, ${d.lastName}, ${d.company}, ${d.phone},
+      ${d.address1}, ${d.address2}, ${d.city}, ${d.stateOrProvince}, ${d.postalCode},
+      ${d.country}, ${d.countryCode}, ${d.isDefaultBilling}, ${d.isDefaultShipping}
+    )`;
+}
+
+/** Full-field update. The WHERE clause is the ownership guard. */
+export async function updateAddressForContact(
+  contactId: number,
+  id: number,
+  d: ContactAddressData
+): Promise<void> {
+  const sql = client();
+  await clearDefaults(contactId, {
+    billing: d.isDefaultBilling,
+    shipping: d.isDefaultShipping,
+    exceptId: id,
+  });
+  const result = await sql`
+    UPDATE customer_addresses SET
+      first_name = ${d.firstName}, last_name = ${d.lastName}, company = ${d.company},
+      phone = ${d.phone}, address1 = ${d.address1}, address2 = ${d.address2},
+      city = ${d.city}, state_or_province = ${d.stateOrProvince}, postal_code = ${d.postalCode},
+      country = ${d.country}, country_code = ${d.countryCode},
+      is_default_billing = ${d.isDefaultBilling}, is_default_shipping = ${d.isDefaultShipping},
+      updated_at = now()
+    WHERE id = ${id} AND contact_id = ${contactId}`;
+  if (result.count === 0) throw new Error("Address not found.");
+}
+
+export async function deleteAddressForContact(contactId: number, id: number): Promise<void> {
+  const sql = client();
+  const result = await sql`
+    DELETE FROM customer_addresses WHERE id = ${id} AND contact_id = ${contactId}`;
+  if (result.count === 0) throw new Error("Address not found.");
+}
+
+export async function setAddressDefaultForContact(
+  contactId: number,
+  id: number,
+  type: "billing" | "shipping"
+): Promise<void> {
+  const sql = client();
+  await clearDefaults(contactId, {
+    billing: type === "billing",
+    shipping: type === "shipping",
+    exceptId: id,
+  });
+  const result =
+    type === "billing"
+      ? await sql`UPDATE customer_addresses SET is_default_billing = true, updated_at = now()
+                  WHERE id = ${id} AND contact_id = ${contactId}`
+      : await sql`UPDATE customer_addresses SET is_default_shipping = true, updated_at = now()
+                  WHERE id = ${id} AND contact_id = ${contactId}`;
+  if (result.count === 0) throw new Error("Address not found.");
+}

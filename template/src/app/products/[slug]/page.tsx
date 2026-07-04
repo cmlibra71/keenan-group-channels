@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { draftMode } from "next/headers";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscription, getSubscriptionPlans, customerService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsTemplate } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsTemplate } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { getSession } from "@/lib/auth";
@@ -63,9 +63,9 @@ export default async function ProductPage({
     const session = await getSession();
     let customerGroupId: number | null = null;
     if (session) {
-      const activeSub = await getActiveSubscription(session.customerId);
+      const activeSub = await getActiveSubscriptionForContact(session.contactId);
       if (activeSub) {
-        const customer = await customerService.getById(session.customerId) as { customer_group_id: number | null } | null;
+        const customer = await contactService.getById(session.contactId) as { customer_group_id: number | null } | null;
         customerGroupId = customer?.customer_group_id ?? null;
         isMember = true;
       }

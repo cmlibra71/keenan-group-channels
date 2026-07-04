@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { cartService, cartItemService, orderService, orderItemService, orderShippingAddressService, CHANNEL_ID, getEffectivePrice, productVariantService, channelSettingsService, getCheckoutSettings, paymentService, couponService } from "@/lib/store";
-import { getFeatureFlag, getActiveSubscription, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
+import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { sendOrderConfirmationEmail, resolveEmailBranding, wantsStripeTestMode, productImageService } from "@keenan/services";
@@ -72,7 +72,7 @@ export async function placeOrder(
   // has expired since items were added, recalculate at non-member prices
   const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
   if (memberPricingEnabled && session) {
-    const activeSub = await getActiveSubscription(session.customerId);
+    const activeSub = await getActiveSubscriptionForContact(session.contactId);
     if (!activeSub) {
       // Subscription expired — recalculate any member-priced items at standard price
       const suppressCatalogSale = await shouldSuppressCatalogSalePrice();
@@ -136,7 +136,7 @@ export async function placeOrder(
   // Shipping calculation
   let shippingIncTax = 0;
   const checkoutSettings = await getCheckoutSettings();
-  const isMember = !!(session && await getActiveSubscription(session.customerId));
+  const isMember = !!(session && await getActiveSubscriptionForContact(session.contactId));
 
   // Shipping is quoted to the customer on the EX-tax subtotal (checkout page +
   // CheckoutForm pass cart.cartAmount), so the order must use the same basis or
@@ -215,7 +215,7 @@ export async function placeOrder(
         filters: {
           channel_id: { type: "eq", value: CHANNEL_ID },
           payment_status: { type: "eq", value: "awaiting_payment" },
-          ...(session?.customerId ? { customer_id: { type: "eq", value: session.customerId } } : {}),
+          ...(session?.contactId ? { contact_id: { type: "eq", value: session.contactId } } : {}),
         },
       });
       const existing = (open.data as Array<{ id: number; order_number: string; metafields?: Record<string, unknown> | null }>).find(
@@ -234,10 +234,11 @@ export async function placeOrder(
     }
   }
 
-  // Create order
+  // Create order — stamped with the CONTACT (identity unification). customer_id
+  // is legacy and no longer written by the storefront.
   const order = await orderService.create({
     channelId: CHANNEL_ID,
-    customerId: session?.customerId ?? null,
+    contactId: session?.contactId ?? null,
     // Link the order to the B2B account when the shopper belongs to one, so the
     // backoffice can reconcile it (esp. net-terms invoices).
     ...(netTerms ? { accountId: netTerms.accountId } : {}),
@@ -327,7 +328,7 @@ export async function placeOrder(
       await couponService.redeem({
         code,
         orderId: order.id,
-        customerId: session?.customerId ?? null,
+        contactId: session?.contactId ?? null,
         discountAmount: "0",
       });
     } catch (e) {
@@ -436,9 +437,9 @@ export async function confirmStripePayment(
       page: 1, limit: 1, sort: "id", direction: "desc",
       filters: { order_number: { type: "eq", value: orderNumber } },
     });
-    const order = orders.data[0] as { id: number; customer_id: number | null } | undefined;
+    const order = orders.data[0] as { id: number; contact_id: number | null } | undefined;
     if (!order) return { success: false, error: "Order not found" };
-    if (order.customer_id !== session.customerId) return { success: false, error: "Forbidden" };
+    if (order.contact_id !== session.contactId) return { success: false, error: "Forbidden" };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : "Failed to confirm payment" };
   }

@@ -7,10 +7,10 @@ import {
   CHANNEL_ID,
   subscriptionPlanService,
   subscriptionService,
-  customerService,
-  customerAddressService,
+  contactService,
   wantStripeTestMode,
 } from "@/lib/store";
+import { createAddressForContact } from "@/lib/contact-addresses";
 import { getStripeProvider } from "@/lib/stripe";
 
 // Per-customer in-flight guard (per container): the active/pending check and the
@@ -34,7 +34,7 @@ export async function createSubscription(planId: number): Promise<{
     return { success: false, error: "Not authenticated" };
   }
 
-  const lockKey = `${CHANNEL_ID}:${session.customerId}`;
+  const lockKey = `${CHANNEL_ID}:${session.contactId}`;
   if (subscriptionLocks.has(lockKey)) {
     return { success: false, error: "A subscription request is already being processed." };
   }
@@ -46,14 +46,14 @@ export async function createSubscription(planId: number): Promise<{
       return { success: false, error: "Plan not found" };
     }
 
-    const customer = await customerService.getById(session.customerId);
-    if (!customer) {
+    const contact = await contactService.getById(session.contactId);
+    if (!contact) {
       return { success: false, error: "Customer not found" };
     }
 
-    // Check for existing active subscription
-    const existing = await subscriptionService.getActiveForCustomer(
-      session.customerId,
+    // Check for existing active subscription (contact-keyed — identity unification)
+    const existing = await subscriptionService.getActiveForContact(
+      session.contactId,
       CHANNEL_ID
     );
     if (existing) {
@@ -71,8 +71,8 @@ export async function createSubscription(planId: number): Promise<{
     //     the customer can retry payment on the same subscription)
     //   - already paid (active/trialing) → activate locally and let them through
     //   - dead/expired/gone → discard it and fall through to create a fresh one
-    const allSubs = await subscriptionService.listForCustomer(
-      session.customerId,
+    const allSubs = await subscriptionService.listForContact(
+      session.contactId,
       CHANNEL_ID
     );
     const pendingSub = allSubs.find((s) => s.status === "pending");
@@ -112,13 +112,16 @@ export async function createSubscription(planId: number): Promise<{
       await subscriptionService.delete(pendingSub.id as number).catch(() => {});
     }
 
-    // Get or create Stripe customer
+    // Get or create Stripe customer. Metadata keys are unchanged for existing
+    // Stripe-side reporting; since identity unification the numeric subject is
+    // the CONTACT id (mirrored under contact_id for clarity).
     const stripeCustomerId = await stripeProvider.getOrCreateCustomer(
-      customer.email as string,
-      `${customer.first_name || ""} ${customer.last_name || ""}`.trim() || undefined,
+      contact.email as string,
+      `${contact.first_name || ""} ${contact.last_name || ""}`.trim() || undefined,
       {
         channel_id: String(CHANNEL_ID),
-        customer_id: String(session.customerId),
+        customer_id: String(session.contactId),
+        contact_id: String(session.contactId),
       }
     );
 
@@ -144,16 +147,18 @@ export async function createSubscription(planId: number): Promise<{
         trialPeriodDays: (plan.trial_period_days as number) || 0,
         metadata: {
           channel_id: String(CHANNEL_ID),
-          customer_id: String(session.customerId),
+          customer_id: String(session.contactId),
+          contact_id: String(session.contactId),
           plan_id: String(planId),
         },
       }
     );
 
-    // Create local subscription record
+    // Create local subscription record — contact_id is the subject (identity
+    // unification); customer_id no longer written.
     const localSub = await subscriptionService.create({
       channelId: CHANNEL_ID,
-      customerId: session.customerId,
+      contactId: session.contactId,
       planId: planId,
       status: "pending",
       stripeSubscriptionId: stripeSub.subscriptionId,
@@ -212,12 +217,12 @@ export async function attemptTestMembership(
     const plan = await subscriptionPlanService.getById(planId);
     if (!plan) return { created: false, error: "Plan not found" };
 
-    const existing = await subscriptionService.getActiveForCustomer(session.customerId, CHANNEL_ID);
+    const existing = await subscriptionService.getActiveForContact(session.contactId, CHANNEL_ID);
     if (existing) return { created: false, error: "You already have an active subscription" };
 
     // Recover any stranded pending subscription (e.g. an abandoned real Stripe
     // attempt that never completed) by activating it, rather than blocking.
-    const all = await subscriptionService.listForCustomer(session.customerId, CHANNEL_ID);
+    const all = await subscriptionService.listForContact(session.contactId, CHANNEL_ID);
     const pending = all.find((s) => s.status === "pending");
     if (pending) {
       await subscriptionService.activate(pending.id as number);
@@ -229,7 +234,7 @@ export async function attemptTestMembership(
     const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
     const localSub = await subscriptionService.create({
       channelId: CHANNEL_ID,
-      customerId: session.customerId,
+      contactId: session.contactId,
       planId,
       status: "pending",
       currentPeriodStart: now,
@@ -277,8 +282,8 @@ export async function completeMembershipProfile(input: {
 
   try {
     // Must have a subscription (active or pending) to complete onboarding.
-    const subs = await subscriptionService.listForCustomer(
-      session.customerId,
+    const subs = await subscriptionService.listForContact(
+      session.contactId,
       CHANNEL_ID
     );
     const sub = subs.find((s) => s.status === "active" || s.status === "pending");
@@ -286,17 +291,23 @@ export async function completeMembershipProfile(input: {
       return { success: false, error: "No membership found" };
     }
 
-    const customer = await customerService.getById(session.customerId);
-    if (!customer) {
+    const contact = await contactService.getById(session.contactId);
+    if (!contact) {
       return { success: false, error: "Customer not found" };
     }
 
-    const firstName = (customer.first_name as string) || "";
-    const lastName = (customer.last_name as string) || "";
+    const firstName = (contact.first_name as string) || "";
+    const lastName = (contact.last_name as string) || "";
 
-    await customerService.update(session.customerId, { company, phone });
+    // Contacts have no company column (identity unification) — company lives
+    // under attributes.company; merge so other attribute keys are preserved.
+    const attributes = {
+      ...((contact.attributes as Record<string, unknown>) || {}),
+      company,
+    };
+    await contactService.update(session.contactId, { phone, attributes });
 
-    await customerAddressService.createForParent(session.customerId, {
+    await createAddressForContact(session.contactId, {
       firstName,
       lastName,
       company,
@@ -309,6 +320,7 @@ export async function completeMembershipProfile(input: {
       country: "Australia",
       countryCode: "AU",
       isDefaultBilling: true,
+      isDefaultShipping: false,
     });
 
     // Best-effort Stripe enrichment — never fail the onboarding on this.
@@ -360,8 +372,8 @@ export async function createBillingPortalSession(returnUrl: string): Promise<{
   }
 
   try {
-    const sub = await subscriptionService.getActiveForCustomer(
-      session.customerId,
+    const sub = await subscriptionService.getActiveForContact(
+      session.contactId,
       CHANNEL_ID
     );
     if (!sub?.stripe_customer_id) {
@@ -396,8 +408,8 @@ export async function cancelSubscription(): Promise<{
   }
 
   try {
-    const sub = await subscriptionService.getActiveForCustomer(
-      session.customerId,
+    const sub = await subscriptionService.getActiveForContact(
+      session.contactId,
       CHANNEL_ID
     );
     if (!sub) {

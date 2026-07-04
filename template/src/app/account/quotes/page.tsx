@@ -11,7 +11,7 @@ interface QuoteRecord {
   id: number;
   uuid: string;
   status: string | null;
-  customer_id: number | null;
+  contact_id: number | null;
   quote_number: string | null;
   quote_amount: string | null;
   attributes: Record<string, unknown> | null;
@@ -70,7 +70,7 @@ export default async function QuotesPage() {
     sort: "created_at",
     direction: "desc",
     filters: {
-      customer_id: { type: "eq", value: session.customerId },
+      contact_id: { type: "eq", value: session.contactId },
       channel_id: { type: "eq", value: CHANNEL_ID },
     },
   });

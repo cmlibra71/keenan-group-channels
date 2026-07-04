@@ -8,7 +8,7 @@ import { getSession } from "@/lib/auth";
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
 
 // QuoteService returns snake_case rows (transformRow convention).
-type QuoteRow = { id: number; uuid: string; customer_id?: number | null; [key: string]: unknown };
+type QuoteRow = { id: number; uuid: string; contact_id?: number | null; [key: string]: unknown };
 
 async function getOrCreateQuote() {
   const uuid = await getQuoteUuid();
@@ -63,10 +63,10 @@ export async function addToQuote(productId: number, variantId?: number | null) {
   // would otherwise throw an FK ValidationError and 500 the whole add-to-quote,
   // leaving the quote empty with no feedback.
   const session = await getSession();
-  if (session && !quote.customer_id) {
+  if (session && !quote.contact_id) {
     try {
       await quoteService.update(quote.id, {
-        customerId: session.customerId,
+        contactId: session.contactId,
         email: session.email,
       });
     } catch (e) {
@@ -146,7 +146,7 @@ export async function submitQuote(notes?: string) {
   // (both share the quote_pending status).
   const existingAttributes = (quote.attributes ?? {}) as Record<string, unknown>;
   await quoteService.update(quote.id, {
-    customerId: session.customerId,
+    contactId: session.contactId,
     email: session.email,
     customerNotes: notes || null,
     attributes: { ...existingAttributes, submitted_at: new Date().toISOString() },
@@ -161,6 +161,21 @@ export async function getQuotesForCustomer() {
   const session = await getSession();
   if (!session) return { error: "Not logged in", quotes: [] };
 
-  const customerQuotes = await quoteService.listForCustomer(session.customerId, CHANNEL_ID);
-  return { quotes: customerQuotes };
+  // Contact-keyed (identity unification). Mirrors the old listForCustomer
+  // semantics: this channel's quotes for the subject, hiding in-progress
+  // drafts (quote_pending), newest first.
+  const result = await quoteService.list({
+    page: 1,
+    limit: 100,
+    sort: "created_at",
+    direction: "desc",
+    filters: {
+      contact_id: { type: "eq", value: session.contactId },
+      channel_id: { type: "eq", value: CHANNEL_ID },
+    },
+  });
+  const contactQuotes = (result.data as Array<{ status?: string | null }>).filter(
+    (q) => q.status !== "quote_pending"
+  );
+  return { quotes: contactQuotes };
 }

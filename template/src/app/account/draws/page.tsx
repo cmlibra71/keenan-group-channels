@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth";
 import {
   getFeatureFlag,
   getUpcomingDraws,
-  getActiveSubscription,
+  getActiveSubscriptionForContact,
   drawEntryService,
   prizeService,
   CHANNEL_ID,
@@ -31,9 +31,9 @@ export default async function DrawsPage() {
 
   const [upcomingDraws, entries, activePrizes, activeSub] = await Promise.all([
     getUpcomingDraws(),
-    drawEntryService.getEntriesForCustomer(session.customerId, CHANNEL_ID) as Promise<DrawEntry[]>,
+    drawEntryService.getEntriesForContact(session.contactId, CHANNEL_ID) as Promise<DrawEntry[]>,
     prizeService.listActiveForChannel(CHANNEL_ID),
-    getActiveSubscription(session.customerId),
+    getActiveSubscriptionForContact(session.contactId),
   ]);
 
   const activeEntries = entries.filter(

@@ -13,11 +13,11 @@ export default async function CompleteProfilePage() {
   if (!session) redirect("/account");
 
   // Must have a subscription (active or pending) to be here.
-  const subs = await subscriptionService.listForCustomer(session.customerId, CHANNEL_ID);
+  const subs = await subscriptionService.listForContact(session.contactId, CHANNEL_ID);
   const sub = subs.find((s) => s.status === "active" || s.status === "pending");
   if (!sub) redirect("/membership");
 
-  const { customer, complete } = await getMembershipProfile(session.customerId);
+  const { customer, complete } = await getMembershipProfile(session.contactId);
   if (complete) redirect("/membership/welcome");
 
   const checkoutSettings = await getCheckoutSettings();

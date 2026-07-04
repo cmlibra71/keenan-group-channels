@@ -1,9 +1,9 @@
 import { getSession } from "@/lib/auth";
 import {
   getFeatureFlag,
-  getActiveSubscription,
+  getActiveSubscriptionForContact,
   getSubscriptionPlans,
-  customerService,
+  contactService,
   getMemberPriceMap,
 } from "@/lib/store";
 
@@ -47,14 +47,14 @@ export async function getMemberContext(): Promise<MemberContext> {
 
   const session = await getSession();
   if (session) {
-    const activeSub = await getActiveSubscription(session.customerId);
+    const activeSub = await getActiveSubscriptionForContact(session.contactId);
     if (activeSub) {
-      const customer = (await customerService.getById(session.customerId)) as {
+      const contact = (await contactService.getById(session.contactId)) as {
         customer_group_id: number | null;
       } | null;
       return {
         isMember: true,
-        customerGroupId: customer?.customer_group_id ?? base.groupId,
+        customerGroupId: contact?.customer_group_id ?? base.groupId,
         planPrice: base.price,
       };
     }

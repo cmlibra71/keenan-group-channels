@@ -6,7 +6,7 @@ import {
   getUpcomingDraws,
   getPartnerOffers,
   getFeatureFlag,
-  getActiveSubscription,
+  getActiveSubscriptionForContact,
   prizeService,
   CHANNEL_ID,
 } from "@/lib/store";
@@ -44,7 +44,7 @@ export default async function MembershipLandingPage() {
   // logged-in users land in a /account/register → /account redirect loop
   // because the register page bounces anyone with an active session.
   const session = await getSession();
-  const activeSub = session ? await getActiveSubscription(session.customerId) : null;
+  const activeSub = session ? await getActiveSubscriptionForContact(session.contactId) : null;
   const joinHref = !session
     ? "/account/register"
     : activeSub

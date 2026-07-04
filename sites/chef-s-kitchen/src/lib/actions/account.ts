@@ -4,10 +4,16 @@ import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
 import {
   CHANNEL_ID,
-  customerService,
-  customerAddressService,
+  contactService,
   subscriptionService,
 } from "@/lib/store";
+import {
+  createAddressForContact,
+  updateAddressForContact,
+  deleteAddressForContact,
+  setAddressDefaultForContact,
+  type ContactAddressData,
+} from "@/lib/contact-addresses";
 import { getStripeProvider } from "@/lib/stripe";
 
 type Result = { success: boolean; error?: string };
@@ -33,7 +39,7 @@ export type AddressInput = {
   isDefaultShipping?: boolean;
 };
 
-function toAddressData(input: AddressInput) {
+function toAddressData(input: AddressInput): ContactAddressData {
   return {
     firstName: input.firstName?.trim() || "",
     lastName: input.lastName?.trim() || "",
@@ -70,11 +76,18 @@ export async function updateCustomerProfile(input: {
   const phone = input.phone?.trim() || "";
 
   try {
-    await customerService.update(session.customerId, { firstName, lastName, company, phone });
+    // Contacts have no company column (identity unification) — company lives
+    // under attributes.company; merge so other attribute keys are preserved.
+    const contact = await contactService.getById(session.contactId);
+    const attributes = {
+      ...((contact?.attributes as Record<string, unknown>) || {}),
+      company,
+    };
+    await contactService.update(session.contactId, { firstName, lastName, phone, attributes });
 
     // Best-effort: keep the Stripe customer in sync if they're a member.
     try {
-      const subs = await subscriptionService.listForCustomer(session.customerId, CHANNEL_ID);
+      const subs = await subscriptionService.listForContact(session.contactId, CHANNEL_ID);
       const sub = subs.find((s) => s.status === "active" || s.status === "pending");
       if (sub?.stripe_customer_id) {
         const stripe = await getStripeProvider();
@@ -102,7 +115,7 @@ export async function createCustomerAddress(input: AddressInput): Promise<Result
     return { success: false, error: "Address, city and postcode are required." };
   }
   try {
-    await customerAddressService.createForParent(session.customerId, toAddressData(input));
+    await createAddressForContact(session.contactId, toAddressData(input));
     revalidatePath("/account/profile");
     return { success: true };
   } catch (err) {
@@ -114,8 +127,8 @@ export async function updateCustomerAddress(id: number, input: AddressInput): Pr
   const session = await getSession();
   if (!session) return { success: false, error: "Not authenticated" };
   try {
-    // parent-scoped — validateBelongsToParent rejects another customer's address
-    await customerAddressService.updateForParent(session.customerId, id, toAddressData(input));
+    // contact-scoped — the WHERE contact_id guard rejects another contact's address
+    await updateAddressForContact(session.contactId, id, toAddressData(input));
     revalidatePath("/account/profile");
     return { success: true };
   } catch (err) {
@@ -127,7 +140,7 @@ export async function deleteCustomerAddress(id: number): Promise<Result> {
   const session = await getSession();
   if (!session) return { success: false, error: "Not authenticated" };
   try {
-    await customerAddressService.deleteForParent(session.customerId, id);
+    await deleteAddressForContact(session.contactId, id);
     revalidatePath("/account/profile");
     return { success: true };
   } catch (err) {
@@ -142,12 +155,8 @@ export async function setDefaultAddress(
   const session = await getSession();
   if (!session) return { success: false, error: "Not authenticated" };
   try {
-    // beforeUpdate clears the flag on the customer's other addresses.
-    await customerAddressService.updateForParent(
-      session.customerId,
-      id,
-      type === "billing" ? { isDefaultBilling: true } : { isDefaultShipping: true }
-    );
+    // Clears the flag on the contact's other addresses, then sets this one.
+    await setAddressDefaultForContact(session.contactId, id, type);
     revalidatePath("/account/profile");
     return { success: true };
   } catch (err) {
@@ -155,7 +164,7 @@ export async function setDefaultAddress(
   }
 }
 
-/** Save the member's "people on the account" list into customer metafields. */
+/** Save the member's "people on the account" list into contact metafields. */
 export async function updateAccountContacts(contacts: AccountContact[]): Promise<Result> {
   const session = await getSession();
   if (!session) return { success: false, error: "Not authenticated" };
@@ -170,12 +179,12 @@ export async function updateAccountContacts(contacts: AccountContact[]): Promise
     .filter((c) => c.name || c.email || c.phone || c.role);
 
   try {
-    const customer = await customerService.getById(session.customerId);
+    const contact = await contactService.getById(session.contactId);
     const metafields = {
-      ...((customer?.metafields as Record<string, unknown>) || {}),
+      ...((contact?.metafields as Record<string, unknown>) || {}),
       account_contacts: cleaned,
     };
-    await customerService.update(session.customerId, { metafields });
+    await contactService.update(session.contactId, { metafields });
     revalidatePath("/account/profile");
     return { success: true };
   } catch (err) {

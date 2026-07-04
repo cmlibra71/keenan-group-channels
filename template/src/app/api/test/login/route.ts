@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { customerService, CHANNEL_ID } from "@/lib/store";
+import { contactService, CHANNEL_ID } from "@/lib/store";
 import { setSession } from "@/lib/auth";
 
 // Guarded test-only login bypass.
@@ -62,15 +62,17 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const customer = (await customerService.findByEmailAndChannel(email, CHANNEL_ID)) as {
+  // Identity unification: sessions are contact-subject; resolve the same login
+  // candidate the real sign-in flow would.
+  const contact = (await contactService.findLoginCandidate(email, CHANNEL_ID)) as {
     id: number;
     email: string;
   } | null;
 
-  if (!customer) {
-    return NextResponse.json({ error: "Test customer not found." }, { status: 404 });
+  if (!contact) {
+    return NextResponse.json({ error: "Test contact not found." }, { status: 404 });
   }
 
-  await setSession(customer.id, customer.email);
-  return NextResponse.json({ ok: true, customerId: customer.id, email: customer.email });
+  await setSession(contact.id, contact.email);
+  return NextResponse.json({ ok: true, contactId: contact.id, email: contact.email });
 }

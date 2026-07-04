@@ -13,7 +13,7 @@ interface QuoteDetail {
   uuid: string;
   status: string | null;
   channel_id: number;
-  customer_id: number | null;
+  contact_id: number | null;
   quote_number: string | null;
   quote_amount: string | null;
   base_amount: string | null;
@@ -76,8 +76,8 @@ export default async function QuoteDetailPage({
   if (Number.isNaN(quoteId)) notFound();
 
   const quote = (await quoteService.getWithItems(quoteId)) as QuoteDetail | null;
-  // Only the owning customer, on this channel, may view a quote.
-  if (!quote || quote.customer_id !== session.customerId || quote.channel_id !== CHANNEL_ID) {
+  // Only the owning contact, on this channel, may view a quote.
+  if (!quote || quote.contact_id !== session.contactId || quote.channel_id !== CHANNEL_ID) {
     notFound();
   }
 

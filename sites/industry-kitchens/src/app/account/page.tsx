@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Package, FileText, MapPin, LogOut, Crown, Trophy, Gift, ArrowRight, Calendar, Ticket, KeyRound } from "lucide-react";
 import { getSession } from "@/lib/auth";
-import { customerService, getFeatureFlag, getActiveSubscription, getUpcomingDraws, drawEntryService, CHANNEL_ID } from "@/lib/store";
+import { contactService, getFeatureFlag, getActiveSubscriptionForContact, getUpcomingDraws, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { logout } from "@/lib/actions/auth";
 
@@ -23,7 +23,7 @@ export default async function AccountPage() {
 
   const [customer, subscriptionsEnabled, drawsEnabled, partnerOffersEnabled] =
     await Promise.all([
-      customerService.getById(session.customerId) as Promise<{
+      contactService.getById(session.contactId) as Promise<{
         first_name: string;
         last_name: string;
         email: string;
@@ -34,7 +34,7 @@ export default async function AccountPage() {
     ]);
 
   const activeSub = subscriptionsEnabled
-    ? await getActiveSubscription(session.customerId)
+    ? await getActiveSubscriptionForContact(session.contactId)
     : null;
 
   // Fetch draw info for members
@@ -45,7 +45,7 @@ export default async function AccountPage() {
       entry: { id: number; entryCount: number | null; status: string };
     };
     const [entries, upcomingDraws] = await Promise.all([
-      drawEntryService.getEntriesForCustomer(session.customerId, CHANNEL_ID) as Promise<DrawEntry[]>,
+      drawEntryService.getEntriesForContact(session.contactId, CHANNEL_ID) as Promise<DrawEntry[]>,
       getUpcomingDraws(),
     ]);
     totalEntries = entries

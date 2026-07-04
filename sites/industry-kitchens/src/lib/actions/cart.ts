@@ -2,8 +2,8 @@
 
 import { cache } from "react";
 import { revalidatePath } from "next/cache";
-import { cartService, cartItemService, productService, productVariantService, customerService, bulkPricingRuleService, getEffectivePrice, CHANNEL_ID } from "@/lib/store";
-import { getFeatureFlag, getActiveSubscription, shouldSuppressCatalogSalePrice } from "@/lib/store";
+import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { getCartUuid, setCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { pickBestBulkUnit, layerCartPrice } from "@/lib/pricing/cart-pricing";
@@ -86,14 +86,14 @@ async function resolveItemPricing(
   if (memberPricingEnabled) {
     const session = await getSession();
     if (session) {
-      const activeSub = await getActiveSubscription(session.customerId);
+      const activeSub = await getActiveSubscriptionForContact(session.contactId);
       if (activeSub) {
-        const customer = (await customerService.getById(session.customerId)) as { customer_group_id: number | null } | null;
-        if (customer?.customer_group_id) {
+        const contact = (await contactService.getById(session.contactId)) as { customer_group_id: number | null } | null;
+        if (contact?.customer_group_id) {
           const variantResult = variantId ? null : await productVariantService.listForParent(productId, { page: 1, limit: 1, sort: "id", direction: "asc" });
           const pricingVariantId = variantId || (variantResult?.data[0] as { id: number } | undefined)?.id;
           if (pricingVariantId) {
-            const pricing = await getEffectivePrice(pricingVariantId, CHANNEL_ID, customer.customer_group_id, quantity);
+            const pricing = await getEffectivePrice(pricingVariantId, CHANNEL_ID, contact.customer_group_id, quantity);
             if (pricing.salePrice) memberSalePrice = pricing.salePrice;
           }
         }

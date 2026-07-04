@@ -23,6 +23,7 @@ import {
   customerService,
   customerAuthTokenService,
   accountService,
+  contactService,
   orderService,
   orderItemService,
   orderShippingAddressService,
@@ -103,6 +104,13 @@ export const {
 } = _store;
 
 export type { MegaMenuNode, MegaMenuFeatured, ContentPage } from "@keenan/services";
+
+// Contact-keyed active subscription (identity unification: the session subject
+// is a CONTACT id, so the member badge / pricing / checkout all key off it).
+// The channel store's getActiveSubscription remains customer-keyed for legacy
+// callers; storefront code should use this.
+export const getActiveSubscriptionForContact = (contactId: number) =>
+  subscriptionService.getActiveForContact(contactId, CHANNEL_ID);
 
 // ============================================================================
 // Blog (channel-scoped)
@@ -444,6 +452,7 @@ export {
   customerService,
   customerAuthTokenService,
   accountService,
+  contactService,
   customerAddressService,
   orderService,
   orderItemService,

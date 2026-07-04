@@ -18,9 +18,9 @@ import {
   getRelatedProducts,
   getFeatureFlag,
   getEffectivePrice,
-  getActiveSubscription,
+  getActiveSubscriptionForContact,
   getSubscriptionPlans,
-  customerService,
+  contactService,
   brandService,
   CHANNEL_ID,
   getProductBreadcrumbs,
@@ -146,9 +146,9 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
       const session = await getSession().catch(() => null);
       let customerGroupId: number | null = null;
       if (session) {
-        const activeSub = await getActiveSubscription(session.customerId).catch(() => null);
+        const activeSub = await getActiveSubscriptionForContact(session.contactId).catch(() => null);
         if (activeSub) {
-          const customer = (await customerService.getById(session.customerId).catch(() => null)) as {
+          const customer = (await contactService.getById(session.contactId).catch(() => null)) as {
             customer_group_id: number | null;
           } | null;
           customerGroupId = customer?.customer_group_id ?? null;
