@@ -263,6 +263,16 @@ export default async function ProductPage({
       },
       draft,
     }).catch(() => null);
+    // The AUTHORED tree wins: the product template doc (builder_kind='nodes' —
+    // published version live, draft in preview). Seed only as fallback.
+    const nodesDoc = (await getCmsTemplate("product", draft).catch(() => null)) as {
+      builder_kind?: string;
+      node_tree?: unknown;
+    } | null;
+    const storedTree =
+      nodesDoc?.builder_kind === "nodes" && nodesDoc.node_tree
+        ? (nodesDoc.node_tree as typeof SEED_PRODUCT_TREE)
+        : null;
     if (payload) {
       return (
         <div>
@@ -287,7 +297,7 @@ export default async function ProductPage({
               brand: brandRow?.name ?? null,
             }}
           />
-          <BuilderProductPage tree={SEED_PRODUCT_TREE} payload={payload} />
+          <BuilderProductPage tree={storedTree ?? SEED_PRODUCT_TREE} payload={payload} />
         </div>
       );
     }
