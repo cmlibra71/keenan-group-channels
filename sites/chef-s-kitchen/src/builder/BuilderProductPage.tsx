@@ -9,7 +9,8 @@ import {
 import { addToCart } from "@/lib/actions/cart";
 import { addToQuote } from "@/lib/actions/quote";
 import { useGst, adjustForGst } from "@/lib/gst";
-import { BuilderTree } from "@keenan/services/builder-react";
+import { ProductImageGallery, type ProductImage as GalleryImage } from "@/components/product/ProductImageGallery";
+import { BuilderTree, type NativeComponents } from "@keenan/services/builder-react";
 import { BuilderActionsProvider, type ActionHandler } from "@keenan/services/builder-react";
 
 // ============================================================================
@@ -29,6 +30,42 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const money = (v: string | number | null | undefined): string | null => {
+  const n = typeof v === "number" ? v : parseFloat(v ?? "");
+  return Number.isFinite(n)
+    ? n.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : null;
+};
+
+/** Site-specific display enrichment of the aggregate payload: full route hrefs
+ *  (tree attrs hold ONE part, so paths can't be concatenated in nodes) and
+ *  proxied/locale-formatted card fields. Logic stays code, per the design. */
+function enrichPayload(payload: ProductPagePayload): ProductPagePayload {
+  const proxy = (u: string | null | undefined, w: number) =>
+    u ? `/api/image?url=${encodeURIComponent(u)}&w=${w}&q=80` : null;
+  return {
+    ...payload,
+    breadcrumbs: payload.breadcrumbs.map((b) => ({ ...b, href: `/categories/${b.slug}` })),
+    lastCrumb: payload.lastCrumb ? { ...payload.lastCrumb, href: `/categories/${payload.lastCrumb.slug}` } : null,
+    brand: payload.brand ? { ...payload.brand, href: `/brands/${payload.brand.slug}` } : payload.brand,
+    related: {
+      ...payload.related,
+      products: payload.related.products.map((p) => {
+        const n = parseFloat(p.price ?? "");
+        const hasPrice = Number.isFinite(n) && n > 0;
+        return {
+          ...p,
+          href: `/products/${p.slug}`,
+          imageUrl: proxy(p.imageUrl, 640),
+          hasPrice,
+          priceDisplay: hasPrice ? money(n) : null,
+          memberDisplay: p.memberPrice != null ? money(p.memberPrice) : null,
+        };
+      }),
+    },
+  } as ProductPagePayload;
 }
 
 function ActionsBridge({
@@ -89,8 +126,10 @@ function ActionsBridge({
 
   const p = purchase.product;
   const hasOptions = purchase.useGroupedMode;
-  const cartEnabled =
-    hasPrice && purchase.inStock && !purchase.purchasingDisabled && purchase.allOptionsSelected;
+  // HARD RULE (Chris, 2026-07-06): the site never blocks an order on stock —
+  // everything can drop-ship. Stock does NOT disable Add to Cart; instead a
+  // ships-to-order note shows (purchase.shipsToOrder below).
+  const cartEnabled = hasPrice && !purchase.purchasingDisabled && purchase.allOptionsSelected;
   const quoteDisabled = hasOptions && !purchase.allOptionsSelected;
 
   // Option groups with per-value flags — the tree repeats over these and each
@@ -184,7 +223,7 @@ function ActionsBridge({
       quotePricedDisabled: hasPrice && quoteDisabled,
       quoteRequestEnabled: !hasPrice && !quoteDisabled,
       quoteRequestDisabled: !hasPrice && quoteDisabled,
-      showOutOfStock: hasPrice && !purchase.inStock,
+      shipsToOrder: hasPrice && !purchase.inStock,
       // Mobile bar (member-aware amount; hidden for unpriced products)
       showMobileBar: hasPrice,
       mobilePriceDisplay: fmt(
@@ -203,9 +242,28 @@ function ActionsBridge({
     },
   };
 
+  // Coded (non-exploded) components slotted in by key — the gallery keeps its
+  // real zoom/pan/thumbnail behaviour instead of being rebuilt as nodes.
+  const nativeComponents: NativeComponents = {
+    "product-gallery": () => (
+      <ProductImageGallery
+        images={payload.product.images as unknown as GalleryImage[]}
+        productName={payload.product.name}
+        variantImageUrl={purchase.variantImageUrl}
+      />
+    ),
+  };
+
   return (
     <BuilderActionsProvider handlers={handlers}>
-      <BuilderTree tree={tree} payload={payload} namedStyles={namedStyles} components={components} scope={purchaseScope} />
+      <BuilderTree
+        tree={tree}
+        payload={payload}
+        namedStyles={namedStyles}
+        components={components}
+        nativeComponents={nativeComponents}
+        scope={purchaseScope}
+      />
     </BuilderActionsProvider>
   );
 }
@@ -223,6 +281,7 @@ export function BuilderProductPage({
 }) {
   // payload.product is the same shape ProductPurchaseProvider expects.
   const product = payload.product as unknown as PurchaseProduct;
+  const enriched = React.useMemo(() => enrichPayload(payload), [payload]);
   return (
     <ProductPurchaseProvider
       product={product}
@@ -231,7 +290,7 @@ export function BuilderProductPage({
       isMember={payload.pricing.isMember}
       membershipTeaser={payload.pricing.membershipTeaser}
     >
-      <ActionsBridge productId={payload.product.id} tree={tree} payload={payload} namedStyles={namedStyles} components={components} />
+      <ActionsBridge productId={payload.product.id} tree={tree} payload={enriched} namedStyles={namedStyles} components={components} />
     </ProductPurchaseProvider>
   );
 }

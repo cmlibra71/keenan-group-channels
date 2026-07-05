@@ -19,7 +19,7 @@ const CHEVRON: BuilderNode = {
     viewBox: { kind: "static", value: "0 0 24 24" },
     fill: { kind: "static", value: "none" },
     stroke: { kind: "static", value: "currentColor" },
-    "stroke-width": { kind: "static", value: "2" },
+    strokeWidth: { kind: "static", value: "2" },
   },
   children: [
     {
@@ -41,7 +41,7 @@ function trustIcon(id: string, d: string): BuilderNode {
       viewBox: { kind: "static", value: "0 0 24 24" },
       fill: { kind: "static", value: "none" },
       stroke: { kind: "static", value: "currentColor" },
-      "stroke-width": { kind: "static", value: "1.7" },
+      strokeWidth: { kind: "static", value: "1.7" },
     },
     children: [{ id: `${id}-p`, kind: "element", tag: "path", attrs: { d: { kind: "static", value: d } } }],
   };
@@ -123,7 +123,7 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                         kind: "element",
                         tag: "a",
                         classes: ["hover:text-text-secondary", "transition-colors", "duration-300"],
-                        attrs: { href: { kind: "binding", path: "crumb.slug" } },
+                        attrs: { href: { kind: "binding", path: "crumb.href" } },
                         text: [{ kind: "binding", path: "crumb.name" }],
                       },
                     ],
@@ -154,33 +154,16 @@ export const SEED_PRODUCT_TREE: NodeTree = {
             tag: "div",
             classes: ["grid", "grid-cols-1", "lg:grid-cols-2", "gap-12"],
             children: [
-              // Gallery (image, placeholder fallback)
+              // Gallery — a NATIVE (non-exploded) component slot: the real
+              // ProductImageGallery (zoom/pan/thumbnails/variant image) is
+              // slotted in by the bridge via BuilderTree.nativeComponents.
+              // First example of a component that does NOT get exploded
+              // (Chris's ruling, 2026-07-06).
               {
                 id: "gallery",
-                kind: "element",
-                tag: "div",
-                classes: ["h-80", "overflow-hidden", "bg-surface-secondary"],
-                children: [
-                  {
-                    id: "gallery-img",
-                    kind: "element",
-                    tag: "img",
-                    condition: { kind: "data", path: "product.images[0].urlStandard" },
-                    classes: ["h-full", "w-full", "object-contain"],
-                    attrs: {
-                      src: { kind: "binding", path: "product.images[0].urlStandard" },
-                      alt: { kind: "binding", path: "product.name" },
-                    },
-                  },
-                  {
-                    id: "gallery-empty",
-                    kind: "element",
-                    tag: "div",
-                    condition: { kind: "data", path: "product.images[0].urlStandard", not: true },
-                    classes: ["h-full", "w-full", "flex", "items-center", "justify-center", "text-text-muted"],
-                    text: [{ kind: "static", value: "No image available" }],
-                  },
-                ],
+                kind: "component",
+                componentKey: "product-gallery",
+                label: "Product gallery (native)",
               },
               // Buy column
               {
@@ -673,14 +656,15 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                       },
                     ],
                   },
-                  // Out-of-stock note (live: priced + out of stock only)
+                  // Ships-to-order note. HARD RULE: the site NEVER says "out of
+                  // stock" and never blocks an order — everything drop-ships.
                   {
-                    id: "oos-note",
+                    id: "ships-note",
                     kind: "element",
                     tag: "p",
-                    condition: { kind: "data", path: "purchase.showOutOfStock" },
-                    classes: ["mt-2", "text-[13px]", "font-semibold", "text-sale"],
-                    text: [{ kind: "static", value: "Out of stock — add to a quote and we'll confirm availability." }],
+                    condition: { kind: "data", path: "purchase.shipsToOrder" },
+                    classes: ["mt-2", "text-[13px]", "font-semibold", "text-text-secondary"],
+                    text: [{ kind: "static", value: "Ships to order — Add to Cart or Add to Quote and we'll confirm delivery timing." }],
                   },
                   // Trust row
                   {
@@ -814,7 +798,7 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                 tag: "a",
                 condition: { kind: "data", path: "brand.name" },
                 classes: ["btn-ghost", "text-[13px]"],
-                attrs: { href: { kind: "binding", path: "brand.slug" } },
+                attrs: { href: { kind: "binding", path: "brand.href" } },
                 text: [{ kind: "static", value: "More from " }, { kind: "binding", path: "brand.name" }],
               },
               {
@@ -823,7 +807,7 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                 tag: "a",
                 condition: { kind: "data", path: "lastCrumb.name" },
                 classes: ["btn-ghost", "text-[13px]"],
-                attrs: { href: { kind: "binding", path: "lastCrumb.slug" } },
+                attrs: { href: { kind: "binding", path: "lastCrumb.href" } },
                 text: [{ kind: "static", value: "More in " }, { kind: "binding", path: "lastCrumb.name" }],
               },
             ],
@@ -1057,7 +1041,7 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                                   viewBox: { kind: "static", value: "0 0 24 24" },
                                   fill: { kind: "static", value: "none" },
                                   stroke: { kind: "static", value: "currentColor" },
-                                  "stroke-width": { kind: "static", value: "1.5" },
+                                  strokeWidth: { kind: "static", value: "1.5" },
                                 },
                                 children: [
                                   { id: "dl-icon-p1", kind: "element", tag: "path", attrs: { d: { kind: "static", value: "M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" } } },
@@ -1124,7 +1108,7 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                 id: "related-grid",
                 kind: "element",
                 tag: "div",
-                classes: ["grid", "grid-cols-2", "gap-3", "sm:gap-4", "md:grid-cols-3", "lg:grid-cols-4"],
+                classes: ["grid", "grid-cols-1", "gap-3", "sm:gap-4", "sm:grid-cols-2", "md:grid-cols-3", "lg:grid-cols-4"],
                 children: [
                   {
                     id: "related-repeat",
@@ -1144,7 +1128,7 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                             kind: "element",
                             tag: "a",
                             classes: ["relative", "block", "aspect-square", "bg-white"],
-                            attrs: { href: { kind: "binding", path: "card.slug" } },
+                            attrs: { href: { kind: "binding", path: "card.href" } },
                             children: [
                               {
                                 id: "rc-img",
@@ -1170,7 +1154,7 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                                 kind: "element",
                                 tag: "a",
                                 classes: ["block"],
-                                attrs: { href: { kind: "binding", path: "card.slug" } },
+                                attrs: { href: { kind: "binding", path: "card.href" } },
                                 children: [
                                   {
                                     id: "rc-name",
@@ -1199,6 +1183,7 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                                     id: "rc-price-row",
                                     kind: "element",
                                     tag: "div",
+                                    condition: { kind: "data", path: "card.hasPrice" },
                                     classes: ["flex", "flex-wrap", "items-baseline", "gap-x-2", "gap-y-1"],
                                     children: [
                                       {
@@ -1206,24 +1191,32 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                                         kind: "element",
                                         tag: "span",
                                         classes: ["text-lg", "font-bold", "leading-none", "tracking-[-0.02em]", "text-text-primary"],
-                                        text: [{ kind: "static", value: "$" }, { kind: "binding", path: "card.price", formatters: ["money"] }],
+                                        text: [{ kind: "static", value: "$" }, { kind: "binding", path: "card.priceDisplay" }],
                                       },
                                       {
                                         id: "rc-exgst",
                                         kind: "element",
                                         tag: "span",
                                         classes: ["text-xs", "font-semibold", "text-steel-500"],
-                                        text: [{ kind: "static", value: "ex GST" }],
+                                        text: [{ kind: "binding", path: "purchase.gstLabel" }],
                                       },
                                     ],
+                                  },
+                                  {
+                                    id: "rc-cfp",
+                                    kind: "element",
+                                    tag: "p",
+                                    condition: { kind: "data", path: "card.hasPrice", not: true },
+                                    classes: ["text-sm", "font-semibold", "text-text-secondary"],
+                                    text: [{ kind: "static", value: "Call for Price" }],
                                   },
                                   {
                                     id: "rc-member",
                                     kind: "element",
                                     tag: "p",
-                                    condition: { kind: "data", path: "card.memberPrice" },
+                                    condition: { kind: "data", path: "card.memberDisplay" },
                                     classes: ["mt-0.5", "flex", "items-center", "gap-1", "text-xs", "font-semibold", "text-member-text"],
-                                    text: [{ kind: "static", value: "Member $" }, { kind: "binding", path: "card.memberPrice", formatters: ["money"] }],
+                                    text: [{ kind: "static", value: "Member $" }, { kind: "binding", path: "card.memberDisplay" }],
                                   },
                                 ],
                               },
@@ -1237,6 +1230,7 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                                     id: "rc-add",
                                     kind: "element",
                                     tag: "button",
+                                    condition: { kind: "data", path: "card.hasPrice" },
                                     classes: ["btn-primary", "w-full", "btn-sm"],
                                     events: [
                                       {
