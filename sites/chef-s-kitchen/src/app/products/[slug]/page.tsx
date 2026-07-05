@@ -7,7 +7,7 @@ import { getMemberContext, getListingPricing } from "@/lib/member";
 import { ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
-import { getProductPageData } from "@/lib/store";
+import { getProductPageData, getNamedStyles } from "@/lib/store";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
@@ -273,6 +273,7 @@ export default async function ProductPage({
       nodesDoc?.builder_kind === "nodes" && nodesDoc.node_tree
         ? (nodesDoc.node_tree as typeof SEED_PRODUCT_TREE)
         : null;
+    const namedStyles = await getNamedStyles().catch(() => ({}));
     if (payload) {
       return (
         <div>
@@ -297,7 +298,7 @@ export default async function ProductPage({
               brand: brandRow?.name ?? null,
             }}
           />
-          <BuilderProductPage tree={storedTree ?? SEED_PRODUCT_TREE} payload={payload} />
+          <BuilderProductPage tree={storedTree ?? SEED_PRODUCT_TREE} payload={payload} namedStyles={namedStyles} />
         </div>
       );
     }

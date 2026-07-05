@@ -103,6 +103,7 @@ export const {
   getCheckoutSettings,
   calculateShipping,
   getProductPageData,
+  getNamedStyles,
 } = _store;
 
 export type { MegaMenuNode, MegaMenuFeatured, ContentPage } from "@keenan/services";
