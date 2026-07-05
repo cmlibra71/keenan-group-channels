@@ -1,0 +1,89 @@
+{
+  "origin": "https://chefsdepot.com.au",
+  "captured": [
+    {
+      "path": "/",
+      "slug": "home",
+      "device": "desktop",
+      "ok": true
+    },
+    {
+      "path": "/",
+      "slug": "home",
+      "device": "mobile",
+      "ok": true
+    },
+    {
+      "path": "/products/frymate-filter-sr142",
+      "slug": "products_frymate_filter_sr142",
+      "device": "desktop",
+      "ok": true
+    },
+    {
+      "path": "/products/frymate-filter-sr142",
+      "slug": "products_frymate_filter_sr142",
+      "device": "mobile",
+      "ok": true
+    },
+    {
+      "path": "/products/dalcon-wcfc-20l-ammoniated-floor-cleaner-20l",
+      "slug": "products_dalcon_wcfc_20l_ammoniated_floor_cleaner_20l",
+      "device": "desktop",
+      "ok": true
+    },
+    {
+      "path": "/products/dalcon-wcfc-20l-ammoniated-floor-cleaner-20l",
+      "slug": "products_dalcon_wcfc_20l_ammoniated_floor_cleaner_20l",
+      "device": "mobile",
+      "ok": true
+    },
+    {
+      "path": "/categories/cut-resistant-gloves",
+      "slug": "categories_cut_resistant_gloves",
+      "device": "desktop",
+      "ok": true
+    },
+    {
+      "path": "/categories/cut-resistant-gloves",
+      "slug": "categories_cut_resistant_gloves",
+      "device": "mobile",
+      "ok": true
+    },
+    {
+      "path": "/categories/grease-traps",
+      "slug": "categories_grease_traps",
+      "device": "desktop",
+      "ok": true
+    },
+    {
+      "path": "/categories/grease-traps",
+      "slug": "categories_grease_traps",
+      "device": "mobile",
+      "ok": true
+    },
+    {
+      "path": "/pages/terms",
+      "slug": "pages_terms",
+      "device": "desktop",
+      "ok": true
+    },
+    {
+      "path": "/pages/terms",
+      "slug": "pages_terms",
+      "device": "mobile",
+      "ok": true
+    },
+    {
+      "path": "/cart",
+      "slug": "cart",
+      "device": "desktop",
+      "ok": true
+    },
+    {
+      "path": "/cart",
+      "slug": "cart",
+      "device": "mobile",
+      "ok": true
+    }
+  ]
+}
