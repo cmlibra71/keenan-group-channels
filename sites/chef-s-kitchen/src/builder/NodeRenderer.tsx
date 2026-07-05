@@ -1,15 +1,27 @@
+"use client";
 import * as React from "react";
 import {
   type BuilderNode,
   type ElementNode,
+  type EventAction,
+  type FollowUp,
   type NodeCondition,
+  type NodeEvent,
   type RepeatNode,
   type TextPart,
   type NodeTree,
   resolveBinding,
+  type AttrValue,
   type ProductPagePayload,
 } from "@keenan/services/builder";
 import { BuilderDataCtx, useBuilderData, type BuilderData } from "./BuilderDataContext";
+import {
+  useBuilderActions,
+  useBuilderLocalState,
+  BuilderLocalStateProvider,
+  type BuilderActionsApi,
+  type LocalStateApi,
+} from "./BuilderActions";
 
 // ============================================================================
 // NodeRenderer — walks a NodeTree and emits real React (no html-react-parser,
@@ -44,10 +56,14 @@ function resolve(data: BuilderData, path: string): unknown {
   return resolveBinding(data.payload, path, data.scope);
 }
 
-function conditionHolds(cond: NodeCondition | undefined, data: BuilderData): boolean {
+function conditionHolds(
+  cond: NodeCondition | undefined,
+  data: BuilderData,
+  local: LocalStateApi | null
+): boolean {
   if (!cond) return true;
   if (cond.kind === "state") {
-    const v = data.scope[cond.ref];
+    const v = local?.get(cond.ref) ?? data.scope[cond.ref];
     return cond.equals === undefined ? !!v : v === cond.equals;
   }
   if (cond.kind === "data") {
@@ -66,12 +82,91 @@ function renderText(parts: TextPart[], data: BuilderData): string {
     .join("");
 }
 
+function resolveArgs(
+  args: Record<string, AttrValue> | undefined,
+  data: BuilderData
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(args ?? {}))
+    out[k] = v.kind === "static" ? v.value : resolve(data, v.path);
+  return out;
+}
+
+function runFollowUps(followUps: FollowUp[] | undefined, actions: BuilderActionsApi | null, local: LocalStateApi | null) {
+  for (const f of followUps ?? []) {
+    if (f.kind === "toast") actions?.toast(f.tone, f.message);
+    else if (f.kind === "navigate") actions?.navigate(f.to);
+    else if (f.kind === "set-state") local?.set(f.ref, f.value);
+  }
+}
+
+/** Dispatch one event's action (local codeless op or a facade Action). Exported for tests. */
+export async function dispatchEvent(
+  action: EventAction,
+  data: BuilderData,
+  actions: BuilderActionsApi | null,
+  local: LocalStateApi | null
+) {
+  if (action.kind === "local") {
+    switch (action.op) {
+      case "toggle":
+        if (action.target) local?.set(action.target, "toggle");
+        break;
+      case "set-index":
+        if (action.target && typeof action.value === "number") local?.set(action.target, action.value);
+        break;
+      case "copy":
+        if (typeof action.value === "string" && typeof navigator !== "undefined")
+          navigator.clipboard?.writeText(action.value);
+        break;
+      case "scroll-to":
+        if (typeof action.target === "string")
+          document.getElementById(action.target)?.scrollIntoView({ behavior: "smooth" });
+        break;
+      // "dismiss" is handled by the app-tier container; no-op here.
+    }
+    return;
+  }
+  // Facade Action + typed-result follow-ups.
+  const result = await (actions?.run(action.ref, resolveArgs(action.args, data)) ?? Promise.resolve({ ok: false }));
+  runFollowUps(result.ok ? action.onSuccess : action.onError, actions, local);
+}
+
+const DOM_EVENT: Record<NodeEvent["on"], string | null> = {
+  click: "onClick",
+  change: "onChange",
+  submit: "onSubmit",
+  mouseenter: "onMouseEnter",
+  mouseleave: "onMouseLeave",
+  keydown: "onKeyDown",
+  mount: null, // handled via effect
+  "in-view": null, // handled via IntersectionObserver (future)
+};
+
 function ElementRenderer({ node, data }: { node: ElementNode; data: BuilderData }): React.ReactElement | null {
+  const actions = useBuilderActions();
+  const local = useBuilderLocalState();
   const className = [...(node.classes ?? []), ...(node.styleRefs ?? [])].join(" ") || undefined;
   const props: Record<string, unknown> = { "data-node-id": node.id };
   if (className) props.className = className;
   for (const [k, v] of Object.entries(node.attrs ?? {}))
     props[k] = v.kind === "static" ? v.value : formatValue(resolve(data, v.path), v.formatters);
+
+  // Wire declared events to DOM handlers (client tier).
+  for (const e of node.events ?? []) {
+    const handlerName = DOM_EVENT[e.on];
+    if (!handlerName) continue;
+    props[handlerName] = (ev: React.SyntheticEvent) => {
+      if (e.on === "submit") ev.preventDefault();
+      void dispatchEvent(e.action, data, actions, local);
+    };
+  }
+  // on-mount event.
+  const mountEvent = (node.events ?? []).find((e) => e.on === "mount");
+  React.useEffect(() => {
+    if (mountEvent) void dispatchEvent(mountEvent.action, data, actions, local);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const Tag = node.tag as keyof React.JSX.IntrinsicElements;
 
@@ -152,22 +247,35 @@ function ComponentRefRenderer({
   );
 }
 
-/** Render a single node (reads BuilderDataCtx). */
+/** Render a single node (reads BuilderDataCtx + local state). */
 export function NodeRenderer({ node }: { node: BuilderNode }): React.ReactElement | null {
   const data = useBuilderData();
-  if (!conditionHolds(node.condition, data)) return null;
+  const local = useBuilderLocalState();
+  if (!conditionHolds(node.condition, data, local)) return null;
+  let rendered: React.ReactElement | null;
   switch (node.kind) {
     case "element":
-      return <ElementRenderer node={node} data={data} />;
+      rendered = <ElementRenderer node={node} data={data} />;
+      break;
     case "repeat":
-      return <RepeatRenderer node={node} data={data} />;
+      rendered = <RepeatRenderer node={node} data={data} />;
+      break;
     case "component":
-      return <ComponentRefRenderer node={node} data={data} />;
+      rendered = <ComponentRefRenderer node={node} data={data} />;
+      break;
     case "code":
-      return <div data-node-id={node.id} dangerouslySetInnerHTML={{ __html: node.html }} />;
+      rendered = <div data-node-id={node.id} dangerouslySetInnerHTML={{ __html: node.html }} />;
+      break;
     default:
-      return null;
+      rendered = null;
   }
+  // An element that declares local state seeds a provider for its subtree.
+  if (node.kind === "element" && node.state?.length) {
+    const initial: Record<string, boolean | number> = {};
+    for (const s of node.state) if (s.initial !== undefined) initial[s.name] = s.initial;
+    return <BuilderLocalStateProvider initial={initial}>{rendered}</BuilderLocalStateProvider>;
+  }
+  return rendered;
 }
 
 /** Top-level: render a whole tree against a payload. */
