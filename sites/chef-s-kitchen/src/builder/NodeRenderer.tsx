@@ -149,8 +149,13 @@ function ElementRenderer({ node, data }: { node: ElementNode; data: BuilderData 
   const className = [...(node.classes ?? []), ...(node.styleRefs ?? [])].join(" ") || undefined;
   const props: Record<string, unknown> = { "data-node-id": node.id };
   if (className) props.className = className;
-  for (const [k, v] of Object.entries(node.attrs ?? {}))
-    props[k] = v.kind === "static" ? v.value : formatValue(resolve(data, v.path), v.formatters);
+  for (const [k, v] of Object.entries(node.attrs ?? {})) {
+    const val = v.kind === "static" ? v.value : formatValue(resolve(data, v.path), v.formatters);
+    // Omit empty/absent values — never emit src="" / href="" (browser refetch,
+    // invalid links) or blank attrs from unresolved bindings.
+    if (val === "" || val == null) continue;
+    props[k] = val;
+  }
 
   // Wire declared events to DOM handlers (client tier).
   for (const e of node.events ?? []) {
