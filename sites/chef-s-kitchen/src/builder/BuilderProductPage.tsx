@@ -40,21 +40,56 @@ function ActionsBridge({
 
   const handlers = React.useMemo<Record<string, ActionHandler>>(
     () => ({
-      addToCart: () => addToCart(productId, ref.current.cartVariantId, ref.current.quantity),
-      addToQuote: () => addToQuote(productId, ref.current.cartVariantId),
+      // args.productId (bound per related-card) overrides the page product.
+      addToCart: (args) =>
+        args?.productId
+          ? addToCart(Number(args.productId), null, 1)
+          : addToCart(productId, ref.current.cartVariantId, ref.current.quantity),
+      addToQuote: (args) =>
+        args?.productId
+          ? addToQuote(Number(args.productId), null)
+          : addToQuote(productId, ref.current.cartVariantId),
       selectOption: (args) => {
         ref.current.selectOption(Number(args.optionId), Number(args.valueId));
       },
       setQuantity: (args) => {
         ref.current.setQuantity(Number(args.quantity));
       },
+      // Codeless steppers wire to these (TS logic lives here, per the design).
+      incrementQuantity: () => ref.current.setQuantity(ref.current.quantity + 1),
+      decrementQuantity: () => ref.current.setQuantity(Math.max(1, ref.current.quantity - 1)),
     }),
     [productId]
   );
 
+  // Reactive purchase state exposed to tree bindings as purchase.* — the tree
+  // re-renders with the provider (qty display, stock, live price).
+  const member = purchase.activeMemberPrice;
+  const rrp = purchase.displayPrice;
+  const hasSave = member != null && rrp > 0 && member < rrp;
+  const purchaseScope = {
+    purchase: {
+      quantity: purchase.quantity,
+      displayPrice: purchase.displayPrice,
+      displaySalePrice: purchase.displaySalePrice,
+      activeMemberPrice: member,
+      inStock: purchase.inStock,
+      allOptionsSelected: purchase.allOptionsSelected,
+      purchasingDisabled: purchase.purchasingDisabled,
+      variantImageUrl: purchase.variantImageUrl,
+      isMember: purchase.isMember,
+      // Display derivations for the member price panel (guest join-funnel).
+      priceDisplay: (member ?? rrp).toFixed(2),
+      rrpDisplay: rrp.toFixed(2),
+      hasSave,
+      saveAmount: hasSave ? Math.round(rrp - (member as number)).toString() : "",
+      savePct: hasSave ? Math.round(((rrp - (member as number)) / rrp) * 100).toString() : "",
+    },
+  };
+
   return (
     <BuilderActionsProvider handlers={handlers}>
-      <BuilderTree tree={tree} payload={payload} namedStyles={namedStyles} components={components} />
+      <BuilderTree tree={tree} payload={payload} namedStyles={namedStyles} components={components} scope={purchaseScope} />
     </BuilderActionsProvider>
   );
 }
