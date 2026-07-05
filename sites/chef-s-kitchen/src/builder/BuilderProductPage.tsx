@@ -25,11 +25,13 @@ function ActionsBridge({
   tree,
   payload,
   namedStyles,
+  components,
 }: {
   productId: number;
   tree: NodeTree;
   payload: ProductPagePayload;
   namedStyles?: Record<string, string[]>;
+  components?: Record<string, NodeTree>;
 }) {
   const purchase = useProductPurchase();
   // Keep handlers reading the LATEST provider state without re-memoizing.
@@ -52,7 +54,7 @@ function ActionsBridge({
 
   return (
     <BuilderActionsProvider handlers={handlers}>
-      <BuilderTree tree={tree} payload={payload} namedStyles={namedStyles} />
+      <BuilderTree tree={tree} payload={payload} namedStyles={namedStyles} components={components} />
     </BuilderActionsProvider>
   );
 }
@@ -61,10 +63,12 @@ export function BuilderProductPage({
   tree,
   payload,
   namedStyles = {},
+  components = {},
 }: {
   tree: NodeTree;
   payload: ProductPagePayload;
   namedStyles?: Record<string, string[]>;
+  components?: Record<string, NodeTree>;
 }) {
   // payload.product is the same shape ProductPurchaseProvider expects.
   const product = payload.product as unknown as PurchaseProduct;
@@ -76,7 +80,7 @@ export function BuilderProductPage({
       isMember={payload.pricing.isMember}
       membershipTeaser={payload.pricing.membershipTeaser}
     >
-      <ActionsBridge productId={payload.product.id} tree={tree} payload={payload} namedStyles={namedStyles} />
+      <ActionsBridge productId={payload.product.id} tree={tree} payload={payload} namedStyles={namedStyles} components={components} />
     </ProductPurchaseProvider>
   );
 }
