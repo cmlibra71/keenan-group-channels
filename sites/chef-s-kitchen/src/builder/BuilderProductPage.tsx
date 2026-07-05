@@ -8,8 +8,8 @@ import {
 } from "@/components/product/ProductPurchaseProvider";
 import { addToCart } from "@/lib/actions/cart";
 import { addToQuote } from "@/lib/actions/quote";
-import { BuilderTree } from "./NodeRenderer";
-import { BuilderActionsProvider, type ActionHandler } from "./BuilderActions";
+import { BuilderTree } from "@keenan/services/builder-react";
+import { BuilderActionsProvider, type ActionHandler } from "@keenan/services/builder-react";
 
 // ============================================================================
 // The Phase-1 product page rendered from a node tree. It reuses the EXISTING
