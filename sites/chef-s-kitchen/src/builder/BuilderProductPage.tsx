@@ -8,6 +8,7 @@ import {
 } from "@/components/product/ProductPurchaseProvider";
 import { addToCart } from "@/lib/actions/cart";
 import { addToQuote } from "@/lib/actions/quote";
+import { useGst, adjustForGst } from "@/lib/gst";
 import { BuilderTree } from "@keenan/services/builder-react";
 import { BuilderActionsProvider, type ActionHandler } from "@keenan/services/builder-react";
 
@@ -18,7 +19,17 @@ import { BuilderActionsProvider, type ActionHandler } from "@keenan/services/bui
 // (addToCart/addToQuote/selectOption/setQuantity) — so a <button> node reaches
 // the same server action the current buy box uses. Data binds from the one
 // aggregate payload via BuilderTree.
+//
+// Display DECISIONS are computed here, not in the tree (logic stays code):
+// nodes carry ONE condition each, so every visible/hidden combination the live
+// ProductDetail/PriceBlock pair expresses gets its own precomputed flag.
 // ============================================================================
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 function ActionsBridge({
   productId,
@@ -34,6 +45,7 @@ function ActionsBridge({
   components?: Record<string, NodeTree>;
 }) {
   const purchase = useProductPurchase();
+  const { inclusive, pricesIncludeTax } = useGst();
   // Keep handlers reading the LATEST provider state without re-memoizing.
   const ref = React.useRef(purchase);
   ref.current = purchase;
@@ -62,11 +74,84 @@ function ActionsBridge({
     [productId]
   );
 
-  // Reactive purchase state exposed to tree bindings as purchase.* — the tree
-  // re-renders with the provider (qty display, stock, live price).
+  // ── Pricing display (PriceBlock semantics) ─────────────────────────────────
+  // Member price is the headline when it undercuts RRP; RRP struck beside it;
+  // the gold join funnel shows for guests only — and only when a deal exists.
+  const adj = (n: number) => adjustForGst(n, inclusive, pricesIncludeTax);
+  const fmt = (n: number) =>
+    adj(n).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const gstLabel = inclusive ? "inc GST" : "ex GST";
+
   const member = purchase.activeMemberPrice;
-  const rrp = purchase.displayPrice;
-  const hasSave = member != null && rrp > 0 && member < rrp;
+  const rrpBase = purchase.displaySalePrice ?? purchase.displayPrice; // PriceBlock's `rrp` input
+  const hasPrice = rrpBase > 0; // 0 ⇒ "Call for Price" + quote-only (grouped products before a match, POA products)
+  const hasSave = hasPrice && member != null && member > 0 && member < rrpBase;
+
+  const p = purchase.product;
+  const hasOptions = purchase.useGroupedMode;
+  const cartEnabled =
+    hasPrice && purchase.inStock && !purchase.purchasingDisabled && purchase.allOptionsSelected;
+  const quoteDisabled = hasOptions && !purchase.allOptionsSelected;
+
+  // Option groups with per-value flags — the tree repeats over these and each
+  // value button carries a single isSelected/isDisabled condition.
+  const optionGroups = hasOptions
+    ? p.options.map((o) => ({
+        optionId: o.id,
+        name: o.displayName,
+        values: p.optionValues
+          .filter((v) => v.optionId === o.id)
+          .map((v) => ({
+            valueId: v.id,
+            optionId: o.id,
+            label: v.label,
+            isSelected: purchase.selectedOptions[o.id] === v.id,
+            isDisabled: purchase.disabledValuesPerOption.get(o.id)?.has(v.id) ?? false,
+          })),
+      }))
+    : [];
+
+  // Bulk tiers (live: shown only when rules exist and the product is priced).
+  const bulkTiers = hasPrice
+    ? p.bulkPricing.map((r) => {
+        const amount = parseFloat(r.amount);
+        const tierPrice = r.type === "percent" ? rrpBase * (1 - amount / 100) : amount;
+        return {
+          qty: r.quantityMax ? `${r.quantityMin} – ${r.quantityMax}` : `${r.quantityMin}+`,
+          price: fmt(tierPrice),
+        };
+      })
+    : [];
+
+  // Specifications / downloads (payload-derived, static per page — mirrors
+  // ProductTabs' specEntries filter and Downloads row copy).
+  const specs = React.useMemo(() => {
+    const cf = (payload.product.customFields ?? {}) as Record<string, unknown>;
+    return Object.entries(cf)
+      .filter(
+        ([k, v]) =>
+          k !== "tabs" &&
+          k !== "leaseOptions" &&
+          (typeof v === "string" || typeof v === "number") &&
+          String(v).trim() !== ""
+      )
+      .map(([k, v]) => ({
+        label: k.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        value: String(v),
+      }));
+  }, [payload]);
+  const downloads = React.useMemo(
+    () =>
+      payload.attachments.map((f) => ({
+        url: f.url,
+        name: f.label || f.fileName,
+        meta: f.fileSize
+          ? `${(f.fileType ?? "").toUpperCase()}${f.fileType ? " · " : ""}${formatFileSize(f.fileSize)}`
+          : (f.fileType ?? "").toUpperCase(),
+      })),
+    [payload]
+  );
+
   const purchaseScope = {
     purchase: {
       quantity: purchase.quantity,
@@ -78,12 +163,43 @@ function ActionsBridge({
       purchasingDisabled: purchase.purchasingDisabled,
       variantImageUrl: purchase.variantImageUrl,
       isMember: purchase.isMember,
-      // Display derivations for the member price panel (guest join-funnel).
-      priceDisplay: (member ?? rrp).toFixed(2),
-      rrpDisplay: rrp.toFixed(2),
+      gstLabel,
+      // Price panel
+      hasPrice,
       hasSave,
-      saveAmount: hasSave ? Math.round(rrp - (member as number)).toString() : "",
-      savePct: hasSave ? Math.round(((rrp - (member as number)) / rrp) * 100).toString() : "",
+      priceDisplay: fmt(hasSave ? (member as number) : rrpBase),
+      rrpDisplay: fmt(rrpBase),
+      saveAmount: hasSave ? Math.round(adj(rrpBase - (member as number))).toLocaleString("en-AU") : "",
+      savePct: hasSave
+        ? Math.round(((rrpBase - (member as number)) / rrpBase) * 100).toString()
+        : "",
+      showJoin: hasSave && !purchase.isMember,
+      joinFrom: purchase.membershipTeaser?.fromPrice
+        ? parseFloat(purchase.membershipTeaser.fromPrice).toFixed(2)
+        : "14.95",
+      // Buy row — one flag per tree-node condition
+      cartEnabled,
+      cartDisabledShown: hasPrice && !cartEnabled,
+      quotePricedEnabled: hasPrice && !quoteDisabled,
+      quotePricedDisabled: hasPrice && quoteDisabled,
+      quoteRequestEnabled: !hasPrice && !quoteDisabled,
+      quoteRequestDisabled: !hasPrice && quoteDisabled,
+      showOutOfStock: hasPrice && !purchase.inStock,
+      // Mobile bar (member-aware amount; hidden for unpriced products)
+      showMobileBar: hasPrice,
+      mobilePriceDisplay: fmt(
+        purchase.isMember && member != null && member < rrpBase ? member : rrpBase
+      ),
+      mobilePriceLabel: purchase.isMember && member != null ? "member" : gstLabel,
+      // Options / bulk / tabs data
+      hasOptions,
+      optionGroups,
+      hasBulk: bulkTiers.length > 0,
+      bulkTiers,
+      hasSpecs: specs.length > 0,
+      specs,
+      hasDownloads: downloads.length > 0,
+      downloads,
     },
   };
 
