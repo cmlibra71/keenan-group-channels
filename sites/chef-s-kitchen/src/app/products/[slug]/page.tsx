@@ -7,6 +7,9 @@ import { getMemberContext, getListingPricing } from "@/lib/member";
 import { ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
+import { getProductPageData, getNamedStyles, getComponents } from "@/lib/store";
+import { BuilderProductPage } from "@/builder/BuilderProductPage";
+import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 import {
   ProductBuyBox,
@@ -244,6 +247,63 @@ export default async function ProductPage({
       pricing: relatedPricing,
     },
   };
+
+  // ═══ Site Builder node-tree path (flag: node_product_template_enabled) ═══
+  // Precedence: nodes → v2 blocks → v1 → legacy. One aggregate read feeds the
+  // NodeRenderer; the route stays SEO/JSON-LD owner. Env CMS_NODES_FORCE=1 for
+  // local testing (never in prod). Phase 1 uses the seed tree; a stored
+  // node_tree template supersedes it once authored.
+  const forceNodes = process.env.CMS_NODES_FORCE === "1";
+  if (forceNodes || (await getFeatureFlag("node_product_template_enabled"))) {
+    const payload = await getProductPageData(slug, {
+      memberContext: {
+        customerGroupId: memberCtx.customerGroupId,
+        isMember,
+        planPrice: membershipTeaser?.fromPrice ?? null,
+      },
+      draft,
+    }).catch(() => null);
+    // The AUTHORED tree wins: the product template doc (builder_kind='nodes' —
+    // published version live, draft in preview). Seed only as fallback.
+    const nodesDoc = (await getCmsTemplate("product", draft).catch(() => null)) as {
+      builder_kind?: string;
+      node_tree?: unknown;
+    } | null;
+    const storedTree =
+      nodesDoc?.builder_kind === "nodes" && nodesDoc.node_tree
+        ? (nodesDoc.node_tree as typeof SEED_PRODUCT_TREE)
+        : null;
+    const namedStyles = await getNamedStyles().catch(() => ({}));
+    const components = (await getComponents().catch(() => ({}))) as Record<string, typeof SEED_PRODUCT_TREE>;
+    if (payload) {
+      return (
+        <div>
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
+          />
+          <ViewedProductTracker
+            product={{
+              id: product.id,
+              sku: product.sku,
+              name: product.name,
+              price:
+                product.salePrice != null
+                  ? parseFloat(String(product.salePrice))
+                  : product.price != null
+                    ? parseFloat(String(product.price))
+                    : null,
+              imageUrl:
+                ((product.images as Array<Record<string, unknown>> | undefined)?.[0]?.urlStandard as string) ?? null,
+              categories: breadcrumbs.map((c: { name: string }) => c.name),
+              brand: brandRow?.name ?? null,
+            }}
+          />
+          <BuilderProductPage tree={storedTree ?? SEED_PRODUCT_TREE} payload={payload} namedStyles={namedStyles} components={components} />
+        </div>
+      );
+    }
+  }
 
   // ═══ CMS product TEMPLATE path (kill switch: flag off → legacy) ═══
   // The whole page as a block document (breadcrumbs / slots / buybox / links /
