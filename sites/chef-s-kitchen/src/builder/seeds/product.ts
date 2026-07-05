@@ -47,6 +47,36 @@ function trustIcon(id: string, d: string): BuilderNode {
   };
 }
 
+// Tab strip: every tab = an active + inactive button pair gated on the shared
+// index state. Conditional tabs (Specifications/Downloads) wrap their pair in a
+// display-contents span gated on the data flag — indices stay FIXED (0..4) so
+// panels never renumber when a tab is absent.
+const TAB_ON = ["px-4", "py-2.5", "text-sm", "font-medium", "transition-colors", "duration-300", "border-b-2", "border-text-primary", "text-text-primary"];
+const TAB_OFF = ["px-4", "py-2.5", "text-sm", "font-medium", "transition-colors", "duration-300", "text-text-secondary", "hover:text-text-primary"];
+type SeedTextPart = { kind: "static"; value: string } | { kind: "binding"; path: string };
+
+function tabPair(i: number, label: SeedTextPart[]): BuilderNode[] {
+  return [
+    {
+      id: `tab-${i}-on`,
+      kind: "element",
+      tag: "button",
+      condition: { kind: "state", ref: "tab", equals: i },
+      classes: [...TAB_ON],
+      text: label,
+    },
+    {
+      id: `tab-${i}-off`,
+      kind: "element",
+      tag: "button",
+      condition: { kind: "state", ref: "tab", equals: i, not: true },
+      classes: [...TAB_OFF],
+      events: [{ on: "click", action: { kind: "local", op: "set-index", target: "tab", value: i } }],
+      text: label,
+    },
+  ] as BuilderNode[];
+}
+
 export const SEED_PRODUCT_TREE: NodeTree = {
   v: 1,
   root: {
@@ -198,7 +228,11 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                       },
                     ],
                   },
-                  // Member price panel + join funnel (guest view)
+                  // Member price panel + join funnel (guest view). Two branches,
+                  // mirroring ProductDetail: displayPrice 0 ⇒ "Call for Price"
+                  // (grouped products before a variant match, POA products);
+                  // otherwise the PriceBlock layout. Member badge / RRP strike /
+                  // join funnel all gate on hasSave (= PriceBlock.hasMemberDeal).
                   {
                     id: "price-panel",
                     kind: "element",
@@ -206,94 +240,310 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                     classes: ["mt-5", "rounded-[12px]", "border", "border-border", "border-l-4", "border-l-member", "bg-steel-50", "p-5"],
                     children: [
                       {
-                        id: "price-row",
+                        id: "cfp",
                         kind: "element",
                         tag: "div",
-                        classes: ["flex", "flex-wrap", "items-baseline", "gap-x-2", "gap-y-1"],
+                        condition: { kind: "data", path: "purchase.hasPrice", not: true },
                         children: [
                           {
-                            id: "price-big",
+                            id: "cfp-head",
                             kind: "element",
-                            tag: "span",
-                            classes: ["text-[33px]", "font-bold", "leading-none", "tracking-[-0.02em]", "text-text-primary"],
-                            text: [{ kind: "static", value: "$" }, { kind: "binding", path: "purchase.priceDisplay" }],
+                            tag: "p",
+                            classes: ["text-2xl", "font-bold", "text-text-primary"],
+                            text: [{ kind: "static", value: "Call for Price" }],
                           },
                           {
-                            id: "price-exgst",
+                            id: "cfp-copy",
                             kind: "element",
-                            tag: "span",
-                            classes: ["text-xs", "font-semibold", "text-steel-500"],
-                            text: [{ kind: "static", value: "ex GST" }],
+                            tag: "p",
+                            classes: ["mt-1", "text-[13px]", "text-text-secondary"],
+                            text: [{ kind: "static", value: "Add this item to a quote and our sales team will price it for you." }],
+                          },
+                        ],
+                      },
+                      {
+                        id: "priced",
+                        kind: "element",
+                        tag: "div",
+                        condition: { kind: "data", path: "purchase.hasPrice" },
+                        children: [
+                          {
+                            id: "price-row",
+                            kind: "element",
+                            tag: "div",
+                            classes: ["flex", "flex-wrap", "items-baseline", "gap-x-2", "gap-y-1"],
+                            children: [
+                              {
+                                id: "price-big",
+                                kind: "element",
+                                tag: "span",
+                                classes: ["text-[33px]", "font-bold", "leading-none", "tracking-[-0.02em]", "text-text-primary"],
+                                text: [{ kind: "static", value: "$" }, { kind: "binding", path: "purchase.priceDisplay" }],
+                              },
+                              {
+                                id: "price-exgst",
+                                kind: "element",
+                                tag: "span",
+                                classes: ["text-xs", "font-semibold", "text-steel-500"],
+                                text: [{ kind: "binding", path: "purchase.gstLabel" }],
+                              },
+                              {
+                                id: "price-badge",
+                                kind: "element",
+                                tag: "span",
+                                condition: { kind: "data", path: "purchase.hasSave" },
+                                classes: ["badge-member", "ml-1"],
+                                text: [{ kind: "static", value: "Member Price" }],
+                              },
+                            ],
                           },
                           {
-                            id: "price-badge",
+                            id: "rrp-line",
                             kind: "element",
-                            tag: "span",
+                            tag: "p",
                             condition: { kind: "data", path: "purchase.hasSave" },
-                            classes: ["badge-member", "ml-1"],
-                            text: [{ kind: "static", value: "Member Price" }],
-                          },
-                        ],
-                      },
-                      {
-                        id: "rrp-line",
-                        kind: "element",
-                        tag: "p",
-                        condition: { kind: "data", path: "purchase.hasSave" },
-                        classes: ["mt-1", "text-steel-500", "text-[13px]"],
-                        children: [
-                          {
-                            id: "rrp-strike",
-                            kind: "element",
-                            tag: "s",
-                            classes: ["text-steel-400"],
-                            text: [{ kind: "static", value: "RRP $" }, { kind: "binding", path: "purchase.rrpDisplay" }],
-                          },
-                          {
-                            id: "rrp-save",
-                            kind: "element",
-                            tag: "b",
-                            classes: ["text-member-text"],
-                            text: [
-                              { kind: "static", value: " You save $" },
-                              { kind: "binding", path: "purchase.saveAmount" },
-                              { kind: "static", value: " (" },
-                              { kind: "binding", path: "purchase.savePct" },
-                              { kind: "static", value: "%)" },
-                            ],
-                          },
-                        ],
-                      },
-                      {
-                        id: "join-strip",
-                        kind: "element",
-                        tag: "div",
-                        condition: { kind: "data", path: "pricing.membershipTeaser.fromPrice" },
-                        classes: ["mt-3.5", "flex", "items-center", "justify-between", "gap-3", "rounded-btn", "bg-member-bg", "px-3.5", "py-[11px]", "text-[12.5px]", "text-member-text"],
-                        children: [
-                          {
-                            id: "join-copy",
-                            kind: "element",
-                            tag: "span",
-                            text: [
-                              { kind: "static", value: "Not a member? Join from $" },
-                              { kind: "binding", path: "pricing.membershipTeaser.fromPrice" },
-                              { kind: "static", value: "/mo to unlock this price." },
+                            classes: ["mt-1", "text-steel-500", "text-[13px]"],
+                            children: [
+                              {
+                                id: "rrp-strike",
+                                kind: "element",
+                                tag: "s",
+                                classes: ["text-steel-400"],
+                                text: [{ kind: "static", value: "RRP $" }, { kind: "binding", path: "purchase.rrpDisplay" }],
+                              },
+                              {
+                                id: "rrp-save",
+                                kind: "element",
+                                tag: "b",
+                                classes: ["text-member-text"],
+                                text: [
+                                  { kind: "static", value: " You save $" },
+                                  { kind: "binding", path: "purchase.saveAmount" },
+                                  { kind: "static", value: " (" },
+                                  { kind: "binding", path: "purchase.savePct" },
+                                  { kind: "static", value: "%)" },
+                                ],
+                              },
                             ],
                           },
                           {
-                            id: "join-cta",
+                            id: "join-strip",
                             kind: "element",
-                            tag: "a",
-                            classes: ["btn-gold", "btn-sm", "shrink-0"],
-                            attrs: { href: { kind: "static", value: "/membership" } },
-                            text: [{ kind: "static", value: "Join" }],
+                            tag: "div",
+                            condition: { kind: "data", path: "purchase.showJoin" },
+                            classes: ["mt-3.5", "flex", "items-center", "justify-between", "gap-3", "rounded-btn", "bg-member-bg", "px-3.5", "py-[11px]", "text-[12.5px]", "text-member-text"],
+                            children: [
+                              {
+                                id: "join-copy",
+                                kind: "element",
+                                tag: "span",
+                                text: [
+                                  { kind: "static", value: "Not a member? Join from $" },
+                                  { kind: "binding", path: "purchase.joinFrom" },
+                                  { kind: "static", value: "/mo to unlock this price." },
+                                ],
+                              },
+                              {
+                                id: "join-cta",
+                                kind: "element",
+                                tag: "a",
+                                classes: ["btn-gold", "btn-sm", "shrink-0"],
+                                attrs: { href: { kind: "static", value: "/membership" } },
+                                text: [{ kind: "static", value: "Join" }],
+                              },
+                            ],
                           },
                         ],
                       },
                     ],
                   },
-                  // Qty stepper + cart/quote
+                  // Bulk pricing tiers (live: bulkPricing.length > 0 && priced)
+                  {
+                    id: "bulk",
+                    kind: "element",
+                    tag: "div",
+                    condition: { kind: "data", path: "purchase.hasBulk" },
+                    classes: ["mt-4"],
+                    children: [
+                      {
+                        id: "bulk-head",
+                        kind: "element",
+                        tag: "h3",
+                        classes: ["text-sm", "font-semibold", "text-text-body", "mb-2"],
+                        text: [{ kind: "static", value: "Bulk Pricing" }],
+                      },
+                      {
+                        id: "bulk-card",
+                        kind: "element",
+                        tag: "div",
+                        classes: ["overflow-hidden", "rounded-[12px]", "border", "border-border"],
+                        children: [
+                          {
+                            id: "bulk-table",
+                            kind: "element",
+                            tag: "table",
+                            classes: ["w-full", "text-sm"],
+                            children: [
+                              {
+                                id: "bulk-thead",
+                                kind: "element",
+                                tag: "thead",
+                                children: [
+                                  {
+                                    id: "bulk-thr",
+                                    kind: "element",
+                                    tag: "tr",
+                                    classes: ["bg-surface-primary", "text-text-secondary"],
+                                    children: [
+                                      { id: "bulk-th-q", kind: "element", tag: "th", classes: ["px-3", "py-2", "text-left", "font-medium"], text: [{ kind: "static", value: "Quantity" }] },
+                                      { id: "bulk-th-p", kind: "element", tag: "th", classes: ["px-3", "py-2", "text-right", "font-medium"], text: [{ kind: "static", value: "Price Per Unit" }] },
+                                    ],
+                                  },
+                                ],
+                              },
+                              {
+                                id: "bulk-tbody",
+                                kind: "element",
+                                tag: "tbody",
+                                classes: ["divide-y", "divide-border"],
+                                children: [
+                                  {
+                                    id: "bulk-repeat",
+                                    kind: "repeat",
+                                    source: "purchase.bulkTiers",
+                                    itemAlias: "tier",
+                                    children: [
+                                      {
+                                        id: "bulk-row",
+                                        kind: "element",
+                                        tag: "tr",
+                                        classes: ["text-text-body"],
+                                        children: [
+                                          { id: "bulk-td-q", kind: "element", tag: "td", classes: ["px-3", "py-2"], text: [{ kind: "binding", path: "tier.qty" }] },
+                                          { id: "bulk-td-p", kind: "element", tag: "td", classes: ["px-3", "py-2", "text-right"], text: [{ kind: "static", value: "$" }, { kind: "binding", path: "tier.price" }] },
+                                        ],
+                                      },
+                                    ],
+                                  },
+                                ],
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  // Grouped option selectors (live: "Configure" card, one group per
+                  // option; value buttons rendered as pills for every option type).
+                  {
+                    id: "options",
+                    kind: "element",
+                    tag: "div",
+                    condition: { kind: "data", path: "purchase.hasOptions" },
+                    classes: ["mt-6", "rounded-[12px]", "border", "border-border", "bg-surface-primary", "p-5"],
+                    children: [
+                      {
+                        id: "options-head",
+                        kind: "element",
+                        tag: "h3",
+                        classes: ["text-sm", "font-semibold", "text-text-primary", "mb-4"],
+                        text: [{ kind: "static", value: "Configure" }],
+                      },
+                      {
+                        id: "options-list",
+                        kind: "element",
+                        tag: "div",
+                        classes: ["space-y-5"],
+                        children: [
+                          {
+                            id: "options-repeat",
+                            kind: "repeat",
+                            source: "purchase.optionGroups",
+                            itemAlias: "opt",
+                            children: [
+                              {
+                                id: "opt-group",
+                                kind: "element",
+                                tag: "div",
+                                children: [
+                                  {
+                                    id: "opt-label",
+                                    kind: "element",
+                                    tag: "label",
+                                    classes: ["block", "text-sm", "font-semibold", "text-text-primary", "mb-2"],
+                                    text: [{ kind: "binding", path: "opt.name" }],
+                                  },
+                                  {
+                                    id: "opt-values",
+                                    kind: "element",
+                                    tag: "div",
+                                    classes: ["flex", "flex-wrap", "gap-2"],
+                                    children: [
+                                      {
+                                        id: "opt-values-repeat",
+                                        kind: "repeat",
+                                        source: "opt.values",
+                                        itemAlias: "val",
+                                        children: [
+                                          {
+                                            id: "opt-val",
+                                            kind: "element",
+                                            tag: "span",
+                                            classes: ["contents"],
+                                            children: [
+                                              {
+                                                id: "opt-val-selected",
+                                                kind: "element",
+                                                tag: "button",
+                                                condition: { kind: "data", path: "val.isSelected" },
+                                                classes: ["px-4", "py-2", "border", "text-sm", "transition-colors", "duration-300", "border-text-primary", "bg-surface-dark", "text-white"],
+                                                events: [{ on: "click", action: { kind: "action", ref: "selectOption", args: { optionId: { kind: "binding", path: "val.optionId" }, valueId: { kind: "binding", path: "val.valueId" } } } }],
+                                                text: [{ kind: "binding", path: "val.label" }],
+                                              },
+                                              {
+                                                id: "opt-val-rest",
+                                                kind: "element",
+                                                tag: "span",
+                                                condition: { kind: "data", path: "val.isSelected", not: true },
+                                                classes: ["contents"],
+                                                children: [
+                                                  {
+                                                    id: "opt-val-disabled",
+                                                    kind: "element",
+                                                    tag: "button",
+                                                    condition: { kind: "data", path: "val.isDisabled" },
+                                                    classes: ["px-4", "py-2", "border", "text-sm", "transition-colors", "duration-300", "border-border", "text-text-muted", "cursor-not-allowed"],
+                                                    text: [{ kind: "binding", path: "val.label" }],
+                                                  },
+                                                  {
+                                                    id: "opt-val-default",
+                                                    kind: "element",
+                                                    tag: "button",
+                                                    condition: { kind: "data", path: "val.isDisabled", not: true },
+                                                    classes: ["px-4", "py-2", "border", "text-sm", "transition-colors", "duration-300", "border-border", "hover:border-text-primary/30"],
+                                                    events: [{ on: "click", action: { kind: "action", ref: "selectOption", args: { optionId: { kind: "binding", path: "val.optionId" }, valueId: { kind: "binding", path: "val.valueId" } } } }],
+                                                    text: [{ kind: "binding", path: "val.label" }],
+                                                  },
+                                                ],
+                                              },
+                                            ],
+                                          },
+                                        ],
+                                      },
+                                    ],
+                                  },
+                                ],
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  // Qty stepper + cart/quote. Live rules (ProductDetail): the
+                  // stepper + Add to Cart exist only for priced products; unpriced
+                  // products get the single "request pricing" quote CTA; buttons
+                  // grey out until options resolve a variant / stock allows.
                   {
                     id: "actions-row",
                     kind: "element",
@@ -304,6 +554,7 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                         id: "qty",
                         kind: "element",
                         tag: "div",
+                        condition: { kind: "data", path: "purchase.hasPrice" },
                         classes: ["flex", "items-center", "rounded-btn", "border", "border-border-strong", "bg-white"],
                         children: [
                           {
@@ -341,6 +592,7 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                             id: "add-to-cart",
                             kind: "element",
                             tag: "button",
+                            condition: { kind: "data", path: "purchase.cartEnabled" },
                             classes: ["btn-primary", "w-full"],
                             events: [
                               {
@@ -356,9 +608,18 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                             text: [{ kind: "static", value: "Add to Cart" }],
                           },
                           {
+                            id: "add-to-cart-off",
+                            kind: "element",
+                            tag: "button",
+                            condition: { kind: "data", path: "purchase.cartDisabledShown" },
+                            classes: ["btn-primary", "w-full", "opacity-50", "cursor-not-allowed"],
+                            text: [{ kind: "static", value: "Add to Cart" }],
+                          },
+                          {
                             id: "add-to-quote",
                             kind: "element",
                             tag: "button",
+                            condition: { kind: "data", path: "purchase.quotePricedEnabled" },
                             classes: ["btn-secondary", "w-full"],
                             events: [
                               {
@@ -373,9 +634,53 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                             ],
                             text: [{ kind: "static", value: "Add to Quote" }],
                           },
+                          {
+                            id: "add-to-quote-off",
+                            kind: "element",
+                            tag: "button",
+                            condition: { kind: "data", path: "purchase.quotePricedDisabled" },
+                            classes: ["btn-secondary", "w-full", "opacity-50", "cursor-not-allowed"],
+                            text: [{ kind: "static", value: "Add to Quote" }],
+                          },
+                          {
+                            id: "quote-request",
+                            kind: "element",
+                            tag: "button",
+                            condition: { kind: "data", path: "purchase.quoteRequestEnabled" },
+                            classes: ["btn-secondary", "w-full"],
+                            events: [
+                              {
+                                on: "click",
+                                action: {
+                                  kind: "action",
+                                  ref: "addToQuote",
+                                  onSuccess: [{ kind: "toast", tone: "success", message: "Added to quote" }],
+                                  onError: [{ kind: "toast", tone: "error", message: "Could not add to quote" }],
+                                },
+                              },
+                            ],
+                            text: [{ kind: "static", value: "Add to Quote — request pricing" }],
+                          },
+                          {
+                            id: "quote-request-off",
+                            kind: "element",
+                            tag: "button",
+                            condition: { kind: "data", path: "purchase.quoteRequestDisabled" },
+                            classes: ["btn-secondary", "w-full", "opacity-50", "cursor-not-allowed"],
+                            text: [{ kind: "static", value: "Add to Quote — request pricing" }],
+                          },
                         ],
                       },
                     ],
+                  },
+                  // Out-of-stock note (live: priced + out of stock only)
+                  {
+                    id: "oos-note",
+                    kind: "element",
+                    tag: "p",
+                    condition: { kind: "data", path: "purchase.showOutOfStock" },
+                    classes: ["mt-2", "text-[13px]", "font-semibold", "text-sale"],
+                    text: [{ kind: "static", value: "Out of stock — add to a quote and we'll confirm availability." }],
                   },
                   // Trust row
                   {
@@ -425,11 +730,12 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                       },
                     ],
                   },
-                  // Mobile buy bar
+                  // Mobile buy bar (live: priced products only; member-aware amount)
                   {
                     id: "mobile-bar",
                     kind: "element",
                     tag: "div",
+                    condition: { kind: "data", path: "purchase.showMobileBar" },
                     classes: ["fixed", "inset-x-0", "bottom-0", "z-[90]", "flex", "items-center", "justify-between", "gap-3", "border-t", "border-border", "bg-white", "px-4", "py-3", "shadow-lg", "lg:hidden"],
                     children: [
                       {
@@ -443,14 +749,14 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                             kind: "element",
                             tag: "span",
                             classes: ["text-lg", "font-bold", "text-text-primary"],
-                            text: [{ kind: "static", value: "$" }, { kind: "binding", path: "purchase.rrpDisplay" }],
+                            text: [{ kind: "static", value: "$" }, { kind: "binding", path: "purchase.mobilePriceDisplay" }],
                           },
                           {
                             id: "mb-exgst",
                             kind: "element",
                             tag: "span",
                             classes: ["ml-1", "text-[10px]", "font-semibold", "text-steel-400"],
-                            text: [{ kind: "static", value: "ex GST" }],
+                            text: [{ kind: "binding", path: "purchase.mobilePriceLabel" }],
                           },
                         ],
                       },
@@ -458,6 +764,7 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                         id: "mb-add",
                         kind: "element",
                         tag: "button",
+                        condition: { kind: "data", path: "purchase.cartEnabled" },
                         classes: ["btn-primary", "w-full", "btn-sm"],
                         events: [
                           {
@@ -470,6 +777,14 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                             },
                           },
                         ],
+                        text: [{ kind: "static", value: "Add to Cart" }],
+                      },
+                      {
+                        id: "mb-add-off",
+                        kind: "element",
+                        tag: "button",
+                        condition: { kind: "data", path: "purchase.cartEnabled", not: true },
+                        classes: ["btn-primary", "w-full", "btn-sm", "opacity-50", "cursor-not-allowed"],
                         text: [{ kind: "static", value: "Add to Cart" }],
                       },
                     ],
@@ -535,45 +850,32 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                 tag: "div",
                 classes: ["flex", "gap-1", "border-b", "border-border"],
                 children: [
-                  // each tab: active + inactive variants gated on the index state
-                  ...[
-                    { i: 0, label: "Description" },
-                    { i: 1, label: "Delivery & Warranty" },
-                  ].flatMap(({ i, label }) => [
-                    {
-                      id: `tab-${i}-on`,
-                      kind: "element" as const,
-                      tag: "button",
-                      condition: { kind: "state" as const, ref: "tab", equals: i },
-                      classes: ["px-4", "py-2.5", "text-sm", "font-medium", "transition-colors", "duration-300", "border-b-2", "border-text-primary", "text-text-primary"],
-                      text: [{ kind: "static" as const, value: label }],
-                    },
-                    {
-                      id: `tab-${i}-off`,
-                      kind: "element" as const,
-                      tag: "button",
-                      condition: { kind: "state" as const, ref: "tab", equals: i, not: true },
-                      classes: ["px-4", "py-2.5", "text-sm", "font-medium", "transition-colors", "duration-300", "text-text-secondary", "hover:text-text-primary"],
-                      events: [{ on: "click" as const, action: { kind: "local" as const, op: "set-index" as const, target: "tab", value: i } }],
-                      text: [{ kind: "static" as const, value: label }],
-                    },
+                  ...tabPair(0, [{ kind: "static", value: "Description" }]),
+                  {
+                    id: "tab-specs-gate",
+                    kind: "element",
+                    tag: "span",
+                    classes: ["contents"],
+                    condition: { kind: "data", path: "purchase.hasSpecs" },
+                    children: tabPair(1, [{ kind: "static", value: "Specifications" }]),
+                  },
+                  ...tabPair(2, [{ kind: "static", value: "Delivery & Warranty" }]),
+                  ...tabPair(3, [
+                    { kind: "static", value: "Reviews (" },
+                    { kind: "binding", path: "reviews.list.length" },
+                    { kind: "static", value: ")" },
                   ]),
                   {
-                    id: "tab-2-on",
+                    id: "tab-dl-gate",
                     kind: "element",
-                    tag: "button",
-                    condition: { kind: "state", ref: "tab", equals: 2 },
-                    classes: ["px-4", "py-2.5", "text-sm", "font-medium", "transition-colors", "duration-300", "border-b-2", "border-text-primary", "text-text-primary"],
-                    text: [{ kind: "static", value: "Reviews (" }, { kind: "binding", path: "reviews.list.length" }, { kind: "static", value: ")" }],
-                  },
-                  {
-                    id: "tab-2-off",
-                    kind: "element",
-                    tag: "button",
-                    condition: { kind: "state", ref: "tab", equals: 2, not: true },
-                    classes: ["px-4", "py-2.5", "text-sm", "font-medium", "transition-colors", "duration-300", "text-text-secondary", "hover:text-text-primary"],
-                    events: [{ on: "click", action: { kind: "local", op: "set-index", target: "tab", value: 2 } }],
-                    text: [{ kind: "static", value: "Reviews (" }, { kind: "binding", path: "reviews.list.length" }, { kind: "static", value: ")" }],
+                    tag: "span",
+                    classes: ["contents"],
+                    condition: { kind: "data", path: "purchase.hasDownloads" },
+                    children: tabPair(4, [
+                      { kind: "static", value: "Downloads (" },
+                      { kind: "binding", path: "purchase.downloads.length" },
+                      { kind: "static", value: ")" },
+                    ]),
                   },
                 ],
               },
@@ -593,11 +895,74 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                   },
                 ],
               },
+              // Specifications — key/value table from custom_fields (via bridge scope)
+              {
+                id: "panel-specs",
+                kind: "element",
+                tag: "div",
+                condition: { kind: "state", ref: "tab", equals: 1 },
+                classes: ["py-6"],
+                children: [
+                  {
+                    id: "specs-card",
+                    kind: "element",
+                    tag: "div",
+                    classes: ["max-w-2xl", "overflow-hidden", "rounded-card", "border", "border-border"],
+                    children: [
+                      {
+                        id: "specs-table",
+                        kind: "element",
+                        tag: "table",
+                        classes: ["w-full", "text-sm"],
+                        children: [
+                          {
+                            id: "specs-tbody",
+                            kind: "element",
+                            tag: "tbody",
+                            classes: ["divide-y", "divide-border"],
+                            children: [
+                              {
+                                id: "specs-repeat",
+                                kind: "repeat",
+                                source: "purchase.specs",
+                                itemAlias: "spec",
+                                children: [
+                                  {
+                                    id: "spec-row",
+                                    kind: "element",
+                                    tag: "tr",
+                                    children: [
+                                      {
+                                        id: "spec-key",
+                                        kind: "element",
+                                        tag: "td",
+                                        classes: ["w-2/5", "bg-surface-primary", "px-4", "py-2.5", "font-medium", "text-text-secondary"],
+                                        text: [{ kind: "binding", path: "spec.label" }],
+                                      },
+                                      {
+                                        id: "spec-val",
+                                        kind: "element",
+                                        tag: "td",
+                                        classes: ["px-4", "py-2.5", "font-mono", "text-[13px]", "text-text-primary"],
+                                        text: [{ kind: "binding", path: "spec.value" }],
+                                      },
+                                    ],
+                                  },
+                                ],
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
               {
                 id: "panel-warranty",
                 kind: "element",
                 tag: "div",
-                condition: { kind: "state", ref: "tab", equals: 1 },
+                condition: { kind: "state", ref: "tab", equals: 2 },
                 classes: ["py-6"],
                 children: [
                   {
@@ -620,7 +985,7 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                 id: "panel-reviews",
                 kind: "element",
                 tag: "div",
-                condition: { kind: "state", ref: "tab", equals: 2 },
+                condition: { kind: "state", ref: "tab", equals: 3 },
                 classes: ["py-6"],
                 children: [
                   {
@@ -647,6 +1012,84 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                         tag: "p",
                         classes: ["text-sm", "text-text-muted"],
                         text: [{ kind: "static", value: "No reviews yet." }],
+                      },
+                    ],
+                  },
+                ],
+              },
+              // Downloads — attachment rows (name + type/size meta, opens in new tab)
+              {
+                id: "panel-downloads",
+                kind: "element",
+                tag: "div",
+                condition: { kind: "state", ref: "tab", equals: 4 },
+                classes: ["py-6"],
+                children: [
+                  {
+                    id: "dl-list",
+                    kind: "element",
+                    tag: "div",
+                    classes: ["space-y-2"],
+                    children: [
+                      {
+                        id: "dl-repeat",
+                        kind: "repeat",
+                        source: "purchase.downloads",
+                        itemAlias: "file",
+                        children: [
+                          {
+                            id: "dl-row",
+                            kind: "element",
+                            tag: "a",
+                            classes: ["flex", "items-center", "gap-3", "card", "px-4", "py-3", "hover:bg-surface-secondary", "transition-colors", "duration-300"],
+                            attrs: {
+                              href: { kind: "binding", path: "file.url" },
+                              target: { kind: "static", value: "_blank" },
+                              rel: { kind: "static", value: "noopener noreferrer" },
+                            },
+                            children: [
+                              {
+                                id: "dl-icon",
+                                kind: "element",
+                                tag: "svg",
+                                classes: ["h-5", "w-5", "flex-shrink-0", "text-sale"],
+                                attrs: {
+                                  viewBox: { kind: "static", value: "0 0 24 24" },
+                                  fill: { kind: "static", value: "none" },
+                                  stroke: { kind: "static", value: "currentColor" },
+                                  "stroke-width": { kind: "static", value: "1.5" },
+                                },
+                                children: [
+                                  { id: "dl-icon-p1", kind: "element", tag: "path", attrs: { d: { kind: "static", value: "M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" } } },
+                                  { id: "dl-icon-p2", kind: "element", tag: "path", attrs: { d: { kind: "static", value: "M14 2v4a2 2 0 0 0 2 2h4" } } },
+                                ],
+                              },
+                              {
+                                id: "dl-body",
+                                kind: "element",
+                                tag: "div",
+                                classes: ["flex-1", "min-w-0"],
+                                children: [
+                                  {
+                                    id: "dl-name",
+                                    kind: "element",
+                                    tag: "p",
+                                    classes: ["text-sm", "font-medium", "text-text-primary", "truncate"],
+                                    text: [{ kind: "binding", path: "file.name" }],
+                                  },
+                                  {
+                                    id: "dl-meta",
+                                    kind: "element",
+                                    tag: "p",
+                                    condition: { kind: "data", path: "file.meta" },
+                                    classes: ["caption"],
+                                    text: [{ kind: "binding", path: "file.meta" }],
+                                  },
+                                ],
+                              },
+                            ],
+                          },
+                        ],
                       },
                     ],
                   },
