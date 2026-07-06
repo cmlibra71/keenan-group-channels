@@ -6,6 +6,19 @@ import { ChevronRight } from "lucide-react";
 import { getBlogPostBySlug } from "@/lib/store";
 import { RichContent } from "@/components/content/RichContent";
 
+// A zeroed/invalid imported timestamp (e.g. epoch 0) must not render as
+// "1 January 1970" — treat pre-2000 or unparseable dates as "no date".
+function formatPublishDate(value: string | Date | null | undefined): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (isNaN(d.getTime()) || d.getUTCFullYear() < 2000) return null;
+  return d.toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -49,6 +62,8 @@ export default async function BlogPostPage({
 
   if (!post) notFound();
 
+  const publishedLabel = formatPublishDate(post.published_at);
+
   return (
     <article className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-12">
       <nav className="flex items-center gap-1.5 text-sm text-zinc-400 mb-6">
@@ -83,16 +98,10 @@ export default async function BlogPostPage({
             />
           )}
           {post.author_name && <span>{post.author_name}</span>}
-          {post.published_at && (
+          {publishedLabel && (
             <>
               {post.author_name && <span>·</span>}
-              <time dateTime={String(post.published_at)}>
-                {new Date(post.published_at).toLocaleDateString("en-AU", {
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                })}
-              </time>
+              <time dateTime={String(post.published_at)}>{publishedLabel}</time>
             </>
           )}
         </div>

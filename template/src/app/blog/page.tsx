@@ -3,6 +3,19 @@ import Image from "next/image";
 import type { Metadata } from "next";
 import { getBlogPosts, getBlogTags } from "@/lib/store";
 
+// A zeroed/invalid imported timestamp (e.g. epoch 0) must not render as
+// "1 Jan 1970" — treat pre-2000 or unparseable dates as "no date".
+function formatPublishDate(value: string | Date | null | undefined): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (isNaN(d.getTime()) || d.getUTCFullYear() < 2000) return null;
+  return d.toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export const metadata: Metadata = {
   title: "Blog",
   description: "Latest news, buying guides, and industry insights.",
@@ -98,13 +111,9 @@ export default async function BlogIndexPage({
                 )}
                 <div className="mt-4 flex items-center justify-between text-xs text-zinc-500">
                   <span>{p.author_name ?? "Industry Kitchens"}</span>
-                  {p.published_at && (
+                  {formatPublishDate(p.published_at) && (
                     <time dateTime={String(p.published_at)}>
-                      {new Date(p.published_at).toLocaleDateString("en-AU", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
+                      {formatPublishDate(p.published_at)}
                     </time>
                   )}
                 </div>
