@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import Link from "next/link";
 import type { NodeTree, ProductPagePayload } from "@keenan/services/builder";
 import {
   ProductPurchaseProvider,
@@ -244,12 +245,20 @@ function ActionsBridge({
 
   // Coded (non-exploded) components slotted in by key — the gallery keeps its
   // real zoom/pan/thumbnail behaviour instead of being rebuilt as nodes.
+  // Variant images in the catalogue are often relative Zoey media paths
+  // (e.g. "/s/k/sko-….png") that the S3-only /api/image proxy 403s — only feed
+  // the gallery a variant image when it's a usable absolute URL, otherwise let
+  // it fall back to the product's own images (matches the live storefront).
+  const variantImg =
+    purchase.variantImageUrl && /^https?:\/\//i.test(purchase.variantImageUrl)
+      ? purchase.variantImageUrl
+      : null;
   const nativeComponents: NativeComponents = {
     "product-gallery": () => (
       <ProductImageGallery
         images={payload.product.images as unknown as GalleryImage[]}
         productName={payload.product.name}
-        variantImageUrl={purchase.variantImageUrl}
+        variantImageUrl={variantImg}
       />
     ),
   };
@@ -262,6 +271,7 @@ function ActionsBridge({
         namedStyles={namedStyles}
         components={components}
         nativeComponents={nativeComponents}
+        linkComponent={Link as unknown as React.ComponentType<Record<string, unknown>>}
         scope={purchaseScope}
       />
     </BuilderActionsProvider>
