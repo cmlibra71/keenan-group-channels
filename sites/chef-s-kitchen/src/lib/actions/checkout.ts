@@ -5,7 +5,7 @@ import { cartService, cartItemService, orderService, orderItemService, orderShip
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
-import { sendOrderConfirmationEmail, resolveEmailBranding, wantsStripeTestMode, productImageService } from "@keenan/services";
+import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, resolveEmailBranding, wantsStripeTestMode, productImageService } from "@keenan/services";
 import { buildLineItems, withShipping, determinePaymentStatus } from "@/lib/checkout/order-draft";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
 import { siteBaseUrl } from "@/lib/seo";
@@ -411,6 +411,34 @@ export async function placeOrder(
     });
   } catch (e) {
     console.error("[placeOrder] confirmation email failed (non-fatal):", e);
+  }
+
+  // Staff "new order" notification — best-effort, never blocks the order.
+  // Recipients come from channel_settings `order_notification_emails` (portal:
+  // Settings → Notifications); an empty/absent list is an opt-out. Card orders
+  // are notified by the portal Stripe webhook once paid (placeOrder returns early
+  // on the stripe branch), so this path covers bank-transfer / net-terms orders.
+  try {
+    const recipients = await resolveOrderNotificationRecipients(CHANNEL_ID);
+    if (recipients.length > 0) {
+      const { site, channel } = await getSiteConfig();
+      const storeName = site?.siteName || channel?.name || null;
+      const portalBase = (process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/$/, "");
+      await sendOrderStaffNotificationEmail({
+        to: recipients,
+        orderNumber: order.order_number,
+        orderUrl: `${portalBase}/dashboard/orders/${order.id}`,
+        customerEmail: email,
+        customerName: `${firstName} ${lastName}`.trim() || null,
+        total: String(totalIncTax),
+        paymentMethod,
+        storeName,
+        items: fullCart.items.map((i) => ({ name: i.product_name, quantity: i.quantity })),
+        testMode: isTestMode,
+      });
+    }
+  } catch (e) {
+    console.error("[placeOrder] staff order notification failed (non-fatal):", e);
   }
 
   const pmParam = paymentMethod ? `&pm=${encodeURIComponent(paymentMethod)}` : "";
