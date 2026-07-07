@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import type { NodeTree, ProductPagePayload } from "@keenan/services/builder";
 import {
   ProductPurchaseProvider,
@@ -11,6 +12,8 @@ import { addToCart } from "@/lib/actions/cart";
 import { addToQuote } from "@/lib/actions/quote";
 import { useGst, adjustForGst } from "@/lib/gst";
 import { ProductImageGallery, type ProductImage as GalleryImage } from "@/components/product/ProductImageGallery";
+import { BackButton } from "@/components/ui/BackButton";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 import { BuilderTree, type NativeComponents } from "@keenan/services/builder-react";
 import { BuilderActionsProvider, type ActionHandler } from "@keenan/services/builder-react";
 
@@ -40,29 +43,51 @@ const money = (v: string | number | null | undefined): string | null => {
     : null;
 };
 
+// Match the live RichContent stripStyles path: drop inline style="" + legacy
+// <font> tags, then DOMPurify-sanitize. Without this, raw catalogue HTML carries
+// inline font sizes that change text metrics / wrapping vs the live tabs.
+function richClean(html: string | null): string | null {
+  if (!html) return html;
+  return sanitizeHtml(html.replace(/\s*style="[^"]*"/gi, "").replace(/<\/?font[^>]*>/gi, ""));
+}
+
 /** Site-specific display enrichment of the aggregate payload: full route hrefs
- *  (tree attrs hold ONE part, so paths can't be concatenated in nodes) and
- *  proxied/locale-formatted card fields. Logic stays code, per the design. */
+ *  (tree attrs hold ONE part, so paths can't be concatenated in nodes),
+ *  proxied/locale-formatted card fields, and rich-HTML sanitization. Logic
+ *  stays code, per the design. */
 function enrichPayload(payload: ProductPagePayload): ProductPagePayload {
-  const proxy = (u: string | null | undefined, w: number) =>
-    u ? `/api/image?url=${encodeURIComponent(u)}&w=${w}&q=80` : null;
   return {
     ...payload,
+    product: {
+      ...payload.product,
+      description: richClean(payload.product.description),
+      warranty: richClean(payload.product.warranty),
+      descriptionShort: richClean(payload.product.descriptionShort),
+    },
     breadcrumbs: payload.breadcrumbs.map((b) => ({ ...b, href: `/categories/${b.slug}` })),
     lastCrumb: payload.lastCrumb ? { ...payload.lastCrumb, href: `/categories/${payload.lastCrumb.slug}` } : null,
     brand: payload.brand ? { ...payload.brand, href: `/brands/${payload.brand.slug}` } : payload.brand,
     related: {
       ...payload.related,
       products: payload.related.products.map((p) => {
-        const n = parseFloat(p.price ?? "");
-        const hasPrice = Number.isFinite(n) && n > 0;
+        // Mirror PriceBlock size="card": member price is the headline when it
+        // undercuts RRP; RRP struck; "★ Member saves $X (Y%)".
+        const rrp = parseFloat(p.price ?? "");
+        const hasPrice = Number.isFinite(rrp) && rrp > 0;
+        const mp = p.memberPrice != null ? Number(p.memberPrice) : null;
+        const hasDeal = hasPrice && mp != null && mp > 0 && mp < rrp;
         return {
           ...p,
           href: `/products/${p.slug}`,
-          imageUrl: proxy(p.imageUrl, 640),
+          // Raw S3 url — Next <Image>'s loader builds the srcset + /api/image
+          // caching (matches the hand-written cards).
+          imageUrl: p.imageUrl,
           hasPrice,
-          priceDisplay: hasPrice ? money(n) : null,
-          memberDisplay: p.memberPrice != null ? money(p.memberPrice) : null,
+          hasDeal,
+          headlineDisplay: hasPrice ? money(hasDeal ? (mp as number) : rrp) : null,
+          rrpDisplay: money(rrp),
+          savesDisplay: hasDeal ? Math.round(rrp - (mp as number)).toLocaleString("en-AU") : null,
+          savesPct: hasDeal ? String(Math.round(((rrp - (mp as number)) / rrp) * 100)) : null,
         };
       }),
     },
@@ -139,6 +164,10 @@ function ActionsBridge({
     ? p.options.map((o) => ({
         optionId: o.id,
         name: o.displayName,
+        // Option render type — the live OptionSelector renders "dropdown" as a
+        // <select>, everything else as pill buttons.
+        isDropdown: (o.type || "rectangles") === "dropdown",
+        selectedValueId: purchase.selectedOptions[o.id] != null ? String(purchase.selectedOptions[o.id]) : "",
         values: p.optionValues
           .filter((v) => v.optionId === o.id)
           .map((v) => ({
@@ -231,6 +260,18 @@ function ActionsBridge({
         purchase.isMember && member != null && member < rrpBase ? member : rrpBase
       ),
       mobilePriceLabel: purchase.isMember && member != null ? "member" : gstLabel,
+      // Links row shows only when there's a brand or category to link to
+      // (the live ProductLinks renders nothing otherwise).
+      hasLinks: payload.brand != null || payload.lastCrumb != null,
+      // Review summary (stars + rating + count) next to the SKU.
+      reviewHasReviews: (payload.reviews?.summary?.count ?? 0) > 0,
+      reviewFilled: "★".repeat(Math.round(payload.reviews?.summary?.avg ?? 0)),
+      reviewEmpty: "★".repeat(Math.max(0, 5 - Math.round(payload.reviews?.summary?.avg ?? 0))),
+      reviewRating: (payload.reviews?.summary?.avg ?? 0).toFixed(1),
+      reviewCountLabel:
+        (payload.reviews?.summary?.count ?? 0) === 1
+          ? "1 review"
+          : `${payload.reviews?.summary?.count ?? 0} reviews`,
       // Options / bulk / tabs data
       hasOptions,
       optionGroups,
@@ -261,6 +302,11 @@ function ActionsBridge({
         variantImageUrl={variantImg}
       />
     ),
+    // Shown in place of the breadcrumb nav when a product has no category trail
+    // (matches the live BreadcrumbsBlock fallback).
+    "back-to-products": () => (
+      <BackButton fallbackHref="/products" fallbackLabel="Back to Products" className="mb-6" />
+    ),
   };
 
   return (
@@ -272,6 +318,7 @@ function ActionsBridge({
         components={components}
         nativeComponents={nativeComponents}
         linkComponent={Link as unknown as React.ComponentType<Record<string, unknown>>}
+        imageComponent={Image as unknown as React.ComponentType<Record<string, unknown>>}
         scope={purchaseScope}
       />
     </BuilderActionsProvider>
