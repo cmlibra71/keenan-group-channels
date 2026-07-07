@@ -1,0 +1,85 @@
+/* ============================================================================
+   DESIGN TOKEN CONTRACT — Template values (zinc-neutral starting point — new sites tune these).
+
+   The token NAMES here are the cross-site standard (@keenan/services
+   design-contract.ts; Chefs Depot's theme is the reference implementation).
+   Every storefront defines ALL of them so builder output (named styles,
+   components, templates authored as bg-surface-secondary / text-member /
+   rounded-card …) renders correctly on every site. Only the VALUES are
+   site-specific — the template ships zinc neutrals + amber action as a neutral starting point.
+
+   The portal Design editor (cms_design_tokens → getPublishedTokenVars) can
+   override any of these live; this file is the code fallback.
+   ========================================================================= */
+@theme static {
+  /* ── Fonts ─────────────────────────────────────────── */
+  --font-serif: Georgia, "Times New Roman", serif;
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ── Brand (industrial dark zinc) ──────────────────── */
+  --color-brand-deep: #18181b;   /* zinc-900 — header/footer        */
+  --color-brand-mid: #27272a;    /* zinc-800                        */
+  --color-brand: #3f3f46;        /* zinc-700 — PRIMARY BRAND        */
+  --color-brand-light: #52525b;  /* zinc-600                        */
+  --color-brand-tint: #f4f4f5;   /* zinc-100 — tint surfaces        */
+
+  /* ── Action amber (the ONLY buy/go colour) ─────────── */
+  --color-accent: #f59e0b;       /* amber-500 — primary actions     */
+  --color-accent-hover: #d97706; /* amber-600 — hover / pressed     */
+  --color-accent-dark: #b45309;  /* amber-700                       */
+  --color-accent-bright: #fbbf24;/* amber-400                       */
+  --color-accent-subtle: #fffbeb;/* amber-50                        */
+
+  /* ── Membership gold (shared Keenan membership brand) ─ */
+  --color-member: #E9B949;
+  --color-member-bright: #F6D154;
+  --color-member-text: #B98A1E;
+  --color-member-bg: #FBF1D6;
+
+  /* ── Sale red (clearance / Save% urgency ONLY) ─────── */
+  --color-sale: #dc2626;         /* red-600                         */
+  --color-sale-deep: #b91c1c;    /* red-700                         */
+  --color-sale-bg: #fef2f2;      /* red-50                          */
+
+  /* ── Warning ───────────────────────────────────────── */
+  --color-warning: #d97706;
+  --color-warning-bg: #fffbeb;
+
+  /* ── Ink & steel neutrals (zinc-based) ─────────────── */
+  --color-ink-900: #18181b;
+  --color-ink-800: #27272a;
+  --color-ink-700: #3f3f46;
+  --color-steel-700: #3f3f46;
+  --color-steel-500: #71717a;
+  --color-steel-400: #a1a1aa;
+  --color-steel-300: #d4d4d8;
+  --color-steel-200: #e4e4e7;
+  --color-steel-100: #f4f4f5;
+  --color-steel-50: #fafafa;
+
+  /* ── Semantic roles (components reference these) ───── */
+  --color-surface-primary: #fafafa;
+  --color-surface-secondary: #f4f4f5;
+  --color-surface-dark: #18181b;
+  --color-surface-dark-alt: #27272a;
+
+  --color-text-primary: #18181b;
+  --color-text-body: #3f3f46;
+  --color-text-secondary: #71717a;
+  --color-text-muted: #a1a1aa;
+
+  --color-border: #e4e4e7;
+  --color-border-strong: #d4d4d8;
+
+  /* ── Radii ─────────────────────────────────────────── */
+  --radius-btn: 8px;
+  --radius-card: 14px;
+  --radius-panel: 18px;
+
+  /* ── Shadows ───────────────────────────────────────── */
+  --shadow-sm: 0 1px 2px rgba(24,24,27,.06), 0 1px 3px rgba(24,24,27,.07);
+  --shadow-md: 0 6px 16px rgba(24,24,27,.09);
+  --shadow-lg: 0 16px 40px rgba(24,24,27,.14);
+  --shadow-hover: 0 20px 48px rgba(24,24,27,.18);
+}
