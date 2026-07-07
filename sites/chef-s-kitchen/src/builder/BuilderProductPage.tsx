@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import type { NodeTree, ProductPagePayload } from "@keenan/services/builder";
 import {
@@ -42,6 +43,7 @@ function ActionsBridge({
   components?: Record<string, NodeTree>;
 }) {
   const purchase = useProductPurchase();
+  const router = useRouter();
   const { inclusive, pricesIncludeTax } = useGst();
   const handlers = useProductPageHandlers({ productId, addToCart, addToQuote });
   const scope = useProductPageScope(payload, { inclusive, pricesIncludeTax });
@@ -67,7 +69,7 @@ function ActionsBridge({
   };
 
   return (
-    <BuilderActionsProvider handlers={handlers}>
+    <BuilderActionsProvider handlers={handlers} navigate={(to) => router.push(to)}>
       <BuilderTree
         tree={tree}
         payload={payload}
