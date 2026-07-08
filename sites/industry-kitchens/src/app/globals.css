@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./theme-contract.css";
 @import "./cms-safelist.css";
 
 /* Prevent horizontal overflow when users pinch-zoom on mobile */
