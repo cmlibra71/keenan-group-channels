@@ -12,7 +12,8 @@ import { ga4SelectItem } from "@/components/analytics/ga4";
  * Design-system product card: white 1:1 image stage, corner badges (max two),
  * brand mark top-right, category eyebrow → 2-line clamped name → mono SKU →
  * shared PriceBlock → dual Add to Cart / Add to Quote. Hover lifts the card
- * with a green edge. "Enquire" replaces Add to Cart for unpriced (POA) items.
+ * with a green edge. Unpriced (POA) items show no price and a single
+ * Add to Quote button.
  */
 export interface ProductCardProps {
   id: number;
@@ -132,7 +133,7 @@ export function ProductCard({
 
         {/* Pricing — shared trade model */}
         <div className="mt-auto pt-2.5">
-          {hasPrice ? (
+          {hasPrice && (
             <PriceBlock
               rrp={rrp}
               memberPrice={memberPrice}
@@ -140,8 +141,6 @@ export function ProductCard({
               planPrice={planPrice}
               size="card"
             />
-          ) : (
-            <p className="text-sm font-semibold text-text-secondary">Call for Price</p>
           )}
         </div>
 
@@ -166,7 +165,7 @@ export function ProductCard({
               <AddToQuoteButton productId={id} size="sm" />
             </>
           ) : (
-            <AddToQuoteButton productId={id} size="sm" label="Enquire" />
+            <AddToQuoteButton productId={id} size="sm" />
           )}
         </div>
       </div>
