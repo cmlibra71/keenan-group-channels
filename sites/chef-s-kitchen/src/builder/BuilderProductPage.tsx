@@ -34,12 +34,16 @@ function ActionsBridge({
   tree,
   payload,
   namedStyles,
+  jsFunctions,
+  callResults,
   components,
 }: {
   productId: number;
   tree: NodeTree;
   payload: ProductPagePayload;
   namedStyles?: Record<string, string[]>;
+  jsFunctions?: Record<string, string>;
+  callResults?: Record<string, boolean>;
   components?: Record<string, NodeTree>;
 }) {
   const purchase = useProductPurchase();
@@ -74,6 +78,8 @@ function ActionsBridge({
         tree={tree}
         payload={payload}
         namedStyles={namedStyles}
+        jsFunctions={jsFunctions}
+        callResults={callResults}
         components={components}
         nativeComponents={nativeComponents}
         linkComponent={Link as unknown as React.ComponentType<Record<string, unknown>>}
@@ -88,11 +94,15 @@ export function BuilderProductPage({
   tree,
   payload,
   namedStyles = {},
+  jsFunctions,
+  callResults,
   components = {},
 }: {
   tree: NodeTree;
   payload: ProductPagePayload;
   namedStyles?: Record<string, string[]>;
+  jsFunctions?: Record<string, string>;
+  callResults?: Record<string, boolean>;
   components?: Record<string, NodeTree>;
 }) {
   const product = payload.product as unknown as PurchaseProduct;
@@ -105,7 +115,7 @@ export function BuilderProductPage({
       isMember={payload.pricing.isMember}
       membershipTeaser={payload.pricing.membershipTeaser}
     >
-      <ActionsBridge productId={payload.product.id} tree={tree} payload={enriched} namedStyles={namedStyles} components={components} />
+      <ActionsBridge productId={payload.product.id} tree={tree} payload={enriched} namedStyles={namedStyles} components={components} jsFunctions={jsFunctions} callResults={callResults} />
     </ProductPurchaseProvider>
   );
 }

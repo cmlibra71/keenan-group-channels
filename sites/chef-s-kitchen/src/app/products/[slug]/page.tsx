@@ -9,6 +9,8 @@ import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { getProductPageData, getNamedStyles, getComponents } from "@/lib/store";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
+import { cmsFunctionService } from "@keenan/services/services";
+import { loadJsSandbox, computeCallResults } from "@keenan/services/builder";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 import {
@@ -276,6 +278,16 @@ export default async function ProductPage({
     const namedStyles = await getNamedStyles().catch(() => ({}));
     const components = (await getComponents().catch(() => ({}))) as Record<string, typeof SEED_PRODUCT_TREE>;
     if (payload) {
+      const nodeTree = storedTree ?? SEED_PRODUCT_TREE;
+      // JavaScript function library: SSR evaluates call-conditions live (the
+      // sandbox is awaited here), and callResults keeps the client's first
+      // paint identical until its wasm loads.
+      const jsFunctions = await cmsFunctionService.enabledMapForChannel(CHANNEL_ID).catch(() => ({}) as Record<string, string>);
+      let callResults: Record<string, boolean> = {};
+      if (Object.keys(jsFunctions).length > 0) {
+        await loadJsSandbox(jsFunctions).catch(() => null);
+        callResults = await computeCallResults(nodeTree.root, jsFunctions, payload as object).catch(() => ({}));
+      }
       return (
         <div>
           <script
@@ -299,7 +311,7 @@ export default async function ProductPage({
               brand: brandRow?.name ?? null,
             }}
           />
-          <BuilderProductPage tree={storedTree ?? SEED_PRODUCT_TREE} payload={payload} namedStyles={namedStyles} components={components} />
+          <BuilderProductPage tree={nodeTree} payload={payload} namedStyles={namedStyles} components={components} jsFunctions={jsFunctions} callResults={callResults} />
         </div>
       );
     }

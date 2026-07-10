@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   transpilePackages: ["@keenan/services"],
-  serverExternalPackages: ["sharp"],
+  serverExternalPackages: ["sharp", "quickjs-emscripten"],
   // Type errors FAIL the build — this is what prevents the snake_case/camelCase
   // service-result bug class (and others) from shipping silently. Keep at false.
   typescript: { ignoreBuildErrors: false },

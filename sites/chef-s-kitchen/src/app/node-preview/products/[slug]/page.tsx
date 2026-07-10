@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { draftMode } from "next/headers";
-import {
+import { CHANNEL_ID,
   getProductBySlug,
   getProductPageData,
   getNamedStyles,
@@ -9,6 +9,8 @@ import {
 } from "@/lib/store";
 import { getMemberContext } from "@/lib/member";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
+import { cmsFunctionService } from "@keenan/services/services";
+import { loadJsSandbox, computeCallResults } from "@keenan/services/builder";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 
 // ============================================================================
@@ -70,12 +72,21 @@ export default async function NodePreviewProductPage({
     typeof SEED_PRODUCT_TREE
   >;
 
+  const nodeTree = storedTree ?? SEED_PRODUCT_TREE;
+  const jsFunctions = await cmsFunctionService.enabledMapForChannel(CHANNEL_ID).catch(() => ({}) as Record<string, string>);
+  let callResults: Record<string, boolean> = {};
+  if (Object.keys(jsFunctions).length > 0) {
+    await loadJsSandbox(jsFunctions).catch(() => null);
+    callResults = await computeCallResults(nodeTree.root, jsFunctions, payload as object).catch(() => ({}));
+  }
   return (
     <BuilderProductPage
-      tree={storedTree ?? SEED_PRODUCT_TREE}
+      tree={nodeTree}
       payload={payload}
       namedStyles={namedStyles}
       components={components}
+      jsFunctions={jsFunctions}
+      callResults={callResults}
     />
   );
 }
