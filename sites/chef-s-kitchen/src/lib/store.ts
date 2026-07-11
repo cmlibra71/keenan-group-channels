@@ -158,8 +158,18 @@ export const getFooterConfig = unstable_cache(
 );
 
 // Custom header nav items (Navigation editor → `nav_structure.header`). Empty =
-// the storefront falls back to the category-driven mega-menu.
-export type HeaderNavItem = { label: string; url: string; children?: { label: string; url: string }[] };
+// the storefront falls back to the category-driven mega-menu. `categories` items
+// render the All Departments entry; `category` items render a department with its
+// auto mega panel (resolved against the category tree by categoryId).
+export type HeaderNavItem = {
+  label: string;
+  url?: string;
+  type?: "categories" | "category" | "page" | "blog" | "link";
+  categoryId?: number;
+  pageSlug?: string;
+  newTab?: boolean;
+  children?: HeaderNavItem[];
+};
 export const getHeaderNav = unstable_cache(
   async (): Promise<HeaderNavItem[]> => {
     const nav = (await getChannelSetting("nav_structure")) as { header?: HeaderNavItem[] } | null;

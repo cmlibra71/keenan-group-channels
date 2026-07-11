@@ -8,7 +8,6 @@ import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, getHeader
 import { HeaderClient } from "./HeaderClient";
 import { GstToggle } from "./GstToggle";
 import { MegaMenu } from "./MegaMenu";
-import { CustomNav } from "./CustomNav";
 import { MobileNavDrawer } from "./MobileNavDrawer";
 import { SearchTypeahead } from "../search/SearchTypeahead";
 
@@ -93,12 +92,9 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
         </div>
       </div>
 
-      {/* Department nav — editor's custom nav when set, else the category mega-menu */}
-      {headerNav.length > 0 ? (
-        <CustomNav items={headerNav} />
-      ) : (
-        <MegaMenu departments={megaMenu.departments} featured={megaMenu.featured} />
-      )}
+      {/* Department nav — editor items (incl. mega-menu department items) when
+          set, else the bar's built-in default */}
+      <MegaMenu departments={megaMenu.departments} featured={megaMenu.featured} items={headerNav} />
     </header>
   );
 }
