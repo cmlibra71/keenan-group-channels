@@ -11,3 +11,6 @@ caddy/
 orchestrator/
 template/
 _services/
+
+# un-ignore the on-box cache warmer shipped into the site image
+!orchestrator/warm-categories.mjs
