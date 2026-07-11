@@ -38,6 +38,18 @@ export async function POST(req: NextRequest) {
   // views stay instant no matter how often the catalog churns.
   const purge = (tag: string) => revalidateTag(tag, { expire: 0 });
 
+  // kind "product" fires on EVERY portal product save (and bulk imports /
+  // suggestion applies), all day long. Purge product-data reads only — the
+  // broad channel purge would force a multi-second mega-menu/category-tree
+  // recompute on the next view each time (IK's tree is ~4.5k categories).
+  // Nav doesn't render product data, and category listings refresh within
+  // their SWR window.
+  if (kind === "product") {
+    purge("products");
+    purge(`channel-${channelId}-template-product`);
+    return NextResponse.json({ revalidated: true });
+  }
+
   // Broad bust (covers nav/settings reads), then the page-specific tag.
   // kind "catalog" (the Zoey ingestor's storefront_revalidate node) is just
   // the broad bust: nav / category tree / product pages pick up ingest writes
@@ -53,8 +65,7 @@ export async function POST(req: NextRequest) {
     purge(`category-listing-${channelId}-${categoryId}`);
   } else if (kind === "blog_index") purge("blog");
   else if (kind === "tokens") purge(`channel-${channelId}-design-tokens`);
-  else if (kind === "product" || kind === "category_layout")
-    purge(`channel-${channelId}-template-${kind}`);
+  else if (kind === "category_layout") purge(`channel-${channelId}-template-${kind}`);
 
   return NextResponse.json({ revalidated: true });
 }
