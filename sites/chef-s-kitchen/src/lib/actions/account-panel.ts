@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { refresh } from "next/cache";
 import { contactService, CHANNEL_ID } from "@/lib/store";
 import { getSession, setSession, clearSession } from "@/lib/auth";
 import { verifyPassword } from "@/lib/password";
@@ -64,7 +64,7 @@ export async function loginFromPanel(formData: FormData): Promise<{
   }
 
   await setSession(candidate.id, candidate.email);
-  revalidatePath("/", "layout");
+  refresh(); // acting user's view refreshes; shared data cache stays intact
 
   return {
     session: {
@@ -116,7 +116,7 @@ export async function registerFromPanel(formData: FormData): Promise<{
   }
 
   await setSession(contact.id, contact.email);
-  revalidatePath("/", "layout");
+  refresh(); // acting user's view refreshes; shared data cache stays intact
 
   return {
     session: {
@@ -130,5 +130,5 @@ export async function registerFromPanel(formData: FormData): Promise<{
 
 export async function logoutFromPanel() {
   await clearSession();
-  revalidatePath("/", "layout");
+  refresh(); // acting user's view refreshes; shared data cache stays intact
 }

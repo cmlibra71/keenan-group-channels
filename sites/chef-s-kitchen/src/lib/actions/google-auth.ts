@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { refresh } from "next/cache";
 import { contactService, CHANNEL_ID } from "@/lib/store";
 import { setSession } from "@/lib/auth";
 import { verifyGoogleClaims, type GoogleTokenInfo } from "@/lib/google-claims";
@@ -62,7 +62,7 @@ export async function googleSignIn(credential: string): Promise<GoogleSignInResu
     }
 
     await setSession(existing.id, existing.email);
-    revalidatePath("/", "layout");
+    refresh(); // acting user's view refreshes; shared data cache stays intact
 
     return {
       session: {
@@ -99,7 +99,7 @@ export async function googleSignIn(credential: string): Promise<GoogleSignInResu
   }
 
   await setSession(contact.id, contact.email);
-  revalidatePath("/", "layout");
+  refresh(); // acting user's view refreshes; shared data cache stays intact
 
   return {
     session: {

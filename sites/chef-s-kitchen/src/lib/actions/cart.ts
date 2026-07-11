@@ -1,7 +1,7 @@
 "use server";
 
 import { cache } from "react";
-import { revalidatePath } from "next/cache";
+import { refresh } from "next/cache";
 import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, CHANNEL_ID } from "@/lib/store";
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { getCartUuid, setCartUuid } from "@/lib/cart";
@@ -143,7 +143,7 @@ export async function addToCart(productId: number, variantId?: number | null, qu
     });
   }
 
-  revalidatePath("/", "layout");
+  refresh(); // acting user's view refreshes; shared data cache stays intact
   return { success: true };
 }
 
@@ -164,7 +164,7 @@ export async function updateCartItem(itemId: number, quantity: number) {
       // Idempotent: removing an already-deleted line (e.g. rapid minus clicks on
       // the last unit, or a raced concurrent remove) is a no-op success.
       await cartItemService.deleteForParent(cart.id, itemId);
-      revalidatePath("/", "layout");
+      refresh(); // acting user's view refreshes; shared data cache stays intact
       return { success: true };
     }
 
@@ -179,7 +179,7 @@ export async function updateCartItem(itemId: number, quantity: number) {
 
     // Line already gone (raced with a concurrent remove) — nothing to update.
     if (!item) {
-      revalidatePath("/", "layout");
+      refresh(); // acting user's view refreshes; shared data cache stays intact
       return { success: true };
     }
 
@@ -200,7 +200,7 @@ export async function updateCartItem(itemId: number, quantity: number) {
         : { quantity }
     );
 
-    revalidatePath("/", "layout");
+    refresh(); // acting user's view refreshes; shared data cache stays intact
     return { success: true };
   } catch (e) {
     console.error("[updateCartItem] failed (non-fatal):", e);

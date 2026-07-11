@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { refresh } from "next/cache";
 import { getSession } from "@/lib/auth";
 import {
   CHANNEL_ID,
@@ -131,7 +131,7 @@ export async function createSubscription(planId: number): Promise<{
       ...((await wantsStripeTestMode(CHANNEL_ID)) ? { metafields: { test_mode: true } } : {}),
     });
 
-    revalidatePath("/", "layout");
+    refresh(); // acting user's view refreshes; shared data cache stays intact
 
     return {
       success: true,
@@ -216,7 +216,7 @@ export async function cancelSubscription(): Promise<{
     // Update local record
     await subscriptionService.cancel(sub.id, true);
 
-    revalidatePath("/", "layout");
+    refresh(); // acting user's view refreshes; shared data cache stays intact
 
     return { success: true };
   } catch (err) {

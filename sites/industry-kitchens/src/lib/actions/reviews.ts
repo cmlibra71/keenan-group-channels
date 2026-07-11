@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { refresh } from "next/cache";
 import { reviewService, productService, CHANNEL_ID } from "@/lib/store";
 import { sendStaffNotification } from "@/lib/staff-email";
 
@@ -53,6 +53,6 @@ export async function submitReview(
     console.error("[submitReview] staff notification failed (non-fatal):", e);
   }
 
-  revalidatePath("/", "layout");
+  refresh(); // acting user's view refreshes; shared data cache stays intact
   return { success: true };
 }

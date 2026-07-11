@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import {
@@ -85,7 +85,7 @@ export async function createSubscription(planId: number): Promise<{
       if (remote && (remote.status === "active" || remote.status === "trialing")) {
         // Payment already succeeded (a missed/late webhook) — reconcile locally.
         await subscriptionService.activate(pendingSub.id as number);
-        revalidatePath("/", "layout");
+        refresh(); // acting user's view refreshes; shared data cache stays intact
         return {
           success: true,
           clientSecret: null,
@@ -166,7 +166,7 @@ export async function createSubscription(planId: number): Promise<{
       ...((await wantStripeTestMode()) ? { metafields: { test_mode: true } } : {}),
     });
 
-    revalidatePath("/", "layout");
+    refresh(); // acting user's view refreshes; shared data cache stays intact
 
     return {
       success: true,
@@ -226,7 +226,7 @@ export async function attemptTestMembership(
     const pending = all.find((s) => s.status === "pending");
     if (pending) {
       await subscriptionService.activate(pending.id as number);
-      revalidatePath("/", "layout");
+      refresh(); // acting user's view refreshes; shared data cache stays intact
       return { created: true };
     }
 
@@ -243,7 +243,7 @@ export async function attemptTestMembership(
     });
     await subscriptionService.activate(localSub.id as number);
 
-    revalidatePath("/", "layout");
+    refresh(); // acting user's view refreshes; shared data cache stays intact
     return { created: true };
   } catch (err) {
     return { created: false, error: err instanceof Error ? err.message : "Failed to create membership" };
@@ -344,7 +344,7 @@ export async function completeMembershipProfile(input: {
       console.error("[completeMembershipProfile] Stripe customer update failed:", e);
     }
 
-    revalidatePath("/", "layout");
+    refresh(); // acting user's view refreshes; shared data cache stays intact
   } catch (err) {
     return {
       success: false,
@@ -425,7 +425,7 @@ export async function cancelSubscription(): Promise<{
     // Update local record
     await subscriptionService.cancel(sub.id, true);
 
-    revalidatePath("/", "layout");
+    refresh(); // acting user's view refreshes; shared data cache stays intact
 
     return { success: true };
   } catch (err) {

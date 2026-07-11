@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, refresh } from "next/cache";
 import { quoteService, quoteItemService, productService, productVariantService, CHANNEL_ID, shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { wantsStripeTestMode } from "@keenan/services";
 import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
@@ -96,7 +96,7 @@ export async function addToQuote(productId: number, variantId?: number | null) {
     });
   }
 
-  revalidatePath("/", "layout");
+  refresh(); // acting user's view refreshes; shared data cache stays intact
   return { success: true };
 }
 
@@ -113,7 +113,7 @@ export async function updateQuoteItem(itemId: number, quantity: number) {
     await quoteItemService.updateForParent(quote.id, itemId, { quantity });
   }
 
-  revalidatePath("/", "layout");
+  refresh(); // acting user's view refreshes; shared data cache stays intact
   return { success: true };
 }
 
@@ -155,7 +155,7 @@ export async function submitQuote(notes?: string) {
   });
   await clearQuoteUuid();
 
-  revalidatePath("/", "layout");
+  refresh(); // acting user's view refreshes; shared data cache stays intact
   return { success: true };
 }
 

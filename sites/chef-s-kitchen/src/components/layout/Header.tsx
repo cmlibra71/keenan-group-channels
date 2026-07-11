@@ -20,7 +20,7 @@ import { SearchTypeahead } from "../search/SearchTypeahead";
 export async function Header({ storeName, logoUrl, logoAlt }: { storeName: string; logoUrl?: string | null; logoAlt?: string | null }) {
   // The Header renders in the root layout — ABOVE the page's error boundary — so
   // any throw here escalates to the site-wide global-error page ("Something went
-  // wrong loading the site"), and it re-runs on every revalidatePath("/", "layout")
+  // wrong loading the site"), and it re-runs on every refresh()
   // from a cart/quote mutation. Degrade gracefully (empty badge / nav) on a
   // transient DB failure instead of taking down the whole storefront.
   const [cart, quote, megaMenu, headerNav] = await Promise.all([
