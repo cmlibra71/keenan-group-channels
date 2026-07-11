@@ -166,18 +166,13 @@ jobs:
       # Deploys change the site bundle, which changes every unstable_cache key
       # (the cached callback's source is part of the key) — the persistent
       # cache volume carries entries across restarts but not across builds.
-      # Re-warm every category on-box, detached (the site warms itself via
-      # localhost with its own DB creds; the workflow doesn't wait).
-      - name: Warm category caches (on-box, detached)
+      # POST /api/warm re-warms every category listing in-process (202 +
+      # background; the site uses its own bundled DB access).
+      - name: Warm category caches
         continue-on-error: true
         run: |
-          SITE="${{ matrix.site }}"
-          CHANNEL_ID="${{ steps.config.outputs.channel_id }}"
-          aws ssm send-command \
-            --instance-ids ${{ env.EC2_INSTANCE }} \
-            --document-name "AWS-RunShellScript" \
-            --parameters "commands=[
-              \"docker exec -d keenan-channel-${SITE} node /app/warm-categories.mjs --url http://localhost:3000 --channel ${CHANNEL_ID} --concurrency 4\"
-            ]" \
-            --output text >/dev/null
-          echo "Warm command dispatched for ${SITE} (channel ${CHANNEL_ID})"
+          DOMAIN="${{ steps.config.outputs.domain }}"
+          RESP=$(curl -s -X POST "https://${DOMAIN}/api/warm" \
+            -H "x-revalidate-secret: ${{ secrets.STOREFRONT_REVALIDATE_SECRET }}" \
+            --max-time 30)
+          echo "Warm dispatched for ${DOMAIN}: ${RESP}"

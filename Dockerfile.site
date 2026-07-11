@@ -44,10 +44,6 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder --chown=nextjs:nodejs /app/sites/${SITE_NAME}/.next/standalone ./
 COPY --from=builder /app/sites/${SITE_NAME}/public ./sites/${SITE_NAME}/public
 COPY --from=builder --chown=nextjs:nodejs /app/sites/${SITE_NAME}/.next/static ./sites/${SITE_NAME}/.next/static
-# Post-deploy cache warmer (run via `docker exec -d ... node /app/warm-categories.mjs`).
-# Deploys change the bundle, which changes unstable_cache keys (cb.toString() is
-# part of the key) — so CI re-warms every category after each deploy.
-COPY --chown=nextjs:nodejs orchestrator/warm-categories.mjs ./warm-categories.mjs
 
 USER nextjs
 EXPOSE 3000
