@@ -283,7 +283,7 @@ export default async function ProductPage({
       // sandbox is awaited here), and callResults keeps the client's first
       // paint identical until its wasm loads.
       const jsFunctions = await cmsFunctionService.enabledMapForChannel(CHANNEL_ID).catch(() => ({}) as Record<string, string>);
-      let callResults: Record<string, boolean> = {};
+      let callResults: Record<string, unknown> = {};
       if (Object.keys(jsFunctions).length > 0) {
         await loadJsSandbox(jsFunctions).catch(() => null);
         callResults = await computeCallResults(nodeTree.root, jsFunctions, payload as object).catch(() => ({}));

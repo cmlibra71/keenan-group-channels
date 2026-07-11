@@ -43,7 +43,7 @@ function ActionsBridge({
   payload: ProductPagePayload;
   namedStyles?: Record<string, string[]>;
   jsFunctions?: Record<string, string>;
-  callResults?: Record<string, boolean>;
+  callResults?: Record<string, unknown>;
   components?: Record<string, NodeTree>;
 }) {
   const purchase = useProductPurchase();
@@ -102,7 +102,7 @@ export function BuilderProductPage({
   payload: ProductPagePayload;
   namedStyles?: Record<string, string[]>;
   jsFunctions?: Record<string, string>;
-  callResults?: Record<string, boolean>;
+  callResults?: Record<string, unknown>;
   components?: Record<string, NodeTree>;
 }) {
   const product = payload.product as unknown as PurchaseProduct;
