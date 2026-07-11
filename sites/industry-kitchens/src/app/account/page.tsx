@@ -190,6 +190,16 @@ export default async function AccountPage() {
           </Link>
         )}
         <Link
+          href="/account/profile"
+          className="flex items-center gap-4 border border-zinc-200 rounded-lg p-6 hover:border-zinc-400 transition-colors"
+        >
+          <MapPin className="h-8 w-8 text-zinc-400" />
+          <div>
+            <h3 className="font-semibold text-zinc-900">Account Details</h3>
+            <p className="text-sm text-zinc-500">Profile, addresses &amp; contacts</p>
+          </div>
+        </Link>
+        <Link
           href="/account/security"
           className="flex items-center gap-4 border border-zinc-200 rounded-lg p-6 hover:border-zinc-400 transition-colors"
         >

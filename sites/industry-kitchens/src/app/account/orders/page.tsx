@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Package } from "lucide-react";
 import { getSession } from "@/lib/auth";
-import { orderService, CHANNEL_ID } from "@/lib/store";
+import { orderService, CHANNEL_ID, getGuestOrdersForEmail } from "@/lib/store";
 import { Price } from "@/components/ui/Price";
 
 // orderService returns snake_case keys (transformRow).
@@ -38,7 +38,29 @@ export default async function OrdersPage() {
     },
   });
 
-  const customerOrders = data as unknown as OrderRecord[];
+  const accountOrders = data as unknown as OrderRecord[];
+
+  // Also surface orders placed as a GUEST under this account's email (e.g. a
+  // checkout done before creating the account), matched on the normalized inbox.
+  // This is deliberately NOT gated on the net-terms `email_verified` check: that
+  // gate exists to stop an unverified self-registration from buying on someone
+  // else's B2B *credit* (see net-terms.ts), whereas this is read-only order
+  // history. Self-service registration currently never verifies the sign-up email,
+  // so gating here permanently hid every self-registered customer's own guest
+  // orders from them (the reported bug). The financial net-terms gate is untouched.
+  let guestOrders: OrderRecord[] = [];
+  try {
+    guestOrders = (await getGuestOrdersForEmail(session.email)) as unknown as OrderRecord[];
+  } catch {
+    // best-effort — never block the page on the guest-order lookup
+  }
+
+  // Merge (dedupe by id; guest orders have no contact_id so they can't overlap)
+  // and re-sort newest-first.
+  const seen = new Set(accountOrders.map((o) => o.id));
+  const customerOrders = [...accountOrders, ...guestOrders.filter((o) => !seen.has(o.id))].sort(
+    (a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+  );
 
   if (customerOrders.length === 0) {
     return (
