@@ -15,6 +15,7 @@ import {
 import { addToCart } from "@/lib/actions/cart";
 import { addToQuote } from "@/lib/actions/quote";
 import { useGst } from "@/lib/gst";
+import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
 import { ProductImageGallery, type ProductImage as GalleryImage } from "@/components/product/ProductImageGallery";
 import { BackButton } from "@/components/ui/BackButton";
 import { sanitizeHtml } from "@/lib/sanitize-html";
@@ -49,7 +50,34 @@ function ActionsBridge({
   const purchase = useProductPurchase();
   const router = useRouter();
   const { inclusive, pricesIncludeTax } = useGst();
-  const handlers = useProductPageHandlers({ productId, addToCart, addToQuote });
+  // Wrap the site actions so the returned fresh counts reach the header badges
+  // (the item mutations no longer trigger a route re-render).
+  const { setCartCount, setQuoteCount } = useCartQuoteCounts();
+  const countingAddToCart = React.useCallback(
+    async (pid: number, variantId: number | null, quantity: number) => {
+      const res = await addToCart(pid, variantId, quantity);
+      if (res && "cartCount" in res && typeof res.cartCount === "number") {
+        setCartCount(res.cartCount);
+      }
+      return res;
+    },
+    [setCartCount]
+  );
+  const countingAddToQuote = React.useCallback(
+    async (pid: number, variantId: number | null) => {
+      const res = await addToQuote(pid, variantId);
+      if (res && "quoteCount" in res && typeof res.quoteCount === "number") {
+        setQuoteCount(res.quoteCount);
+      }
+      return res;
+    },
+    [setQuoteCount]
+  );
+  const handlers = useProductPageHandlers({
+    productId,
+    addToCart: countingAddToCart,
+    addToQuote: countingAddToQuote,
+  });
   const scope = useProductPageScope(payload, { inclusive, pricesIncludeTax });
 
   // Coded (non-exploded) components slotted in by key — the gallery keeps its
