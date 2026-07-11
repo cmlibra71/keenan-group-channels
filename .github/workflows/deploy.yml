@@ -163,16 +163,3 @@ jobs:
 
           echo "Warning: ${{ matrix.site }} did not respond within 80 seconds (may still be starting)"
 
-      # Deploys change the site bundle, which changes every unstable_cache key
-      # (the cached callback's source is part of the key) — the persistent
-      # cache volume carries entries across restarts but not across builds.
-      # POST /api/warm re-warms every category listing in-process (202 +
-      # background; the site uses its own bundled DB access).
-      - name: Warm category caches
-        continue-on-error: true
-        run: |
-          DOMAIN="${{ steps.config.outputs.domain }}"
-          RESP=$(curl -s -X POST "https://${DOMAIN}/api/warm" \
-            -H "x-revalidate-secret: ${{ secrets.STOREFRONT_REVALIDATE_SECRET }}" \
-            --max-time 30)
-          echo "Warm dispatched for ${DOMAIN}: ${RESP}"
