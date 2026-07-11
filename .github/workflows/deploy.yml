@@ -132,6 +132,7 @@ jobs:
               \"echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin\",
               \"docker pull ${IMAGE}\",
               \"mkdir -p /home/ubuntu/storefront-cache/${SITE} && chown -R 1001:1001 /home/ubuntu/storefront-cache/${SITE}\",
+              \"find /home/ubuntu/storefront-cache/${SITE} -type f -mtime +14 -delete 2>/dev/null || true\",
               \"docker stop ${CONTAINER} || true\",
               \"docker rm ${CONTAINER} || true\",
               \"docker run -d --name ${CONTAINER} --restart unless-stopped --network ${DOCKER_NETWORK} -p 127.0.0.1:${PORT}:3000 -v /home/ubuntu/storefront-cache/${SITE}:/app/sites/${SITE}/.next/cache -e COMMERCE_DATABASE_URL=${{ secrets.COMMERCE_DATABASE_URL }} -e CHANNEL_ID=${CHANNEL_ID} -e CHANNEL_KEY=${SITE} -e SITE_URL=https://${DOMAIN} -e SITE_INDEXABLE=${INDEXABLE} -e STOREFRONT_REVALIDATE_SECRET=${{ secrets.STOREFRONT_REVALIDATE_SECRET }} -e CMS_PREVIEW_SECRET=${{ secrets.CMS_PREVIEW_SECRET }} -e SESSION_SECRET=${{ secrets.SESSION_SECRET }} -e E2E_LOGIN_SECRET=${{ secrets.E2E_LOGIN_SECRET }} -e TEST_EMAIL_RECIPIENT=chrisbmosely@gmail.com -e STAFF_NOTIFICATIONS_EMAIL=${{ secrets.STAFF_NOTIFICATIONS_EMAIL || 'chrisbmosely@gmail.com' }} -e GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} -e MEILI_URL=http://keenan-search:7700 -e MEILI_API_KEY=${{ secrets.MEILI_MASTER_KEY }} -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} -e AWS_REGION=ap-southeast-2 ${IMAGE}\",
@@ -161,3 +162,22 @@ jobs:
           done
 
           echo "Warning: ${{ matrix.site }} did not respond within 80 seconds (may still be starting)"
+
+      # Deploys change the site bundle, which changes every unstable_cache key
+      # (the cached callback's source is part of the key) — the persistent
+      # cache volume carries entries across restarts but not across builds.
+      # Re-warm every category on-box, detached (the site warms itself via
+      # localhost with its own DB creds; the workflow doesn't wait).
+      - name: Warm category caches (on-box, detached)
+        continue-on-error: true
+        run: |
+          SITE="${{ matrix.site }}"
+          CHANNEL_ID="${{ steps.config.outputs.channel_id }}"
+          aws ssm send-command \
+            --instance-ids ${{ env.EC2_INSTANCE }} \
+            --document-name "AWS-RunShellScript" \
+            --parameters "commands=[
+              \"docker exec -d keenan-channel-${SITE} node /app/warm-categories.mjs --url http://localhost:3000 --channel ${CHANNEL_ID} --concurrency 4\"
+            ]" \
+            --output text >/dev/null
+          echo "Warm command dispatched for ${SITE} (channel ${CHANNEL_ID})"
