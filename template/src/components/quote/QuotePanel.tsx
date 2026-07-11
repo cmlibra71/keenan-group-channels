@@ -9,6 +9,7 @@ import { GoogleSignInButton } from "@/components/account/GoogleSignInButton";
 import { Price } from "@/components/ui/Price";
 import { QuoteItemsList, type QuoteItemRow } from "./QuoteItemsList";
 import { usePanelContext } from "@/components/ui/PanelContext";
+import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
 
 type QuoteData = Awaited<ReturnType<typeof getQuote>>;
 
@@ -28,6 +29,7 @@ export function QuotePanel() {
   const [notes, setNotes] = useState("");
   const [needsLogin, setNeedsLogin] = useState(false);
   const [authView, setAuthView] = useState<"login" | "register">("login");
+  const { setQuoteCount } = useCartQuoteCounts();
 
   useEffect(() => {
     if (isOpen) {
@@ -71,6 +73,8 @@ export function QuotePanel() {
       setIsSubmitting(false);
       setSubmitted(true);
       setQuote(null);
+      // Badge zeroes instantly; the kept server refresh() re-seeds it identically.
+      setQuoteCount(0);
     });
   }
 
@@ -87,6 +91,7 @@ export function QuotePanel() {
       setIsSubmitting(false);
       setSubmitted(true);
       setQuote(null);
+      setQuoteCount(0);
     });
   }
 

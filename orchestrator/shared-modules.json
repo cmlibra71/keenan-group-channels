@@ -29,6 +29,7 @@
     "lib/actions/google-auth.ts",
     "lib/actions/reviews.ts",
     "lib/auth.ts",
+    "lib/cart-quote-counts.tsx",
     "lib/cart.ts",
     "lib/channel.ts",
     "lib/checkout/net-terms-policy.test.ts",

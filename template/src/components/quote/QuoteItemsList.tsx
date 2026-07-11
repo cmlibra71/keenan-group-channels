@@ -1,7 +1,9 @@
 "use client";
 
-import { useTransition } from "react";
+import { useTransition, useOptimistic } from "react";
+import { useRouter } from "next/navigation";
 import { updateQuoteItem, removeQuoteItem } from "@/lib/actions/quote";
+import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { Price } from "@/components/ui/Price";
 
@@ -35,24 +37,35 @@ export function QuoteItemsList({ items, onMutate }: { items: QuoteItemRow[]; onM
 
 function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () => void }) {
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+  const { setQuoteCount } = useCartQuoteCounts();
+  // Instant on click; auto-reverts to the prop if the transition ends without
+  // fresh items (error → refresh self-heal).
+  const [displayQty, setDisplayQty] = useOptimistic(item.quantity);
 
   const unitPrice = item.sale_price
     ? parseFloat(item.sale_price)
     : parseFloat(item.list_price ?? "");
-  const lineTotal = unitPrice * item.quantity;
+  const lineTotal = unitPrice * displayQty;
   // Zero-priced lines are price-on-application — the sales team quotes them.
   const isPoa = !Number.isFinite(unitPrice) || unitPrice <= 0;
 
   function handleQuantity(newQty: number) {
     startTransition(async () => {
+      setDisplayQty(Math.max(0, newQty));
       // Never let a thrown action escape the transition (it would kill the click
-      // and can escalate to the error boundary). Always re-sync from the server.
+      // and can escalate to the error boundary). On failure, refresh to re-sync.
       try {
-        await updateQuoteItem(item.id, newQty);
-      } catch {
-        /* fall through — onMutate re-fetches the true state */
-      } finally {
+        const res = await updateQuoteItem(item.id, newQty);
+        if (res?.error) {
+          router.refresh();
+          return;
+        }
+        // Fresh count from the action → header badge updates in place.
+        if (typeof res?.quoteCount === "number") setQuoteCount(res.quoteCount);
         await onMutate?.();
+      } catch {
+        router.refresh();
       }
     });
   }
@@ -60,11 +73,15 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
   function handleRemove() {
     startTransition(async () => {
       try {
-        await removeQuoteItem(item.id);
-      } catch {
-        /* fall through */
-      } finally {
+        const res = await removeQuoteItem(item.id);
+        if (res?.error) {
+          router.refresh();
+          return;
+        }
+        if (typeof res?.quoteCount === "number") setQuoteCount(res.quoteCount);
         await onMutate?.();
+      } catch {
+        router.refresh();
       }
     });
   }
@@ -98,7 +115,7 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
         >
           <Minus className="h-3 w-3" />
         </button>
-        <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
+        <span className="w-8 text-center text-sm font-medium">{displayQty}</span>
         <button
           onClick={() => handleQuantity(item.quantity + 1)}
           disabled={isPending}

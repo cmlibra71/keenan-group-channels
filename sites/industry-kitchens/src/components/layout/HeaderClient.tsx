@@ -1,15 +1,16 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { ShoppingCart, LayoutGrid, User, Crown } from "lucide-react";
 import { SlidePanel } from "@/components/ui/SlidePanel";
 import { CartPanel } from "@/components/cart/CartPanel";
 import { QuotePanel } from "@/components/quote/QuotePanel";
 import { AccountPanel } from "@/components/account/AccountPanel";
+import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
 
 export function HeaderClient({
-  cartCount,
-  quoteCount,
+  cartCount: serverCartCount,
+  quoteCount: serverQuoteCount,
   isMember,
   entryCount,
   variant = "full",
@@ -28,6 +29,16 @@ export function HeaderClient({
   const closeCart = useCallback(() => setCartOpen(false), []);
   const closeQuote = useCallback(() => setQuoteOpen(false), []);
   const closeAccount = useCallback(() => setAccountOpen(false), []);
+
+  // Badges read the client counts (pushed by cart/quote mutations without any
+  // route re-render); server props re-seed on any real route re-render. All
+  // three HeaderClient instances share the one context, so they always agree.
+  const { cartCount: ctxCartCount, quoteCount: ctxQuoteCount, seed } = useCartQuoteCounts();
+  useEffect(() => {
+    seed(serverCartCount, serverQuoteCount);
+  }, [serverCartCount, serverQuoteCount, seed]);
+  const cartCount = ctxCartCount ?? serverCartCount;
+  const quoteCount = ctxQuoteCount ?? serverQuoteCount;
 
   const panels = (
     <>

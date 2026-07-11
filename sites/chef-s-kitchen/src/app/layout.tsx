@@ -7,6 +7,7 @@ import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { GstProvider } from "@/lib/gst";
+import { CartQuoteCountsProvider } from "@/lib/cart-quote-counts";
 import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
 import { siteBaseUrl } from "@/lib/seo";
 import "./globals.css";
@@ -73,7 +74,7 @@ export default async function RootLayout({
       <html lang="en" className={`${fraunces.variable} ${plexSans.variable} ${plexMono.variable}`}>
         <body className="min-h-screen bg-surface-primary text-text-body antialiased">
           <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
-            {children}
+            <CartQuoteCountsProvider>{children}</CartQuoteCountsProvider>
           </GstProvider>
         </body>
       </html>
@@ -127,9 +128,11 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
           />
         </noscript>
         <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
-          <Header storeName={storeName} logoUrl={logoUrl} logoAlt={logoAlt} />
-          <main className="flex-1">{children}</main>
-          <Footer storeName={storeName} subscriptionsEnabled={subscriptionsEnabled} config={footerConfig} />
+          <CartQuoteCountsProvider>
+            <Header storeName={storeName} logoUrl={logoUrl} logoAlt={logoAlt} />
+            <main className="flex-1">{children}</main>
+            <Footer storeName={storeName} subscriptionsEnabled={subscriptionsEnabled} config={footerConfig} />
+          </CartQuoteCountsProvider>
         </GstProvider>
         {/* GA4 gtag — direct, alongside GTM. Both share window.dataLayer (standard
             coexistence); the ecommerce funnel fires via gtag from the components. */}

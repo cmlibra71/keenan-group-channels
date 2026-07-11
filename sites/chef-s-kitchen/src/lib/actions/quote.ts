@@ -29,6 +29,16 @@ async function getOrCreateQuote() {
   return quote;
 }
 
+
+/** Total units in the quote — returned by item mutations so the client can
+ *  update the header badge without a route re-render. */
+async function countQuoteItems(quoteId: number): Promise<number> {
+  const full = (await quoteService.getWithItems(quoteId)) as {
+    items?: { quantity: number }[];
+  } | null;
+  return (full?.items ?? []).reduce((sum, i) => sum + (i.quantity ?? 0), 0);
+}
+
 export async function addToQuote(productId: number, variantId?: number | null) {
   // getById returns snake_case — read sale_price (reading salePrice was undefined,
   // so quotes silently used RRP instead of the catalog sale price).
@@ -96,25 +106,30 @@ export async function addToQuote(productId: number, variantId?: number | null) {
     });
   }
 
-  refresh(); // acting user's view refreshes; shared data cache stays intact
-  return { success: true };
+  return { success: true, quoteCount: await countQuoteItems(quote.id) };
 }
 
 export async function updateQuoteItem(itemId: number, quantity: number) {
-  const uuid = await getQuoteUuid();
-  if (!uuid) return { error: "No quote" };
+  // Guarded like updateCartItem: return { error } instead of throwing; on
+  // success the fresh quoteCount lets the caller update the badge in place.
+  try {
+    const uuid = await getQuoteUuid();
+    if (!uuid) return { error: "No quote" };
 
-  const quote = (await quoteService.getByUuid(uuid)) as QuoteRow | null;
-  if (!quote) return { error: "Quote not found" };
+    const quote = (await quoteService.getByUuid(uuid)) as QuoteRow | null;
+    if (!quote) return { error: "Quote not found" };
 
-  if (quantity <= 0) {
-    await quoteItemService.deleteForParent(quote.id, itemId);
-  } else {
-    await quoteItemService.updateForParent(quote.id, itemId, { quantity });
+    if (quantity <= 0) {
+      await quoteItemService.deleteForParent(quote.id, itemId);
+    } else {
+      await quoteItemService.updateForParent(quote.id, itemId, { quantity });
+    }
+
+    return { success: true, quoteCount: await countQuoteItems(quote.id) };
+  } catch (e) {
+    console.error("[updateQuoteItem] failed (non-fatal):", e);
+    return { error: "Could not update quote" };
   }
-
-  refresh(); // acting user's view refreshes; shared data cache stays intact
-  return { success: true };
 }
 
 export async function removeQuoteItem(itemId: number) {

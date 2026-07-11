@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { addToCart } from "@/lib/actions/cart";
+import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
 import { trackAddedToCart } from "@/components/analytics/klaviyo";
 import { ga4AddToCart } from "@/components/analytics/ga4";
 
@@ -32,10 +33,16 @@ export function AddToCartButton({
   categoryName?: string;
 }) {
   const [isPending, startTransition] = useTransition();
+  const { setCartCount } = useCartQuoteCounts();
 
   function handleClick() {
     startTransition(async () => {
-      await addToCart(productId, variantId, quantity ?? 1);
+      const res = await addToCart(productId, variantId, quantity ?? 1);
+      // Fresh count from the action → badge updates without a route re-render
+      // (no-op on the provider-less /render/* surface).
+      if (res && "cartCount" in res && typeof res.cartCount === "number") {
+        setCartCount(res.cartCount);
+      }
       // Fire client-side so browse/cart-abandonment flows see it (server actions can't).
       trackAddedToCart({
         id: productId,

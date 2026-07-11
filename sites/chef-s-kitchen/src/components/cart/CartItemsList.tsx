@@ -1,13 +1,14 @@
 "use client";
 
-import { useTransition } from "react";
+import { useTransition, useOptimistic } from "react";
 import { useRouter } from "next/navigation";
 import { updateCartItem, removeCartItem } from "@/lib/actions/cart";
+import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { Price } from "@/components/ui/Price";
 import { ga4AddToCart, ga4RemoveFromCart, type Ga4Item } from "@/components/analytics/ga4";
 
-type CartItemRow = {
+export type CartItemRow = {
   id: number;
   product_id: number;
   variant_id: number | null;
@@ -44,11 +45,15 @@ export function CartItemsList({
 function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => void | Promise<void> }) {
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  const { setCartCount } = useCartQuoteCounts();
+  // Instant on click; auto-reverts to the prop if the transition ends without
+  // fresh items (error → refresh self-heal).
+  const [displayQty, setDisplayQty] = useOptimistic(item.quantity);
 
   const unitPrice = item.sale_price
     ? parseFloat(item.sale_price)
     : parseFloat(item.list_price);
-  const lineTotal = unitPrice * item.quantity;
+  const lineTotal = unitPrice * displayQty;
 
   // GA4 add/remove_from_cart carry the CHANGED quantity, not the line total.
   function ga4Item(qty: number): Ga4Item {
@@ -66,12 +71,15 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
   // refresh to re-sync the cart from the server instead.
   function handleQuantity(newQty: number) {
     startTransition(async () => {
+      setDisplayQty(Math.max(0, newQty));
       try {
         const res = await updateCartItem(item.id, newQty);
         if (res?.error) {
           router.refresh();
           return;
         }
+        // Fresh count from the action → header badge updates in place.
+        if (typeof res?.cartCount === "number") setCartCount(res.cartCount);
         // Fire GA4 with the delta (the +/− adjusters change one unit at a time,
         // but guard for any step size). newQty <= 0 removes the whole line.
         const delta = Math.max(0, newQty) - item.quantity;
@@ -93,6 +101,7 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
           router.refresh();
           return;
         }
+        if (typeof res?.cartCount === "number") setCartCount(res.cartCount);
         ga4RemoveFromCart(ga4Item(item.quantity));
         await onMutate?.();
       } catch {
@@ -128,7 +137,7 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
         >
           <Minus className="h-3 w-3" />
         </button>
-        <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
+        <span className="w-8 text-center text-sm font-medium">{displayQty}</span>
         <button
           onClick={() => handleQuantity(item.quantity + 1)}
           disabled={isPending}

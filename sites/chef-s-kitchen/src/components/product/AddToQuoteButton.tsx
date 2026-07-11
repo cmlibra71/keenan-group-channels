@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { addToQuote } from "@/lib/actions/quote";
+import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
 
 export function AddToQuoteButton({
   productId,
@@ -17,10 +18,15 @@ export function AddToQuoteButton({
   label?: string;
 }) {
   const [isPending, startTransition] = useTransition();
+  const { setQuoteCount } = useCartQuoteCounts();
 
   function handleClick() {
     startTransition(async () => {
-      await addToQuote(productId, variantId);
+      const res = await addToQuote(productId, variantId);
+      // Fresh count from the action → badge updates without a route re-render.
+      if (res && "quoteCount" in res && typeof res.quoteCount === "number") {
+        setQuoteCount(res.quoteCount);
+      }
     });
   }
 

@@ -7,6 +7,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { SpecialistButton } from "@/components/layout/SpecialistButton";
 import { GstProvider } from "@/lib/gst";
+import { CartQuoteCountsProvider } from "@/lib/cart-quote-counts";
 import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
 import { siteBaseUrl } from "@/lib/seo";
 import "./globals.css";
@@ -52,7 +53,7 @@ export default async function RootLayout({
       <html lang="en">
         <body className="min-h-screen bg-white text-zinc-900 antialiased">
           <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
-            {children}
+            <CartQuoteCountsProvider>{children}</CartQuoteCountsProvider>
           </GstProvider>
         </body>
       </html>
@@ -89,16 +90,18 @@ export default async function RootLayout({
     <html lang="en" style={(tokenVars ?? undefined) as React.CSSProperties | undefined}>
       <body className="min-h-screen flex flex-col bg-white text-zinc-900 antialiased">
         <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
-          <Header
-            storeName={storeName}
-            logoUrl={logoUrl}
-            logoAlt={logoAlt}
-            nav={headerNav}
-            config={headerConfig}
-          />
-          <main className="flex-1">{children}</main>
-          <Footer storeName={storeName} config={footerConfig} />
-          <SpecialistButton phone={headerConfig.phone} />
+          <CartQuoteCountsProvider>
+            <Header
+              storeName={storeName}
+              logoUrl={logoUrl}
+              logoAlt={logoAlt}
+              nav={headerNav}
+              config={headerConfig}
+            />
+            <main className="flex-1">{children}</main>
+            <Footer storeName={storeName} config={footerConfig} />
+            <SpecialistButton phone={headerConfig.phone} />
+          </CartQuoteCountsProvider>
         </GstProvider>
         <GoogleAnalytics measurementId={ga4MeasurementId} />
       </body>

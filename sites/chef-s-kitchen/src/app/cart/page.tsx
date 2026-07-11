@@ -1,49 +1,21 @@
-import Link from "next/link";
-import { ShoppingCart } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
 import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, channelSettingsService, CHANNEL_ID } from "@/lib/store";
-import { CartItemsList } from "@/components/cart/CartItemsList";
-import { CartSummary } from "@/components/cart/CartSummary";
-import { MembershipCartUpsell } from "@/components/cart/MembershipCartUpsell";
+import { CartPageClient } from "@/components/cart/CartPageClient";
 import { Ga4ViewCart } from "@/components/analytics/Ga4ViewCart";
 
 export const metadata = {
   title: "Cart",
 };
 
+/**
+ * Thin server wrapper: initial cart + settings/upsell eligibility are read
+ * server-side once; all interaction (quantities, totals, empty-state swap)
+ * lives in the CartPageClient island — no route re-render on mutations.
+ */
 export default async function CartPage() {
   const cart = await getCart();
   const items = cart?.items ?? [];
-
-  if (items.length === 0) {
-    return (
-      <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="page-title mb-8">Your Cart</h1>
-        <div className="text-center py-16">
-          <ShoppingCart className="h-16 w-16 text-steel-300 mx-auto" />
-          <p className="mt-4 text-steel-500">Your cart is empty.</p>
-          <Link
-            href="/products"
-            className="btn-primary mt-6 inline-flex"
-          >
-            Continue Shopping
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  // Member savings flow through item salePrice (cart.discountAmount stays 0),
-  // so compute the discount from the items: full list value minus what's
-  // actually charged. Subtotal shows the undiscounted (RRP) value.
-  const typedItems = items as { list_price: string | null; sale_price: string | null; quantity: number }[];
-  const subtotal = typedItems.reduce(
-    (sum, i) => sum + (i.list_price ? parseFloat(i.list_price) : 0) * i.quantity,
-    0
-  );
-  const total = parseFloat(cart!.cart_amount ?? "0");
-  const discount = Math.max(0, Math.round((subtotal - total) * 100) / 100);
 
   // Check tax mode
   let pricesIncludeTax = false;
@@ -57,14 +29,12 @@ export default async function CartPage() {
   let planPrice = 0;
   let billingInterval = "month";
   let isMember = false;
-  let savingsPercentage = 15;
 
   const [subscriptionsEnabled, checkoutSettings] = await Promise.all([
     getFeatureFlag("subscriptions_enabled"),
     getCheckoutSettings(),
   ]);
-  savingsPercentage = checkoutSettings.memberSavingsPercentage;
-  if (subscriptionsEnabled) {
+  if (subscriptionsEnabled && items.length > 0) {
     const session = await getSession();
     if (session) {
       const activeSub = await getActiveSubscriptionForContact(session.contactId);
@@ -80,37 +50,36 @@ export default async function CartPage() {
     }
   }
 
-  return (
-    <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
-      <Ga4ViewCart value={total} items={items as Record<string, unknown>[]} />
-      <h1 className="page-title mb-8">Your Cart</h1>
+  const total = parseFloat(cart?.cart_amount ?? "0");
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2">
-          <CartItemsList items={items} />
-        </div>
-        <div className="space-y-4">
-          <CartSummary
-            subtotal={subtotal}
-            discount={discount}
-            total={total}
-            isMember={isMember}
-            pricesIncludeTax={pricesIncludeTax}
-            freeShippingEnabled={checkoutSettings.freeShippingEnabled}
-            freeShippingThreshold={checkoutSettings.freeShippingThreshold}
-          />
-          {showUpsell && (
-            <MembershipCartUpsell
-              cartTotal={total}
-              planPrice={planPrice}
-              billingInterval={billingInterval}
-              savingsPercentage={savingsPercentage}
-              freeShippingEnabled={checkoutSettings.freeShippingEnabled}
-              freeShippingThreshold={checkoutSettings.freeShippingThreshold}
-            />
-          )}
-        </div>
-      </div>
-    </div>
+  return (
+    <>
+      {items.length > 0 && (
+        <Ga4ViewCart value={total} items={items as Record<string, unknown>[]} />
+      )}
+      <CartPageClient
+        initialCart={
+          cart
+            ? {
+                items: items as never,
+                cart_amount: (cart.cart_amount as string | null) ?? null,
+              }
+            : null
+        }
+        pricesIncludeTax={pricesIncludeTax}
+        isMember={isMember}
+        freeShippingEnabled={checkoutSettings.freeShippingEnabled}
+        freeShippingThreshold={checkoutSettings.freeShippingThreshold}
+        upsell={
+          showUpsell
+            ? {
+                planPrice,
+                billingInterval,
+                savingsPercentage: checkoutSettings.memberSavingsPercentage,
+              }
+            : null
+        }
+      />
+    </>
   );
 }

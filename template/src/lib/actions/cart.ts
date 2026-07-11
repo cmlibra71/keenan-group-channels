@@ -1,7 +1,6 @@
 "use server";
 
 import { cache } from "react";
-import { refresh } from "next/cache";
 import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, CHANNEL_ID } from "@/lib/store";
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { getCartUuid, setCartUuid } from "@/lib/cart";
@@ -22,6 +21,19 @@ async function getOrCreateCart() {
 
   await setCartUuid(cart.uuid);
   return cart;
+}
+
+
+/** Total units in the cart — returned by item mutations so the client can
+ *  update the header badge without a route re-render. Direct service read
+ *  (NOT the react-cache()d readCart, which would memoise pre-mutation data
+ *  within this same request). */
+async function countCartItems(cartId: number): Promise<number> {
+  const full = await cartService.getWithItems(cartId);
+  return (full?.items ?? []).reduce(
+    (sum: number, i: { quantity: number }) => sum + (i.quantity ?? 0),
+    0
+  );
 }
 
 /**
@@ -143,16 +155,14 @@ export async function addToCart(productId: number, variantId?: number | null, qu
     });
   }
 
-  refresh(); // acting user's view refreshes; shared data cache stays intact
-  return { success: true };
+  return { success: true, cartCount: await countCartItems(cart.id) };
 }
 
 export async function updateCartItem(itemId: number, quantity: number) {
   // Whole body is guarded: a transient DB/pool failure here must never escape as
-  // an unhandled rejection — the caller re-renders the root layout via
-  // revalidatePath, so a throw would surface as the site-wide global-error
-  // boundary ("Something went wrong loading the site"). Return { error } instead;
-  // the client refreshes to re-sync.
+  // an unhandled rejection. Return { error } instead; the client falls back to
+  // router.refresh() to re-sync. On success the fresh cartCount is returned so
+  // the caller updates the badge/state in place — no route re-render.
   try {
     const uuid = await getCartUuid();
     if (!uuid) return { error: "No cart" };
@@ -164,8 +174,7 @@ export async function updateCartItem(itemId: number, quantity: number) {
       // Idempotent: removing an already-deleted line (e.g. rapid minus clicks on
       // the last unit, or a raced concurrent remove) is a no-op success.
       await cartItemService.deleteForParent(cart.id, itemId);
-      refresh(); // acting user's view refreshes; shared data cache stays intact
-      return { success: true };
+      return { success: true, cartCount: await countCartItems(cart.id) };
     }
 
     // Re-price the line for the new quantity so bulk tiers are applied/removed as
@@ -179,8 +188,7 @@ export async function updateCartItem(itemId: number, quantity: number) {
 
     // Line already gone (raced with a concurrent remove) — nothing to update.
     if (!item) {
-      refresh(); // acting user's view refreshes; shared data cache stays intact
-      return { success: true };
+      return { success: true, cartCount: await countCartItems(cart.id) };
     }
 
     // Re-pricing can throw (product lookup); never let it block the quantity
@@ -200,8 +208,7 @@ export async function updateCartItem(itemId: number, quantity: number) {
         : { quantity }
     );
 
-    refresh(); // acting user's view refreshes; shared data cache stays intact
-    return { success: true };
+    return { success: true, cartCount: await countCartItems(cart.id) };
   } catch (e) {
     console.error("[updateCartItem] failed (non-fatal):", e);
     return { error: "Could not update cart" };
