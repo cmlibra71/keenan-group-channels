@@ -58,6 +58,8 @@
     "lib/pricing/cart-pricing.test.ts",
     "lib/pricing/cart-pricing.ts",
     "lib/quote.ts",
+    "lib/role-permissions.test.ts",
+    "lib/role-permissions.ts",
     "lib/sanitize-html.ts",
     "lib/seo.ts",
     "lib/staff-email.ts",

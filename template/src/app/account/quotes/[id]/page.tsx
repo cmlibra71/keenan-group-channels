@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Package } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { quoteService, productImageService, CHANNEL_ID } from "@/lib/store";
+import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import { Price } from "@/components/ui/Price";
 
 // QuoteService returns snake_case rows (transformRow convention).
@@ -76,9 +77,16 @@ export default async function QuoteDetailPage({
   if (Number.isNaN(quoteId)) notFound();
 
   const quote = (await quoteService.getWithItems(quoteId)) as QuoteDetail | null;
-  // Only the owning contact, on this channel, may view a quote.
-  if (!quote || quote.contact_id !== session.contactId || quote.channel_id !== CHANNEL_ID) {
-    notFound();
+  // Only the owning contact, on this channel, may view a quote — UNLESS their B2B
+  // account role grants `view_company_quotes`, in which case any quote belonging to
+  // an active member of their account is visible (docs/crm-parity/10-role-enforcement.md).
+  if (!quote || quote.channel_id !== CHANNEL_ID) notFound();
+  if (quote.contact_id !== session.contactId) {
+    const perms = await getContactPermissions(session.contactId);
+    const canSeeAccountQuotes =
+      perms.isB2B && perms.accountId !== null && perms.can("view_company_quotes");
+    const memberIds = canSeeAccountQuotes ? await getAccountContactIds(perms.accountId!) : [];
+    if (!quote.contact_id || !memberIds.includes(quote.contact_id)) notFound();
   }
 
   // Item thumbnails (quote items don't carry images themselves).

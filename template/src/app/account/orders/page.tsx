@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Package } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { orderService, CHANNEL_ID, getGuestOrdersForEmail } from "@/lib/store";
+import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import { Price } from "@/components/ui/Price";
 
 // orderService returns snake_case keys (transformRow).
@@ -27,13 +28,26 @@ export default async function OrdersPage() {
   // filters on OrderService; without the contact_id filter the list would return
   // channel-wide orders. contact_id is the identity-unification subject; legacy
   // customer-keyed orders were contact_id-backfilled in the migration.
+  //
+  // B2B account-role gate `view_company_orders` (docs/crm-parity/10-role-enforcement.md):
+  // a contact whose role GRANTS it sees every order on their account; without it they
+  // see only their own. Accountless (B2C) contacts are unaffected — always own-only.
+  const perms = await getContactPermissions(session.contactId);
+  const seesWholeAccount = perms.isB2B && perms.accountId !== null && perms.can("view_company_orders");
+  const memberIds = seesWholeAccount ? await getAccountContactIds(perms.accountId!) : [];
+  // An empty member list (lookup failure) degrades to own-only, never to channel-wide.
+  const contactFilter =
+    memberIds.length > 0
+      ? { type: "in" as const, value: memberIds }
+      : { type: "eq" as const, value: session.contactId };
+
   const { data } = await orderService.list({
     page: 1,
     limit: 50,
     sort: "created_at",
     direction: "desc",
     filters: {
-      contact_id: { type: "eq", value: session.contactId },
+      contact_id: contactFilter,
       channel_id: { type: "eq", value: CHANNEL_ID },
     },
   });
@@ -95,6 +109,11 @@ export default async function OrdersPage() {
         <div>
           <p className="eyebrow mb-3">ORDERS</p>
           <h1 className="text-3xl heading-serif text-text-primary">Order History</h1>
+          {seesWholeAccount && memberIds.length > 1 && (
+            <p className="mt-1 text-sm text-text-secondary">
+              Showing every order on your account.
+            </p>
+          )}
         </div>
         <Link href="/account" className="text-sm text-text-secondary hover:text-text-primary transition-colors duration-300">
           Back to Account

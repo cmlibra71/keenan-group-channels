@@ -4,6 +4,7 @@ import { FileText, ChevronRight } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { quoteService, CHANNEL_ID } from "@/lib/store";
 import { getQuoteUuid } from "@/lib/quote";
+import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import { Price } from "@/components/ui/Price";
 
 // QuoteService returns snake_case rows (transformRow convention).
@@ -64,13 +65,25 @@ export default async function QuotesPage() {
   // "awaiting review". Fetch all of the customer's quotes and hide only the
   // in-progress draft (the one the quote panel cookie points at).
   const currentDraftUuid = await getQuoteUuid();
+
+  // B2B account-role gate `view_company_quotes` (docs/crm-parity/10-role-enforcement.md):
+  // granted → every quote on the account; otherwise own-only. Accountless (B2C)
+  // contacts are unaffected. A failed member lookup degrades to own-only.
+  const perms = await getContactPermissions(session.contactId);
+  const seesWholeAccount = perms.isB2B && perms.accountId !== null && perms.can("view_company_quotes");
+  const memberIds = seesWholeAccount ? await getAccountContactIds(perms.accountId!) : [];
+  const contactFilter =
+    memberIds.length > 0
+      ? { type: "in" as const, value: memberIds }
+      : { type: "eq" as const, value: session.contactId };
+
   const result = await quoteService.list({
     page: 1,
     limit: 100,
     sort: "created_at",
     direction: "desc",
     filters: {
-      contact_id: { type: "eq", value: session.contactId },
+      contact_id: contactFilter,
       channel_id: { type: "eq", value: CHANNEL_ID },
     },
   });

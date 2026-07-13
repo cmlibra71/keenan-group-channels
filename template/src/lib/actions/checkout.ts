@@ -10,6 +10,14 @@ import { buildLineItems, withShipping, determinePaymentStatus } from "@/lib/chec
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
 import { siteBaseUrl } from "@/lib/seo";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
+import {
+  getContactPermissions,
+  accountHasSavedAddress,
+  sumContactOrderTotalSince,
+  firstFailedOrderCondition,
+  describeFailedCondition,
+  resolveAccountEmailRecipients,
+} from "@/lib/role-permissions";
 
 // Pricing/tax/payment-status computation lives in the pure order-draft module
 // (lib/checkout/order-draft.ts), which delegates GST math to @keenan/services
@@ -67,6 +75,35 @@ export async function placeOrder(
     postalCode,
     country,
   };
+
+  // ── B2B account-role enforcement (docs/crm-parity/10-role-enforcement.md) ──
+  // A contact on a B2B account may be restricted by their account role. Accountless
+  // (B2C) shoppers and guests bypass entirely. The resolver FAILS OPEN on DB error
+  // (logged) — a hiccup must never stop a customer paying us.
+  const perms = await getContactPermissions(session?.contactId);
+
+  if (perms.isB2B && !perms.can("submit_orders")) {
+    return {
+      error:
+        "Your role on this account doesn't allow submitting orders. Ask your account administrator, or submit a quote request instead.",
+    };
+  }
+
+  // "Can Add Billing/Shipping Address In Checkout": our checkout collects ONE
+  // address used for both, so a NEW (not-yet-saved) address needs both codes.
+  if (
+    perms.isB2B &&
+    perms.accountId !== null &&
+    (!perms.can("add_billing_address_in_checkout") || !perms.can("add_shipping_address_in_checkout"))
+  ) {
+    const known = await accountHasSavedAddress(perms.accountId, address1, postalCode);
+    if (!known) {
+      return {
+        error:
+          "Your role on this account doesn't allow adding a new address during checkout. Please choose an address already saved on your account.",
+      };
+    }
+  }
 
   // Re-validate subscription status — if member pricing is enabled but subscription
   // has expired since items were added, recalculate at non-member prices
@@ -132,6 +169,45 @@ export async function placeOrder(
   );
   const subtotalIncTax = subtotal.incTax;
   const subtotalExTax = subtotal.exTax;
+
+  // Zoey Conditions on `submit_orders` ("If Cart Total / Month-to-date / Year-to-date
+  // order total is less than X"). ANDed; evaluated against the GST-inc cart total and
+  // the contact's channel order history. A failed MTD/YTD lookup skips that condition
+  // (fail open, logged). Runs before ANY order row is written.
+  if (perms.isB2B && session?.contactId) {
+    const orderConditions = perms.conditions("submit_orders");
+    if (orderConditions.length > 0) {
+      const now = new Date();
+      const needsMtd = orderConditions.some((c) => c.type === "mtd_total_lt");
+      const needsYtd = orderConditions.some((c) => c.type === "ytd_total_lt");
+      const [mtdTotal, ytdTotal] = await Promise.all([
+        needsMtd
+          ? sumContactOrderTotalSince(
+              session.contactId,
+              CHANNEL_ID,
+              new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+            )
+          : Promise.resolve(null),
+        needsYtd
+          ? sumContactOrderTotalSince(
+              session.contactId,
+              CHANNEL_ID,
+              new Date(Date.UTC(now.getUTCFullYear(), 0, 1))
+            )
+          : Promise.resolve(null),
+      ]);
+      const failed = firstFailedOrderCondition(orderConditions, {
+        cartTotal: subtotalIncTax,
+        mtdTotal,
+        ytdTotal,
+      });
+      if (failed) {
+        return {
+          error: `This order can't be submitted — ${describeFailedCondition(failed)}. Ask your account administrator to approve it, or submit it as a quote request.`,
+        };
+      }
+    }
+  }
 
   // Shipping calculation
   let shippingIncTax = 0;
@@ -384,8 +460,7 @@ export async function placeOrder(
       .primaryImageUrlsForProducts(fullCart.items.map((i) => i.product_id))
       .catch(() => new Map<number, string>());
 
-    await sendOrderConfirmationEmail({
-      to: email,
+    const confirmationParams = {
       orderNumber: order.order_number,
       customerName: `${firstName} ${lastName}`.trim() || undefined,
       storeName,
@@ -408,7 +483,29 @@ export async function placeOrder(
       brandColor: branding?.brandColor ?? null,
       footerText: branding?.footerText ?? null,
       testMode: isTestMode,
-    });
+    };
+
+    await sendOrderConfirmationEmail({ to: email, ...confirmationParams });
+
+    // B2B: also mail the account colleagues whose ROLE grants the order-email triple
+    // (Account / Own Account / Account-as-CC — see docs/crm-parity/10-role-enforcement.md).
+    // sendOrderConfirmationEmail takes a single `to`, so each extra recipient gets its
+    // own copy (the recipient SET is exact; a true Cc: header needs a services change).
+    // Best-effort and independent: one bad address must not stop the others.
+    if (perms.isB2B && perms.accountId !== null) {
+      const extra = await resolveAccountEmailRecipients(perms.accountId, {
+        doc: "orders",
+        ownerContactId: session?.contactId ?? null,
+        primaryEmail: email,
+      });
+      for (const recipient of [...extra.to, ...extra.cc]) {
+        try {
+          await sendOrderConfirmationEmail({ to: recipient, ...confirmationParams });
+        } catch (e) {
+          console.error(`[placeOrder] account order email to ${recipient} failed (non-fatal):`, e);
+        }
+      }
+    }
   } catch (e) {
     console.error("[placeOrder] confirmation email failed (non-fatal):", e);
   }

@@ -8,6 +8,7 @@ import { getSession } from "@/lib/auth";
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
 import { slidingWindowAllow } from "@/lib/rate-limit";
 import { sendStaffNotification } from "@/lib/staff-email";
+import { getContactPermissions } from "@/lib/role-permissions";
 
 // QuoteService returns snake_case rows (transformRow convention).
 type QuoteRow = { id: number; uuid: string; contact_id?: number | null; [key: string]: unknown };
@@ -156,6 +157,17 @@ export async function submitQuote(notes?: string) {
   const session = await getSession();
   if (!session) return { error: "login_required" };
 
+  // B2B account-role gate — `submit_quotes` (Zoey Usage Restriction). Accountless
+  // (B2C) contacts bypass; the resolver fails open on DB error.
+  // docs/crm-parity/10-role-enforcement.md
+  const perms = await getContactPermissions(session.contactId);
+  if (perms.isB2B && !perms.can("submit_quotes")) {
+    return {
+      error:
+        "Your role on this account doesn't allow submitting quote requests. Ask your account administrator to submit it for you.",
+    };
+  }
+
   // Attach customer identity + notes. The quote stays in `quote_pending`
   // (Zoey lifecycle): the sales team reviews it in the portal and sends
   // pricing back via markSent → quote_available. The submitted_at attribute
@@ -206,10 +218,43 @@ export async function acceptQuote(quoteId: number) {
   if (!["quote_available", "open_change_request"].includes(String(q.status))) {
     return { error: "This quote can't be accepted yet." };
   }
+
+  // B2B account-role gates (docs/crm-parity/10-role-enforcement.md). Accepting a
+  // finalised quote IS the request to turn it into an order in our lifecycle (staff
+  // do the conversion in the portal), so it is gated by BOTH `approve_quotes` and
+  // `convert_company_quotes_to_order`. `convert_quotes_to_order_require_approval` is
+  // a RESTRICTION: when the role carries it, the acceptance is flagged for admin
+  // approval rather than going straight through to an order.
+  const perms = await getContactPermissions(session.contactId);
+  if (perms.isB2B && !perms.can("approve_quotes")) {
+    return {
+      error: "Your role on this account doesn't allow approving quotes. Ask your account administrator to accept it.",
+    };
+  }
+  if (perms.isB2B && !perms.can("convert_company_quotes_to_order")) {
+    return {
+      error: "Your role on this account doesn't allow converting quotes to orders. Ask your account administrator.",
+    };
+  }
+  const requiresAdminApproval = perms.isB2B && perms.can("convert_quotes_to_order_require_approval");
+
   // Lifecycle method, NOT a bare status update: stamps accepted_at and writes
   // the quote.accepted audit row. The generic update() fired no side effects,
   // which is why acceptances used to be invisible to staff.
   await quoteService.markAccepted(quoteId);
+
+  // Flag the acceptance so staff know this contact's conversions need sign-off
+  // before the quote becomes an order. Best-effort — never fail the acceptance.
+  if (requiresAdminApproval) {
+    try {
+      const attrs = (q.attributes ?? {}) as Record<string, unknown>;
+      await quoteService.update(quoteId, {
+        attributes: { ...attrs, requires_admin_approval: true },
+      });
+    } catch (e) {
+      console.error("[acceptQuote] approval flag not stamped (non-fatal):", e);
+    }
+  }
 
   // Best-effort staff alert — the acceptance already succeeded; never fail the
   // customer's action because the notification couldn't send.
@@ -223,6 +268,9 @@ export async function acceptQuote(quoteId: number) {
         ["Name", String(q.quote_name ?? "—")],
         ["Customer email", String(q.email ?? "—")],
         ["Amount", q.quote_amount == null ? "—" : `$${Number(q.quote_amount).toFixed(2)}`],
+        ...(requiresAdminApproval
+          ? ([["Approval", "Requires admin approval before conversion (account role)"]] as Array<[string, string]>)
+          : []),
       ],
       portalPath: `/dashboard/quotes/${quoteId}`,
       linkLabel: "Open quote in portal",
@@ -232,7 +280,15 @@ export async function acceptQuote(quoteId: number) {
   }
   revalidatePath(`/account/quotes/${quoteId}`);
   revalidatePath("/account/quotes");
-  return { success: true };
+  return {
+    success: true,
+    ...(requiresAdminApproval
+      ? {
+          message:
+            "Accepted — your role requires an administrator to approve the conversion, so we've sent it for approval.",
+        }
+      : {}),
+  };
 }
 
 // Customer self-service: duplicate a quote into a fresh editable quote (same items).

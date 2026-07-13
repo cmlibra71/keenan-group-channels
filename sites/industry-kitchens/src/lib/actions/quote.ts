@@ -5,6 +5,7 @@ import { quoteService, quoteItemService, productService, productVariantService, 
 import { wantsStripeTestMode } from "@keenan/services";
 import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
 import { getSession } from "@/lib/auth";
+import { getContactPermissions } from "@/lib/role-permissions";
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
 
 // QuoteService returns snake_case rows (transformRow convention).
@@ -153,6 +154,17 @@ export async function submitQuote(notes?: string) {
 
   const session = await getSession();
   if (!session) return { error: "login_required" };
+
+  // B2B account-role gate — `submit_quotes` (Zoey Usage Restriction). Accountless
+  // (B2C) contacts bypass; the resolver fails open on DB error.
+  // docs/crm-parity/10-role-enforcement.md
+  const perms = await getContactPermissions(session.contactId);
+  if (perms.isB2B && !perms.can("submit_quotes")) {
+    return {
+      error:
+        "Your role on this account doesn't allow submitting quote requests. Ask your account administrator to submit it for you.",
+    };
+  }
 
   // Attach customer identity + notes. The quote stays in `quote_pending`
   // (Zoey lifecycle): the sales team reviews it in the portal and sends
