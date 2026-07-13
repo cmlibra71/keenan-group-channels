@@ -120,6 +120,16 @@ export function parseRolePermissions(raw: unknown): ParsedRolePermissions {
   const grants = new Set<string>();
   const denies = new Set<string>();
   let conditions: Record<string, RoleCondition[]> = {};
+  // Defensive: a jsonb column can hold a JSON *string* (a double-encoded write —
+  // postgres.js re-serialises a stringified value bound with a bare ::jsonb cast).
+  // Decode it rather than silently reading the role as "no permissions".
+  if (typeof raw === "string") {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      /* not JSON — falls through to the empty result */
+    }
+  }
   if (Array.isArray(raw)) {
     for (const entry of raw) {
       if (typeof entry === "string") {
