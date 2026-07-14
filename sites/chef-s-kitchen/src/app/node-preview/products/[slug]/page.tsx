@@ -6,6 +6,7 @@ import { CHANNEL_ID,
   getNamedStyles,
   getComponents,
   getCmsTemplate,
+  getChannelSetting,
 } from "@/lib/store";
 import { getMemberContext } from "@/lib/member";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
@@ -79,14 +80,20 @@ export default async function NodePreviewProductPage({
     await loadJsSandbox(jsFunctions).catch(() => null);
     callResults = await computeCallResults(nodeTree.root, jsFunctions, payload as object).catch(() => ({}));
   }
+  // Same authored-class CSS the live route injects (compiled by the portal).
+  const builderCss =
+    ((await getChannelSetting("builder_published_css").catch(() => null)) as { css?: string } | null)?.css ?? "";
   return (
-    <BuilderProductPage
-      tree={nodeTree}
-      payload={payload}
-      namedStyles={namedStyles}
-      components={components}
-      jsFunctions={jsFunctions}
-      callResults={callResults}
-    />
+    <>
+      {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
+      <BuilderProductPage
+        tree={nodeTree}
+        payload={payload}
+        namedStyles={namedStyles}
+        components={components}
+        jsFunctions={jsFunctions}
+        callResults={callResults}
+      />
+    </>
   );
 }
