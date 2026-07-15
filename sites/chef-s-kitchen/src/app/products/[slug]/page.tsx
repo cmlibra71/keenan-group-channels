@@ -8,7 +8,7 @@ import { assertProductVisible, applyCatalogScope } from "@/lib/catalog-scope";
 import { ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
-import { getProductPageData, getNamedStyles, getComponents } from "@/lib/store";
+import { getProductPageData, getNamedStyles, getComponents, getChannelSetting } from "@/lib/store";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { cmsFunctionService } from "@keenan/services/services";
 import { loadJsSandbox, computeCallResults } from "@keenan/services/builder";
@@ -298,6 +298,13 @@ export default async function ProductPage({
         : null;
     const namedStyles = await getNamedStyles().catch(() => ({}));
     const components = (await getComponents().catch(() => ({}))) as Record<string, typeof SEED_PRODUCT_TREE>;
+    // CSS for AUTHORED classes: the static Tailwind sheet only covers classes
+    // in this repo's source, so the portal compiles the channel's designer
+    // vocabulary (arbitrary values, lg:/hover: variants, palette colours…) on
+    // publish/save and stores it in channel_settings. Injected server-side so
+    // the first paint matches the editor canvas exactly.
+    const builderCss =
+      ((await getChannelSetting("builder_published_css").catch(() => null)) as { css?: string } | null)?.css ?? "";
     if (payload) {
       const nodeTree = storedTree ?? SEED_PRODUCT_TREE;
       // JavaScript function library: SSR evaluates call-conditions live (the
@@ -315,6 +322,7 @@ export default async function ProductPage({
             type="application/ld+json"
             dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
           />
+          {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
           <ViewedProductTracker
             product={{
               id: product.id,
