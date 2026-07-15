@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { searchProducts } from "@keenan/services/search";
 import { shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { CHANNEL_ID } from "@/lib/channel";
+import { applyCatalogScope } from "@/lib/catalog-scope";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -24,6 +25,17 @@ export async function GET(request: NextRequest) {
       sort,
       facets,
     });
+
+    // L2 — the Meilisearch index is SHARED by every shopper and cannot encode per-account
+    // visibility, so the viewer's scope is applied HERE, to the hits already returned by the index.
+    // (estimatedTotalHits is the index's count and may over-count when a restricted product is
+    // dropped — a count, never a leak: no restricted row is ever rendered.)
+    const visible = await applyCatalogScope(result.hits as unknown as { id: number }[]);
+    const dropped = result.hits.length - visible.length;
+    if (dropped > 0) {
+      result.hits = visible as unknown as typeof result.hits;
+      result.estimatedTotalHits = Math.max(visible.length, result.estimatedTotalHits - dropped);
+    }
 
     // Member-only pricing channels never expose the shared catalog sale price
     // (it's another channel's public price) — not even in search results.

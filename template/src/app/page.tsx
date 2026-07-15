@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Crown, ArrowRight, ChevronRight } from "lucide-react";
 import { getProducts, getSiteConfig, getTopCategories, getFeatureFlag, getSubscriptionPlans, getUpcomingDraws, getBrandsForChannel, getHomepageCopy, getValueBarItems, getHomepageSpotlights, getBannerBlocks, getWhyShop, getCustomerLogos, getKnowledgeHubLinks, getSpecialistCta, prizeService, CHANNEL_ID } from "@/lib/store";
-import { getListingMemberPrices } from "@/lib/member";
+import { getListingMemberPrices, applyAccountPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { ValueBar } from "@/components/home/ValueBar";
 import { MembershipCTA } from "@/components/home/MembershipCTA";
@@ -256,7 +256,7 @@ export default async function HomePage() {
       <BrandShowcase brands={featuredBrands} heading={copy.brands_heading} eyebrow={copy.brands_eyebrow} />
 
       {/* Clearance Spotlight */}
-      <ClearanceSpotlight products={clearanceProducts} heading={copy.clearance_heading} eyebrow={copy.clearance_eyebrow} />
+      <ClearanceSpotlight products={await applyAccountPrices(clearanceProducts)} heading={copy.clearance_heading} eyebrow={copy.clearance_eyebrow} />
 
       {/* Membership CTA Banner */}
       {subscriptionsEnabled && plan && (

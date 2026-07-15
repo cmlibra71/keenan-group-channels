@@ -20,6 +20,7 @@ import {
   type HomeImage,
 } from "@/lib/store";
 import { HomeSections, type HomeSectionsProps } from "@/components/home/HomeSections";
+import { applyCatalogScope } from "@/lib/catalog-scope";
 
 type BlockProps = { props: Record<string, unknown>; ctx?: RenderContext };
 
@@ -99,6 +100,9 @@ async function ProductCarouselBlock({ props }: BlockProps) {
   } catch {
     products = [];
   }
+  // This rail renders through its own card component (not <ProductGrid>), so the visibility scope
+  // is applied HERE — the rows came from the shared cached channel query.
+  products = await applyCatalogScope(products);
   if (products.length === 0) return null;
   const memberPricingAvailable = await getFeatureFlag("member_pricing_enabled");
 

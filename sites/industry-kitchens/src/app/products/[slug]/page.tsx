@@ -4,6 +4,8 @@ import Link from "next/link";
 import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsPage, getCmsTemplate } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
 import { getSession } from "@/lib/auth";
+import { getAccountId, applyAccountPrices } from "@/lib/member";
+import { assertProductVisible, applyCatalogScope } from "@/lib/catalog-scope";
 import { ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
@@ -26,13 +28,24 @@ export default async function ProductPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const product = await getProductBySlug(slug);
+  const cachedProduct = await getProductBySlug(slug);
 
-  if (!product) {
+  if (!cachedProduct) {
     notFound();
   }
 
-  const [reviewsRaw, attachmentsRaw, relatedProducts, brandRow] = await Promise.all([
+  // L2 — per-account Product Restrictions + group∩contact category access. A product exclusive to
+  // another account (or outside this viewer's category access) must be UNREACHABLE, not merely
+  // absent from listings: a directly-navigated slug 404s. `categoryIds` come free with the cached
+  // row, so this costs no extra query.
+  await assertProductVisible(cachedProduct as { id: number; categoryIds?: number[] | null });
+
+  // Per-account product prices override EVERY other price. The cached product row is shared by all
+  // shoppers, so the account's price is overlaid onto a copy at read time (never into the cache).
+  const accountId = await getAccountId();
+  const [product] = await applyAccountPrices([cachedProduct]);
+
+  const [reviewsRaw, attachmentsRaw, relatedRaw, brandRow] = await Promise.all([
     getProductReviews(product.id),
     getProductAttachments(product.id),
     getRelatedProducts(product.id, product.categoryIds ?? []),
@@ -40,6 +53,9 @@ export default async function ProductPage({
       ? (brandService.getById(product.brandId) as Promise<{ name: string | null; metafields: ProductBrandMetafields | null } | null>)
       : Promise.resolve(null),
   ]);
+  // Related/upsell rail: hidden products are dropped at the SOURCE, so they cannot reach the grid,
+  // the builder payload or any serialized props.
+  const relatedProducts = await applyAccountPrices(await applyCatalogScope(relatedRaw));
   const brandMeta = (brandRow?.metafields ?? {}) as ProductBrandMetafields;
   const brandName = brandRow?.name ?? undefined;
 
@@ -83,10 +99,10 @@ export default async function ProductPage({
     // Fetch member prices for ALL variants (only for actual members — the
     // customer's group is what unlocks member pricing) so the client can update
     // the displayed price on variant change.
-    if (customerGroupId) {
+    if (customerGroupId || accountId) {
       const variants = product.variants ?? [];
       const pricingResults = await Promise.all(
-        variants.map((v) => getEffectivePrice(v.id, CHANNEL_ID, customerGroupId))
+        variants.map((v) => getEffectivePrice(v.id, CHANNEL_ID, customerGroupId, 1, accountId))
       );
       for (let i = 0; i < variants.length; i++) {
         const pricing = pricingResults[i];

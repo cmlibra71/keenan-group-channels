@@ -12,6 +12,7 @@ import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { cmsFunctionService } from "@keenan/services/services";
 import { loadJsSandbox, computeCallResults } from "@keenan/services/builder";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
+import { assertProductVisible } from "@/lib/catalog-scope";
 
 // ============================================================================
 // NODE-RENDER PREVIEW ROUTE  —  /node-preview/products/[slug]
@@ -39,6 +40,8 @@ export default async function NodePreviewProductPage({
   const { slug } = await params;
   const product = await getProductBySlug(slug);
   if (!product) notFound();
+  // Same visibility rule as the live PDP — the preview route must not become a back door.
+  await assertProductVisible(product as { id: number; categoryIds?: number[] | null });
 
   const { isEnabled: draft } = await draftMode();
 
@@ -53,6 +56,7 @@ export default async function NodePreviewProductPage({
       isMember: memberCtx.isMember,
       planPrice: membershipTeaser.fromPrice,
     },
+    accountId: memberCtx.accountId,
     draft,
   }).catch(() => null);
   if (!payload) notFound();

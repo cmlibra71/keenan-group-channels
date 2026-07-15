@@ -2,6 +2,9 @@
 
 import { cache } from "react";
 import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, CHANNEL_ID } from "@/lib/store";
+import { resolveAccountLinePrices, accountLineKey } from "@keenan/services";
+import { getAccountId } from "@/lib/member";
+import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { getCartUuid, setCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
@@ -77,6 +80,18 @@ async function resolveItemPricing(
   const product = (await productService.getById(productId)) as { price: string; sale_price: string | null } | null;
   if (!product) throw new Error("Product not found");
 
+  // ── ACCOUNT CONTRACT PRICE: an unconditional override (Zoey: "takes priority over ALL other
+  // Product prices"). Resolved BEFORE any layering, and returned directly — the catalogue sale
+  // price, the member/cost-plus price and the bulk tiers below must not undercut or replace it.
+  const accountId = await getAccountId();
+  if (accountId) {
+    const key = accountLineKey({ productId, variantId });
+    const record = (
+      await resolveAccountLinePrices(accountId, [{ productId, variantId }])
+    ).get(key);
+    if (record) return { listPrice: record.price, salePrice: record.salePrice };
+  }
+
   let listPrice = product.price;
   // NOTE: getById returns snake_case — read sale_price (reading salePrice silently
   // yielded undefined, so IK was charging RRP instead of its public sale price).
@@ -121,6 +136,10 @@ async function resolveItemPricing(
 }
 
 export async function addToCart(productId: number, variantId?: number | null, quantity: number = 1) {
+  // "What we show is what we accept" — a product restricted away from this shopper is not addable,
+  // even by poking the action directly (the listing/PDP guards are UX; THIS is the enforcement).
+  if (!(await isProductVisibleToViewer(productId))) return { error: RESTRICTED_PRODUCT_ERROR };
+
   const cart = await getOrCreateCart();
 
   // Check if this product/variant is already in the cart
@@ -232,7 +251,16 @@ const readCart = cache(async () => {
   const cart = await cartService.getByUuid(uuid);
   if (!cart) return null;
 
-  return cartService.getWithItems(cart.id);
+  const full = await cartService.getWithItems(cart.id);
+  if (!full) return full;
+
+  // A line may have been added before a restriction was applied (or before the shopper logged in
+  // as a different account). Such a line is DROPPED from what we render — and rejected outright at
+  // checkout (placeOrder), which is where the money moves.
+  const items = (full.items ?? []) as { product_id: number }[];
+  const blocked = await blockedProductIds(items.map((i) => i.product_id));
+  if (blocked.length === 0) return full;
+  return { ...full, items: items.filter((i) => !blocked.includes(i.product_id)) } as typeof full;
 });
 
 export async function getCart() {

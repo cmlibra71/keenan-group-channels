@@ -9,6 +9,8 @@ import { StartedCheckoutTracker } from "@/components/analytics/StartedCheckoutTr
 import { gstSplit } from "@keenan/services/calc";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
+import { resolveAccountOptions } from "@/lib/checkout/account-options";
+import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-policy";
 
 export const metadata = {
   title: "Checkout",
@@ -32,8 +34,19 @@ export default async function CheckoutPage() {
   // transfer (invoice → pay → deliver). When eligible, show the account's actual
   // term length, not the flat channel default. Uses the SAME entitlement resolver
   // placeOrder authorizes against, so what we show is exactly what we'll accept.
-  const netTerms = await resolveNetTermsEntitlement(session);
-  const paymentMethods = checkoutSettings.paymentMethods
+  //
+  // Account Options (L3) narrow the list further: an account may carry an explicit
+  // payment-method allow-list (NULL/empty = every channel method). Same resolver
+  // placeOrder authorizes against — every filter here IS duplicated there, or the
+  // storefront would leak a bypass.
+  const [netTerms, accountOptions] = await Promise.all([
+    resolveNetTermsEntitlement(session),
+    resolveAccountOptions(session),
+  ]);
+  const paymentMethods = filterPaymentMethodsForAccount(
+    checkoutSettings.paymentMethods,
+    accountOptions?.allowedPaymentMethods ?? null
+  )
     .filter((m) => m.id !== "net_terms" || !!netTerms)
     .map((m) => (m.id === "net_terms" && netTerms ? { ...m, netTermsDays: netTerms.netTermsDays } : m));
 

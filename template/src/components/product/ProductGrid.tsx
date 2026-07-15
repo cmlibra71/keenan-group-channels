@@ -1,4 +1,6 @@
 import { ProductCard } from "./ProductCard";
+import { applyAccountPrices } from "@/lib/member";
+import { applyCatalogScope } from "@/lib/catalog-scope";
 import { Ga4ViewItemList } from "@/components/analytics/Ga4ViewItemList";
 
 interface ProductWithImage {
@@ -10,7 +12,17 @@ interface ProductWithImage {
   thumbnailImage?: { urlStandard: string; urlThumbnail: string | null } | null;
 }
 
-export function ProductGrid({
+/**
+ * Server component. Every listing card in the site funnels through here, so this is where the
+ * shopper's per-account VISIBILITY and per-account contract PRICES are applied — at READ time, to
+ * the rows already fetched from the SHARED sources (category_listing_cache, unstable_cache, the
+ * Meilisearch index), none of which can hold per-account state without leaking one account's
+ * private products / negotiated prices to every other shopper. Guests: visibility still applies
+ * (they never see another account's exclusive products); prices are a no-op.
+ *
+ * Order matters: hide first, then price — an invisible row is never priced or emitted to GA4.
+ */
+export async function ProductGrid({
   products,
   memberPricingAvailable,
   memberPriceMap,
@@ -25,6 +37,8 @@ export function ProductGrid({
   listId?: string;
   listName?: string;
 }) {
+  products = await applyCatalogScope(products);
+  products = await applyAccountPrices(products);
   if (products.length === 0) {
     return (
       <div className="text-center py-16">

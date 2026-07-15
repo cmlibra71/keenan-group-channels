@@ -138,14 +138,14 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
     const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
     const memberCtx = await getMemberContext();
     isMember = memberCtx.isMember;
-    if (memberPricingEnabled && memberCtx.customerGroupId) {
+    if ((memberPricingEnabled && memberCtx.customerGroupId) || memberCtx.accountId) {
       membershipTeaser = {
         fromPrice: memberCtx.planPrice ? parseFloat(memberCtx.planPrice).toFixed(2) : null,
       };
       const variants = product.variants ?? [];
       const pricingResults = await Promise.all(
         variants.map((v: { id: number }) =>
-          getEffectivePrice(v.id, CHANNEL_ID, memberCtx.customerGroupId)
+          getEffectivePrice(v.id, CHANNEL_ID, memberCtx.customerGroupId, 1, memberCtx.accountId)
         )
       );
       for (let i = 0; i < variants.length; i++) {
@@ -455,14 +455,14 @@ async function ProductOverviewBlock({ props, ctx }: BlockProps) {
     const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
     const memberCtx = await getMemberContext();
     isMember = memberCtx.isMember;
-    if (memberPricingEnabled && memberCtx.customerGroupId) {
+    if ((memberPricingEnabled && memberCtx.customerGroupId) || memberCtx.accountId) {
       membershipTeaser = {
         fromPrice: memberCtx.planPrice ? parseFloat(memberCtx.planPrice).toFixed(2) : null,
       };
       const variants = product.variants ?? [];
       const pricingResults = await Promise.all(
         variants.map((v: { id: number }) =>
-          getEffectivePrice(v.id, CHANNEL_ID, memberCtx.customerGroupId)
+          getEffectivePrice(v.id, CHANNEL_ID, memberCtx.customerGroupId, 1, memberCtx.accountId)
         )
       );
       for (let i = 0; i < variants.length; i++) {

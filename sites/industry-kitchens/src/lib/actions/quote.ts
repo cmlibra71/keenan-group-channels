@@ -6,6 +6,7 @@ import { wantsStripeTestMode } from "@keenan/services";
 import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
 import { getSession } from "@/lib/auth";
 import { getContactPermissions } from "@/lib/role-permissions";
+import { isProductVisibleToViewer, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
 
 // QuoteService returns snake_case rows (transformRow convention).
@@ -41,6 +42,9 @@ async function countQuoteItems(quoteId: number): Promise<number> {
 export async function addToQuote(productId: number, variantId?: number | null) {
   // getById returns snake_case — read sale_price (reading salePrice was undefined,
   // so quotes silently used RRP instead of the catalog sale price).
+  // Same visibility gate as the cart: a product restricted away from this shopper can't be quoted.
+  if (!(await isProductVisibleToViewer(productId))) return { error: RESTRICTED_PRODUCT_ERROR };
+
   const product = await productService.getById(productId) as { price: string; sale_price: string | null } | null;
   if (!product) return { error: "Product not found" };
 

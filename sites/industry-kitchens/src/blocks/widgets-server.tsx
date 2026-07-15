@@ -14,7 +14,8 @@ import {
   getRelatedProducts,
   getFeatureFlag,
 } from "@/lib/store";
-import { getListingMemberPrices } from "@/lib/member";
+import { getListingMemberPrices, applyAccountPrices } from "@/lib/member";
+import { applyCatalogScope } from "@/lib/catalog-scope";
 import {
   ProductPurchaseProvider,
   type PurchaseProduct,
@@ -96,6 +97,12 @@ export async function CardPartialGrid({
   gridClassName?: string;
 }) {
   if (products.length === 0) return null;
+  // Rows come from the shared cache / Meili index — apply this shopper's VISIBILITY scope, then
+  // overlay their account prices, at read time (guests: visibility still hides other accounts'
+  // exclusive products). Never written back into the cache. Hide before pricing.
+  products = (await applyCatalogScope(products as never)) as typeof products;
+  if (products.length === 0) return null;
+  products = (await applyAccountPrices(products as never)) as typeof products;
   const [cardSource, resolvePartial, priceMap, mpe] = await Promise.all([
     cardTemplate ? Promise.resolve(cardTemplate) : getPartialSource(cardKey, ctx),
     buildPartialResolver(ctx),

@@ -18,6 +18,15 @@ import {
   describeFailedCondition,
   resolveAccountEmailRecipients,
 } from "@/lib/role-permissions";
+import { applyAccountPricesToCart } from "@/lib/checkout/account-prices";
+import { blockedProductIds } from "@/lib/catalog-scope";
+import { resolveAccountOptions } from "@/lib/checkout/account-options";
+import {
+  effectiveMinimums,
+  isPaymentMethodAllowed,
+  minimumOrderError,
+  disallowedPaymentMethodError,
+} from "@/lib/checkout/account-options-policy";
 
 // Pricing/tax/payment-status computation lives in the pure order-draft module
 // (lib/checkout/order-draft.ts), which delegates GST math to @keenan/services
@@ -44,6 +53,25 @@ export async function placeOrder(
 
   const fullCart = await cartService.getWithItems(cartWithItems.id);
   if (!fullCart || fullCart.items.length === 0) return { error: "Cart is empty." };
+
+  // ── L2 PRODUCT RESTRICTIONS: what we SHOW is what we ACCEPT. A line whose product this shopper
+  // may no longer see (restricted since it was added, added under another account, or poked in by
+  // hand) is REMOVED from the cart and the order is refused — a restricted product must never be
+  // sellable through a stale cart. Unrestricted carts pay one cached set-lookup and nothing else.
+  const blocked = await blockedProductIds(
+    (fullCart.items as { product_id: number }[]).map((i) => i.product_id)
+  );
+  if (blocked.length > 0) {
+    for (const item of fullCart.items as { id: number; product_id: number }[]) {
+      if (blocked.includes(item.product_id)) {
+        await cartItemService.deleteForParent(cartWithItems.id, item.id).catch(() => {});
+      }
+    }
+    return {
+      error:
+        "Some items are no longer available on your account and have been removed from your cart. Please review your cart and try again.",
+    };
+  }
 
   // Validate billing info
   const email = (formData.get("email") as string)?.trim();
@@ -104,6 +132,10 @@ export async function placeOrder(
       };
     }
   }
+  // ── ACCOUNT CONTRACT PRICES: what the shopper is CHARGED must equal what they were shown. A line
+  // may have been added before the account price was set (or before they logged in), so every line is
+  // reconciled against the account's price here, at the moment of charging, and persisted to the cart.
+  await applyAccountPricesToCart(cartWithItems.id, fullCart.items);
 
   // Re-validate subscription status — if member pricing is enabled but subscription
   // has expired since items were added, recalculate at non-member prices
@@ -256,6 +288,26 @@ export async function placeOrder(
   const netTerms = await resolveNetTermsEntitlement(session);
   if (paymentMethod === "net_terms" && !netTerms) {
     return { error: "Net terms aren't available on your account. Please pay by card or bank transfer." };
+  }
+
+  // Account Options (L3) — the authorization half of the checkout page's visibility filter.
+  // Re-resolve the account's options with the SAME resolver the page used (never trust the client)
+  // and reject anything the page would not have offered:
+  //   (a) a payment method outside the account's allow-list;
+  //   (b) a cart under the minimum order amount / quantity (per-account override, else the channel
+  //       global — which also covers guests and account-less shoppers).
+  // "What we show is exactly what we accept" — every filter added to the checkout page MUST be
+  // duplicated here or the storefront leaks a bypass.
+  const accountOptions = await resolveAccountOptions(session);
+  if (paymentMethod && !isPaymentMethodAllowed(paymentMethod, accountOptions?.allowedPaymentMethods ?? null)) {
+    return { error: disallowedPaymentMethodError() };
+  }
+  const minError = minimumOrderError(
+    { subtotalIncTax, itemCount: totalItems },
+    effectiveMinimums(accountOptions, checkoutSettings)
+  );
+  if (minError) {
+    return { error: minError };
   }
 
   // Determine payment status based on payment method

@@ -16,6 +16,7 @@ import {
 import type { RenderContext } from "@keenan/services";
 import { getListingPricing } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
+import { assertCategoryVisible } from "@/lib/catalog-scope";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
 import { RichContent } from "@/components/content/RichContent";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
@@ -80,6 +81,11 @@ export default async function CategoryPage({
     }
     notFound();
   }
+
+  // L2 — group∩contact CATEGORY access. Previously enforced on /products only, so a restricted
+  // category's page was still reachable by URL; it now 404s like any other unreachable resource.
+  // (Its products are independently filtered in ProductGrid, so nothing leaks through the grid.)
+  await assertCategoryVisible(category.id);
 
   const page = Math.min(MAX_PAGES, Math.max(1, parseInt(sp.page || "1", 10)));
   const sort = (["price_asc", "price_desc", "saving", "newest"] as const).includes(

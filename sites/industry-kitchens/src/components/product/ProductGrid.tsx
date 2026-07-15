@@ -1,4 +1,6 @@
 import { ProductCard } from "./ProductCard";
+import { applyAccountPrices } from "@/lib/member";
+import { applyCatalogScope } from "@/lib/catalog-scope";
 import { Ga4ViewItemList } from "@/components/analytics/Ga4ViewItemList";
 
 interface ProductWithImage {
@@ -10,7 +12,13 @@ interface ProductWithImage {
   thumbnailImage?: { urlStandard: string; urlThumbnail: string | null } | null;
 }
 
-export function ProductGrid({
+/**
+ * Server component. Every listing card in the site funnels through here, so this is where the
+ * shopper's per-account contract prices are applied — at READ time, to the rows already fetched
+ * from the SHARED sources (category_listing_cache, unstable_cache, the Meilisearch index), which
+ * cannot hold a per-account price without leaking it to every other shopper. Guests: no-op.
+ */
+export async function ProductGrid({
   products,
   memberPricingAvailable,
   memberPriceMap,
@@ -25,6 +33,12 @@ export function ProductGrid({
   listId?: string;
   listName?: string;
 }) {
+  // Hide before pricing. Rows arrive from the SHARED category_listing_cache / unstable_cache /
+  // Meilisearch index, which cannot encode per-account visibility or price — both are applied HERE,
+  // per viewer, to a copy. Guests still get the visibility pass (other accounts' exclusive products
+  // are hidden from them too).
+  products = await applyCatalogScope(products);
+  products = await applyAccountPrices(products);
   if (products.length === 0) {
     return (
       <div className="text-center py-16">

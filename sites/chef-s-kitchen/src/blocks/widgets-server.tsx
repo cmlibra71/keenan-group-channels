@@ -22,7 +22,8 @@ import {
   getFeatureFlag,
 } from "@/lib/store";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
-import { getListingPricing } from "@/lib/member";
+import { getListingPricing, applyAccountPrices } from "@/lib/member";
+import { applyCatalogScope } from "@/lib/catalog-scope";
 import {
   ProductPurchaseProvider,
   type PurchaseProduct,
@@ -170,6 +171,11 @@ export async function CardPartialGrid({
   gridClassName?: string;
 }) {
   if (products.length === 0) return null;
+  // Hide before pricing: the shopper's VISIBILITY scope, then their account prices — both applied
+  // at read time to rows that came out of the SHARED cache / Meili index (never written back).
+  products = (await applyCatalogScope(products as never)) as typeof products;
+  if (products.length === 0) return null;
+  products = (await applyAccountPrices(products as never)) as typeof products;
   const [cardSource, resolvePartial, pricingResolved, mpe] = await Promise.all([
     cardTemplate ? Promise.resolve(cardTemplate) : getPartialSource(cardKey, ctx),
     buildPartialResolver(ctx),
@@ -228,8 +234,13 @@ export async function ProductGridWidget({
   attrs: Record<string, unknown>;
   ctx?: RenderContext;
 }) {
-  const products = await fetchGridProducts(attrs, ctx);
+  let products = await fetchGridProducts(attrs, ctx);
   if (products.length === 0) return null;
+  // Hide before pricing: the shopper's VISIBILITY scope, then their account prices — both applied
+  // at read time to rows that came out of the SHARED cache / Meili index (never written back).
+  products = (await applyCatalogScope(products as never)) as typeof products;
+  if (products.length === 0) return null;
+  products = (await applyAccountPrices(products as never)) as typeof products;
 
   const cardKey = str(attrs.card) || "product_card";
   // detached card: an inline KTL override stored on THIS block (attrs.card_template)
@@ -378,8 +389,13 @@ export async function ListingGridWidget({
       return null;
     }
   }
-  const products = listing.products ?? [];
+  let products = listing.products ?? [];
   if (products.length === 0) return null;
+  // Hide before pricing: the shopper's VISIBILITY scope, then their account prices — both applied
+  // at read time to rows that came out of the SHARED cache / Meili index (never written back).
+  products = (await applyCatalogScope(products as never)) as typeof products;
+  if (products.length === 0) return null;
+  products = (await applyAccountPrices(products as never)) as typeof products;
 
   const cardKey = str(attrs.card) || "product_card";
   const detached = str(attrs.card_template);

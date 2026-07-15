@@ -5,6 +5,7 @@ import { S3Client, GetObjectCommand, PutObjectCommand, HeadObjectCommand } from 
 import { getProducts } from "@/lib/store";
 import { isAllowedImageUrl } from "@/lib/image-origin";
 import { CHANNEL_ID } from "@/lib/channel";
+import { applyGuestCatalogScope } from "@/lib/catalog-scope";
 
 const S3_BUCKET = process.env.IMAGE_CACHE_S3_BUCKET || "keenan-group-images";
 const S3_REGION = process.env.IMAGE_CACHE_S3_REGION || "ap-southeast-2";
@@ -33,7 +34,12 @@ export async function GET(request: NextRequest) {
   const refresh = request.nextUrl.searchParams.get("refresh") === "true";
 
   // 1. Fetch featured product image URLs
-  const { products } = await getProducts({ featured: true, limit: 25 });
+  const { products: featuredRaw } = await getProducts({ featured: true, limit: 25 });
+  // The atlas is a PUBLIC, shared image — build it from the GUEST catalogue only, so no account's
+  // exclusive product ends up composited into every visitor's hero.
+  const products = await applyGuestCatalogScope(
+    featuredRaw as Array<{ id: number; thumbnailImage?: { urlStandard: string } | null }>
+  );
   const imageUrls = products
     .map((p: { thumbnailImage?: { urlStandard: string } | null }) =>
       p.thumbnailImage?.urlStandard

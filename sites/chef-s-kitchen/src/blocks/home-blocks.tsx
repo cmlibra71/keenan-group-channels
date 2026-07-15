@@ -24,7 +24,8 @@ import {
   CHANNEL_ID,
   getJsonSetting,
 } from "@/lib/store";
-import { getListingPricing } from "@/lib/member";
+import { getListingPricing, applyAccountPrices } from "@/lib/member";
+import { applyCatalogScope } from "@/lib/catalog-scope";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { TrustBar } from "@/components/home/TrustBar";
 import { SeoFaq } from "@/components/home/SeoFaq";
@@ -467,7 +468,10 @@ async function BrandShowcaseBlock() {
 
 // ── Clearance spotlight ───────────────────────────────────────────────────────
 async function ClearanceSpotlightBlock(props: Record<string, unknown> = {}, ctx?: RenderContext) {
-  const { products: clearanceProducts } = await getProducts({ limit: 9, onSale: true });
+  const { products: clearanceRaw } = await getProducts({ limit: 9, onSale: true });
+  // Shared cached rows → overlay this shopper's account prices at read time (guests: no-op).
+  // Read-time visibility THEN price (the rail's rows come from the shared cache).
+  const clearanceProducts = await applyAccountPrices(await applyCatalogScope(clearanceRaw));
 
   // CMS v2.1: editable heading template + component-owned rail.
   if (homeV2On(props, ctx)) {

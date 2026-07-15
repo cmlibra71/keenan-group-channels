@@ -27,6 +27,7 @@ import {
   getCmsPage,
 } from "@/lib/store";
 import { getSession } from "@/lib/auth";
+import { getAccountId } from "@/lib/member";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductTabs } from "@/components/product/ProductTabs";
 import { ProductGrid } from "@/components/product/ProductGrid";
@@ -165,10 +166,13 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
           fromPrice: cheapest != null && Number.isFinite(cheapest) ? cheapest.toFixed(2) : null,
         };
       }
-      if (customerGroupId) {
+      const accountId = await getAccountId();
+      if (customerGroupId || accountId) {
         const variants = product.variants ?? [];
         const pricingResults = await Promise.all(
-          variants.map((v: { id: number }) => getEffectivePrice(v.id, CHANNEL_ID, customerGroupId))
+          variants.map((v: { id: number }) =>
+            getEffectivePrice(v.id, CHANNEL_ID, customerGroupId, 1, accountId)
+          )
         );
         for (let i = 0; i < variants.length; i++) {
           if (pricingResults[i].salePrice) {

@@ -88,6 +88,7 @@ export const {
   getSubscriptionPlans,
   getActiveSubscription,
   getMemberPriceMap,
+  applyAccountPricesToProducts,
   getUpcomingDraws,
   getPartnerOffers,
   getFeatureFlag,
@@ -404,7 +405,7 @@ function toDate(value: string | Date): Date | null {
 export async function getSitemapProducts(
   offset: number,
   limit: number
-): Promise<Array<{ slug: string; updatedAt: Date | null }>> {
+): Promise<Array<{ id: number; slug: string; updatedAt: Date | null }>> {
   const sql = getCommerceClient();
   if (!sql) return [];
   const rows = await sql<{ id: number; url_path: string | null; updated_at: string | Date | null }[]>`
@@ -417,6 +418,8 @@ export async function getSitemapProducts(
   // Product routes are keyed by url_path, falling back to the numeric id
   // (mirrors ProductGrid: `slug={product.urlPath || String(product.id)}`).
   return rows.map((r) => ({
+    // id is carried so the sitemap can drop products restricted to an account (a crawler is a GUEST).
+    id: r.id,
     slug: r.url_path || String(r.id),
     // postgres.js returns timestamptz as a string here; coerce to Date so Next
     // serialises a valid W3C <lastmod>. Drop unparseable values.

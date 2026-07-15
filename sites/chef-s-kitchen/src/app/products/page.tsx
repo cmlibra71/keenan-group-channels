@@ -1,8 +1,7 @@
-import { getProducts, getFeatureFlag, productService, contactService, CHANNEL_ID } from "@/lib/store";
-import { customerGroupService } from "@keenan/services";
-import { getSession } from "@/lib/auth";
+import { getProducts, getFeatureFlag, productService, CHANNEL_ID } from "@/lib/store";
 import { getListingPricing } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
+import { getCatalogScope } from "@/lib/catalog-scope";
 import Link from "next/link";
 
 function getPageNumbers(current: number, total: number): (number | "...")[] {
@@ -44,21 +43,13 @@ export default async function ProductsPage({
   if (activeFilter === "featured") fetchOptions.featured = true;
   if (activeFilter === "sale") fetchOptions.onSale = true;
 
-  // Category access: a logged-in customer whose group restricts categories only sees
-  // products in its allow-list. resolveAccessibleCategoryIds → null (unrestricted, cached
-  // path), [] ('none', show nothing), or specific ids (restrict → uncached listForChannel).
-  let accessibleCategoryIds: number[] | null = null;
-  const session = await getSession();
-  if (session) {
-    const customer = (await contactService.getById(session.contactId)) as {
-      customer_group_id?: number | null;
-    } | null;
-    if (customer?.customer_group_id) {
-      accessibleCategoryIds = await customerGroupService.resolveAccessibleCategoryIds(
-        customer.customer_group_id
-      );
-    }
-  }
+  // CATEGORY ACCESS (group ∩ contact) — resolved through the ONE chokepoint (lib/catalog-scope),
+  // not a bespoke group-only lookup. Applied at QUERY level here so `total`/pagination stay exact:
+  // null → the cached channel path; [] ('none') → nothing; ids → an uncached, category-bounded
+  // query (results are per-viewer and must never enter the shared cache).
+  // PRODUCT-level restrictions (per-account exclusivity) are applied downstream in <ProductGrid>,
+  // which every card on this page funnels through.
+  const { categories: accessibleCategoryIds } = await getCatalogScope();
 
   const productsPromise =
     accessibleCategoryIds === null

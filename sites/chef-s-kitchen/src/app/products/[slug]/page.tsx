@@ -3,7 +3,8 @@ import { draftMode } from "next/headers";
 import Link from "next/link";
 import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, brandService, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice, getCmsPage, getCmsTemplate } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
-import { getMemberContext, getListingPricing } from "@/lib/member";
+import { getMemberContext, getListingPricing, applyAccountPrices } from "@/lib/member";
+import { assertProductVisible, applyCatalogScope } from "@/lib/catalog-scope";
 import { ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
@@ -57,13 +58,23 @@ export default async function ProductPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const product = await getProductBySlug(slug);
+  const cachedProduct = await getProductBySlug(slug);
 
-  if (!product) {
+  if (!cachedProduct) {
     notFound();
   }
 
-  const [reviewsRaw, attachmentsRaw, relatedProducts, brandRow] = await Promise.all([
+  // L2 — per-account Product Restrictions + group∩contact category access. A product exclusive to
+  // another account (or outside this viewer's category access) must be UNREACHABLE, not merely
+  // absent from listings: a directly-navigated slug 404s. `categoryIds` come free with the cached
+  // row, so this costs no extra query.
+  await assertProductVisible(cachedProduct as { id: number; categoryIds?: number[] | null });
+
+  // Per-account product prices override EVERY other price. The cached product row is SHARED by all
+  // shoppers, so the account's price is overlaid onto a copy at read time (never into the cache).
+  const [product] = await applyAccountPrices([cachedProduct]);
+
+  const [reviewsRaw, attachmentsRaw, relatedRaw, brandRow] = await Promise.all([
     getProductReviews(product.id),
     getProductAttachments(product.id),
     getRelatedProducts(product.id, product.categoryIds ?? []),
@@ -71,6 +82,10 @@ export default async function ProductPage({
       ? (brandService.getById(product.brandId) as Promise<{ name?: string | null; slug?: string | null } | null>)
       : Promise.resolve(null),
   ]);
+
+  // Related/upsell rail: hidden products are dropped at the SOURCE, so they cannot reach the grid,
+  // the builder payload or any serialized props.
+  const relatedProducts = await applyAccountPrices(await applyCatalogScope(relatedRaw));
 
   // Breadcrumb trail scoped to this channel's own category tree. A product's
   // category assignments can span other channels' trees, so resolving through
@@ -95,13 +110,16 @@ export default async function ProductPage({
   const isMember = memberCtx.isMember;
 
   let memberPriceMap: Record<number, number> = {};
-  if (memberPricingEnabled && memberCtx.customerGroupId) {
+  if ((memberPricingEnabled && memberCtx.customerGroupId) || memberCtx.accountId) {
     membershipTeaser = { fromPrice: memberCtx.planPrice ? parseFloat(memberCtx.planPrice).toFixed(2) : null };
 
-    // Member prices for ALL variants so the client can update on variant change.
+    // Member prices for ALL variants so the client can update on variant change. The account is
+    // threaded in so its contract price short-circuits the member / cost-plus price.
     const variants = product.variants ?? [];
     const pricingResults = await Promise.all(
-      variants.map((v) => getEffectivePrice(v.id, CHANNEL_ID, memberCtx.customerGroupId))
+      variants.map((v) =>
+        getEffectivePrice(v.id, CHANNEL_ID, memberCtx.customerGroupId, 1, memberCtx.accountId)
+      )
     );
     for (let i = 0; i < variants.length; i++) {
       const pricing = pricingResults[i];
@@ -263,6 +281,9 @@ export default async function ProductPage({
         isMember,
         planPrice: membershipTeaser?.fromPrice ?? null,
       },
+      // Per-account contract prices override every layer; the payload's product + related cards
+      // and its variant pricing are all resolved with the account in scope.
+      accountId: memberCtx.accountId,
       draft,
     }).catch(() => null);
     // The AUTHORED tree wins: the product template doc (builder_kind='nodes' —

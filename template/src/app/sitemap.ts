@@ -8,6 +8,7 @@ import {
   getSitemapProducts,
 } from "@/lib/store";
 import { isIndexable, siteBaseUrl } from "@/lib/seo";
+import { applyGuestCatalogScope } from "@/lib/catalog-scope";
 
 // Generated at request time — the catalog lives in the commerce DB, which is
 // not reachable at build, and the contents change as products are updated.
@@ -91,8 +92,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const productRoutes: MetadataRoute.Sitemap = [];
   for (let offset = 0; offset < productBudget; offset += BATCH) {
     const limit = Math.min(BATCH, productBudget - offset);
-    const rows = await getSitemapProducts(offset, limit);
-    if (rows.length === 0) break;
+    const rawRows = await getSitemapProducts(offset, limit);
+    if (rawRows.length === 0) break;
+    // A crawler is a GUEST: products exclusive to some account must not even be advertised here
+    // (their PDP 404s for a guest, so listing them would publish dead URLs and leak their existence).
+    const rows = await applyGuestCatalogScope(rawRows);
     for (const p of rows) {
       productRoutes.push({
         url: `${base}/products/${encodeURIComponent(p.slug)}`,
@@ -101,7 +105,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         priority: 0.7,
       });
     }
-    if (rows.length < limit) break;
+    if (rawRows.length < limit) break;
   }
 
   if (productRoutes.length >= productBudget) {

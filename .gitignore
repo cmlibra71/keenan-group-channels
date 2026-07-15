@@ -14,3 +14,4 @@ scripts/.work/
 
 # Local audit workspace (reports, crawls, large JSONL data) — not versioned
 /scripts/
+.worktrees/
