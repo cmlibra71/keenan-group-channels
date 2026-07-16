@@ -40,7 +40,7 @@ export interface HomeHeroData {
   brandCount: number;
 }
 
-function HeroSidePanel({
+export function HeroSidePanel({
   planBenefits,
   featuredPrize,
   featuredDraw,

@@ -13,6 +13,7 @@ import { BrandShowcase } from "@/components/home/BrandShowcase";
 import { ClearanceSpotlight } from "@/components/home/ClearanceSpotlight";
 import {
   HomeHeroView,
+  HeroSidePanel,
   ShopByCategoryView,
   FeaturedProductsView,
   type HomeHeroData,
@@ -71,6 +72,17 @@ export function BuilderHomePage({
 }) {
   const router = useRouter();
   const nativeComponents: NativeComponents = {
+    // Granular hero side panel (the rich seed authors the copy panel itself).
+    "hero-side-panel": () =>
+      home.hero ? (
+        <HeroSidePanel
+          planBenefits={home.hero.planBenefits}
+          featuredPrize={home.hero.featuredPrize}
+          featuredDraw={home.hero.featuredDraw}
+          productCount={home.hero.productCount}
+          brandCount={home.hero.brandCount}
+        />
+      ) : null,
     "home-hero": () => (home.hero ? <HomeHeroView {...home.hero} /> : null),
     "trust-bar": () => <TrustBar />,
     "shop-by-category": () => (

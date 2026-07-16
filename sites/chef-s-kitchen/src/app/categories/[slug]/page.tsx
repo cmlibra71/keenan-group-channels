@@ -168,6 +168,8 @@ export default async function CategoryPage({
         },
         page,
         hasMore,
+        nextPageHref,
+        pricing: pricing as { memberPriceMap?: Record<number, number>; isMember?: boolean; planPrice?: string | null },
         breadcrumbs: breadcrumbs as { id: number; name: string; slug: string }[],
         customer: {
           isMember: memberCtx?.isMember ?? false,

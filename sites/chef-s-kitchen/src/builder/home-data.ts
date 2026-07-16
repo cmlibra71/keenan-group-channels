@@ -26,7 +26,7 @@ import type { HomeSectionsInput } from "@keenan/services/builder";
 export async function loadHomeNativeData(
   keys: Set<string>
 ): Promise<{ home: HomeNativeData; sections: HomeSectionsInput }> {
-  const needHero = keys.has("home-hero");
+  const needHero = keys.has("home-hero") || keys.has("hero-side-panel");
   const needCats = keys.has("shop-by-category");
   const needStrip = keys.has("membership-value-strip");
   const needBrands = keys.has("brand-showcase");
@@ -153,8 +153,36 @@ export async function loadHomeNativeData(
         : null,
   };
 
+  // Merged member-price map for the composer's card enrichment (ids unique
+  // across rails, so one map serves both).
+  const mergedPricing = {
+    memberPriceMap: {
+      ...((clearancePricing as { memberPriceMap?: Record<number, number> } | null)?.memberPriceMap ?? {}),
+      ...((featuredPricing as { memberPriceMap?: Record<number, number> } | null)?.memberPriceMap ?? {}),
+    },
+  };
+  const tilesWithCounts = needCats
+    ? (topCategories as Record<string, unknown>[]).map((c) => ({
+        ...c,
+        childCount:
+          megaMenu?.departments.find((d: { id: number }) => d.id === (c as { id: number }).id)?.children.length ?? 0,
+      }))
+    : [];
   const sections: HomeSectionsInput = {
-    topCategories: topCategories as Record<string, unknown>[],
+    hero: home.hero
+      ? {
+          eyebrow: home.hero.eyebrow,
+          headline: home.hero.headline,
+          headline_emphasis: home.hero.headlineEmphasis,
+          subheadline: home.hero.subheadline,
+          cta_text: home.hero.ctaText,
+          cta_href: home.hero.ctaHref,
+          cta2_text: home.hero.cta2Text,
+          cta2_href: home.hero.cta2Href,
+        }
+      : null,
+    pricing: mergedPricing,
+    topCategories: tilesWithCounts as Record<string, unknown>[],
     brands: featuredBrands as Record<string, unknown>[],
     featured: featuredProducts as unknown as Record<string, unknown>[],
     clearance: clearanceProducts as unknown as Record<string, unknown>[],

@@ -64,6 +64,7 @@ export default async function BrandPage({
       brand: brand as unknown as Record<string, unknown>,
       products: scoped as unknown as Record<string, unknown>[],
       total,
+      pricing: productCtx.pricing as { memberPriceMap?: Record<number, number>; isMember?: boolean; planPrice?: string | null },
       customer: {
         isMember: memberCtx?.isMember ?? false,
         loggedIn: (memberCtx?.accountId ?? null) != null || (memberCtx?.isMember ?? false),

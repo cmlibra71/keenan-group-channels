@@ -53,6 +53,16 @@ export function BuilderCategoryPage({
 }) {
   const router = useRouter();
   const nativeComponents: NativeComponents = {
+    // Granular sealed natives (the rich seed uses these; the authored grid of
+    // ⬢ product-card instances renders straight from the tree).
+    "filter-rail": () => <FilterRail facets={listing.facets as never} />,
+    "filter-controls": () => (
+      <div className="flex flex-wrap items-center gap-3">
+        <FilterChips facets={listing.facets as never} />
+        <SortSelect />
+      </div>
+    ),
+    // Legacy whole-listing native (early trees) — kept for compatibility.
     "category-listing": () => (
       <div className="flex gap-6">
         <FilterRail facets={listing.facets as never} />
