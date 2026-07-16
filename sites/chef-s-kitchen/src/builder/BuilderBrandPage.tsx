@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import type { NodeTree } from "@keenan/services/builder";
 import { BuilderTree, BuilderActionsProvider, type NativeComponents } from "@keenan/services/builder-react";
 import { ProductGridClient, type GridProduct } from "@/components/product/ProductGridClient";
+import { Ga4ViewItemList } from "@/components/analytics/Ga4ViewItemList";
+import { masterLeafNatives, selectItemHandler } from "./master-leaves";
 
 // ============================================================================
 // The brand page rendered from the 'brand' node template. The route owns the
@@ -42,6 +44,8 @@ export function BuilderBrandPage({
 }) {
   const router = useRouter();
   const nativeComponents: NativeComponents = {
+    // Sealed leaves the product-card master places:
+    ...masterLeafNatives(pricing),
     "brand-products": () => (
       <div>
         <h2 className="text-lg font-semibold text-ink-900 mb-4">Products</h2>
@@ -56,7 +60,22 @@ export function BuilderBrandPage({
     ),
   };
   return (
-    <BuilderActionsProvider handlers={{}} navigate={(to) => router.push(to)}>
+    <BuilderActionsProvider
+      handlers={{ selectItem: selectItemHandler("brand_products", "Brand Products") }}
+      navigate={(to) => router.push(to)}
+    >
+      <Ga4ViewItemList
+        listId="brand_products"
+        listName="Brand Products"
+        items={products.map((p, index) => ({
+          item_id: p.sku ?? String(p.id),
+          item_name: p.name,
+          item_brand: p.brandName ?? undefined,
+          price: parseFloat(p.salePrice ?? p.price) || undefined,
+          quantity: 1,
+          index,
+        }))}
+      />
       <BuilderTree
         tree={tree}
         payload={payload}

@@ -7,6 +7,8 @@ import type { NodeTree } from "@keenan/services/builder";
 import { BuilderTree, BuilderActionsProvider, type NativeComponents } from "@keenan/services/builder-react";
 import { FilterRail, FilterChips, SortSelect, FacetCheckbox, MobileFilterRail } from "@/components/category/FilterRail";
 import { ProductGridClient, type GridProduct } from "@/components/product/ProductGridClient";
+import { Ga4ViewItemList } from "@/components/analytics/Ga4ViewItemList";
+import { masterLeafNatives, selectItemHandler } from "./master-leaves";
 
 // ============================================================================
 // The category page rendered from the 'category_layout' node template. The
@@ -81,11 +83,14 @@ export function BuilderCategoryPage({
         router.replace(`${pathname}?${next.toString()}`, { scroll: false });
         return { success: true };
       },
+      selectItem: selectItemHandler(listing.categorySlug, listing.categoryName),
     }),
-    [router, pathname, searchParams]
+    [router, pathname, searchParams, listing.categorySlug, listing.categoryName]
   );
 
   const nativeComponents: NativeComponents = {
+    // Sealed leaves the product-card master places:
+    ...masterLeafNatives(listing.pricing),
     // filter-rail / clear-filters / filter-drawer / facet-option are component
     // MASTERS (drillable trees driven by the Actions above) — natives win over
     // same-key masters, so they must NOT be registered here.
@@ -142,6 +147,18 @@ export function BuilderCategoryPage({
   };
   return (
     <BuilderActionsProvider handlers={handlers} navigate={(to) => router.push(to)}>
+      <Ga4ViewItemList
+        listId={listing.categorySlug}
+        listName={listing.categoryName}
+        items={listing.products.map((p, index) => ({
+          item_id: p.sku ?? String(p.id),
+          item_name: p.name,
+          item_brand: p.brandName ?? undefined,
+          price: parseFloat(p.salePrice ?? p.price) || undefined,
+          quantity: 1,
+          index,
+        }))}
+      />
       <BuilderTree
         tree={tree}
         payload={payload}

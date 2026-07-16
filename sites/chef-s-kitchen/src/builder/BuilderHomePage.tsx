@@ -17,6 +17,7 @@ import {
   type CategoryTile,
 } from "./home-natives";
 import type { GridProduct } from "@/components/product/ProductGridClient";
+import { masterLeafNatives, selectItemHandler } from "./master-leaves";
 
 // ============================================================================
 // The homepage rendered from the 'home' node doc. All nine legacy sections are
@@ -68,7 +69,11 @@ export function BuilderHomePage({
   draft?: boolean;
 }) {
   const router = useRouter();
+  const leafPricing = home.featured?.pricing ?? home.clearance?.pricing ?? null;
   const nativeComponents: NativeComponents = {
+    // Sealed leaves the card/panel masters place (price-block, CTAs, the
+    // count-up stats banner):
+    ...masterLeafNatives(leafPricing),
     // hero-side-panel / membership-value-strip / draw-spotlight are component
     // MASTERS now (they bind home.prize / home.stats / home.plan from the
     // composer payload) — natives win over same-key masters, so no entries.
@@ -95,7 +100,7 @@ export function BuilderHomePage({
     "seo-faq": () => (home.seoFaq ? <SeoFaq {...home.seoFaq} /> : null),
   };
   return (
-    <BuilderActionsProvider handlers={{}} navigate={(to) => router.push(to)}>
+    <BuilderActionsProvider handlers={{ selectItem: selectItemHandler() }} navigate={(to) => router.push(to)}>
       <BuilderTree
         tree={tree}
         payload={payload}
