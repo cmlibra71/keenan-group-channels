@@ -111,6 +111,61 @@ export function FacetRail({ groups, clearParams }: { groups: FacetGroupDef[]; cl
   );
 }
 
+
+/** Mobile-only facets (trigger + off-canvas drawer) — the Site Builder's
+ *  authored DESKTOP rail pairs with this sealed mobile unit. */
+export function MobileFilterRail({ facets }: { facets: CategoryFacets }) {
+  const groups = categoryGroups(facets);
+  const clearParams = ["sub", "brand", "price", "stock"];
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  return (
+    <>
+      <div className="lg:hidden">
+        <button onClick={() => setDrawerOpen(true)} className="btn-secondary btn-sm">
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          Filters
+        </button>
+      </div>
+      {drawerOpen && (
+        <div className="fixed inset-0 z-[200] lg:hidden">
+          <div className="absolute inset-0 bg-ink-900/50" onClick={() => setDrawerOpen(false)} />
+          <div className="absolute inset-y-0 left-0 w-[300px] max-w-[85vw] overflow-y-auto bg-white p-5 shadow-lg">
+            <div className="mb-4 flex items-center justify-between">
+              <span className="text-sm font-bold uppercase tracking-[0.1em] text-text-primary">Filters</span>
+              <button onClick={() => setDrawerOpen(false)} aria-label="Close filters" className="text-text-secondary">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <RailContent groups={groups} clearParams={clearParams} />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** "Clear all" for the authored rail header (renders nothing when inactive). */
+export function ClearFiltersButton() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const clearParams = ["sub", "brand", "price", "stock"];
+  const hasAny = clearParams.some((p) => searchParams.get(p));
+  if (!hasAny) return null;
+  return (
+    <button
+      onClick={() => {
+        const next = new URLSearchParams(searchParams.toString());
+        [...clearParams, "page"].forEach((p) => next.delete(p));
+        router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+      }}
+      className="text-xs font-semibold text-accent hover:text-accent-hover"
+    >
+      Clear all
+    </button>
+  );
+}
+
 /** Category-page adapter — keeps the existing `<FilterRail facets={…} />` call site. */
 export function FilterRail({ facets }: { facets: CategoryFacets }) {
   return <FacetRail groups={categoryGroups(facets)} clearParams={["sub", "brand", "price", "stock"]} />;
@@ -194,7 +249,7 @@ function FacetGroup({ title, children }: { title: string; children: React.ReactN
   );
 }
 
-function FacetCheckbox({ param, value, label, count }: { param: string; value: string; label: string; count: number }) {
+export function FacetCheckbox({ param, value, label, count }: { param: string; value: string; label: string; count: number }) {
   const { selected, toggle } = useFacetParam(param);
   const checked = selected.includes(value);
   return (

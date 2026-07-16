@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import type { NodeTree } from "@keenan/services/builder";
 import { BuilderTree, BuilderActionsProvider, type NativeComponents } from "@keenan/services/builder-react";
-import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
+import { FilterRail, FilterChips, SortSelect, FacetCheckbox, MobileFilterRail, ClearFiltersButton } from "@/components/category/FilterRail";
 import { ProductGridClient, type GridProduct } from "@/components/product/ProductGridClient";
 
 // ============================================================================
@@ -55,6 +55,17 @@ export function BuilderCategoryPage({
   const nativeComponents: NativeComponents = {
     // Granular sealed natives (the rich seed uses these; the authored grid of
     // ⬢ product-card instances renders straight from the tree).
+    // The smallest interactive leaves — everything around them is authored:
+    "facet-toggle": (props: Record<string, unknown>) => (
+      <FacetCheckbox
+        param={String(props.param ?? "")}
+        value={String(props.value ?? "")}
+        label={String(props.label ?? "")}
+        count={Number(props.count ?? 0)}
+      />
+    ),
+    "clear-filters": () => <ClearFiltersButton />,
+    "filter-rail-mobile": () => <MobileFilterRail facets={listing.facets as never} />,
     "filter-rail": () => <FilterRail facets={listing.facets as never} />,
     "filter-controls": () => (
       <div className="flex flex-wrap items-center gap-3">
