@@ -69,8 +69,10 @@ export function RegisterForm() {
             name="password"
             required
             minLength={8}
+            pattern="(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}"
+            title="At least 8 characters, one capital letter and one special character."
             className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
-            placeholder="At least 8 characters"
+            placeholder="8+ chars, 1 capital, 1 special character"
           />
         </div>
         <button

@@ -66,8 +66,10 @@ export function RegisterForm() {
             name="password"
             required
             minLength={8}
+            pattern="(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}"
+            title="At least 8 characters, one capital letter and one special character."
             className="mt-1 block w-full input"
-            placeholder="At least 8 characters"
+            placeholder="8+ chars, 1 capital, 1 special character"
           />
         </div>
         <button
