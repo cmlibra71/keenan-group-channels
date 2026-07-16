@@ -4,7 +4,7 @@ import { Search, Crown } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
-import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, drawEntryService, CHANNEL_ID } from "@/lib/store";
+import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, getHeaderNav, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 import { GstToggle } from "./GstToggle";
 import { MegaMenu } from "./MegaMenu";
@@ -28,10 +28,11 @@ export async function Header({
   // wrong loading the site"), and it re-runs on every refresh()
   // from a cart/quote mutation. Degrade gracefully (empty badge / nav) on a
   // transient DB failure instead of taking down the whole storefront.
-  const [cart, quote, megaMenu] = await Promise.all([
+  const [cart, quote, megaMenu, headerNav] = await Promise.all([
     getCart().catch(() => null),
     getQuote().catch(() => null),
     getMegaMenu().catch(() => ({ departments: [], featured: {} })),
+    getHeaderNav().catch(() => []),
   ]);
   const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   // QuoteService.getWithItems types its items loosely (Record<string,unknown>) unlike
@@ -73,9 +74,20 @@ export async function Header({
             </Link>
           )}
 
-          {/* Navigation (data-driven from channel categories) */}
+          {/* Navigation — portal-managed links (Storefront > Navigation) when
+              configured, else channel categories, else static fallbacks. */}
           <nav className="hidden md:flex items-center gap-6 lg:gap-8">
-            {navCategories.length > 0 ? (
+            {headerNav.length > 0 ? (
+              headerNav.map((item) => (
+                <Link
+                  key={item.href + item.label}
+                  href={item.href}
+                  className="text-sm font-medium text-zinc-600 hover:text-zinc-900 whitespace-nowrap"
+                >
+                  {item.label}
+                </Link>
+              ))
+            ) : navCategories.length > 0 ? (
               navCategories.map((cat) => (
                 <Link
                   key={cat.id}
