@@ -9,15 +9,16 @@ import { BuilderTree, BuilderActionsProvider } from "@keenan/services/builder-re
 // ============================================================================
 // A CONTENT page rendered from a node tree (Site Builder) — the generic,
 // product-free sibling of BuilderProductPage. Used by /pages/[slug] for
-// one-off pages (custom pages, contact, policies once they migrate). No
-// purchase provider — bindings see { page: { slug, title } } plus whatever
-// future contexts add. Cart/quote Actions are not wired here (no-op); internal
-// links navigate through next/link.
+// one-off pages AND the shared policy layout. The payload is composed by the
+// route via the SHARED composers (@keenan/services page-payloads) — the same
+// functions the portal designer samples with, so bindings resolve identically.
+// Cart/quote Actions are not wired here (no-op); internal links navigate
+// through next/link.
 // ============================================================================
 
 export function BuilderContentPage({
   tree,
-  page,
+  payload,
   namedStyles = {},
   jsFunctions,
   callResults,
@@ -25,7 +26,8 @@ export function BuilderContentPage({
   draft = false,
 }: {
   tree: NodeTree;
-  page: { slug: string; title: string };
+  /** Composed page payload ({ context, page } — composeContentPagePayload). */
+  payload: object;
   namedStyles?: Record<string, string[]>;
   jsFunctions?: Record<string, string>;
   callResults?: Record<string, unknown>;
@@ -37,7 +39,7 @@ export function BuilderContentPage({
     <BuilderActionsProvider handlers={{}} navigate={(to) => router.push(to)}>
       <BuilderTree
         tree={tree}
-        payload={{ page }}
+        payload={payload}
         namedStyles={namedStyles}
         jsFunctions={jsFunctions}
         callResults={callResults}
