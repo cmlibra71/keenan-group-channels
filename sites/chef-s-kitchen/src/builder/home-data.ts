@@ -31,6 +31,10 @@ export interface HomePathNeeds {
   clearance?: boolean;
   faq?: boolean;
   membership?: boolean;
+  /** home.prize.* / home.stats.* / home.plan.* — the interactive masters. */
+  prize?: boolean;
+  stats?: boolean;
+  plan?: boolean;
 }
 
 export async function loadHomeNativeData(
@@ -44,14 +48,16 @@ export async function loadHomeNativeData(
   const needClearance = keys.has("clearance-spotlight") || !!pathNeeds.clearance;
   const needFeatured = keys.has("featured-products") || !!pathNeeds.featured;
   const needFaq = keys.has("seo-faq") || !!pathNeeds.faq;
-  const needDraw = keys.has("draw-spotlight");
-  const needMembership = needHero || needStrip || needDraw || !!pathNeeds.membership;
+  const needDraw = keys.has("draw-spotlight") || !!pathNeeds.prize;
+  const needMembership =
+    needHero || needStrip || needDraw || !!pathNeeds.membership || !!pathNeeds.plan || !!pathNeeds.prize;
+  const needStats = needHero || !!pathNeeds.stats || keys.has("hero-side-panel");
 
   const [membership, siteConfig, counts, topCategories, megaMenu, brands, clearanceRes, featuredRes, memberPricingEnabled, seoFaq] =
     await Promise.all([
       needMembership ? getMembershipContext() : null,
       needHero ? getSiteConfig() : null,
-      needHero
+      needStats
         ? Promise.all([
             productChannelAssignmentService.countForChannel(CHANNEL_ID),
             productChannelAssignmentService.countBrandsForChannel(CHANNEL_ID),
@@ -199,6 +205,28 @@ export async function loadHomeNativeData(
     clearance: clearanceProducts as unknown as Record<string, unknown>[],
     membership: membership?.plan ? ({ ...membership.plan, planPrice: membership.planPrice } as Record<string, unknown>) : null,
     faq: (seoFaq as { faqs?: Record<string, unknown>[] } | null)?.faqs ?? null,
+    // Slices the interactive masters bind (hero-side-panel / membership-value-
+    // strip / draw-spotlight) — labels composed by composeHomePagePayload.
+    prize:
+      membership?.drawsEnabled && membership.featuredPrize
+        ? {
+            name: membership.featuredPrize.name,
+            image_url: membership.featuredPrize.imageUrl ?? "",
+            value: membership.featuredPrize.value,
+          }
+        : null,
+    drawDate: membership?.featuredDraw?.scheduled_at
+      ? new Date(membership.featuredDraw.scheduled_at).toISOString()
+      : null,
+    stats: { productCount: counts?.[0] ?? 0, brandCount: counts?.[1] ?? 0 },
+    plan:
+      membership?.subscriptionsEnabled && membership.plan
+        ? {
+            price: membership.planPrice,
+            billing_interval: membership.plan.billing_interval,
+            benefits: membership.planBenefits,
+          }
+        : null,
   };
 
   return { home, sections };

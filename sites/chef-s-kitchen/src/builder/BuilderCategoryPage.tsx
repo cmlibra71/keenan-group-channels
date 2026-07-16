@@ -2,10 +2,10 @@
 import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { NodeTree } from "@keenan/services/builder";
 import { BuilderTree, BuilderActionsProvider, type NativeComponents } from "@keenan/services/builder-react";
-import { FilterRail, FilterChips, SortSelect, FacetCheckbox, MobileFilterRail, ClearFiltersButton } from "@/components/category/FilterRail";
+import { FilterRail, FilterChips, SortSelect, FacetCheckbox, MobileFilterRail } from "@/components/category/FilterRail";
 import { ProductGridClient, type GridProduct } from "@/components/product/ProductGridClient";
 
 // ============================================================================
@@ -52,10 +52,44 @@ export function BuilderCategoryPage({
   draft?: boolean;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // App-tier Actions the interactive MASTERS run (facet-option's click →
+  // toggleFacet, clear-filters' click → clearFilters). Same URL semantics as
+  // the legacy FacetCheckbox/ClearFiltersButton: comma-list params, paging
+  // reset, replace without scroll.
+  const handlers = React.useMemo(
+    () => ({
+      toggleFacet: (args: Record<string, unknown>) => {
+        const param = String(args.param ?? "");
+        const value = String(args.value ?? "");
+        if (!param || !value) return { success: false, error: "Missing facet param/value" };
+        const next = new URLSearchParams(searchParams.toString());
+        const set = new Set(next.get(param)?.split(",").filter(Boolean) ?? []);
+        if (set.has(value)) set.delete(value);
+        else set.add(value);
+        if (set.size > 0) next.set(param, [...set].join(","));
+        else next.delete(param);
+        next.delete("page"); // filters reset pagination
+        router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+        return { success: true };
+      },
+      clearFilters: () => {
+        const next = new URLSearchParams(searchParams.toString());
+        ["sub", "brand", "price", "stock", "page"].forEach((p) => next.delete(p));
+        router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+        return { success: true };
+      },
+    }),
+    [router, pathname, searchParams]
+  );
+
   const nativeComponents: NativeComponents = {
-    // Granular sealed natives (the rich seed uses these; the authored grid of
-    // ⬢ product-card instances renders straight from the tree).
-    // The smallest interactive leaves — everything around them is authored:
+    // filter-rail / clear-filters / filter-drawer / facet-option are component
+    // MASTERS (drillable trees driven by the Actions above) — natives win over
+    // same-key masters, so they must NOT be registered here.
+    // Legacy sealed leaves kept for older published trees only:
     "facet-toggle": (props: Record<string, unknown>) => (
       <FacetCheckbox
         param={String(props.param ?? "")}
@@ -64,9 +98,7 @@ export function BuilderCategoryPage({
         count={Number(props.count ?? 0)}
       />
     ),
-    "clear-filters": () => <ClearFiltersButton />,
     "filter-rail-mobile": () => <MobileFilterRail facets={listing.facets as never} />,
-    "filter-rail": () => <FilterRail facets={listing.facets as never} />,
     "filter-controls": () => (
       <div className="flex flex-wrap items-center gap-3">
         <FilterChips facets={listing.facets as never} />
@@ -109,7 +141,7 @@ export function BuilderCategoryPage({
     ),
   };
   return (
-    <BuilderActionsProvider handlers={{}} navigate={(to) => router.push(to)}>
+    <BuilderActionsProvider handlers={handlers} navigate={(to) => router.push(to)}>
       <BuilderTree
         tree={tree}
         payload={payload}

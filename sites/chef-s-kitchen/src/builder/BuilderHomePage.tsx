@@ -7,13 +7,10 @@ import type { NodeTree } from "@keenan/services/builder";
 import { BuilderTree, BuilderActionsProvider, type NativeComponents } from "@keenan/services/builder-react";
 import { TrustBar } from "@/components/home/TrustBar";
 import { SeoFaq } from "@/components/home/SeoFaq";
-import { MembershipValueStrip } from "@/components/home/MembershipValueStrip";
-import { DrawSpotlight } from "@/components/home/DrawSpotlight";
 import { BrandShowcase } from "@/components/home/BrandShowcase";
 import { ClearanceSpotlight } from "@/components/home/ClearanceSpotlight";
 import {
   HomeHeroView,
-  HeroSidePanel,
   ShopByCategoryView,
   FeaturedProductsView,
   type HomeHeroData,
@@ -72,17 +69,9 @@ export function BuilderHomePage({
 }) {
   const router = useRouter();
   const nativeComponents: NativeComponents = {
-    // Granular hero side panel (the rich seed authors the copy panel itself).
-    "hero-side-panel": () =>
-      home.hero ? (
-        <HeroSidePanel
-          planBenefits={home.hero.planBenefits}
-          featuredPrize={home.hero.featuredPrize}
-          featuredDraw={home.hero.featuredDraw}
-          productCount={home.hero.productCount}
-          brandCount={home.hero.brandCount}
-        />
-      ) : null,
+    // hero-side-panel / membership-value-strip / draw-spotlight are component
+    // MASTERS now (they bind home.prize / home.stats / home.plan from the
+    // composer payload) — natives win over same-key masters, so no entries.
     "home-hero": () => (home.hero ? <HomeHeroView {...home.hero} /> : null),
     "trust-bar": () => <TrustBar />,
     "shop-by-category": () => (
@@ -92,14 +81,6 @@ export function BuilderHomePage({
         heading={home.shopByCategoryCopy.heading}
       />
     ),
-    "membership-value-strip": () =>
-      home.membershipStrip ? (
-        <MembershipValueStrip
-          planPrice={home.membershipStrip.planPrice}
-          billingInterval={home.membershipStrip.billingInterval}
-          benefits={home.membershipStrip.benefits}
-        />
-      ) : null,
     "brand-showcase": () => <BrandShowcase brands={home.brands as never} />,
     "clearance-spotlight": () =>
       home.clearance ? (
@@ -112,10 +93,6 @@ export function BuilderHomePage({
       ) : null,
     "featured-products": () => (home.featured ? <FeaturedProductsView {...home.featured} /> : null),
     "seo-faq": () => (home.seoFaq ? <SeoFaq {...home.seoFaq} /> : null),
-    "draw-spotlight": () =>
-      home.drawSpotlight?.prize ? (
-        <DrawSpotlight prize={home.drawSpotlight.prize as never} draw={home.drawSpotlight.draw as never} />
-      ) : null,
   };
   return (
     <BuilderActionsProvider handlers={{}} navigate={(to) => router.push(to)}>

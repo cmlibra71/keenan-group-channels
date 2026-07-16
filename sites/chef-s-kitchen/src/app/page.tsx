@@ -47,6 +47,9 @@ export default async function HomePage() {
         clearance: uses("home.clearance"),
         faq: uses("home.faq"),
         membership: uses("home.membership"),
+        prize: uses("home.prize"),
+        stats: uses("home.stats"),
+        plan: uses("home.plan"),
       }),
       getMemberContext().catch(() => null),
     ]);

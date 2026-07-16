@@ -171,6 +171,14 @@ export default async function CategoryPage({
         nextPageHref,
         pricing: pricing as { memberPriceMap?: Record<number, number>; isMember?: boolean; planPrice?: string | null },
         breadcrumbs: breadcrumbs as { id: number; name: string; slug: string }[],
+        // Current URL selections → facet options gain `selected` (the facet-
+        // option master renders its checked state from it).
+        selections: {
+          sub: sp.sub?.split(",").filter(Boolean) ?? [],
+          brand: sp.brand?.split(",").filter(Boolean) ?? [],
+          price: sp.price?.split(",").filter(Boolean) ?? [],
+          stock: sp.stock?.split(",").filter(Boolean) ?? [],
+        },
         customer: {
           isMember: memberCtx?.isMember ?? false,
           loggedIn: (memberCtx?.accountId ?? null) != null || (memberCtx?.isMember ?? false),
