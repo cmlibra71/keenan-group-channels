@@ -64,7 +64,8 @@ const DEFAULT_FOOTER: Required<Omit<FooterConfig, "membership" | "columns">> &
       { label: "Warranty", href: "/pages/warranty" },
     ],
   },
-  abn: "ABN 33 669 144 629",
+  // No contact info pre-launch: ABN/phone render only when set via the footer config.
+  abn: "",
 };
 
 function Column({ column }: { column: FooterColumn }) {
@@ -139,8 +140,12 @@ export function Footer({
           <div className="flex flex-col items-center justify-between gap-2 text-xs text-white/50 sm:flex-row">
             <p>&copy; {new Date().getFullYear()} {storeName}. All rights reserved.</p>
             <p className="flex items-center gap-3">
-              <span>{abn}</span>
-              <span aria-hidden>·</span>
+              {abn && (
+                <>
+                  <span>{abn}</span>
+                  <span aria-hidden>·</span>
+                </>
+              )}
               <Link href="/pages/privacy" className="transition-colors hover:text-white">Privacy</Link>
               <span aria-hidden>·</span>
               <Link href="/pages/terms" className="transition-colors hover:text-white">Terms</Link>
