@@ -1,4 +1,5 @@
-import { draftMode } from "next/headers";
+import { draftMode, cookies } from "next/headers";
+import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
 import { getCmsPage, getFeatureFlag, getNamedStyles, getComponents, getChannelSetting, CHANNEL_ID } from "@/lib/store";
 import { getMemberContext } from "@/lib/member";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
@@ -53,6 +54,11 @@ export default async function HomePage() {
       }),
       getMemberContext().catch(() => null),
     ]);
+    const [pricesIncludeTax, cookieStore] = await Promise.all([
+      getFeatureFlag("prices_include_tax"),
+      cookies(),
+    ]);
+    const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
     const payload = composeHomePagePayload({
       channelId: CHANNEL_ID,
       sections,
@@ -60,6 +66,7 @@ export default async function HomePage() {
         isMember: memberCtx?.isMember ?? false,
         loggedIn: (memberCtx?.accountId ?? null) != null || (memberCtx?.isMember ?? false),
       },
+      gst: { inclusive: gstInclusive, pricesIncludeTax },
       draft,
     });
     const namedStyles = await getNamedStyles().catch(() => ({}));

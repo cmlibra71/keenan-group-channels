@@ -8,7 +8,9 @@ import { BuilderTree, BuilderActionsProvider, type NativeComponents } from "@kee
 import { FilterRail, FilterChips, SortSelect, FacetCheckbox, MobileFilterRail } from "@/components/category/FilterRail";
 import { ProductGridClient, type GridProduct } from "@/components/product/ProductGridClient";
 import { Ga4ViewItemList } from "@/components/analytics/Ga4ViewItemList";
-import { masterLeafNatives, selectItemHandler } from "./master-leaves";
+import { masterLeafNatives, selectItemHandler, useAddToCartHandler, useAddToQuoteHandler } from "./master-leaves";
+import { useGst } from "@/lib/gst";
+import { overlayLiveGst } from "./live-gst";
 
 // ============================================================================
 // The category page rendered from the 'category_layout' node template. The
@@ -56,13 +58,24 @@ export function BuilderCategoryPage({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  // Overlay the live GST toggle onto context.gst so the price-block masters in
+  // the card grid re-render ex/inc labels the instant the shopper flips it.
+  const { inclusive, pricesIncludeTax } = useGst();
+  const livePayload = React.useMemo(
+    () => overlayLiveGst(payload, inclusive, pricesIncludeTax),
+    [payload, inclusive, pricesIncludeTax]
+  );
 
   // App-tier Actions the interactive MASTERS run (facet-option's click →
   // toggleFacet, clear-filters' click → clearFilters). Same URL semantics as
   // the legacy FacetCheckbox/ClearFiltersButton: comma-list params, paging
   // reset, replace without scroll.
+  const addToCart = useAddToCartHandler();
+  const addToQuote = useAddToQuoteHandler();
   const handlers = React.useMemo(
     () => ({
+      addToCart,
+      addToQuote,
       toggleFacet: (args: Record<string, unknown>) => {
         const param = String(args.param ?? "");
         const value = String(args.value ?? "");
@@ -83,14 +96,24 @@ export function BuilderCategoryPage({
         router.replace(`${pathname}?${next.toString()}`, { scroll: false });
         return { success: true };
       },
+      // filter-controls master's sort <select> → ?sort= (same as SortSelect).
+      setSort: (args: Record<string, unknown>) => {
+        const value = String(args.value ?? "");
+        const next = new URLSearchParams(searchParams.toString());
+        if (value === "relevance") next.delete("sort");
+        else next.set("sort", value);
+        next.delete("page");
+        router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+        return { success: true };
+      },
       selectItem: selectItemHandler(listing.categorySlug, listing.categoryName),
     }),
-    [router, pathname, searchParams, listing.categorySlug, listing.categoryName]
+    [addToCart, addToQuote, router, pathname, searchParams, listing.categorySlug, listing.categoryName]
   );
 
   const nativeComponents: NativeComponents = {
     // Sealed leaves the product-card master places:
-    ...masterLeafNatives(listing.pricing),
+    ...masterLeafNatives(),
     // filter-rail / clear-filters / filter-drawer / facet-option are component
     // MASTERS (drillable trees driven by the Actions above) — natives win over
     // same-key masters, so they must NOT be registered here.
@@ -104,12 +127,8 @@ export function BuilderCategoryPage({
       />
     ),
     "filter-rail-mobile": () => <MobileFilterRail facets={listing.facets as never} />,
-    "filter-controls": () => (
-      <div className="flex flex-wrap items-center gap-3">
-        <FilterChips facets={listing.facets as never} />
-        <SortSelect />
-      </div>
-    ),
+    // filter-controls is a component MASTER now (FacetChips + SortSelect
+    // exploded) — natives win over same-key masters, so it must NOT be here.
     // Legacy whole-listing native (early trees) — kept for compatibility.
     "category-listing": () => (
       <div className="flex gap-6">
@@ -161,7 +180,7 @@ export function BuilderCategoryPage({
       />
       <BuilderTree
         tree={tree}
-        payload={payload}
+        payload={livePayload}
         namedStyles={namedStyles}
         jsFunctions={jsFunctions}
         callResults={callResults}

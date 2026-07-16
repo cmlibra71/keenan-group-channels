@@ -7,7 +7,9 @@ import type { NodeTree } from "@keenan/services/builder";
 import { BuilderTree, BuilderActionsProvider, type NativeComponents } from "@keenan/services/builder-react";
 import { ProductGridClient, type GridProduct } from "@/components/product/ProductGridClient";
 import { Ga4ViewItemList } from "@/components/analytics/Ga4ViewItemList";
-import { masterLeafNatives, selectItemHandler } from "./master-leaves";
+import { masterLeafNatives, selectItemHandler, useAddToCartHandler, useAddToQuoteHandler } from "./master-leaves";
+import { useGst } from "@/lib/gst";
+import { overlayLiveGst } from "./live-gst";
 
 // ============================================================================
 // The brand page rendered from the 'brand' node template. The route owns the
@@ -43,9 +45,16 @@ export function BuilderBrandPage({
   draft?: boolean;
 }) {
   const router = useRouter();
+  const addToCart = useAddToCartHandler();
+  const addToQuote = useAddToQuoteHandler();
+  const { inclusive, pricesIncludeTax } = useGst();
+  const livePayload = React.useMemo(
+    () => overlayLiveGst(payload, inclusive, pricesIncludeTax),
+    [payload, inclusive, pricesIncludeTax]
+  );
   const nativeComponents: NativeComponents = {
     // Sealed leaves the product-card master places:
-    ...masterLeafNatives(pricing),
+    ...masterLeafNatives(),
     "brand-products": () => (
       <div>
         <h2 className="text-lg font-semibold text-ink-900 mb-4">Products</h2>
@@ -61,7 +70,7 @@ export function BuilderBrandPage({
   };
   return (
     <BuilderActionsProvider
-      handlers={{ selectItem: selectItemHandler("brand_products", "Brand Products") }}
+      handlers={{ selectItem: selectItemHandler("brand_products", "Brand Products"), addToCart, addToQuote }}
       navigate={(to) => router.push(to)}
     >
       <Ga4ViewItemList
@@ -78,7 +87,7 @@ export function BuilderBrandPage({
       />
       <BuilderTree
         tree={tree}
-        payload={payload}
+        payload={livePayload}
         namedStyles={namedStyles}
         jsFunctions={jsFunctions}
         callResults={callResults}

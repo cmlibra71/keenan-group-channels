@@ -17,7 +17,9 @@ import {
   type CategoryTile,
 } from "./home-natives";
 import type { GridProduct } from "@/components/product/ProductGridClient";
-import { masterLeafNatives, selectItemHandler } from "./master-leaves";
+import { masterLeafNatives, selectItemHandler, useAddToCartHandler, useAddToQuoteHandler } from "./master-leaves";
+import { useGst } from "@/lib/gst";
+import { overlayLiveGst } from "./live-gst";
 
 // ============================================================================
 // The homepage rendered from the 'home' node doc. All nine legacy sections are
@@ -69,11 +71,17 @@ export function BuilderHomePage({
   draft?: boolean;
 }) {
   const router = useRouter();
-  const leafPricing = home.featured?.pricing ?? home.clearance?.pricing ?? null;
+  const addToCart = useAddToCartHandler();
+  const addToQuote = useAddToQuoteHandler();
+  const { inclusive, pricesIncludeTax } = useGst();
+  const livePayload = React.useMemo(
+    () => overlayLiveGst(payload, inclusive, pricesIncludeTax),
+    [payload, inclusive, pricesIncludeTax]
+  );
   const nativeComponents: NativeComponents = {
-    // Sealed leaves the card/panel masters place (price-block, CTAs, the
-    // count-up stats banner):
-    ...masterLeafNatives(leafPricing),
+    // Sealed leaves the card/panel masters place (CTAs + the count-up stats
+    // banner; price-block is a component master reading context.gst):
+    ...masterLeafNatives(),
     // hero-side-panel / membership-value-strip / draw-spotlight are component
     // MASTERS now (they bind home.prize / home.stats / home.plan from the
     // composer payload) — natives win over same-key masters, so no entries.
@@ -100,10 +108,10 @@ export function BuilderHomePage({
     "seo-faq": () => (home.seoFaq ? <SeoFaq {...home.seoFaq} /> : null),
   };
   return (
-    <BuilderActionsProvider handlers={{ selectItem: selectItemHandler() }} navigate={(to) => router.push(to)}>
+    <BuilderActionsProvider handlers={{ selectItem: selectItemHandler(), addToCart, addToQuote }} navigate={(to) => router.push(to)}>
       <BuilderTree
         tree={tree}
-        payload={payload}
+        payload={livePayload}
         namedStyles={namedStyles}
         jsFunctions={jsFunctions}
         callResults={callResults}

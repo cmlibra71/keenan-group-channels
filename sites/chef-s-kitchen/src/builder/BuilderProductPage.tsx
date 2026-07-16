@@ -15,9 +15,9 @@ import {
 import { addToCart } from "@/lib/actions/cart";
 import { addToQuote } from "@/lib/actions/quote";
 import { useGst } from "@/lib/gst";
+import { overlayLiveGst } from "./live-gst";
 import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
 import { ProductImageGallery, type ProductImage as GalleryImage } from "@/components/product/ProductImageGallery";
-import { BackButton } from "@/components/ui/BackButton";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { BuilderTree, type NativeComponents } from "@keenan/services/builder-react";
 import { BuilderActionsProvider } from "@keenan/services/builder-react";
@@ -79,6 +79,12 @@ function ActionsBridge({
     addToQuote: countingAddToQuote,
   });
   const scope = useProductPageScope(payload, { inclusive, pricesIncludeTax });
+  // Overlay the live GST toggle onto context.gst so any card-rail price-block
+  // masters (related products) resolve ex/inc labels from the live state.
+  const livePayload = React.useMemo(
+    () => overlayLiveGst(payload, inclusive, pricesIncludeTax),
+    [payload, inclusive, pricesIncludeTax]
+  );
 
   // Coded (non-exploded) components slotted in by key — the gallery keeps its
   // real zoom/pan/thumbnail behaviour. Variant images that are relative Zoey
@@ -95,16 +101,26 @@ function ActionsBridge({
         variantImageUrl={variantImg}
       />
     ),
-    "back-to-products": () => (
-      <BackButton fallbackHref="/products" fallbackLabel="Back to Products" className="mb-6" />
-    ),
   };
 
+  // goBack drives the exploded back-to-products master's click Action — mirrors
+  // the old BackButton native (history-back with a /products fallback).
+  const actionHandlers = React.useMemo(
+    () => ({
+      ...handlers,
+      goBack: (args?: Record<string, unknown>) => {
+        if (window.history.length > 1) router.back();
+        else router.push(String(args?.fallbackHref ?? "/products"));
+      },
+    }),
+    [handlers, router]
+  );
+
   return (
-    <BuilderActionsProvider handlers={handlers} navigate={(to) => router.push(to)}>
+    <BuilderActionsProvider handlers={actionHandlers} navigate={(to) => router.push(to)}>
       <BuilderTree
         tree={tree}
-        payload={payload}
+        payload={livePayload}
         namedStyles={namedStyles}
         jsFunctions={jsFunctions}
         callResults={callResults}

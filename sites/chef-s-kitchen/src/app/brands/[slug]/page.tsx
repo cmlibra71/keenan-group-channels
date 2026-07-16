@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { draftMode } from "next/headers";
+import { draftMode, cookies } from "next/headers";
+import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { getBrandBySlug, getProducts, getFeatureFlag, getCmsPage, getNamedStyles, getComponents, getChannelSetting, CHANNEL_ID } from "@/lib/store";
@@ -59,6 +60,11 @@ export default async function BrandPage({
   if (nodeTree && ((await getFeatureFlag("node_brand_template_enabled")) || draft)) {
     const scoped = (await applyAccountPrices(await applyCatalogScope(products))) as unknown as GridProduct[];
     const memberCtx = await getMemberContext().catch(() => null);
+    const [pricesIncludeTax, cookieStore] = await Promise.all([
+      getFeatureFlag("prices_include_tax"),
+      cookies(),
+    ]);
+    const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
     const payload = composeBrandPagePayload({
       channelId: CHANNEL_ID,
       brand: brand as unknown as Record<string, unknown>,
@@ -69,6 +75,7 @@ export default async function BrandPage({
         isMember: memberCtx?.isMember ?? false,
         loggedIn: (memberCtx?.accountId ?? null) != null || (memberCtx?.isMember ?? false),
       },
+      gst: { inclusive: gstInclusive, pricesIncludeTax },
       draft,
     });
     const namedStyles = await getNamedStyles().catch(() => ({}));

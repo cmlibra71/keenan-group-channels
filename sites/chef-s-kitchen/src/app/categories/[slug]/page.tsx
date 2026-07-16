@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
-import { draftMode } from "next/headers";
+import { draftMode, cookies } from "next/headers";
+import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
@@ -158,6 +159,14 @@ export default async function CategoryPage({
     if (nodeTree && ((await getFeatureFlag("node_category_template_enabled")) || draft)) {
       const scoped = (await applyAccountPrices(await applyCatalogScope(products))) as unknown as GridProduct[];
       const memberCtx = await getMemberContext().catch(() => null);
+      // GST facts for the price-block masters: the composer emits both ex/inc
+      // labels; the SSR cookie sets the first-paint choice (the wrapper overlays
+      // the live toggle thereafter).
+      const [pricesIncludeTax, cookieStore] = await Promise.all([
+        getFeatureFlag("prices_include_tax"),
+        cookies(),
+      ]);
+      const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
       const payload = composeCategoryPagePayload({
         channelId: CHANNEL_ID,
         category: category as unknown as Record<string, unknown>,
@@ -169,6 +178,7 @@ export default async function CategoryPage({
         page,
         hasMore,
         nextPageHref,
+        sort,
         pricing: pricing as { memberPriceMap?: Record<number, number>; isMember?: boolean; planPrice?: string | null },
         breadcrumbs: breadcrumbs as { id: number; name: string; slug: string }[],
         // Current URL selections → facet options gain `selected` (the facet-
@@ -183,6 +193,7 @@ export default async function CategoryPage({
           isMember: memberCtx?.isMember ?? false,
           loggedIn: (memberCtx?.accountId ?? null) != null || (memberCtx?.isMember ?? false),
         },
+        gst: { inclusive: gstInclusive, pricesIncludeTax },
         draft,
       });
       const namedStyles = await getNamedStyles().catch(() => ({}));
