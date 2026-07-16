@@ -14,9 +14,14 @@ import {
   getCmsTemplate,
 } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
-import { getListingPricing } from "@/lib/member";
+import { getListingPricing, getMemberContext, applyAccountPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
-import { assertCategoryVisible } from "@/lib/catalog-scope";
+import { assertCategoryVisible, applyCatalogScope } from "@/lib/catalog-scope";
+import { getNamedStyles, getComponents, CHANNEL_ID } from "@/lib/store";
+import { composeCategoryPagePayload, loadJsSandbox, computeCallResults, type NodeTree } from "@keenan/services/builder";
+import { cmsFunctionService } from "@keenan/services/services";
+import { BuilderCategoryPage } from "@/builder/BuilderCategoryPage";
+import type { GridProduct } from "@/components/product/ProductGridClient";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
 import { RichContent } from "@/components/content/RichContent";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
@@ -139,6 +144,75 @@ export default async function CategoryPage({
     next.set("page", String(page + 1));
     return `/categories/${slug}?${next.toString()}`;
   })();
+
+  // ═══ Site Builder node path — the 'category_layout' template authored in
+  // the node designer, gated by node_category_template_enabled (or draft mode
+  // with an authored draft). The route stays data owner: the sealed
+  // "category-listing" native gets the SAME scoped/priced listing the native
+  // page renders; bindables come from the SHARED composeCategoryPagePayload. ═══
+  {
+    const catTemplate = (await getCmsTemplate("category_layout", draft).catch(() => null)) as {
+      node_tree?: unknown;
+    } | null;
+    const nodeTree = (catTemplate?.node_tree as NodeTree | null) ?? null;
+    if (nodeTree && ((await getFeatureFlag("node_category_template_enabled")) || draft)) {
+      const scoped = (await applyAccountPrices(await applyCatalogScope(products))) as unknown as GridProduct[];
+      const memberCtx = await getMemberContext().catch(() => null);
+      const payload = composeCategoryPagePayload({
+        channelId: CHANNEL_ID,
+        category: category as unknown as Record<string, unknown>,
+        listing: {
+          products: scoped as unknown as Record<string, unknown>[],
+          total,
+          facets,
+        },
+        page,
+        hasMore,
+        breadcrumbs: breadcrumbs as { id: number; name: string; slug: string }[],
+        customer: {
+          isMember: memberCtx?.isMember ?? false,
+          loggedIn: (memberCtx?.accountId ?? null) != null || (memberCtx?.isMember ?? false),
+        },
+        draft,
+      });
+      const namedStyles = await getNamedStyles().catch(() => ({}));
+      const components = (await getComponents().catch(() => ({}))) as Record<string, NodeTree>;
+      const builderCss =
+        ((await getChannelSetting("builder_published_css").catch(() => null)) as { css?: string } | null)?.css ?? "";
+      const jsFunctions = await cmsFunctionService.enabledMapForChannel(CHANNEL_ID).catch(() => ({}) as Record<string, string>);
+      let callResults: Record<string, unknown> = {};
+      if (Object.keys(jsFunctions).length > 0) {
+        await loadJsSandbox(jsFunctions).catch(() => null);
+        callResults = await computeCallResults(nodeTree.root, jsFunctions, payload as object).catch(() => ({}));
+      }
+      return (
+        <>
+          {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
+          <BuilderCategoryPage
+            tree={nodeTree}
+            payload={payload}
+            listing={{
+              products: scoped,
+              total,
+              shown,
+              facets,
+              hasMore,
+              nextPageHref,
+              memberPricingAvailable: memberPricingEnabled,
+              pricing: pricing as { memberPriceMap?: Record<number, number>; isMember?: boolean; planPrice?: string | null },
+              categoryName: category.name,
+              categorySlug: category.slug ?? slug,
+            }}
+            namedStyles={namedStyles}
+            components={components}
+            jsFunctions={jsFunctions}
+            callResults={callResults}
+            draft={draft}
+          />
+        </>
+      );
+    }
+  }
 
   // ═══ CMS category-layout TEMPLATE path (kill switch: flag off → legacy) ═══
   // The whole page as a block document (category_header / category_slot /

@@ -51,7 +51,7 @@ import { ClearanceSpotlight } from "@/components/home/ClearanceSpotlight";
 // ---------------------------------------------------------------------------
 // Shared membership/draw data (cached underneath, so per-block fetch is cheap).
 // ---------------------------------------------------------------------------
-async function getMembershipContext() {
+export async function getMembershipContext() {
   const [subscriptionsEnabled, drawsEnabled] = await Promise.all([
     getFeatureFlag("subscriptions_enabled"),
     getFeatureFlag("draws_enabled"),
@@ -95,7 +95,7 @@ const regDefault = (type: string, key: string): string => {
   const d = BLOCK_REGISTRY[type]?.defaultProps?.[key];
   return typeof d === "string" ? d : "";
 };
-const copy = (type: string, key: string, props: Record<string, unknown>): string =>
+export const copy = (type: string, key: string, props: Record<string, unknown>): string =>
   str(props[key], regDefault(type, key));
 
 

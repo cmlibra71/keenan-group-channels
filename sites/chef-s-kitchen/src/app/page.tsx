@@ -1,7 +1,18 @@
 import { draftMode } from "next/headers";
-import { getCmsPage } from "@/lib/store";
+import { getCmsPage, getFeatureFlag, getNamedStyles, getComponents, getChannelSetting, CHANNEL_ID } from "@/lib/store";
+import { getMemberContext } from "@/lib/member";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { DEFAULT_HOME_BLOCKS } from "@/blocks/home-blocks";
+import {
+  composeHomePagePayload,
+  walkTree,
+  loadJsSandbox,
+  computeCallResults,
+  type NodeTree,
+} from "@keenan/services/builder";
+import { cmsFunctionService } from "@keenan/services/services";
+import { BuilderHomePage } from "@/builder/BuilderHomePage";
+import { loadHomeNativeData } from "@/builder/home-data";
 
 // The homepage is composed of CMS section blocks. Content/order is editable via
 // the `home` CMS page; with none set it falls back to DEFAULT_HOME_BLOCKS — the
@@ -9,6 +20,57 @@ import { DEFAULT_HOME_BLOCKS } from "@/blocks/home-blocks";
 export default async function HomePage() {
   const { isEnabled: draft } = await draftMode();
   const home = await getCmsPage("home", draft);
+
+  // ═══ Site Builder node path — the home doc authored in the node designer,
+  // gated by node_home_enabled (or draft mode with an authored draft). The
+  // nine legacy sections are sealed natives; the route prefetches ONLY the
+  // data the authored tree uses (walkTree over componentKeys). ═══
+  const nodeTree = ((home as { node_tree?: unknown } | null)?.node_tree as NodeTree | null) ?? null;
+  if (nodeTree && ((await getFeatureFlag("node_home_enabled")) || draft)) {
+    const keys = new Set<string>();
+    walkTree(nodeTree.root, (n) => {
+      if (n.kind === "component") keys.add(n.componentKey);
+    });
+    const [{ home: homeData, sections }, memberCtx] = await Promise.all([
+      loadHomeNativeData(keys),
+      getMemberContext().catch(() => null),
+    ]);
+    const payload = composeHomePagePayload({
+      channelId: CHANNEL_ID,
+      sections,
+      customer: {
+        isMember: memberCtx?.isMember ?? false,
+        loggedIn: (memberCtx?.accountId ?? null) != null || (memberCtx?.isMember ?? false),
+      },
+      draft,
+    });
+    const namedStyles = await getNamedStyles().catch(() => ({}));
+    const components = (await getComponents().catch(() => ({}))) as Record<string, NodeTree>;
+    const builderCss =
+      ((await getChannelSetting("builder_published_css").catch(() => null)) as { css?: string } | null)?.css ?? "";
+    const jsFunctions = await cmsFunctionService.enabledMapForChannel(CHANNEL_ID).catch(() => ({}) as Record<string, string>);
+    let callResults: Record<string, unknown> = {};
+    if (Object.keys(jsFunctions).length > 0) {
+      await loadJsSandbox(jsFunctions).catch(() => null);
+      callResults = await computeCallResults(nodeTree.root, jsFunctions, payload as object).catch(() => ({}));
+    }
+    return (
+      <>
+        {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
+        <BuilderHomePage
+          tree={nodeTree}
+          payload={payload}
+          home={homeData}
+          namedStyles={namedStyles}
+          components={components}
+          jsFunctions={jsFunctions}
+          callResults={callResults}
+          draft={draft}
+        />
+      </>
+    );
+  }
+
   const blocks: RenderedBlock[] =
     home && Array.isArray(home.blocks) && home.blocks.length > 0
       ? (home.blocks as unknown as RenderedBlock[])
