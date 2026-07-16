@@ -23,18 +23,29 @@ import type { HomeSectionsInput } from "@keenan/services/builder";
 // identical data. Also returns the composer-ready `sections` for bindables.
 // ============================================================================
 
+export interface HomePathNeeds {
+  hero?: boolean;
+  cats?: boolean;
+  brands?: boolean;
+  featured?: boolean;
+  clearance?: boolean;
+  faq?: boolean;
+  membership?: boolean;
+}
+
 export async function loadHomeNativeData(
-  keys: Set<string>
+  keys: Set<string>,
+  pathNeeds: HomePathNeeds = {}
 ): Promise<{ home: HomeNativeData; sections: HomeSectionsInput }> {
-  const needHero = keys.has("home-hero") || keys.has("hero-side-panel");
-  const needCats = keys.has("shop-by-category");
-  const needStrip = keys.has("membership-value-strip");
-  const needBrands = keys.has("brand-showcase");
-  const needClearance = keys.has("clearance-spotlight");
-  const needFeatured = keys.has("featured-products");
-  const needFaq = keys.has("seo-faq");
+  const needHero = keys.has("home-hero") || keys.has("hero-side-panel") || !!pathNeeds.hero;
+  const needCats = keys.has("shop-by-category") || !!pathNeeds.cats;
+  const needStrip = keys.has("membership-value-strip") || !!pathNeeds.membership;
+  const needBrands = keys.has("brand-showcase") || !!pathNeeds.brands;
+  const needClearance = keys.has("clearance-spotlight") || !!pathNeeds.clearance;
+  const needFeatured = keys.has("featured-products") || !!pathNeeds.featured;
+  const needFaq = keys.has("seo-faq") || !!pathNeeds.faq;
   const needDraw = keys.has("draw-spotlight");
-  const needMembership = needHero || needStrip || needDraw;
+  const needMembership = needHero || needStrip || needDraw || !!pathNeeds.membership;
 
   const [membership, siteConfig, counts, topCategories, megaMenu, brands, clearanceRes, featuredRes, memberPricingEnabled, seoFaq] =
     await Promise.all([

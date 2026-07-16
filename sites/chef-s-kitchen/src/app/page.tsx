@@ -6,6 +6,7 @@ import { DEFAULT_HOME_BLOCKS } from "@/blocks/home-blocks";
 import {
   composeHomePagePayload,
   walkTree,
+  collectBindingPaths,
   loadJsSandbox,
   computeCallResults,
   type NodeTree,
@@ -31,8 +32,22 @@ export default async function HomePage() {
     walkTree(nodeTree.root, (n) => {
       if (n.kind === "component") keys.add(n.componentKey);
     });
+    // Authored sections reference data by BINDING (repeat over home.featured,
+    // hero copy bound to home.hero.*) — those needs are invisible to the
+    // componentKey scan, so union in the tree's binding paths.
+    const paths = collectBindingPaths(nodeTree.root);
+    const uses = (prefix: string) =>
+      [...paths].some((x) => x === prefix || x.startsWith(`${prefix}.`) || x.startsWith(`${prefix}[`));
     const [{ home: homeData, sections }, memberCtx] = await Promise.all([
-      loadHomeNativeData(keys),
+      loadHomeNativeData(keys, {
+        hero: uses("home.hero"),
+        cats: uses("home.topCategories"),
+        brands: uses("home.brands"),
+        featured: uses("home.featured"),
+        clearance: uses("home.clearance"),
+        faq: uses("home.faq"),
+        membership: uses("home.membership"),
+      }),
       getMemberContext().catch(() => null),
     ]);
     const payload = composeHomePagePayload({
