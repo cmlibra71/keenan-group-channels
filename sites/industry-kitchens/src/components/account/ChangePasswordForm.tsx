@@ -39,10 +39,12 @@ export function ChangePasswordForm() {
             name="password"
             required
             minLength={8}
+            pattern="(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}"
+            title="At least 8 characters, one capital letter and one special character."
             autoComplete="new-password"
             className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
           />
-          <p className="mt-1 text-xs text-zinc-400">At least 8 characters.</p>
+          <p className="mt-1 text-xs text-zinc-400">At least 8 characters, one capital letter and one special character.</p>
         </div>
         <div>
           <label htmlFor="confirmPassword" className="block text-sm font-medium text-zinc-700">

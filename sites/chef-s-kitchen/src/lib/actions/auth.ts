@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { contactService, CHANNEL_ID } from "@/lib/store";
 import { setSession, clearSession } from "@/lib/auth";
-import { verifyPassword } from "@/lib/password";
+import { verifyPassword, validatePasswordStrength } from "@/lib/password";
 import { createAccountlessContact, EmailTakenError, type LoginCandidate } from "@/lib/contact-auth";
 // Shared login throttle so the form login and the account-panel login share ONE keyspace.
 import { tooManyAttempts, recordFailure } from "@/lib/login-throttle";
@@ -65,8 +65,9 @@ export async function register(
     return { error: "All fields are required." };
   }
 
-  if (password.length < 8) {
-    return { error: "Password must be at least 8 characters." };
+  const weak = validatePasswordStrength(password);
+  if (weak) {
+    return { error: weak };
   }
 
   // Neutral response — do NOT confirm that an account with this email exists

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash, randomBytes, scryptSync } from "node:crypto";
-import { hashPassword, verifyPassword } from "./password.ts";
+import { hashPassword, verifyPassword, validatePasswordStrength } from "./password.ts";
 
 // password.ts is a thin re-export of @keenan/services verifyStoredPassword /
 // hashPasswordForStorage — these tests exercise all three stored-hash formats
@@ -46,4 +46,29 @@ test("legacy unsalted SHA-256 verifies and flags needsRehash", async () => {
   const legacy = createHash("sha256").update("legacypw").digest("hex");
   assert.deepEqual(await verifyPassword("legacypw", legacy), { valid: true, needsRehash: true });
   assert.deepEqual(await verifyPassword("nope", legacy), { valid: false, needsRehash: false });
+});
+
+test("validatePasswordStrength accepts 8+ chars with a capital and a special char", () => {
+  assert.equal(validatePasswordStrength("Passw0rd!"), null);
+  assert.equal(validatePasswordStrength("Aardvark#"), null);
+});
+
+test("validatePasswordStrength rejects too-short passwords", () => {
+  assert.match(validatePasswordStrength("Ab!") ?? "", /at least 8 characters/i);
+  assert.match(validatePasswordStrength("") ?? "", /at least 8 characters/i);
+});
+
+test("validatePasswordStrength rejects a password with no capital letter", () => {
+  // 8+ chars and a special char, but all lowercase.
+  assert.match(validatePasswordStrength("aaaaaaaa!") ?? "", /capital letter/i);
+});
+
+test("validatePasswordStrength rejects a password with no special character", () => {
+  // 8+ chars with a capital, but alphanumeric only.
+  assert.match(validatePasswordStrength("Aaaaaaaa1") ?? "", /special character/i);
+});
+
+test("validatePasswordStrength rejects the card's example weak password", () => {
+  // "aaaaaaaa" — the all-lowercase 8-char password that used to pass.
+  assert.notEqual(validatePasswordStrength("aaaaaaaa"), null);
 });

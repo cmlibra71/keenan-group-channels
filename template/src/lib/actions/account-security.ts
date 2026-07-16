@@ -8,7 +8,7 @@ import {
   CHANNEL_ID,
 } from "@/lib/store";
 import { getSession, setSession } from "@/lib/auth";
-import { verifyPassword } from "@/lib/password";
+import { verifyPassword, validatePasswordStrength } from "@/lib/password";
 import { mergeContactMetafields } from "@/lib/contact-auth";
 import { siteBaseUrl } from "@/lib/seo";
 import {
@@ -35,8 +35,6 @@ import {
 //   - Tokens are single-use, hashed at rest, 30-min TTL (CustomerAuthTokenService).
 //   - Tokens are consumed on explicit submit, never on GET page load, so email
 //     link-scanners can't burn them.
-
-const MIN_PASSWORD_LENGTH = 8;
 
 type ActionResult = { error?: string; success?: boolean; message?: string };
 
@@ -152,8 +150,9 @@ export async function resetPassword(
   const confirm = formData.get("confirmPassword") as string;
 
   if (!token) return { error: "This reset link is invalid or has expired. Please request a new one." };
-  if (!password || password.length < MIN_PASSWORD_LENGTH) {
-    return { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` };
+  const weak = validatePasswordStrength(password);
+  if (weak) {
+    return { error: weak };
   }
   if (password !== confirm) {
     return { error: "Passwords do not match." };
@@ -205,8 +204,9 @@ export async function changePassword(
   const confirm = formData.get("confirmPassword") as string;
 
   if (!current) return { error: "Please enter your current password." };
-  if (!password || password.length < MIN_PASSWORD_LENGTH) {
-    return { error: `New password must be at least ${MIN_PASSWORD_LENGTH} characters.` };
+  const weak = validatePasswordStrength(password);
+  if (weak) {
+    return { error: weak.replace(/^Password/, "New password") };
   }
   if (password !== confirm) return { error: "New passwords do not match." };
 

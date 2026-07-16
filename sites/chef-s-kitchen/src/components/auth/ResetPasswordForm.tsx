@@ -25,9 +25,11 @@ export function ResetPasswordForm({ token }: { token: string }) {
             name="password"
             required
             minLength={8}
+            pattern="(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}"
+            title="At least 8 characters, one capital letter and one special character."
             className="mt-1 block w-full input"
           />
-          <p className="mt-1 text-xs text-text-secondary">At least 8 characters.</p>
+          <p className="mt-1 text-xs text-text-secondary">At least 8 characters, one capital letter and one special character.</p>
         </div>
         <div>
           <label htmlFor="confirmPassword" className="field-label">
