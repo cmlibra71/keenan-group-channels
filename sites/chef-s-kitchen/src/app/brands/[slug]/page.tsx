@@ -2,8 +2,13 @@ import { notFound } from "next/navigation";
 import { draftMode } from "next/headers";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { getBrandBySlug, getProducts, getFeatureFlag, getCmsPage } from "@/lib/store";
-import { getListingPricing } from "@/lib/member";
+import { getBrandBySlug, getProducts, getFeatureFlag, getCmsPage, getNamedStyles, getComponents, getChannelSetting, CHANNEL_ID } from "@/lib/store";
+import { getListingPricing, getMemberContext, applyAccountPrices } from "@/lib/member";
+import { applyCatalogScope } from "@/lib/catalog-scope";
+import { composeBrandPagePayload, loadJsSandbox, computeCallResults, type NodeTree } from "@keenan/services/builder";
+import { cmsFunctionService } from "@keenan/services/services";
+import { BuilderBrandPage } from "@/builder/BuilderBrandPage";
+import type { GridProduct } from "@/components/product/ProductGridClient";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BrandHero, BrandProducts, DEFAULT_BRAND_BLOCKS } from "@/blocks/brand-page-blocks";
 import { TemplateRenderer } from "@/blocks/TemplateRenderer";
@@ -44,6 +49,55 @@ export default async function BrandPage({
   // so an unedited template renders exactly as before.
   const { isEnabled: draft } = await draftMode();
   const brandCms = await getCmsPage("__brand__", draft).catch(() => null);
+
+  // ═══ Site Builder node path — the 'brand' template authored in the node
+  // designer, gated by node_brand_template_enabled (or draft mode with an
+  // authored draft). The route stays data owner: scoped + account-priced rows
+  // feed the sealed "brand-products" native; bindables come from the SHARED
+  // composeBrandPagePayload (identical to the designer sample). ═══
+  const nodeTree = ((brandCms as { node_tree?: unknown } | null)?.node_tree as NodeTree | null) ?? null;
+  if (nodeTree && ((await getFeatureFlag("node_brand_template_enabled")) || draft)) {
+    const scoped = (await applyAccountPrices(await applyCatalogScope(products))) as unknown as GridProduct[];
+    const memberCtx = await getMemberContext().catch(() => null);
+    const payload = composeBrandPagePayload({
+      channelId: CHANNEL_ID,
+      brand: brand as unknown as Record<string, unknown>,
+      products: scoped as unknown as Record<string, unknown>[],
+      total,
+      customer: {
+        isMember: memberCtx?.isMember ?? false,
+        loggedIn: (memberCtx?.accountId ?? null) != null || (memberCtx?.isMember ?? false),
+      },
+      draft,
+    });
+    const namedStyles = await getNamedStyles().catch(() => ({}));
+    const components = (await getComponents().catch(() => ({}))) as Record<string, NodeTree>;
+    const builderCss =
+      ((await getChannelSetting("builder_published_css").catch(() => null)) as { css?: string } | null)?.css ?? "";
+    const jsFunctions = await cmsFunctionService.enabledMapForChannel(CHANNEL_ID).catch(() => ({}) as Record<string, string>);
+    let callResults: Record<string, unknown> = {};
+    if (Object.keys(jsFunctions).length > 0) {
+      await loadJsSandbox(jsFunctions).catch(() => null);
+      callResults = await computeCallResults(nodeTree.root, jsFunctions, payload as object).catch(() => ({}));
+    }
+    return (
+      <>
+        {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
+        <BuilderBrandPage
+          tree={nodeTree}
+          payload={payload}
+          products={scoped}
+          pricing={productCtx.pricing}
+          memberPricingAvailable={memberPricingEnabled}
+          namedStyles={namedStyles}
+          components={components}
+          jsFunctions={jsFunctions}
+          callResults={callResults}
+          draft={draft}
+        />
+      </>
+    );
+  }
   const mainBlocks = ((brandCms?.blocks as unknown as RenderedBlock[]) ?? []).filter(
     (b) => b.region === "main"
   );

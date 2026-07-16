@@ -1,7 +1,6 @@
-import { ProductCard } from "./ProductCard";
 import { applyAccountPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
-import { Ga4ViewItemList } from "@/components/analytics/Ga4ViewItemList";
+import { ProductGridClient } from "./ProductGridClient";
 
 interface ProductWithImage {
   id: number;
@@ -69,47 +68,17 @@ export async function ProductGrid({
   }
 
   return (
-    <div
-      className={`grid grid-cols-2 gap-3 sm:gap-4 ${
-        narrow ? "md:grid-cols-2 lg:grid-cols-3" : "md:grid-cols-3 lg:grid-cols-4"
-      }`}
-    >
-      <Ga4ViewItemList
-        listId={listId}
-        listName={listName}
-        items={products.map((p, index) => ({
-          item_id: p.sku ?? String(p.id),
-          item_name: p.name,
-          item_brand: p.brandName ?? undefined,
-          price: parseFloat(p.salePrice ?? p.price) || undefined,
-          quantity: 1,
-          index,
-        }))}
-      />
-      {products.map((product, index) => (
-        <ProductCard
-          key={product.id}
-          id={product.id}
-          name={product.name}
-          slug={product.urlPath || String(product.id)}
-          sku={product.sku}
-          price={product.price}
-          salePrice={product.salePrice}
-          imageUrl={product.thumbnailImage?.urlThumbnail || product.thumbnailImage?.urlStandard}
-          brandName={product.brandName}
-          eyebrow={eyebrow}
-          memberPrice={memberPricingAvailable ? memberPriceMap?.[product.id] ?? null : null}
-          isMember={isMember}
-          planPrice={planPrice}
-          clearance={clearance}
-          availability={product.availability}
-          inventoryLevel={product.inventoryLevel}
-          inventoryTracking={product.inventoryTracking}
-          listId={listId}
-          listName={listName}
-          listIndex={index}
-        />
-      ))}
-    </div>
+    <ProductGridClient
+      products={products}
+      memberPricingAvailable={memberPricingAvailable}
+      memberPriceMap={memberPriceMap}
+      isMember={isMember}
+      planPrice={planPrice}
+      eyebrow={eyebrow}
+      clearance={clearance}
+      narrow={narrow}
+      listId={listId}
+      listName={listName}
+    />
   );
 }
