@@ -54,6 +54,14 @@ export function selectItemHandler(listId?: string, listName?: string) {
   };
 }
 
+export function enquireHandler(router: { push: (to: string) => void }) {
+  return (args: Record<string, unknown>) => {
+    const pid = args?.product_id ?? "";
+    router.push(`/contact?product=${pid}`);
+    return { success: true };
+  };
+}
+
 /** The `addToCart` Action the add-to-cart MASTER runs — a faithful port of
  *  AddToCartButton.tsx's handleClick: cart POST → header badge update → BOTH
  *  Klaviyo `Added to Cart` and GA4 `add_to_cart` fired unconditionally (exactly

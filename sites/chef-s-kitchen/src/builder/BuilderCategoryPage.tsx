@@ -8,7 +8,13 @@ import { BuilderTree, BuilderActionsProvider, type NativeComponents } from "@kee
 import { FilterRail, FilterChips, SortSelect, FacetCheckbox, MobileFilterRail } from "@/components/category/FilterRail";
 import { ProductGridClient, type GridProduct } from "@/components/product/ProductGridClient";
 import { Ga4ViewItemList } from "@/components/analytics/Ga4ViewItemList";
-import { masterLeafNatives, selectItemHandler, useAddToCartHandler, useAddToQuoteHandler } from "./master-leaves";
+import {
+  enquireHandler,
+  masterLeafNatives,
+  selectItemHandler,
+  useAddToCartHandler,
+  useAddToQuoteHandler,
+} from "./master-leaves";
 import { useGst } from "@/lib/gst";
 import { overlayLiveGst } from "./live-gst";
 
@@ -76,6 +82,7 @@ export function BuilderCategoryPage({
     () => ({
       addToCart,
       addToQuote,
+      enquire: enquireHandler(router),
       toggleFacet: (args: Record<string, unknown>) => {
         const param = String(args.param ?? "");
         const value = String(args.value ?? "");

@@ -7,7 +7,13 @@ import type { NodeTree } from "@keenan/services/builder";
 import { BuilderTree, BuilderActionsProvider, type NativeComponents } from "@keenan/services/builder-react";
 import { ProductGridClient, type GridProduct } from "@/components/product/ProductGridClient";
 import { Ga4ViewItemList } from "@/components/analytics/Ga4ViewItemList";
-import { masterLeafNatives, selectItemHandler, useAddToCartHandler, useAddToQuoteHandler } from "./master-leaves";
+import {
+  enquireHandler,
+  masterLeafNatives,
+  selectItemHandler,
+  useAddToCartHandler,
+  useAddToQuoteHandler,
+} from "./master-leaves";
 import { useGst } from "@/lib/gst";
 import { overlayLiveGst } from "./live-gst";
 
@@ -70,7 +76,12 @@ export function BuilderBrandPage({
   };
   return (
     <BuilderActionsProvider
-      handlers={{ selectItem: selectItemHandler("brand_products", "Brand Products"), addToCart, addToQuote }}
+      handlers={{
+        selectItem: selectItemHandler("brand_products", "Brand Products"),
+        addToCart,
+        addToQuote,
+        enquire: enquireHandler(router),
+      }}
       navigate={(to) => router.push(to)}
     >
       <Ga4ViewItemList

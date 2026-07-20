@@ -17,7 +17,13 @@ import {
   type CategoryTile,
 } from "./home-natives";
 import type { GridProduct } from "@/components/product/ProductGridClient";
-import { masterLeafNatives, selectItemHandler, useAddToCartHandler, useAddToQuoteHandler } from "./master-leaves";
+import {
+  enquireHandler,
+  masterLeafNatives,
+  selectItemHandler,
+  useAddToCartHandler,
+  useAddToQuoteHandler,
+} from "./master-leaves";
 import { useGst } from "@/lib/gst";
 import { overlayLiveGst } from "./live-gst";
 
@@ -108,7 +114,10 @@ export function BuilderHomePage({
     "seo-faq": () => (home.seoFaq ? <SeoFaq {...home.seoFaq} /> : null),
   };
   return (
-    <BuilderActionsProvider handlers={{ selectItem: selectItemHandler(), addToCart, addToQuote }} navigate={(to) => router.push(to)}>
+    <BuilderActionsProvider
+      handlers={{ selectItem: selectItemHandler(), addToCart, addToQuote, enquire: enquireHandler(router) }}
+      navigate={(to) => router.push(to)}
+    >
       <BuilderTree
         tree={tree}
         payload={livePayload}
