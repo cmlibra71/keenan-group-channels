@@ -112,8 +112,12 @@ function ActionsBridge({
         if (window.history.length > 1) router.back();
         else router.push(String(args?.fallbackHref ?? "/products"));
       },
+      enquire: (args?: Record<string, unknown>) => {
+        const pid = args?.product_id ?? productId;
+        router.push(`/contact?product=${pid}`);
+      },
     }),
-    [handlers, router]
+    [handlers, router, productId]
   );
 
   return (

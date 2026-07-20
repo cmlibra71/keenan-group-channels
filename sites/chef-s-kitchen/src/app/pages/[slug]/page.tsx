@@ -61,13 +61,18 @@ export default async function ContentPage({
     if (pageKind === "policy") {
       const flag = await getFeatureFlag("node_policy_template_enabled");
       if (flag || draft) {
-        const layout = (await getCmsTemplate("policy_layout", draft).catch(() => null)) as {
-          node_tree?: unknown;
-        } | null;
-        const layoutTree = (layout?.node_tree as NodeTree | null) ?? null;
-        if (layoutTree) {
-          tree = layoutTree;
+        if (ownTree) {
+          tree = ownTree;
           treeKind = "policy";
+        } else {
+          const layout = (await getCmsTemplate("policy_layout", draft).catch(() => null)) as {
+            node_tree?: unknown;
+          } | null;
+          const layoutTree = (layout?.node_tree as NodeTree | null) ?? null;
+          if (layoutTree) {
+            tree = layoutTree;
+            treeKind = "policy";
+          }
         }
       }
     } else if (ownTree) {

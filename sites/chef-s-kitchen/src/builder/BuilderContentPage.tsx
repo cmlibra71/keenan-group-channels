@@ -4,7 +4,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import type { NodeTree } from "@keenan/services/builder";
-import { BuilderTree, BuilderActionsProvider } from "@keenan/services/builder-react";
+import { ContactForm } from "@/components/contact/ContactForm";
+import { BuilderTree, BuilderActionsProvider, type NativeComponents } from "@keenan/services/builder-react";
 
 // ============================================================================
 // A CONTENT page rendered from a node tree (Site Builder) — the generic,
@@ -35,6 +36,7 @@ export function BuilderContentPage({
   draft?: boolean;
 }) {
   const router = useRouter();
+  const nativeComponents: NativeComponents = { "contact-form": () => <ContactForm /> };
   return (
     <BuilderActionsProvider handlers={{}} navigate={(to) => router.push(to)}>
       <BuilderTree
@@ -44,6 +46,7 @@ export function BuilderContentPage({
         jsFunctions={jsFunctions}
         callResults={callResults}
         components={components}
+        nativeComponents={nativeComponents}
         linkComponent={Link as unknown as React.ComponentType<Record<string, unknown>>}
         imageComponent={Image as unknown as React.ComponentType<Record<string, unknown>>}
         draft={draft}
