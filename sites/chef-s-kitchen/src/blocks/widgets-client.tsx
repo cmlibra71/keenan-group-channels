@@ -229,14 +229,9 @@ export const AddToQuoteWidget: WidgetComponent = ({ attrs }) => {
 export const StockStatusWidget: WidgetComponent = () => {
   const purchase = useProductPurchaseOptional();
   if (!purchase) return null;
-  const { inStock, displayPrice } = purchase;
+  const { inStock } = purchase;
   return (
     <>
-      {!inStock && displayPrice > 0 && (
-        <p className="mt-2 text-[13px] font-semibold text-sale">
-          Out of stock — add to a quote and we&apos;ll confirm availability.
-        </p>
-      )}
       <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-4 text-[13px] text-text-secondary">
         <span className="flex items-center gap-1.5">
           <Truck className="h-4 w-4 text-accent" strokeWidth={1.7} />
