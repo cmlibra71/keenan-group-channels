@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { draftMode } from "next/headers";
+import { draftMode, headers } from "next/headers";
 import Link from "next/link";
 import Image from "next/image";
 import { ChevronRight, Package } from "lucide-react";
@@ -108,7 +108,8 @@ export default async function CategoryPage({
   // category_listing …); this route stays the data owner — the heavy queries
   // above are passed to the blocks via RenderContext extras.
   if (await getFeatureFlag("cms_category_layout_enabled")) {
-    const { isEnabled: draft } = await draftMode();
+    const { isEnabled } = await draftMode();
+  const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
     const template = await getCmsTemplate("category_layout", draft).catch(() => null);
     if (template && template.blocks.length > 0) {
       const context: RenderContext = {

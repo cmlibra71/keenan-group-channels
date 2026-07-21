@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { draftMode } from "next/headers";
+import { draftMode, headers } from "next/headers";
 import Link from "next/link";
 import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsTemplate } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
@@ -141,7 +141,8 @@ export default async function ProductPage({
   // heavy queries above feed the blocks via RenderContext extras. Analytics
   // (ViewedProductTracker) stays route-owned on both paths.
   if (await getFeatureFlag("cms_product_template_enabled")) {
-    const { isEnabled: draft } = await draftMode();
+    const { isEnabled } = await draftMode();
+  const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
     const template = await getCmsTemplate("product", draft).catch(() => null);
     if (template && template.blocks.length > 0) {
       const context: RenderContext = {

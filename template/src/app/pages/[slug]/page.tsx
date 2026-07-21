@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { draftMode } from "next/headers";
+import { draftMode, headers } from "next/headers";
 import type { Metadata } from "next";
 import { getContentPage, getCmsPage } from "@/lib/store";
 import { RichContent } from "@/components/content/RichContent";
@@ -11,7 +11,8 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const { isEnabled: draft } = await draftMode();
+  const { isEnabled } = await draftMode();
+  const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
 
   // Prefer the new CMS page; fall back to the legacy content_pages setting.
   const cms = await getCmsPage(slug, draft);
@@ -37,7 +38,8 @@ export default async function ContentPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const { isEnabled: draft } = await draftMode();
+  const { isEnabled } = await draftMode();
+  const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
 
   // New CMS page (block-composed) takes precedence.
   const cms = await getCmsPage(slug, draft);
