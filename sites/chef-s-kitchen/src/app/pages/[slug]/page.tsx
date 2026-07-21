@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { draftMode } from "next/headers";
+import { draftMode, headers } from "next/headers";
 import type { Metadata } from "next";
 import { getContentPage, getCmsPage, getCmsTemplate, getFeatureFlag, getNamedStyles, getComponents, getChannelSetting, CHANNEL_ID } from "@/lib/store";
 import { getMemberContext } from "@/lib/member";
@@ -17,7 +17,8 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const { isEnabled: draft } = await draftMode();
+  const { isEnabled } = await draftMode();
+  const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
 
   const cms = await getCmsPage(slug, draft);
   if (cms) {
@@ -42,7 +43,8 @@ export default async function ContentPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const { isEnabled: draft } = await draftMode();
+  const { isEnabled } = await draftMode();
+  const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
 
   const cms = await getCmsPage(slug, draft);
   if (cms) {

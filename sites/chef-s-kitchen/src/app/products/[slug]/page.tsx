@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { draftMode } from "next/headers";
+import { draftMode, headers } from "next/headers";
 import Link from "next/link";
 import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, brandService, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice, getCmsPage, getCmsTemplate } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
@@ -211,7 +211,8 @@ export default async function ProductPage({
 
   // Editable CMS content zones shown on every product page (global product
   // template). Empty unless set — so the page renders exactly as before.
-  const { isEnabled: draft } = await draftMode();
+  const { isEnabled } = await draftMode();
+  const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
   const productCms = await getCmsPage("__product__", draft).catch(() => null);
   // Product page content is the __product__ template's `main` block list (editable
   // in Pages & Content). Defaults to buy-box + links + tabs + related, so an

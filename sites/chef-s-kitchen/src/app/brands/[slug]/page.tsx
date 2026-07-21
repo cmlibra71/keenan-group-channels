@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { draftMode, cookies } from "next/headers";
+import { draftMode, cookies, headers } from "next/headers";
 import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
@@ -48,7 +48,8 @@ export default async function BrandPage({
   // Brand page content is an ordered block list (the __brand__ template's `main`
   // region), editable in Pages & Content. Defaults to hero + products when unset,
   // so an unedited template renders exactly as before.
-  const { isEnabled: draft } = await draftMode();
+  const { isEnabled } = await draftMode();
+  const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
   const brandCms = await getCmsPage("__brand__", draft).catch(() => null);
 
   // ═══ Site Builder node path — the 'brand' template authored in the node

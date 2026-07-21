@@ -1,4 +1,4 @@
-import { draftMode, cookies } from "next/headers";
+import { draftMode, cookies, headers } from "next/headers";
 import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
 import { getCmsPage, getFeatureFlag, getNamedStyles, getComponents, getChannelSetting, CHANNEL_ID } from "@/lib/store";
 import { getMemberContext } from "@/lib/member";
@@ -20,7 +20,8 @@ import { loadHomeNativeData } from "@/builder/home-data";
 // the `home` CMS page; with none set it falls back to DEFAULT_HOME_BLOCKS — the
 // current section order — so the page renders exactly as before.
 export default async function HomePage() {
-  const { isEnabled: draft } = await draftMode();
+  const { isEnabled } = await draftMode();
+  const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
   const home = await getCmsPage("home", draft);
 
   // ═══ Site Builder node path — the home doc authored in the node designer,

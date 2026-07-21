@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { draftMode, cookies } from "next/headers";
+import { draftMode, cookies, headers } from "next/headers";
 import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -128,7 +128,8 @@ export default async function CategoryPage({
 
   // Editable CMS content zones around the (system) listing. Empty when no CMS
   // category page is set — so the page renders exactly as before.
-  const { isEnabled: draft } = await draftMode();
+  const { isEnabled } = await draftMode();
+  const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
   const cmsCat = await getCmsCategoryPage(category.id, draft).catch(() => null);
   const region = (r: string): RenderedBlock[] =>
     ((cmsCat?.blocks as unknown as RenderedBlock[]) ?? []).filter((b) => b.region === r);
