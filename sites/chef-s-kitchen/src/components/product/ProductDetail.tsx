@@ -170,9 +170,6 @@ export function ProductDetail() {
           )}
         </div>
       </div>
-      {!inStock && displayPrice > 0 && (
-        <p className="mt-2 text-[13px] font-semibold text-sale">Out of stock — add to a quote and we'll confirm availability.</p>
-      )}
 
       {/* ═══ Delivery / warranty / stock trust row ═══ */}
       <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-4 text-[13px] text-text-secondary">

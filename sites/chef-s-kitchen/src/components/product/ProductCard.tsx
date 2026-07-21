@@ -159,11 +159,6 @@ export function ProductCard({
               />
               <AddToQuoteButton productId={id} size="sm" />
             </>
-          ) : outOfStock ? (
-            <>
-              <button disabled className="btn-primary btn-sm w-full">Out of stock</button>
-              <AddToQuoteButton productId={id} size="sm" />
-            </>
           ) : (
             <AddToQuoteButton productId={id} size="sm" />
           )}
