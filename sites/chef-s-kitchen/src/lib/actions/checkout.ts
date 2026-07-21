@@ -572,6 +572,9 @@ export async function placeOrder(
     if (recipients.length > 0) {
       const { site, channel } = await getSiteConfig();
       const storeName = site?.siteName || channel?.name || null;
+      // Brand the staff alert to match the storefront the order came from (same
+      // branding the customer confirmation email uses) — not the Keenan default.
+      const branding = await resolveEmailBranding(CHANNEL_ID).catch(() => undefined);
       const portalBase = (process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/$/, "");
       await sendOrderStaffNotificationEmail({
         to: recipients,
@@ -582,6 +585,13 @@ export async function placeOrder(
         total: String(totalIncTax),
         paymentMethod,
         storeName,
+        logoUrl: branding?.logoUrl ?? site?.logoUrl ?? null,
+        logoAlt: branding?.logoAlt ?? site?.logoAlt ?? null,
+        siteUrl: branding?.siteUrl ?? null,
+        fromEmail: branding?.fromEmail ?? site?.fromEmail ?? null,
+        brandColor: branding?.brandColor ?? null,
+        bannerBgColor: branding?.bannerBgColor ?? null,
+        footerText: branding?.footerText ?? null,
         items: fullCart.items.map((i) => ({ name: i.product_name, quantity: i.quantity })),
         testMode: isTestMode,
       });
