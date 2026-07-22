@@ -105,6 +105,7 @@ export const {
   getProductPageData,
   getNamedStyles,
   getComponents,
+  getDraftComponents,
 } = _store;
 
 export type { MegaMenuNode, MegaMenuFeatured, ContentPage } from "@keenan/services";

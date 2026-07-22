@@ -1,6 +1,6 @@
 import { draftMode, cookies, headers } from "next/headers";
 import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
-import { getCmsPage, getFeatureFlag, getNamedStyles, getComponents, getChannelSetting, CHANNEL_ID } from "@/lib/store";
+import { getCmsPage, getFeatureFlag, getNamedStyles, getComponents, getDraftComponents, getChannelSetting, CHANNEL_ID } from "@/lib/store";
 import { getMemberContext } from "@/lib/member";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { DEFAULT_HOME_BLOCKS } from "@/blocks/home-blocks";
@@ -71,7 +71,7 @@ export default async function HomePage() {
       draft,
     });
     const namedStyles = await getNamedStyles().catch(() => ({}));
-    const components = (await getComponents().catch(() => ({}))) as Record<string, NodeTree>;
+    const components = (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<string, NodeTree>;
     const builderCss =
       ((await getChannelSetting("builder_published_css").catch(() => null)) as { css?: string } | null)?.css ?? "";
     const jsFunctions = await cmsFunctionService.enabledMapForChannel(CHANNEL_ID).catch(() => ({}) as Record<string, string>);

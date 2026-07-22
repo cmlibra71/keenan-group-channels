@@ -8,7 +8,7 @@ import { assertProductVisible, applyCatalogScope } from "@/lib/catalog-scope";
 import { ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
-import { getProductPageData, getNamedStyles, getComponents, getChannelSetting } from "@/lib/store";
+import { getProductPageData, getNamedStyles, getComponents, getDraftComponents, getChannelSetting } from "@/lib/store";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { cmsFunctionService } from "@keenan/services/services";
 import { loadJsSandbox, computeCallResults } from "@keenan/services/builder";
@@ -298,7 +298,7 @@ export default async function ProductPage({
         ? (nodesDoc.node_tree as typeof SEED_PRODUCT_TREE)
         : null;
     const namedStyles = await getNamedStyles().catch(() => ({}));
-    const components = (await getComponents().catch(() => ({}))) as Record<string, typeof SEED_PRODUCT_TREE>;
+    const components = (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<string, typeof SEED_PRODUCT_TREE>;
     // CSS for AUTHORED classes: the static Tailwind sheet only covers classes
     // in this repo's source, so the portal compiles the channel's designer
     // vocabulary (arbitrary values, lg:/hover: variants, palette colours…) on

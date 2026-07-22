@@ -4,7 +4,7 @@ import { CHANNEL_ID,
   getProductBySlug,
   getProductPageData,
   getNamedStyles,
-  getComponents,
+  getComponents, getDraftComponents,
   getCmsTemplate,
   getChannelSetting,
 } from "@/lib/store";
@@ -72,7 +72,7 @@ export default async function NodePreviewProductPage({
       ? (nodesDoc.node_tree as typeof SEED_PRODUCT_TREE)
       : null;
   const namedStyles = await getNamedStyles().catch(() => ({}));
-  const components = (await getComponents().catch(() => ({}))) as Record<
+  const components = (await getDraftComponents().catch(() => ({}))) as Record<
     string,
     typeof SEED_PRODUCT_TREE
   >;

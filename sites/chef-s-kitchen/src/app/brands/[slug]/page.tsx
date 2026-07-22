@@ -3,7 +3,7 @@ import { draftMode, cookies, headers } from "next/headers";
 import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { getBrandBySlug, getProducts, getFeatureFlag, getCmsPage, getNamedStyles, getComponents, getChannelSetting, CHANNEL_ID } from "@/lib/store";
+import { getBrandBySlug, getProducts, getFeatureFlag, getCmsPage, getNamedStyles, getComponents, getDraftComponents, getChannelSetting, CHANNEL_ID } from "@/lib/store";
 import { getListingPricing, getMemberContext, applyAccountPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
 import { composeBrandPagePayload, loadJsSandbox, computeCallResults, type NodeTree } from "@keenan/services/builder";
@@ -80,7 +80,7 @@ export default async function BrandPage({
       draft,
     });
     const namedStyles = await getNamedStyles().catch(() => ({}));
-    const components = (await getComponents().catch(() => ({}))) as Record<string, NodeTree>;
+    const components = (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<string, NodeTree>;
     const builderCss =
       ((await getChannelSetting("builder_published_css").catch(() => null)) as { css?: string } | null)?.css ?? "";
     const jsFunctions = await cmsFunctionService.enabledMapForChannel(CHANNEL_ID).catch(() => ({}) as Record<string, string>);

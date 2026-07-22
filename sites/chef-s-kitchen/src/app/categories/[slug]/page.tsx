@@ -18,7 +18,7 @@ import type { RenderContext } from "@keenan/services";
 import { getListingPricing, getMemberContext, applyAccountPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { assertCategoryVisible, applyCatalogScope } from "@/lib/catalog-scope";
-import { getNamedStyles, getComponents, CHANNEL_ID } from "@/lib/store";
+import { getNamedStyles, getComponents, getDraftComponents, CHANNEL_ID } from "@/lib/store";
 import { composeCategoryPagePayload, loadJsSandbox, computeCallResults, type NodeTree } from "@keenan/services/builder";
 import { cmsFunctionService } from "@keenan/services/services";
 import { BuilderCategoryPage } from "@/builder/BuilderCategoryPage";
@@ -198,7 +198,7 @@ export default async function CategoryPage({
         draft,
       });
       const namedStyles = await getNamedStyles().catch(() => ({}));
-      const components = (await getComponents().catch(() => ({}))) as Record<string, NodeTree>;
+      const components = (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<string, NodeTree>;
       const builderCss =
         ((await getChannelSetting("builder_published_css").catch(() => null)) as { css?: string } | null)?.css ?? "";
       const jsFunctions = await cmsFunctionService.enabledMapForChannel(CHANNEL_ID).catch(() => ({}) as Record<string, string>);

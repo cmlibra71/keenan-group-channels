@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { draftMode, headers } from "next/headers";
 import type { Metadata } from "next";
-import { getContentPage, getCmsPage, getCmsTemplate, getFeatureFlag, getNamedStyles, getComponents, getChannelSetting, CHANNEL_ID } from "@/lib/store";
+import { getContentPage, getCmsPage, getCmsTemplate, getFeatureFlag, getNamedStyles, getComponents, getDraftComponents, getChannelSetting, CHANNEL_ID } from "@/lib/store";
 import { getMemberContext } from "@/lib/member";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { composeContentPagePayload } from "@keenan/services/builder";
@@ -105,7 +105,7 @@ export default async function ContentPage({
         sanitizeHtml,
       });
       const namedStyles = await getNamedStyles().catch(() => ({}));
-      const components = (await getComponents().catch(() => ({}))) as Record<string, NodeTree>;
+      const components = (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<string, NodeTree>;
       const builderCss =
         ((await getChannelSetting("builder_published_css").catch(() => null)) as { css?: string } | null)?.css ?? "";
       const jsFunctions = await cmsFunctionService.enabledMapForChannel(CHANNEL_ID).catch(() => ({}) as Record<string, string>);
