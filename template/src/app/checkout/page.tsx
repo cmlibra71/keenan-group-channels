@@ -43,8 +43,10 @@ export default async function CheckoutPage() {
     resolveNetTermsEntitlement(session),
     resolveAccountOptions(session),
   ]);
+  // enabledPaymentMethods, never paymentMethods: the shared read returns EVERY
+  // configured method (admin editor + past-order lookups need the disabled ones).
   const paymentMethods = filterPaymentMethodsForAccount(
-    checkoutSettings.paymentMethods,
+    checkoutSettings.enabledPaymentMethods,
     accountOptions?.allowedPaymentMethods ?? null
   )
     .filter((m) => m.id !== "net_terms" || !!netTerms)
