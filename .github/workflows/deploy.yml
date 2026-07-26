@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
 
+# Serialize deploys: only one build+deploy for main runs at a time. A newer push
+# that lands while a deploy is in flight is QUEUED (not cancelled) so the in-flight
+# container swap finishes cleanly before the next one starts. Without this, two
+# pushes close together race each other over the same storefront containers on the
+# shared EC2 box and an older image can land last. Mirrors the portal repo.
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
 env:
   EC2_INSTANCE: i-07fb3cc6aeea2eb49
   AWS_REGION: ap-southeast-2
