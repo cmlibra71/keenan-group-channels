@@ -71,6 +71,7 @@ export const {
   sanitizeCatalogProducts,
   getProducts,
   getProductBySlug,
+  getRedirectForPath,
   getTopCategories,
   getCategories,
   getMegaMenu,

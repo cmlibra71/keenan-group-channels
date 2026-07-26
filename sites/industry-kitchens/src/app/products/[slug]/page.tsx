@@ -1,7 +1,7 @@
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { draftMode } from "next/headers";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsPage, getCmsTemplate } from "@/lib/store";
+import { getRedirectForPath, getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsPage, getCmsTemplate } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
 import { getSession } from "@/lib/auth";
 import { getAccountId, applyAccountPrices } from "@/lib/member";
@@ -31,6 +31,9 @@ export default async function ProductPage({
   const cachedProduct = await getProductBySlug(slug);
 
   if (!cachedProduct) {
+    // Retired/renamed product URLs redirect (url_redirects) instead of 404ing.
+    const redirect = await getRedirectForPath(`/products/${slug}`);
+    if (redirect) permanentRedirect(redirect.toPath);
     notFound();
   }
 
