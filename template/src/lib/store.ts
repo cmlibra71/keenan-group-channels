@@ -134,7 +134,11 @@ export const getBlogPostBySlug = (slug: string) =>
 export const getBlogTags = unstable_cache(
   async () => blogService.listTagsForChannel(CHANNEL_ID),
   [`blog-tags-${CHANNEL_ID}`],
-  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "blog"] }
+  // Same 5-minute window as the index and the post page. A scheduled post
+  // brings its tags with it when its moment passes, and nothing purges the
+  // cache at that moment — a longer window would leave the facet describing a
+  // blog that no longer exists for up to half an hour.
+  { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "blog"] }
 );
 
 // ============================================================================
