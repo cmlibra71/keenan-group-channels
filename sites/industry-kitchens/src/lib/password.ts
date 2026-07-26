@@ -34,19 +34,13 @@ export const verifyPassword = verifyStoredPassword;
  * Enforce password strength on every path that SETS a password (register /
  * reset / change). Rule: at least 8 characters, at least one capital letter,
  * and at least one special (non-alphanumeric) character. Returns an error
- * message when the password is too weak, or `null` when it passes — so the
- * rule lives in one place and can't be bypassed by a client that skips its
- * own validation.
+ * message when the password is too weak, or `null` when it passes.
+ *
+ * The rule itself now lives in @keenan/services (src/auth/password-policy.ts)
+ * so the storefronts and the portal (staff sign-up, the back-office
+ * set-customer-password dialog, the Commerce REST contact routes) all enforce
+ * ONE definition. `@keenan/services/password-policy` is a pure, import-free
+ * leaf, so it is safe in client components too. Re-exported here so existing
+ * `@/lib/password` imports keep working.
  */
-export function validatePasswordStrength(password: string): string | null {
-  if (!password || password.length < 8) {
-    return "Password must be at least 8 characters.";
-  }
-  if (!/[A-Z]/.test(password)) {
-    return "Password must include at least one capital letter.";
-  }
-  if (!/[^A-Za-z0-9]/.test(password)) {
-    return "Password must include at least one special character.";
-  }
-  return null;
-}
+export { validatePasswordStrength, PASSWORD_POLICY_HINT } from "@keenan/services/password-policy";
