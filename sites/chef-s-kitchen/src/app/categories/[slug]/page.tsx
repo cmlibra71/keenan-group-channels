@@ -200,7 +200,10 @@ export default async function CategoryPage({
           sub: sp.sub?.split(",").filter(Boolean) ?? [],
           brand: sp.brand?.split(",").filter(Boolean) ?? [],
           price: sp.price?.split(",").filter(Boolean) ?? [],
-          stock: sp.stock?.split(",").filter(Boolean) ?? [],
+          // Validated, not raw: the authored rail's `selected` state and its
+          // active-filter chips must reflect what was actually applied to the
+          // listing (a retired ?stock= value is dropped above, not filtered on).
+          stock: availability,
         },
         customer: {
           isMember: memberCtx?.isMember ?? false,
