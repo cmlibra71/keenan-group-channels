@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { draftMode, headers } from "next/headers";
 import Link from "next/link";
 import Image from "next/image";
@@ -68,9 +68,21 @@ export default async function CategoryPage({
   const priceBands = (sp.price?.split(",").filter(Boolean) ?? []).filter((b) =>
     ["lt1000", "1000to3000", "gt3000"].includes(b)
   ) as ("lt1000" | "1000to3000" | "gt3000")[];
-  const availability = (sp.stock?.split(",").filter(Boolean) ?? []).filter((a) =>
-    ["in_stock", "clearance"].includes(a)
-  ) as ("in_stock" | "clearance")[];
+  // "In stock" was retired as a shopper-facing facet — Clearance is the only
+  // availability filter. Anything else in ?stock= (e.g. a bookmarked
+  // ?stock=in_stock link) is dropped and the URL canonicalised, so old links
+  // neither filter silently nor leave an orphan chip in the toolbar.
+  const stockValues = sp.stock?.split(",").filter(Boolean) ?? [];
+  const availability = stockValues.filter((a) => a === "clearance") as "clearance"[];
+  if (availability.length !== stockValues.length) {
+    const next = new URLSearchParams(
+      Object.entries(sp).filter((e): e is [string, string] => typeof e[1] === "string")
+    );
+    if (availability.length > 0) next.set("stock", availability.join(","));
+    else next.delete("stock");
+    const qs = next.toString();
+    redirect(`/categories/${slug}${qs ? `?${qs}` : ""}`);
+  }
 
   const [listing, subcategories, breadcrumbs, memberPricingEnabled] = await Promise.all([
     getCategoryListing(category.id, {
