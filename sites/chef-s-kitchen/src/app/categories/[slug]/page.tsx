@@ -122,7 +122,10 @@ export default async function CategoryPage({
   const [listing, breadcrumbs, memberPricingEnabled] = await Promise.all([
     getCategoryListing(category.id, {
       page: 1,
-      limit: PER_PAGE * page, // cumulative for Load more
+      // Cumulative for Load more: each press re-asks for the SAME listing with a
+      // bigger limit. `total` and `facets` below are therefore anchored to page 1
+      // inside getCategoryListing — they must not move as the shopper pages.
+      limit: PER_PAGE * page,
       subcategoryIds: parseIds(sp.sub),
       brandIds: parseIds(sp.brand),
       priceBands,
