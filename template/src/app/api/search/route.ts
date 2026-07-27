@@ -4,6 +4,60 @@ import { shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { CHANNEL_ID } from "@/lib/channel";
 import { applyCatalogScope } from "@/lib/catalog-scope";
 
+/**
+ * Fields this PUBLIC endpoint may serialise, as an ALLOWLIST.
+ *
+ * The Meilisearch product document carries `costPrice` (see the services package,
+ * `src/search/meilisearch.ts`), the index sets no `displayedAttributes`, and
+ * `searchProducts()` sets no `attributesToRetrieve` — so the raw hit is the whole
+ * document. Returning it verbatim published our buy price to anyone who could type
+ * a URL, and on a cost-plus channel the cost IS the member price.
+ *
+ * An allowlist, not a blocklist: a field added to the index later must be opted in
+ * here deliberately rather than start leaking on its own. Fixed here (the storefront
+ * boundary) rather than on the shared index or in `searchProducts()`, because the
+ * admin dashboard legitimately reads `costPrice` from the warehouse index.
+ *
+ * Keep in step with the `SearchHit` interface in `components/search/SearchTypeahead.tsx`,
+ * the only consumer.
+ */
+const PUBLIC_HIT_FIELDS = [
+  "id",
+  "name",
+  "sku",
+  "urlPath",
+  "price",
+  "salePrice",
+  "brandName",
+  "brandId",
+  "categoryNames",
+  "categoryIds",
+  "thumbnailUrl",
+  "isOnSale",
+  "isFeatured",
+  "type",
+  "_formatted",
+] as const;
+
+function pick(src: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of PUBLIC_HIT_FIELDS) {
+    if (key in src) out[key] = src[key];
+  }
+  return out;
+}
+
+function toPublicHit(hit: unknown): Record<string, unknown> {
+  const out = pick(hit as Record<string, unknown>);
+  // `_formatted` is Meilisearch's highlighted MIRROR of the whole document — it
+  // carries every attribute again, costPrice included. Filter it with the same
+  // allowlist or the narrowing above is defeated by its own copy.
+  if (out._formatted && typeof out._formatted === "object") {
+    out._formatted = pick(out._formatted as Record<string, unknown>);
+  }
+  return out;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const q = searchParams.get("q")?.trim() || "";
@@ -44,6 +98,9 @@ export async function GET(request: NextRequest) {
         "salePrice" in hit ? { ...hit, salePrice: null } : hit
       ) as typeof result.hits;
     }
+
+    // Narrow to the public field set LAST, so nothing added above can widen it.
+    result.hits = result.hits.map(toPublicHit) as unknown as typeof result.hits;
 
     return NextResponse.json(result);
   } catch {
