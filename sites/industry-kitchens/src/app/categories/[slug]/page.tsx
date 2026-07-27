@@ -110,6 +110,12 @@ export default async function CategoryPage({
       // Cumulative for Load more: each press re-asks for the SAME listing with a
       // bigger limit. `total` and `facets` below are therefore anchored to page 1
       // inside getCategoryListing — they must not move as the shopper pages.
+      //
+      // The counts the filter rail ADVERTISES come from the same `facets`, while
+      // selecting a facet re-queries live. getCategoryListing now bounds how stale
+      // the materialized base row may get (refreshed in the background once it
+      // passes the live listings' own TTL), so "Clearance (43)" and "showing 31"
+      // can no longer disagree.
       limit: PER_PAGE * page,
       subcategoryIds: parseIds(sp.sub),
       brandIds: parseIds(sp.brand),
