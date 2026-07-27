@@ -6,6 +6,7 @@ import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
 import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, getHeaderNav, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
+import { HeaderPanels } from "./HeaderPanels";
 import { GstToggle } from "./GstToggle";
 import { MegaMenu } from "./MegaMenu";
 import { MobileNavDrawer } from "./MobileNavDrawer";
@@ -54,47 +55,54 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
   }
 
   return (
-    <header className="sticky top-0 z-[100]">
-      {/* Masthead — brand green */}
-      <div className="bg-brand">
-        <div className="container-page">
-          <div className="flex h-[72px] items-center gap-5 lg:h-[78px] lg:gap-6">
-            <MobileNavDrawer departments={megaMenu.departments} />
+    <>
+      <header className="sticky top-0 z-[100]">
+        {/* Masthead — brand green */}
+        <div className="bg-brand">
+          <div className="container-page">
+            <div className="flex h-[72px] items-center gap-5 lg:h-[78px] lg:gap-6">
+              <MobileNavDrawer departments={megaMenu.departments} />
 
-            {/* Logo — white wordmark on green (design-system asset) */}
-            <Link href="/" className="shrink-0" aria-label={storeName}>
-              <Image
-                src="/brand/chefs-depot-logo-white.png"
-                alt={logoAlt || storeName}
-                height={48}
-                width={166}
-                priority
-                className="h-9 w-auto object-contain lg:h-12"
-              />
-            </Link>
-
-            {/* Search — centred glass pill (design .cd-search) */}
-            <div className="hidden flex-1 justify-center md:flex">
-              <div className="w-full max-w-[560px]">
-                <SearchTypeahead inline variant="masthead" />
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="ml-auto flex items-center gap-5">
-              <GstToggle className="hidden md:inline-flex" />
-              <Link href="/search" className="md:hidden text-white transition-colors duration-200 hover:text-white/80" aria-label="Search">
-                <Search className="h-[22px] w-[22px]" strokeWidth={1.7} />
+              {/* Logo — white wordmark on green (design-system asset) */}
+              <Link href="/" className="shrink-0" aria-label={storeName}>
+                <Image
+                  src="/brand/chefs-depot-logo-white.png"
+                  alt={logoAlt || storeName}
+                  height={48}
+                  width={166}
+                  priority
+                  className="h-9 w-auto object-contain lg:h-12"
+                />
               </Link>
-              <HeaderClient cartCount={cartCount} quoteCount={quoteCount} isMember={isMember} entryCount={entryCount} />
+
+              {/* Search — centred glass pill (design .cd-search) */}
+              <div className="hidden flex-1 justify-center md:flex">
+                <div className="w-full max-w-[560px]">
+                  <SearchTypeahead inline variant="masthead" />
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="ml-auto flex items-center gap-5">
+                <GstToggle className="hidden md:inline-flex" />
+                <Link href="/search" className="md:hidden text-white transition-colors duration-200 hover:text-white/80" aria-label="Search">
+                  <Search className="h-[22px] w-[22px]" strokeWidth={1.7} />
+                </Link>
+                <HeaderClient cartCount={cartCount} quoteCount={quoteCount} isMember={isMember} entryCount={entryCount} />
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Department nav — editor items (incl. mega-menu department items) when
-          set, else the bar's built-in default */}
-      <MegaMenu departments={megaMenu.departments} featured={megaMenu.featured} items={headerNav} />
-    </header>
+        {/* Department nav — editor items (incl. mega-menu department items) when
+            set, else the bar's built-in default */}
+        <MegaMenu departments={megaMenu.departments} featured={megaMenu.featured} items={headerNav} />
+      </header>
+
+      {/* The header's slide-out panels — rendered ONCE, outside <header>, so
+          exactly one is ever visible and none inherits a breakpoint-hidden
+          wrapper. */}
+      <HeaderPanels />
+    </>
   );
 }

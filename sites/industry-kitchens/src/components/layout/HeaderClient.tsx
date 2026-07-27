@@ -1,12 +1,8 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useEffect } from "react";
 import { ShoppingCart, LayoutGrid, User, Crown } from "lucide-react";
-import { SlidePanel } from "@/components/ui/SlidePanel";
-import { CartPanel } from "@/components/cart/CartPanel";
-import { QuotePanel } from "@/components/quote/QuotePanel";
-import { AccountPanel } from "@/components/account/AccountPanel";
-import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
+import { useCartQuoteCounts, useHeaderPanels } from "@/lib/cart-quote-counts";
 
 export function HeaderClient({
   cartCount: serverCartCount,
@@ -22,13 +18,12 @@ export function HeaderClient({
   /** full: account + quote + cart with labels · compact: quote + cart icons · account: account button only */
   variant?: "full" | "compact" | "account";
 }) {
-  const [cartOpen, setCartOpen] = useState(false);
-  const [quoteOpen, setQuoteOpen] = useState(false);
-  const [accountOpen, setAccountOpen] = useState(false);
-
-  const closeCart = useCallback(() => setCartOpen(false), []);
-  const closeQuote = useCallback(() => setQuoteOpen(false), []);
-  const closeAccount = useCallback(() => setAccountOpen(false), []);
+  // This component renders THREE times per page (desktop, compact and account
+  // variants for different breakpoints), so the panels themselves cannot live
+  // here — per-instance state would stack two or three panels the moment the
+  // open signal is shared. They live in <HeaderPanels />, rendered once outside
+  // the header; these buttons only raise the signal.
+  const { open } = useHeaderPanels();
 
   // Badges read the client counts (pushed by cart/quote mutations without any
   // route re-render); server props re-seed on any real route re-render. All
@@ -40,23 +35,9 @@ export function HeaderClient({
   const cartCount = ctxCartCount ?? serverCartCount;
   const quoteCount = ctxQuoteCount ?? serverQuoteCount;
 
-  const panels = (
-    <>
-      <SlidePanel isOpen={quoteOpen} onClose={closeQuote} title="Your Quote">
-        <QuotePanel />
-      </SlidePanel>
-      <SlidePanel isOpen={cartOpen} onClose={closeCart} title="Your Cart">
-        <CartPanel />
-      </SlidePanel>
-      <SlidePanel isOpen={accountOpen} onClose={closeAccount} title="Account">
-        <AccountPanel />
-      </SlidePanel>
-    </>
-  );
-
   const accountButton = (
     <button
-      onClick={() => setAccountOpen(true)}
+      onClick={() => open("account")}
       className="inline-flex items-center gap-1.5 text-[13px] font-medium text-zinc-600 hover:text-[#D94B2B] transition-colors whitespace-nowrap"
       aria-label="Account"
     >
@@ -77,19 +58,14 @@ export function HeaderClient({
   );
 
   if (variant === "account") {
-    return (
-      <>
-        {accountButton}
-        {panels}
-      </>
-    );
+    return accountButton;
   }
 
   if (variant === "compact") {
     return (
       <>
         <button
-          onClick={() => setQuoteOpen(true)}
+          onClick={() => open("quote")}
           className="relative p-2 text-zinc-700"
           aria-label="Open quote"
         >
@@ -101,7 +77,7 @@ export function HeaderClient({
           )}
         </button>
         <button
-          onClick={() => setCartOpen(true)}
+          onClick={() => open("cart")}
           className="relative p-2 text-zinc-700"
           aria-label="Open cart"
         >
@@ -112,7 +88,6 @@ export function HeaderClient({
             </span>
           )}
         </button>
-        {panels}
       </>
     );
   }
@@ -123,7 +98,7 @@ export function HeaderClient({
 
       {/* Quote */}
       <button
-        onClick={() => setQuoteOpen(true)}
+        onClick={() => open("quote")}
         className="inline-flex items-center gap-1.5 text-[13px] font-medium text-zinc-600 hover:text-[#D94B2B] transition-colors whitespace-nowrap"
         aria-label="Open quote"
       >
@@ -133,15 +108,13 @@ export function HeaderClient({
 
       {/* Cart */}
       <button
-        onClick={() => setCartOpen(true)}
+        onClick={() => open("cart")}
         className="inline-flex items-center gap-1.5 text-[13px] font-medium text-zinc-600 hover:text-[#D94B2B] transition-colors whitespace-nowrap"
         aria-label="Open cart"
       >
         <ShoppingCart className="h-4 w-4" />
         Cart ({cartCount})
       </button>
-
-      {panels}
     </>
   );
 }

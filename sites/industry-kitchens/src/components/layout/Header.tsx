@@ -7,6 +7,7 @@ import { getSession } from "@/lib/auth";
 import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import type { HeaderNavItem, HeaderConfig } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
+import { HeaderPanels } from "./HeaderPanels";
 import { HeaderSearch } from "./HeaderSearch";
 import { GstToggle } from "./GstToggle";
 import { MobileNav } from "./MobileNav";
@@ -69,129 +70,137 @@ export async function Header({
   const searchPlaceholder = config.search_placeholder || `Search ${storeName}`;
 
   return (
-    <header className="bg-white sticky top-0 z-50 shadow-[0_1px_0_rgba(0,0,0,0.06)]">
-      {/* Utility row — logo, search (xl), account cluster (xl), compact icons (sub-xl) */}
-      <div className="border-b border-zinc-200">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3 lg:gap-6 py-3">
-            {/* Logo */}
-            <Link href="/" className="shrink-0">
-              {logoUrl ? (
-                <Image
-                  src={logoUrl}
-                  alt={logoAlt || storeName}
-                  width={188}
-                  height={64}
-                  priority
-                  className="h-11 xl:h-14 w-auto object-contain"
+    <>
+      <header className="bg-white sticky top-0 z-50 shadow-[0_1px_0_rgba(0,0,0,0.06)]">
+        {/* Utility row — logo, search (xl), account cluster (xl), compact icons (sub-xl) */}
+        <div className="border-b border-zinc-200">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center gap-3 lg:gap-6 py-3">
+              {/* Logo */}
+              <Link href="/" className="shrink-0">
+                {logoUrl ? (
+                  <Image
+                    src={logoUrl}
+                    alt={logoAlt || storeName}
+                    width={188}
+                    height={64}
+                    priority
+                    className="h-11 xl:h-14 w-auto object-contain"
+                  />
+                ) : (
+                  <span className="text-xl font-bold text-[#D94B2B]">{storeName}</span>
+                )}
+              </Link>
+
+              {/* Search — inline on desktop */}
+              <HeaderSearch
+                placeholder={searchPlaceholder}
+                className="hidden xl:block flex-1 max-w-3xl"
+              />
+
+              {/* Account / GST / Quote / Cart — desktop */}
+              <div className="hidden xl:flex items-center gap-4 shrink-0">
+                <GstToggle />
+                <HeaderClient
+                  cartCount={cartCount}
+                  quoteCount={quoteCount}
+                  isMember={isMember}
+                  entryCount={entryCount}
                 />
-              ) : (
-                <span className="text-xl font-bold text-[#D94B2B]">{storeName}</span>
-              )}
-            </Link>
+              </div>
 
-            {/* Search — inline on desktop */}
-            <HeaderSearch
-              placeholder={searchPlaceholder}
-              className="hidden xl:block flex-1 max-w-3xl"
-            />
+              {/* Compact (sub-desktop): phone + quote/cart + menu */}
+              <div className="flex xl:hidden items-center gap-0.5 ml-auto shrink-0">
+                {phoneHref && (
+                  <a href={phoneHref} aria-label="Call us" className="p-2 text-[#D94B2B]">
+                    <Phone className="h-5 w-5" />
+                  </a>
+                )}
+                <HeaderClient
+                  cartCount={cartCount}
+                  quoteCount={quoteCount}
+                  isMember={isMember}
+                  entryCount={entryCount}
+                  variant="compact"
+                />
+                <span className="p-2 text-zinc-700 xl:hidden">
+                  <MobileNavDrawer departments={megaMenu.departments} />
+                </span>
+                <MobileNav nav={nav} />
+              </div>
+            </div>
+          </div>
+        </div>
 
-            {/* Account / GST / Quote / Cart — desktop */}
-            <div className="hidden xl:flex items-center gap-4 shrink-0">
+        {/* Sub-desktop search row */}
+        <div className="xl:hidden border-b border-zinc-200">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-2.5">
+            <HeaderSearch placeholder={searchPlaceholder} className="block w-full" />
+          </div>
+        </div>
+
+        {/* Sub-desktop GST + sign-in row */}
+        <div className="xl:hidden border-b border-zinc-200 bg-zinc-50">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between py-1.5">
               <GstToggle />
               <HeaderClient
                 cartCount={cartCount}
                 quoteCount={quoteCount}
                 isMember={isMember}
                 entryCount={entryCount}
+                variant="account"
               />
-            </div>
-
-            {/* Compact (sub-desktop): phone + quote/cart + menu */}
-            <div className="flex xl:hidden items-center gap-0.5 ml-auto shrink-0">
-              {phoneHref && (
-                <a href={phoneHref} aria-label="Call us" className="p-2 text-[#D94B2B]">
-                  <Phone className="h-5 w-5" />
-                </a>
-              )}
-              <HeaderClient
-                cartCount={cartCount}
-                quoteCount={quoteCount}
-                isMember={isMember}
-                entryCount={entryCount}
-                variant="compact"
-              />
-              <span className="p-2 text-zinc-700 xl:hidden">
-                <MobileNavDrawer departments={megaMenu.departments} />
-              </span>
-              <MobileNav nav={nav} />
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Sub-desktop search row */}
-      <div className="xl:hidden border-b border-zinc-200">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-2.5">
-          <HeaderSearch placeholder={searchPlaceholder} className="block w-full" />
-        </div>
-      </div>
-
-      {/* Sub-desktop GST + sign-in row */}
-      <div className="xl:hidden border-b border-zinc-200 bg-zinc-50">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between py-1.5">
-            <GstToggle />
-            <HeaderClient
-              cartCount={cartCount}
-              quoteCount={quoteCount}
-              isMember={isMember}
-              entryCount={entryCount}
-              variant="account"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Navigation row — nav links and contact buttons share one row */}
-      <div className="hidden xl:block border-b border-zinc-200">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between gap-4 py-2">
-            <nav className="flex items-center gap-x-4 2xl:gap-x-6">
-              {nav.map((item) => (
+        {/* Navigation row — nav links and contact buttons share one row */}
+        <div className="hidden xl:block border-b border-zinc-200">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between gap-4 py-2">
+              <nav className="flex items-center gap-x-4 2xl:gap-x-6">
+                {nav.map((item) => (
+                  <Link
+                    key={item.href + item.label}
+                    href={item.href}
+                    className="text-[11px] font-semibold text-zinc-700 hover:text-[#D94B2B] whitespace-nowrap transition-colors"
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </nav>
+              <div className="flex items-center gap-2 shrink-0">
                 <Link
-                  key={item.href + item.label}
-                  href={item.href}
-                  className="text-[11px] font-semibold text-zinc-700 hover:text-[#D94B2B] whitespace-nowrap transition-colors"
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
-            <div className="flex items-center gap-2 shrink-0">
-              <Link
-                href="/pages/contact"
-                className="inline-flex items-center gap-1.5 rounded-md bg-[#D94B2B] px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white hover:bg-[#C73629] transition-colors"
-              >
-                <Mail className="h-3.5 w-3.5" />
-                Contact Us
-              </Link>
-              {phoneHref && (
-                <a
-                  href={phoneHref}
+                  href="/pages/contact"
                   className="inline-flex items-center gap-1.5 rounded-md bg-[#D94B2B] px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white hover:bg-[#C73629] transition-colors"
                 >
-                  <Phone className="h-3.5 w-3.5" />
-                  {phone}
-                </a>
-              )}
+                  <Mail className="h-3.5 w-3.5" />
+                  Contact Us
+                </Link>
+                {phoneHref && (
+                  <a
+                    href={phoneHref}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-[#D94B2B] px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white hover:bg-[#C73629] transition-colors"
+                  >
+                    <Phone className="h-3.5 w-3.5" />
+                    {phone}
+                  </a>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Department nav + mega panels — dark bar below the nav row */}
-      <MegaMenu departments={megaMenu.departments} featured={megaMenu.featured} />
-    </header>
+        {/* Department nav + mega panels — dark bar below the nav row */}
+        <MegaMenu departments={megaMenu.departments} featured={megaMenu.featured} />
+      </header>
+
+      {/* The header's slide-out panels — rendered ONCE here, NOT inside
+          HeaderClient (which renders three times for three breakpoints) and NOT
+          inside any hidden xl:* wrapper, so exactly one panel is ever visible
+          and it is visible at every width. */}
+      <HeaderPanels />
+    </>
   );
 }

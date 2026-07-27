@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { addToCart } from "@/lib/actions/cart";
-import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
+import { useCartQuoteCounts, useHeaderPanels } from "@/lib/cart-quote-counts";
 import { trackAddedToCart } from "@/components/analytics/klaviyo";
 import { ga4AddToCart } from "@/components/analytics/ga4";
 
@@ -34,14 +34,18 @@ export function AddToCartButton({
 }) {
   const [isPending, startTransition] = useTransition();
   const { setCartCount } = useCartQuoteCounts();
+  const { open } = useHeaderPanels();
 
   function handleClick() {
     startTransition(async () => {
       const res = await addToCart(productId, variantId, quantity ?? 1);
       // Fresh count from the action → badge updates without a route re-render
-      // (no-op on the provider-less /render/* surface).
+      // (no-op on the provider-less /render/* surface). The same success branch
+      // pops the cart panel out showing what was just added; a failed add
+      // returns `{ error }` and leaves it closed.
       if (res && "cartCount" in res && typeof res.cartCount === "number") {
         setCartCount(res.cartCount);
+        open("cart");
       }
       // Fire client-side so browse/cart-abandonment flows see it (server actions can't).
       trackAddedToCart({
