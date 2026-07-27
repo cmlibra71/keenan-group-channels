@@ -16,6 +16,7 @@
     "resolveJsonModule": true,
     "preserveSymlinks": true,
     "isolatedModules": true,
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "incremental": true,
     "plugins": [
@@ -37,8 +38,6 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules",
-    "**/*.test.ts",
-    "**/*.test.tsx"
+    "node_modules"
   ]
 }
