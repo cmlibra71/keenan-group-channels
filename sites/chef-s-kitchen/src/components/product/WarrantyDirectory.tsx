@@ -226,12 +226,8 @@ export function BrandWarranty({ brand }: { brand: string | null }) {
         </>
       ) : (
         <p className="text-sm text-text-secondary mb-4 max-w-2xl">
-          Warranty for this product is handled by the manufacturer. Call 1800 431 323 or
-          email{" "}
-          <a href="mailto:cs@chefsdepot.com.au" className="text-accent hover:text-accent-hover">
-            cs@chefsdepot.com.au
-          </a>{" "}
-          and our team will connect you with the right service department.
+          Warranty for this product is handled by the manufacturer. Get in touch and our
+          team will connect you with the right service department.
         </p>
       )}
       <p className="mt-4 text-sm">
@@ -341,12 +337,9 @@ export function WarrantyDirectory() {
       {/* Footer note */}
       <div className="mt-6 border-t border-border pt-4">
         <p className="text-xs text-text-muted leading-relaxed">
-          <strong>Brand not listed?</strong> Call 1800 431 323 or email{" "}
-          <a href="mailto:cs@chefsdepot.com.au" className="text-accent hover:text-accent-hover">
-            cs@chefsdepot.com.au
-          </a>{" "}
-          &mdash; our team will connect you with the right manufacturer or importer
-          service department. We work with 160+ suppliers across Australia.
+          <strong>Brand not listed?</strong> Get in touch &mdash; our team will connect you
+          with the right manufacturer or importer service department. We work with 160+
+          suppliers across Australia.
         </p>
         <p className="text-xs text-text-muted leading-relaxed mt-2">
           <strong>Important:</strong> &ldquo;On-site&rdquo; generally means metropolitan areas
