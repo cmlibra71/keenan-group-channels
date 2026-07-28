@@ -1,9 +1,14 @@
 name: Typecheck
 
-# Fast type-safety gate. Runs `tsc --noEmit` for every site against a freshly built
+# Fast correctness gate. Runs `tsc --noEmit` for every site against a freshly built
 # @keenan/services, so the snake_case/camelCase service-result bug class (and any other
 # type error) is caught on every push/PR — not discovered at runtime. The deploy build
 # also enforces types (ignoreBuildErrors: false); this job is the quicker signal.
+#
+# It then runs the unit tests for template/ AND every site. check-shared-sync.mjs only
+# catches DIVERGENCE between the copies, so a rule weakened identically in all three
+# (e.g. the password strength policy) sails past it and past tsc — the tests are the
+# only gate that objects.
 
 on:
   push:
@@ -66,3 +71,8 @@ jobs:
             echo "::endgroup::"
           done
           exit $code
+
+      # Must run after "Install workspace" — the tests import @keenan/services, and tsx
+      # is a root devDependency installed by that step.
+      - name: Unit tests (template + every site)
+        run: npm test

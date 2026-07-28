@@ -1,6 +1,5 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Package } from "lucide-react";
 import { getBrandsForChannel } from "@/lib/store";
 
 export const metadata = {
@@ -24,18 +23,22 @@ export default async function BrandsPage() {
               href={`/brands/${brand.slug}`}
               className="group block rounded-lg border border-steel-200 overflow-hidden hover:border-steel-400 hover:shadow-sm transition-all"
             >
-              <div className="relative aspect-[4/3] bg-steel-100 overflow-hidden">
+              <div className="relative aspect-[4/3] bg-white overflow-hidden">
                 {brand.image_url ? (
                   <Image
                     src={brand.image_url}
                     alt={brand.name}
                     fill
                     sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                    className="object-contain p-4 group-hover:scale-105 transition-transform duration-300"
+                    className="object-contain p-6 group-hover:scale-105 transition-transform duration-300"
                   />
                 ) : (
-                  <div className="h-full w-full flex items-center justify-center text-steel-300">
-                    <Package className="h-12 w-12" />
+                  // No logo exists for this brand (neither Zoey nor the web had one) — a set
+                  // wordmark reads as designed where an empty placeholder icon reads as broken.
+                  <div className="h-full w-full flex items-center justify-center px-4">
+                    <span className="text-center text-lg font-semibold leading-tight tracking-tight text-ink-700">
+                      {brand.name}
+                    </span>
                   </div>
                 )}
               </div>

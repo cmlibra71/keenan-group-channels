@@ -51,6 +51,23 @@ node $S/cloak.mjs shot http://localhost:3002 --out /tmp/cd.png   # then Read the
 node $S/cloak.mjs eval http://localhost:3002 "document.title"
 ```
 
+### Unit tests
+
+Co-located `*.test.ts` files (`node:test` + `node:assert/strict`, imports carry an explicit
+`.ts` extension) cover the pure logic seams in `src/lib/**` — password policy, session tokens,
+Google claims, GST cookie, role permissions, checkout, Stripe gateways, cart pricing.
+
+```bash
+npm test                            # template + every site (this is what CI runs)
+npm test -w template                # one workspace
+npm test -w sites/chef-s-kitchen
+```
+
+These run in the **Typecheck** workflow on every push and PR. Note `sync:check` only catches
+*divergence* between the template and site copies — a rule weakened identically in all three
+passes it, so the tests are the only gate that objects. Test files are typechecked too
+(they are no longer excluded from the tsconfigs).
+
 ### Chef's Depot E2E suite
 
 `sites/chef-s-kitchen/tests/e2e/` is a cloakbrowser-driven walk through every CD path
@@ -89,7 +106,7 @@ node sites/chef-s-kitchen/tests/e2e/run.mjs --smoke-only --base https://chefsdep
 - DB pool is kept small (5 connections) per site to avoid exhausting PostgreSQL
 - New files created in `template/` must be copied to all sites in `sites/`
 - Channel-agnostic shared logic (pure helpers, API routes, shared actions) must stay **byte-identical** to `template/` across every site. The set is declared in `orchestrator/shared-modules.json` and enforced by `npm run sync:check` (also a CI gate). Editing a shared file in `template/` means copying it to every site; the check tells you which drifted. Everything NOT in the manifest (design, layout, homepage, `store.ts` config, `blocks/registry.tsx`) is intentionally per-channel and free to diverge.
-- Pure checkout/payment logic lives behind small seams under `template/src/lib/checkout/` (`order-draft`, `shipping`, `net-terms`) and `template/src/lib/payments/` (`gateway`, `stripe-gateways`), each with co-located `*.test.ts` runnable via `node --test`. `placeOrder` is a thin imperative shell over these; don't re-inline tax/shipping/gateway/net-terms logic at call sites.
+- Pure checkout/payment logic lives behind small seams under `template/src/lib/checkout/` (`order-draft`, `shipping`, `net-terms`) and `template/src/lib/payments/` (`gateway`, `stripe-gateways`), each with co-located `*.test.ts` run by `npm test`. `placeOrder` is a thin imperative shell over these; don't re-inline tax/shipping/gateway/net-terms logic at call sites.
 
 ## Commerce Database Migrations
 

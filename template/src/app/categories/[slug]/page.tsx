@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { draftMode, headers } from "next/headers";
 import Link from "next/link";
 import Image from "next/image";
@@ -68,14 +68,35 @@ export default async function CategoryPage({
   const priceBands = (sp.price?.split(",").filter(Boolean) ?? []).filter((b) =>
     ["lt1000", "1000to3000", "gt3000"].includes(b)
   ) as ("lt1000" | "1000to3000" | "gt3000")[];
-  const availability = (sp.stock?.split(",").filter(Boolean) ?? []).filter((a) =>
-    ["in_stock", "clearance"].includes(a)
-  ) as ("in_stock" | "clearance")[];
+  // "In stock" was retired as a shopper-facing facet — Clearance is the only
+  // availability filter. Anything else in ?stock= (e.g. a bookmarked
+  // ?stock=in_stock link) is dropped and the URL canonicalised, so old links
+  // neither filter silently nor leave an orphan chip in the toolbar.
+  const stockValues = sp.stock?.split(",").filter(Boolean) ?? [];
+  const availability = stockValues.filter((a) => a === "clearance") as "clearance"[];
+  if (availability.length !== stockValues.length) {
+    const next = new URLSearchParams(
+      Object.entries(sp).filter((e): e is [string, string] => typeof e[1] === "string")
+    );
+    if (availability.length > 0) next.set("stock", availability.join(","));
+    else next.delete("stock");
+    const qs = next.toString();
+    redirect(`/categories/${slug}${qs ? `?${qs}` : ""}`);
+  }
 
   const [listing, subcategories, breadcrumbs, memberPricingEnabled] = await Promise.all([
     getCategoryListing(category.id, {
       page: 1,
-      limit: PER_PAGE * page, // cumulative for Load more
+      // Cumulative for Load more: each press re-asks for the SAME listing with a
+      // bigger limit. `total` and `facets` below are therefore anchored to page 1
+      // inside getCategoryListing — they must not move as the shopper pages.
+      //
+      // The counts the filter rail ADVERTISES come from the same `facets`, while
+      // selecting a facet re-queries live. getCategoryListing now bounds how stale
+      // the materialized base row may get (refreshed in the background once it
+      // passes the live listings' own TTL), so "Clearance (43)" and "showing 31"
+      // can no longer disagree.
+      limit: PER_PAGE * page,
       subcategoryIds: parseIds(sp.sub),
       brandIds: parseIds(sp.brand),
       priceBands,

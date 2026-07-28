@@ -30,8 +30,9 @@ const PRICE_LABELS: Record<string, string> = {
   "1000to3000": "$1,000–$3,000",
   gt3000: "$3,000+",
 };
+// Stock availability is deliberately NOT a shopper-facing facet — "In stock" was
+// retired, so Clearance is the only availability option we label (and render).
 const AVAIL_LABELS: Record<string, string> = {
-  in_stock: "In stock",
   clearance: "Clearance",
 };
 
@@ -58,7 +59,9 @@ function categoryGroups(facets: CategoryFacets): FacetGroupDef[] {
   groups.push({
     param: "stock",
     title: "Availability",
-    options: facets.availability.map((f) => ({ value: f.key, label: AVAIL_LABELS[f.key] ?? f.key, count: f.count })),
+    options: facets.availability
+      .filter((f) => f.key in AVAIL_LABELS)
+      .map((f) => ({ value: f.key, label: AVAIL_LABELS[f.key], count: f.count })),
   });
   return groups;
 }

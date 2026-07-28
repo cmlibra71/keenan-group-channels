@@ -1,7 +1,7 @@
 "use client";
 import { addToCart } from "@/lib/actions/cart";
 import { addToQuote } from "@/lib/actions/quote";
-import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
+import { useCartQuoteCounts, useHeaderPanels } from "@/lib/cart-quote-counts";
 import { trackAddedToCart } from "@/components/analytics/klaviyo";
 import { ga4SelectItem, ga4AddToCart } from "@/components/analytics/ga4";
 import type { NativeComponents } from "@keenan/services/builder-react";
@@ -71,13 +71,17 @@ export function enquireHandler(router: { push: (to: string) => void }) {
  *  onError branch (reset the pending state) fires. */
 export function useAddToCartHandler() {
   const { setCartCount } = useCartQuoteCounts();
+  const { open } = useHeaderPanels();
   return async (args: Record<string, unknown>) => {
     const id = num(args.productId);
     if (id == null) return { success: false, error: "no product" };
     const res = await addToCart(id, undefined, 1);
-    // Fresh count from the action → badge updates without a route re-render.
+    // Fresh count from the action → badge updates without a route re-render,
+    // and the cart panel pops out showing what was just added — parity with
+    // AddToCartButton, which does exactly this in the same success branch.
     if (res && "cartCount" in res && typeof res.cartCount === "number") {
       setCartCount(res.cartCount);
+      open("cart");
     }
     // Fire client-side so browse/cart-abandonment flows see it (server actions can't).
     trackAddedToCart({
@@ -108,13 +112,16 @@ export function useAddToCartHandler() {
  *  `{ success:false, error }` so the master's onError toast fires. */
 export function useAddToQuoteHandler() {
   const { setQuoteCount } = useCartQuoteCounts();
+  const { open } = useHeaderPanels();
   return async (args: Record<string, unknown>) => {
     const id = num(args.productId);
     if (id == null) return { success: false, error: "no product" };
     const res = await addToQuote(id, null);
-    // Fresh count from the action → badge updates without a route re-render.
+    // Fresh count from the action → badge updates without a route re-render,
+    // and the quote panel pops out — parity with AddToQuoteButton.
     if (res && "quoteCount" in res && typeof res.quoteCount === "number") {
       setQuoteCount(res.quoteCount);
+      open("quote");
     }
     return "error" in (res ?? {})
       ? { success: false, error: String((res as { error: string }).error) }

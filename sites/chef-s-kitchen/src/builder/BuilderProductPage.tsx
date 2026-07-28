@@ -16,7 +16,7 @@ import { addToCart } from "@/lib/actions/cart";
 import { addToQuote } from "@/lib/actions/quote";
 import { useGst } from "@/lib/gst";
 import { overlayLiveGst } from "./live-gst";
-import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
+import { useCartQuoteCounts, useHeaderPanels } from "@/lib/cart-quote-counts";
 import { ProductImageGallery, type ProductImage as GalleryImage } from "@/components/product/ProductImageGallery";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { BuilderTree, type NativeComponents } from "@keenan/services/builder-react";
@@ -51,27 +51,31 @@ function ActionsBridge({
   const router = useRouter();
   const { inclusive, pricesIncludeTax } = useGst();
   // Wrap the site actions so the returned fresh counts reach the header badges
-  // (the item mutations no longer trigger a route re-render).
+  // (the item mutations no longer trigger a route re-render) and a successful
+  // add pops the matching panel out — parity with AddToCart/AddToQuoteButton.
   const { setCartCount, setQuoteCount } = useCartQuoteCounts();
+  const { open } = useHeaderPanels();
   const countingAddToCart = React.useCallback(
     async (pid: number, variantId: number | null, quantity: number) => {
       const res = await addToCart(pid, variantId, quantity);
       if (res && "cartCount" in res && typeof res.cartCount === "number") {
         setCartCount(res.cartCount);
+        open("cart");
       }
       return res;
     },
-    [setCartCount]
+    [setCartCount, open]
   );
   const countingAddToQuote = React.useCallback(
     async (pid: number, variantId: number | null) => {
       const res = await addToQuote(pid, variantId);
       if (res && "quoteCount" in res && typeof res.quoteCount === "number") {
         setQuoteCount(res.quoteCount);
+        open("quote");
       }
       return res;
     },
-    [setQuoteCount]
+    [setQuoteCount, open]
   );
   const handlers = useProductPageHandlers({
     productId,
