@@ -75,6 +75,8 @@ export function ProductPageClient({
   memberPrice,
   memberPriceMap,
   isMember,
+  memberSavingsPct,
+  accountPricing,
   membershipTeaser,
   brandName,
   reviewSummary,
@@ -83,6 +85,10 @@ export function ProductPageClient({
   memberPrice?: number | null;
   memberPriceMap?: Record<number, number>;
   isMember?: boolean;
+  /** Non-members only: what membership saves here, as a whole percentage. */
+  memberSavingsPct?: number;
+  /** The member price is really a B2B contract price. */
+  accountPricing?: boolean;
   membershipTeaser?: { fromPrice: string | null } | null;
   brandName?: string | null;
   reviewSummary?: { avg: number; count: number } | null;
@@ -93,6 +99,8 @@ export function ProductPageClient({
       memberPrice={memberPrice ?? null}
       memberPriceMap={memberPriceMap ?? {}}
       isMember={isMember ?? false}
+      memberSavingsPct={memberSavingsPct ?? 0}
+      accountPricing={accountPricing ?? false}
       membershipTeaser={membershipTeaser ?? null}
     >
       <ProductOverviewInner brandName={brandName} reviewSummary={reviewSummary} />

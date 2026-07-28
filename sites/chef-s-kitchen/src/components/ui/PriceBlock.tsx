@@ -3,17 +3,22 @@
 import Link from "next/link";
 import { Star } from "lucide-react";
 import { useGst, adjustForGst } from "@/lib/gst";
+import { derivePriceDisplay } from "./price-display";
 
 /**
  * Design-system pricing block — the single component that renders the trade
- * pricing model so cards, PDP and cart never diverge. Per the reference
- * (.pricecard / prodcard demos) the MEMBER PRICE is always the headline when
- * it undercuts RRP; RRP is struck with the savings beside it; the gold
- * "Not a member? Join … to unlock this price" box shows for guests only.
+ * pricing model so cards, PDP and cart never diverge.
  *
- *  Card:  $1,346.40 ex GST  /  RRP ~~$1,683~~  /  ★ Member saves $336.60 (20%)
- *  PDP:   $1,346.40 ex GST [★ MEMBER PRICE]  /  RRP ~~$1,683~~ · You save $336.60 (20%)
- *         (guest) gold box: Not a member? Join from $14.95/mo to unlock this price [Join]
+ * Who sees what:
+ *   Public   $1,683.00 ex GST · RRP
+ *            (pdp) gold box: Members save up to 20% — join from $14.95/mo to see
+ *            member pricing [Join]
+ *   Member   $1,346.40 ex GST [★ MEMBER PRICE] / RRP ~~$1,683~~ · You save $337 (20%)
+ *   Account  $1,500.00 ex GST · Your account price / RRP ~~$1,683~~
+ *
+ * A member price is only ever computed for an actual member (see lib/member.ts),
+ * so nothing here can show trade pricing to the public even if called wrongly.
+ * The decision lives in price-display.ts; this file only formats it.
  *
  * All figures are stored ex-GST and derived for display (inc = ex × 1.1).
  */
@@ -22,6 +27,8 @@ export function PriceBlock({
   memberPrice,
   isMember,
   planPrice,
+  accountPricing = false,
+  memberSavingsPct = 0,
   size = "card",
   className = "",
 }: {
@@ -29,6 +36,11 @@ export function PriceBlock({
   memberPrice?: number | null;
   isMember?: boolean;
   planPrice?: string | null;
+  /** The memberPrice is a negotiated B2B contract price, not a member price. */
+  accountPricing?: boolean;
+  /** What membership saves on this product, as a whole percentage — non-members
+   *  only. Never paired with a price. */
+  memberSavingsPct?: number;
   size?: "card" | "pdp";
   className?: string;
 }) {
@@ -39,62 +51,96 @@ export function PriceBlock({
   const fmtRound = (n: number) => `$${Math.round(adj(n)).toLocaleString("en-AU")}`;
   const gstLabel = inclusive ? "inc GST" : "ex GST";
 
-  if (!Number.isFinite(rrp) || rrp <= 0) return null;
+  const d = derivePriceDisplay({ rrp, memberPrice, isMember, accountPricing, memberSavingsPct });
+  if (d.hidden) return null;
 
-  const hasMemberDeal = memberPrice != null && memberPrice > 0 && memberPrice < rrp;
-  const headline = hasMemberDeal ? memberPrice! : rrp;
-  const savings = hasMemberDeal ? rrp - memberPrice! : 0;
-  const savingsPct = hasMemberDeal ? Math.round((savings / rrp) * 100) : 0;
   const big = size === "pdp" ? "text-[33px]" : "text-lg";
-  const join = planPrice ? parseFloat(planPrice).toFixed(2) : "14.95";
+  const join = planPrice ? parseFloat(planPrice).toFixed(2) : null;
 
   return (
     <div className={className}>
-      {/* Headline = member price when a deal exists, else RRP */}
+      {/* Headline: the price this shopper actually gets */}
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className={`${big} font-bold leading-none tracking-[-0.02em] text-text-primary`}>
-          {fmt(headline)}
+          {fmt(d.headline)}
         </span>
         <span className="text-xs font-semibold text-steel-500">{gstLabel}</span>
-        {hasMemberDeal && size === "pdp" && (
+        {d.showRrpLabel && (
+          <span className="text-xs font-semibold uppercase tracking-wide text-steel-400">RRP</span>
+        )}
+        {d.showMemberBadge && size === "pdp" && (
           <span className="badge-member ml-1">
             <Star className="h-3 w-3 fill-current" />
             Member Price
           </span>
         )}
+        {d.showAccountLabel && size === "pdp" && (
+          <span className="text-xs font-semibold text-member-text">Your account price</span>
+        )}
       </div>
 
-      {hasMemberDeal && (
-        <>
-          {/* RRP struck + savings */}
-          <p className={`mt-1 text-steel-500 ${size === "card" ? "text-xs" : "text-[13px]"}`}>
-            RRP <s className="text-steel-400">{fmt(rrp)}</s>
-            {size === "pdp" && (
-              <>
-                {" · "}
-                <b className="text-member-text">You save {fmtRound(savings)} ({savingsPct}%)</b>
-              </>
-            )}
-          </p>
-          {size === "card" && (
-            <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-member-text">
-              <Star className="h-3 w-3 fill-current" />
-              Member saves {fmtRound(savings)} ({savingsPct}%)
-            </p>
+      {/* Struck RRP — only when something beats it */}
+      {d.showStruckRrp && (
+        <p className={`mt-1 text-steel-500 ${size === "card" ? "text-xs" : "text-[13px]"}`}>
+          RRP <s className="text-steel-400">{fmt(rrp)}</s>
+          {size === "pdp" && d.savings > 0 && (
+            <>
+              {" · "}
+              <b className="text-member-text">
+                You save {fmtRound(d.savings)} ({d.savingsPct}%)
+              </b>
+            </>
           )}
+          {size === "card" && d.showAccountLabel && (
+            <>
+              {" · "}
+              <b className="text-member-text">Your account price</b>
+            </>
+          )}
+        </p>
+      )}
 
-          {/* Guest-only join funnel (gold box on PDP) */}
-          {!isMember && size === "pdp" && (
-            <div className="mt-3.5 flex items-center justify-between gap-3 rounded-btn bg-member-bg px-3.5 py-[11px] text-[12.5px] text-member-text">
-              <span>
-                Not a member? <b>Join from ${join}/mo</b> to unlock this price.
-              </span>
-              <Link href="/membership" className="btn-gold btn-sm shrink-0">
-                Join
-              </Link>
-            </div>
-          )}
-        </>
+      {/* Member saving on cards */}
+      {d.savings > 0 && size === "card" && (
+        <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-member-text">
+          <Star className="h-3 w-3 fill-current" />
+          Member saves {fmtRound(d.savings)} ({d.savingsPct}%)
+        </p>
+      )}
+
+      {/* Join funnel. Deliberately NOT nested inside "there is a member price" —
+          the people this is aimed at are exactly the ones who have none. */}
+      {d.showJoin && size === "pdp" && (
+        <div className="mt-3.5 flex items-center justify-between gap-3 rounded-btn bg-member-bg px-3.5 py-[11px] text-[12.5px] text-member-text">
+          <span>
+            {d.teaserPct > 0 ? (
+              <>
+                Members save up to <b>{d.teaserPct}%</b> on this item
+              </>
+            ) : (
+              <>Members get wholesale pricing</>
+            )}
+            {join ? (
+              <>
+                {" — "}
+                <b>join from ${join}/mo</b> to see member pricing.
+              </>
+            ) : (
+              <> — join to see member pricing.</>
+            )}
+          </span>
+          <Link href="/membership" className="btn-gold btn-sm shrink-0">
+            Join
+          </Link>
+        </div>
+      )}
+
+      {/* Card-sized teaser: one quiet line, no CTA button */}
+      {d.showJoin && size === "card" && d.teaserPct > 0 && (
+        <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-member-text">
+          <Star className="h-3 w-3 fill-current" />
+          Members save up to {d.teaserPct}%
+        </p>
       )}
     </div>
   );

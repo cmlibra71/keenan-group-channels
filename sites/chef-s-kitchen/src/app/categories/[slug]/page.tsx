@@ -216,7 +216,7 @@ export default async function CategoryPage({
         },
         customer: {
           isMember: memberCtx?.isMember ?? false,
-          loggedIn: (memberCtx?.accountId ?? null) != null || (memberCtx?.isMember ?? false),
+          loggedIn: memberCtx?.loggedIn ?? false,
         },
         gst: { inclusive: gstInclusive, pricesIncludeTax },
         draft,

@@ -4,7 +4,6 @@ import {
   type ConditionContext,
   type RenderContext,
 } from "@keenan/services";
-import { getSession } from "@/lib/auth";
 import { getMemberContext } from "@/lib/member";
 
 /**
@@ -46,12 +45,14 @@ export async function buildConditionContext(ctx?: RenderContext): Promise<Condit
   }
 
   try {
-    const [session, memberCtx] = await Promise.all([
-      getSession().catch(() => null),
-      getMemberContext().catch(() => null),
-    ]);
-    base.signedIn = session != null;
+    const memberCtx = await getMemberContext().catch(() => null);
+    // Both facts come from the one resolver so they cannot disagree — and it
+    // already reads the session, so this drops a duplicate lookup.
+    base.signedIn = memberCtx?.loggedIn ?? false;
     base.isMember = memberCtx?.isMember ?? false;
+    // Null for every non-member now. Authored conditions of the form
+    // "customerGroupId is <CD Member>" used to fire for logged-out visitors,
+    // because guests were handed the base member group.
     base.customerGroupId = memberCtx?.customerGroupId ?? null;
   } catch {
     // guest defaults stand

@@ -27,6 +27,8 @@ export interface ProductCardProps {
   /** Category eyebrow (usually the page's category name). */
   eyebrow?: string | null;
   memberPrice?: number | null;
+  accountPricing?: boolean;
+  memberSavingsPct?: number;
   isMember?: boolean;
   planPrice?: string | null;
   /** Render the ink Clearance badge (clearance/last-units contexts). */
@@ -51,6 +53,8 @@ export function ProductCard({
   brandName,
   eyebrow,
   memberPrice,
+  accountPricing,
+  memberSavingsPct,
   isMember,
   planPrice,
   clearance,
@@ -137,6 +141,8 @@ export function ProductCard({
             <PriceBlock
               rrp={rrp}
               memberPrice={memberPrice}
+              accountPricing={accountPricing}
+              memberSavingsPct={memberSavingsPct}
               isMember={isMember}
               planPrice={planPrice}
               size="card"

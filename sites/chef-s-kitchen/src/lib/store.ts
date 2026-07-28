@@ -90,6 +90,7 @@ export const {
   getSubscriptionPlans,
   getActiveSubscription,
   getMemberPriceMap,
+  getMemberSavingsPctMap,
   applyAccountPricesToProducts,
   getUpcomingDraws,
   getPartnerOffers,

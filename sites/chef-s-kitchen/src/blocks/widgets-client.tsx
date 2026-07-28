@@ -53,6 +53,9 @@ export const PriceWidget: WidgetComponent = ({ attrs }) => {
   if (!purchase) return <NoProvider name="price" />;
   const { displayPrice, displaySalePrice, activeMemberPrice, isMember, membershipTeaser } =
     purchase;
+  // Non-members get a percentage for the join teaser; account holders get their
+  // contract price labelled as one rather than as a membership perk.
+  const { memberSavingsPct, accountPricing } = purchase;
   // size="card": the LISTING-card pricing look (bare PriceBlock, RRP not sale
   // — the save badge carries the discount), verbatim from ProductCard.tsx.
   if (attrs.size === "card") {
@@ -62,6 +65,8 @@ export const PriceWidget: WidgetComponent = ({ attrs }) => {
         memberPrice={activeMemberPrice}
         isMember={isMember}
         planPrice={membershipTeaser?.fromPrice}
+        memberSavingsPct={memberSavingsPct}
+        accountPricing={accountPricing}
         size="card"
       />
     ) : (
@@ -83,6 +88,8 @@ export const PriceWidget: WidgetComponent = ({ attrs }) => {
           memberPrice={activeMemberPrice}
           isMember={isMember}
           planPrice={membershipTeaser?.fromPrice}
+          memberSavingsPct={memberSavingsPct}
+          accountPricing={accountPricing}
           size="pdp"
         />
       )}
@@ -274,7 +281,7 @@ export const MobileBuyBarWidget: WidgetComponent = () => {
       <div className="min-w-0">
         <Price
           amount={
-            isMember && memberPrice != null && memberPrice < displayPrice
+            memberPrice != null && memberPrice < displayPrice
               ? memberPrice
               : (displaySalePrice ?? displayPrice)
           }
@@ -282,7 +289,9 @@ export const MobileBuyBarWidget: WidgetComponent = () => {
           className="text-lg font-bold text-text-primary"
         />
         <span className="ml-1 text-[10px] font-semibold text-steel-400">
-          {isMember && memberPrice != null ? "member" : "ex GST"}
+          {memberPrice != null && memberPrice < displayPrice
+            ? (isMember ? "member" : "your price")
+            : "ex GST"}
         </span>
       </div>
       <AddToCartButton

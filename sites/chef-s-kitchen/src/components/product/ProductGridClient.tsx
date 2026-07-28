@@ -25,6 +25,8 @@ export function ProductGridClient({
   products,
   memberPricingAvailable,
   memberPriceMap,
+  accountPricing,
+  savingsPctMap,
   isMember,
   planPrice,
   eyebrow,
@@ -36,6 +38,8 @@ export function ProductGridClient({
   products: GridProduct[];
   memberPricingAvailable?: boolean;
   memberPriceMap?: Record<number, number>;
+  accountPricing?: boolean;
+  savingsPctMap?: Record<number, number>;
   isMember?: boolean;
   planPrice?: string | null;
   eyebrow?: string | null;
@@ -82,6 +86,8 @@ export function ProductGridClient({
           brandName={product.brandName}
           eyebrow={eyebrow}
           memberPrice={memberPricingAvailable ? memberPriceMap?.[product.id] ?? null : null}
+          accountPricing={accountPricing}
+          memberSavingsPct={savingsPctMap?.[product.id] ?? 0}
           isMember={isMember}
           planPrice={planPrice}
           clearance={clearance}

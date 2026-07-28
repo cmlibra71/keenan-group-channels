@@ -1,7 +1,7 @@
 import { notFound, permanentRedirect } from "next/navigation";
 import { draftMode, headers } from "next/headers";
 import Link from "next/link";
-import { getRedirectForPath, getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, brandService, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice, getCmsPage, getCmsTemplate } from "@/lib/store";
+import { getRedirectForPath, getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getMemberSavingsPctMap, brandService, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice, getCmsPage, getCmsTemplate } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
 import { getMemberContext, getListingPricing, applyAccountPrices } from "@/lib/member";
 import { assertProductVisible, applyCatalogScope } from "@/lib/catalog-scope";
@@ -99,9 +99,10 @@ export default async function ProductPage({
     slug: string;
   }[];
 
-  // Member pricing — design-system model: the member figure is computed for
-  // EVERYONE (guests price at the base member tier) so the page can render
-  // either the member price or the gold "Join → pay $X" conversion funnel.
+  // Member pricing. Only an active member (or a B2B account) resolves a price
+  // here — getMemberContext hands non-members no pricing group, so no member
+  // figure is computed for them and none can reach the page. Non-members get
+  // `teaserSavingsPct` instead: a rounded percentage, never a price.
   let memberPrice: number | null = null;
   let membershipTeaser: { fromPrice: string | null } | null = null;
   const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
@@ -113,8 +114,12 @@ export default async function ProductPage({
   const isMember = memberCtx.isMember;
 
   let memberPriceMap: Record<number, number> = {};
+  // "Join from $X/mo" is a public, channel-wide figure — it must render for the
+  // people we are trying to convert, who by definition have no member price.
+  membershipTeaser = memberCtx.planPrice
+    ? { fromPrice: parseFloat(memberCtx.planPrice).toFixed(2) }
+    : null;
   if ((memberPricingEnabled && memberCtx.customerGroupId) || memberCtx.accountId) {
-    membershipTeaser = { fromPrice: memberCtx.planPrice ? parseFloat(memberCtx.planPrice).toFixed(2) : null };
 
     // Member prices for ALL variants so the client can update on variant change. The account is
     // threaded in so its contract price short-circuits the member / cost-plus price.
@@ -136,6 +141,17 @@ export default async function ProductPage({
       memberPrice = memberPriceMap[defaultVariant.id];
     }
   }
+
+  // What membership would save on THIS product, for people who aren't members —
+  // a rounded percentage resolved server-side, with no price attached. This is
+  // what keeps the join funnel alive now that non-members have no member price.
+  const teaserSavingsPct =
+    !isMember && memberCtx.teaserCustomerGroupId
+      ? (await getMemberSavingsPctMap(
+          [{ id: product.id, price: product.price as string | null }],
+          memberCtx.teaserCustomerGroupId
+        ))[product.id] ?? 0
+      : 0;
 
   const reviews = reviewsRaw as {
     id: number;
@@ -248,6 +264,8 @@ export default async function ProductPage({
       memberPrice,
       memberPriceMap,
       isMember,
+      memberSavingsPct: teaserSavingsPct,
+      accountPricing: !isMember && memberCtx.accountId != null,
       membershipTeaser,
       brandName: brandRow?.name ?? null,
       reviewSummary,
@@ -283,7 +301,10 @@ export default async function ProductPage({
       memberContext: {
         customerGroupId: memberCtx.customerGroupId,
         isMember,
-        planPrice: membershipTeaser?.fromPrice ?? null,
+        loggedIn: memberCtx.loggedIn,
+        planPrice: memberCtx.planPrice ? parseFloat(memberCtx.planPrice).toFixed(2) : null,
+        // Non-members get a savings PERCENTAGE for the join teaser — never a price.
+        teaserCustomerGroupId: memberCtx.teaserCustomerGroupId,
       },
       // Per-account contract prices override every layer; the payload's product + related cards
       // and its variant pricing are all resolved with the account in scope.
@@ -388,6 +409,8 @@ export default async function ProductPage({
             memberPrice,
             memberPriceMap,
             isMember,
+            memberSavingsPct: teaserSavingsPct,
+            accountPricing: !isMember && memberCtx.accountId != null,
             membershipTeaser,
             memberPricingEnabled,
             suppressCatalogPricing,

@@ -99,7 +99,7 @@ export default async function ContentPage({
         legacyPage: (legacyPage as Record<string, unknown> | null) ?? null,
         customer: {
           isMember: memberCtx?.isMember ?? false,
-          loggedIn: (memberCtx?.accountId ?? null) != null || (memberCtx?.isMember ?? false),
+          loggedIn: memberCtx?.loggedIn ?? false,
         },
         draft,
         sanitizeHtml,

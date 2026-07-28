@@ -74,7 +74,7 @@ export default async function BrandPage({
       pricing: productCtx.pricing as { memberPriceMap?: Record<number, number>; isMember?: boolean; planPrice?: string | null },
       customer: {
         isMember: memberCtx?.isMember ?? false,
-        loggedIn: (memberCtx?.accountId ?? null) != null || (memberCtx?.isMember ?? false),
+        loggedIn: memberCtx?.loggedIn ?? false,
       },
       gst: { inclusive: gstInclusive, pricesIncludeTax },
       draft,

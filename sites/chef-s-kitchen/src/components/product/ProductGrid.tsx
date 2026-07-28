@@ -30,6 +30,8 @@ export async function ProductGrid({
   products,
   memberPricingAvailable,
   memberPriceMap,
+  accountPricing,
+  savingsPctMap,
   isMember,
   planPrice,
   eyebrow,
@@ -42,6 +44,8 @@ export async function ProductGrid({
   memberPricingAvailable?: boolean;
   /** Member prices keyed by product id (computed for guests too — join funnel). */
   memberPriceMap?: Record<number, number>;
+  accountPricing?: boolean;
+  savingsPctMap?: Record<number, number>;
   isMember?: boolean;
   planPrice?: string | null;
   /** Category eyebrow shown on each card. */
@@ -72,6 +76,8 @@ export async function ProductGrid({
       products={products}
       memberPricingAvailable={memberPricingAvailable}
       memberPriceMap={memberPriceMap}
+      accountPricing={accountPricing}
+      savingsPctMap={savingsPctMap}
       isMember={isMember}
       planPrice={planPrice}
       eyebrow={eyebrow}
