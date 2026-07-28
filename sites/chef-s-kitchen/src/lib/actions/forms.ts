@@ -86,8 +86,11 @@ export async function submitForm(input: SubmitFormInput): Promise<SubmitFormResu
   } catch (e) {
     const msg = e instanceof Error ? e.message : "";
     // ValidationError messages are written for the customer; anything else is
-    // ours to hide.
-    const isValidation = (e as { statusCode?: number })?.statusCode === 422;
+    // ours to hide. The property is `status` — reading `statusCode` meant every
+    // fixable problem ("Choose a valid option…") came back as a dead-end
+    // "please try again" the visitor could do nothing with.
+    const isValidation = (e as { status?: number; statusCode?: number })?.status === 422 ||
+      (e as { statusCode?: number })?.statusCode === 422;
     if (!isValidation) console.error("[submitForm] persist failed:", e);
     return {
       success: false,
