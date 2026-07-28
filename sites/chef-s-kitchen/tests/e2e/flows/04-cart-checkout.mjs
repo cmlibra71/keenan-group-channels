@@ -32,7 +32,15 @@ export async function run(ctx) {
   await report.step({ flow: "checkout", name: "cart shows item", route: "/cart" }, async (s) => {
     const status = await goto(page, base, "/cart");
     assert(status < 400, `HTTP ${status}`);
-    const empty = await page.locator("text=/your cart is empty/i").first().isVisible().catch(() => false);
+    // Scope to <main>: the header cart slide-out stays mounted when closed (see
+    // isLoggedOut in lib/site.mjs), and its "Your cart is empty" copy is present
+    // — and counts as visible — on EVERY page, so an unscoped check always fails.
+    const empty = await page
+      .locator("main")
+      .locator("text=/your cart is empty/i")
+      .first()
+      .isVisible()
+      .catch(() => false);
     assert(!empty, "cart reported empty after add-to-cart");
   });
 

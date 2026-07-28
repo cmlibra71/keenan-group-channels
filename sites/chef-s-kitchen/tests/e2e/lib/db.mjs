@@ -48,6 +48,14 @@ export async function purgeTestData({ emailLike = "e2e-%@e2e.test", extraCustome
     const customerIds = customers.map((r) => r.id);
     counts.customers_matched = customerIds.length;
 
+    // 1b. Since the 2026-07-11 identity cutover the storefront writes CONTACTS,
+    // not customers — registration, sessions and every cart/quote/order link now
+    // hang off contacts.id. Resolve the test contacts too, or the run strands
+    // test rows in production.
+    const contacts = await tx`SELECT id FROM contacts WHERE email LIKE ${emailLike}`;
+    const contactIds = contacts.map((r) => r.id);
+    counts.contacts_matched = contactIds.length;
+
     // 2. Resolve dependent parent ids. `IN ${tx(ids)}` expands to a typed value
     // list — avoids the untyped-array type mismatch of ANY(array).
     //
@@ -56,14 +64,19 @@ export async function purgeTestData({ emailLike = "e2e-%@e2e.test", extraCustome
     // email stored in billing_address instead, so they're cleaned even if the
     // customer row is already gone.
     const orders = await tx`SELECT id FROM orders WHERE billing_address->>'email' LIKE ${emailLike}`;
-    const [quotes, carts, subs] = customerIds.length
-      ? await Promise.all([
-          tx`SELECT id FROM quotes WHERE customer_id IN ${tx(customerIds)}`,
-          tx`SELECT id FROM carts WHERE customer_id IN ${tx(customerIds)}`,
-          tx`SELECT id FROM subscriptions WHERE customer_id IN ${tx(customerIds)}`,
-        ])
-      : [[], [], []];
-    if (customerIds.length === 0 && orders.length === 0) return;
+    // Quotes/carts/subs may be keyed by EITHER identity (customer_id pre-cutover,
+    // contact_id after) — collect both so nothing survives teardown.
+    const anyCust = customerIds.length ? customerIds : [-1];
+    const anyCont = contactIds.length ? contactIds : [-1];
+    const [quotes, carts, subs] =
+      customerIds.length || contactIds.length
+        ? await Promise.all([
+            tx`SELECT id FROM quotes WHERE customer_id IN ${tx(anyCust)} OR contact_id IN ${tx(anyCont)}`,
+            tx`SELECT id FROM carts WHERE customer_id IN ${tx(anyCust)} OR contact_id IN ${tx(anyCont)}`,
+            tx`SELECT id FROM subscriptions WHERE customer_id IN ${tx(anyCust)} OR contact_id IN ${tx(anyCont)}`,
+          ])
+        : [[], [], []];
+    if (customerIds.length === 0 && contactIds.length === 0 && orders.length === 0) return;
     const orderIds = orders.map((r) => r.id);
     const quoteIds = quotes.map((r) => r.id);
     const cartIds = carts.map((r) => r.id);
@@ -100,16 +113,36 @@ export async function purgeTestData({ emailLike = "e2e-%@e2e.test", extraCustome
       await del("customer_addresses", () => tx`DELETE FROM customer_addresses WHERE customer_id IN ${tx(customerIds)}`);
       await del("customers", () => tx`DELETE FROM customers WHERE id IN ${tx(customerIds)}`);
     }
+
+    // Contacts last: customer_contact_map is ON DELETE RESTRICT, so its rows must
+    // go FIRST or the contact delete raises and the whole teardown rolls back.
+    if (contactIds.length) {
+      await del("customer_contact_map", () => tx`DELETE FROM customer_contact_map WHERE contact_id IN ${tx(contactIds)}`);
+      await del("account_memberships", () => tx`DELETE FROM account_memberships WHERE contact_id IN ${tx(contactIds)}`);
+      await del("customer_auth_tokens", () => tx`DELETE FROM customer_auth_tokens WHERE contact_id IN ${tx(contactIds)}`);
+      await del("contact_addresses", () => tx`DELETE FROM customer_addresses WHERE contact_id IN ${tx(contactIds)}`);
+      await del("contact_reviews", () => tx`DELETE FROM product_reviews WHERE contact_id IN ${tx(contactIds)}`);
+      await del("draw_entries", () => tx`DELETE FROM draw_entries WHERE contact_id IN ${tx(contactIds)}`);
+      await del("wishlists", () => tx`DELETE FROM wishlists WHERE contact_id IN ${tx(contactIds)}`);
+      await del("crm_activities", () => tx`DELETE FROM crm_activities WHERE contact_id IN ${tx(contactIds)}`);
+      await del("contacts", () => tx`DELETE FROM contacts WHERE id IN ${tx(contactIds)}`);
+    }
   });
 
   return counts;
 }
 
-/** Count remaining test customers — used to assert a clean teardown. */
+/**
+ * Count remaining test identities — used to assert a clean teardown. Counts BOTH
+ * tables (post-cutover the storefront creates contacts), so a non-zero result
+ * means real leftovers in production, not a stale query.
+ */
 export async function countTestCustomers(emailLike = "e2e-%@e2e.test") {
   const sql = getSql();
-  const rows = await sql`SELECT count(*)::int AS n FROM customers WHERE email LIKE ${emailLike}`;
-  return rows[0].n;
+  const rows = await sql`
+    SELECT (SELECT count(*) FROM customers WHERE email LIKE ${emailLike})
+         + (SELECT count(*) FROM contacts  WHERE email LIKE ${emailLike}) AS n`;
+  return Number(rows[0].n);
 }
 
 /** The customer's member group + latest channel-2 subscription status (diagnostics). */

@@ -17,7 +17,10 @@ export async function run(ctx) {
   });
 
   await report.step({ flow: "auth", name: "login via form", route: "/account" }, async () => {
-    await loginViaForm(page, base, account.email, account.password);
+    // Assert on the action's own response first — the form lives AT /account, so
+    // a DOM check alone can't distinguish "logged in" from "never submitted".
+    const status = await loginViaForm(page, base, account.email, account.password);
+    assert(status === 303, `login POST returned ${status ?? "no response"} (303 = success)`);
     await goto(page, base, "/account");
     assert(!(await isLoggedOut(page)), "login form did not establish a session");
   });

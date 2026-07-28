@@ -107,7 +107,11 @@ export async function openAccountPanelLoggedIn(page) {
 
 /** Whether the page currently shows the logged-out login form. */
 export async function isLoggedOut(page) {
-  return page.locator("#password").first().isVisible().catch(() => false);
+  // Scope to <main>: the header's slide-out panels (HeaderPanels → SlidePanel)
+  // stay MOUNTED when closed — translated off-screen rather than unmounted — so
+  // document-wide selectors match the panel's copy, which Playwright still counts
+  // as "visible" (it has a layout box; it is not display:none/visibility:hidden).
+  return page.locator("main #password").first().isVisible().catch(() => false);
 }
 
 /** Log out via the header Account panel. Returns true if it reached a logged-out state. */
@@ -122,17 +126,35 @@ export async function logoutViaPanel(page, base) {
   return isLoggedOut(page);
 }
 
-/** Log in through the real /account login form. */
+/**
+ * Log in through the real /account login form.
+ *
+ * Scoped to the PAGE form, not the whole document: the header's Account slide-out
+ * (HeaderPanels → SlidePanel) keeps its own copy of AccountPanel mounted on every
+ * page — translated off-screen rather than unmounted — so `#email`, `#password`
+ * and "Sign In" each match TWICE. Unscoped selectors hit the hidden panel's copy
+ * and the real form is never submitted.
+ */
 export async function loginViaForm(page, base, email, password) {
   await goto(page, base, "/account");
-  await settle(page, 400);
-  await fillStable(page, "#email", email);
-  await fillStable(page, "#password", password);
-  await Promise.all([
-    page.waitForLoadState("domcontentloaded").catch(() => {}),
-    page.getByRole("button", { name: /Sign In/ }).click(),
+  await settle(page, 800); // let the client panels hydrate before we query
+  const main = page.locator("main");
+  await main.locator("#email").first().fill(email);
+  await main.locator("#password").first().fill(password);
+  // Wait for the action's own POST rather than a load state: the form lives AT
+  // /account, so the URL is identical before and after. login() answers 303 on
+  // success and 200 (with an error) on bad credentials.
+  const [resp] = await Promise.all([
+    page
+      .waitForResponse(
+        (r) => r.url().replace(/\?.*$/, "").endsWith("/account") && r.request().method() === "POST",
+        { timeout: 20000 }
+      )
+      .catch(() => null),
+    main.getByRole("button", { name: /^Sign In$/i }).first().click(),
   ]);
-  await settle(page, 500);
+  await settle(page, 800);
+  return resp ? resp.status() : null;
 }
 
 /** Register a new account through the real /account/register form. */
