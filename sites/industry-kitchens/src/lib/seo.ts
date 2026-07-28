@@ -14,9 +14,15 @@ export function isIndexable(): boolean {
  * then a safe production default.
  */
 export function siteBaseUrl(siteUrl?: string | null): string {
+  // No cross-brand default. This file is shared by every channel, so a hardcoded
+  // fallback domain means one storefront silently emits ANOTHER brand's canonical
+  // and OG urls whenever SITE_URL is missing. localhost is obviously wrong in
+  // production, which is the point: it shows up instead of hiding.
   const raw =
     process.env.SITE_URL ||
     siteUrl ||
-    `https://${process.env.NEXT_PUBLIC_SITE_DOMAIN || "chefsdepot.com.au"}`;
+    (process.env.NEXT_PUBLIC_SITE_DOMAIN
+      ? `https://${process.env.NEXT_PUBLIC_SITE_DOMAIN}`
+      : "http://localhost:3000");
   return raw.replace(/\/+$/, "");
 }

@@ -273,12 +273,13 @@ export function WarrantyDirectory() {
       {/* Footer note */}
       <div className="mt-6 border-t border-zinc-200 pt-4">
         <p className="text-xs text-zinc-400 leading-relaxed">
-          <strong>Brand not listed?</strong> Call 1800 431 323 or email{" "}
-          <a href="mailto:cs@industrykitchens.com.au" className="text-blue-600 hover:text-blue-800">
-            cs@industrykitchens.com.au
-          </a>{" "}
-          &mdash; our team will connect you with the right manufacturer or importer
-          service department. We work with 160+ suppliers across Australia.
+          {/* No hardcoded contact details. This file is the fork source for every
+              new storefront, so a brand's phone/email baked in here ships on the
+              next site built from it. Channels that want contact details in this
+              note should render them from their own channel settings. */}
+          <strong>Brand not listed?</strong> Get in touch &mdash; our team will connect
+          you with the right manufacturer or importer service department. We work with
+          160+ suppliers across Australia.
         </p>
         <p className="text-xs text-zinc-400 leading-relaxed mt-2">
           <strong>Important:</strong> &ldquo;On-site&rdquo; generally means metropolitan areas
