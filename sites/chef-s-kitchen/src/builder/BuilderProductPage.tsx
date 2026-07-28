@@ -168,6 +168,10 @@ export function BuilderProductPage({
       memberPrice={payload.pricing.memberPrice}
       memberPriceMap={payload.pricing.memberPriceMap}
       isMember={payload.pricing.isMember}
+      // Non-members have no member price, so the join strip's condition is false
+      // for them — this is what keeps the funnel on the page.
+      memberSavingsPct={payload.pricing.memberSavingsPct ?? 0}
+      accountPricing={!payload.pricing.isMember && payload.pricing.memberPrice != null}
       membershipTeaser={payload.pricing.membershipTeaser}
     >
       <ActionsBridge productId={payload.product.id} tree={tree} payload={enriched} namedStyles={namedStyles} components={components} jsFunctions={jsFunctions} callResults={callResults} />
