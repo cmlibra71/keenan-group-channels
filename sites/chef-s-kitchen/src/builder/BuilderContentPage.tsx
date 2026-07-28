@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { NodeTree } from "@keenan/services/builder";
 import { ContactForm } from "@/components/contact/ContactForm";
 import { BuilderTree, BuilderActionsProvider, type NativeComponents } from "@keenan/services/builder-react";
+import { useFormHandlers } from "./use-form-handlers";
 
 // ============================================================================
 // A CONTENT page rendered from a node tree (Site Builder) — the generic,
