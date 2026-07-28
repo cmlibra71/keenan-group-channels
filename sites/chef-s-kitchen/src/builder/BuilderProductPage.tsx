@@ -21,6 +21,7 @@ import { ProductImageGallery, type ProductImage as GalleryImage } from "@/compon
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { BuilderTree, type NativeComponents } from "@keenan/services/builder-react";
 import { BuilderActionsProvider } from "@keenan/services/builder-react";
+import { useFormHandlers } from "./use-form-handlers";
 
 // ============================================================================
 // The product page rendered from a node tree. Thin wrapper over the SHARED
@@ -109,9 +110,11 @@ function ActionsBridge({
 
   // goBack drives the exploded back-to-products master's click Action — mirrors
   // the old BackButton native (history-back with a /products fallback).
+  const formHandlers = useFormHandlers();
   const actionHandlers = React.useMemo(
     () => ({
       ...handlers,
+      ...formHandlers,
       goBack: (args?: Record<string, unknown>) => {
         if (window.history.length > 1) router.back();
         else router.push(String(args?.fallbackHref ?? "/products"));

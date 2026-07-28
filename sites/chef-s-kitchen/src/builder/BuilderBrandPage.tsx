@@ -16,6 +16,7 @@ import {
 } from "./master-leaves";
 import { useGst } from "@/lib/gst";
 import { overlayLiveGst } from "./live-gst";
+import { useFormHandlers } from "./use-form-handlers";
 
 // ============================================================================
 // The brand page rendered from the 'brand' node template. The route owns the
@@ -74,14 +75,20 @@ export function BuilderBrandPage({
       </div>
     ),
   };
+  const formHandlers = useFormHandlers();
+  const brandHandlers = React.useMemo(
+    () => ({
+      ...formHandlers,
+      selectItem: selectItemHandler("brand_products", "Brand Products"),
+      addToCart,
+      addToQuote,
+      enquire: enquireHandler(router),
+    }),
+    [formHandlers, addToCart, addToQuote, router]
+  );
   return (
     <BuilderActionsProvider
-      handlers={{
-        selectItem: selectItemHandler("brand_products", "Brand Products"),
-        addToCart,
-        addToQuote,
-        enquire: enquireHandler(router),
-      }}
+      handlers={brandHandlers}
       navigate={(to) => router.push(to)}
     >
       <Ga4ViewItemList

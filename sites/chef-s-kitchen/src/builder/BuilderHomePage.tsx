@@ -26,6 +26,7 @@ import {
 } from "./master-leaves";
 import { useGst } from "@/lib/gst";
 import { overlayLiveGst } from "./live-gst";
+import { useFormHandlers } from "./use-form-handlers";
 
 // ============================================================================
 // The homepage rendered from the 'home' node doc. All nine legacy sections are
@@ -84,6 +85,13 @@ export function BuilderHomePage({
     () => overlayLiveGst(payload, inclusive, pricesIncludeTax),
     [payload, inclusive, pricesIncludeTax]
   );
+  const formHandlers = useFormHandlers();
+  // Memoized: a fresh object literal each render defeats the actions
+  // provider's useMemo and re-creates every handler on every paint.
+  const homeHandlers = React.useMemo(
+    () => ({ ...formHandlers, selectItem: selectItemHandler(), addToCart, addToQuote, enquire: enquireHandler(router) }),
+    [formHandlers, addToCart, addToQuote, router]
+  );
   const nativeComponents: NativeComponents = {
     // Sealed leaves the card/panel masters place (CTAs + the count-up stats
     // banner; price-block is a component master reading context.gst):
@@ -115,7 +123,7 @@ export function BuilderHomePage({
   };
   return (
     <BuilderActionsProvider
-      handlers={{ selectItem: selectItemHandler(), addToCart, addToQuote, enquire: enquireHandler(router) }}
+      handlers={homeHandlers}
       navigate={(to) => router.push(to)}
     >
       <BuilderTree

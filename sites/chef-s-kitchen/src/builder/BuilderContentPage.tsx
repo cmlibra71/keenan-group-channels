@@ -37,8 +37,11 @@ export function BuilderContentPage({
 }) {
   const router = useRouter();
   const nativeComponents: NativeComponents = { "contact-form": () => <ContactForm /> };
+  // Content/landing pages are exactly where enquiry forms go, and they
+  // registered NO actions at all until now.
+  const formHandlers = useFormHandlers();
   return (
-    <BuilderActionsProvider handlers={{}} navigate={(to) => router.push(to)}>
+    <BuilderActionsProvider handlers={formHandlers} navigate={(to) => router.push(to)}>
       <BuilderTree
         tree={tree}
         payload={payload}

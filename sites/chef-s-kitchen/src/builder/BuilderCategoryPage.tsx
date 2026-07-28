@@ -17,6 +17,7 @@ import {
 } from "./master-leaves";
 import { useGst } from "@/lib/gst";
 import { overlayLiveGst } from "./live-gst";
+import { useFormHandlers } from "./use-form-handlers";
 
 // ============================================================================
 // The category page rendered from the 'category_layout' node template. The
@@ -78,8 +79,10 @@ export function BuilderCategoryPage({
   // reset, replace without scroll.
   const addToCart = useAddToCartHandler();
   const addToQuote = useAddToQuoteHandler();
+  const formHandlers = useFormHandlers();
   const handlers = React.useMemo(
     () => ({
+      ...formHandlers,
       addToCart,
       addToQuote,
       enquire: enquireHandler(router),
