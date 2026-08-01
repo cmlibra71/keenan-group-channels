@@ -171,11 +171,18 @@ jobs:
             --query 'Command.CommandId' --output text)
 
           echo "SSM command: $CMD_ID — waiting for completion…"
+          POLL_ERRS=0
           for i in {1..120}; do
             STATUS=$(aws ssm get-command-invocation --command-id "$CMD_ID" \
-              --instance-id ${{ env.EC2_INSTANCE }} --query 'Status' --output text 2>/dev/null || echo Pending)
+              --instance-id ${{ env.EC2_INSTANCE }} --query 'Status' --output text 2>/dev/null || echo PollError)
             case "$STATUS" in
               Success|Failed|Cancelled|TimedOut|DeliveryTimedOut) break ;;
+              PollError)
+                # A brief InvocationDoesNotExist right after send-command is normal;
+                # persistent poll errors (e.g. IAM) must fail fast, not spin blind.
+                POLL_ERRS=$((POLL_ERRS+1))
+                if [ "$POLL_ERRS" -ge 6 ]; then echo "Cannot poll SSM status ($POLL_ERRS consecutive errors — IAM?)"; break; fi ;;
+              *) POLL_ERRS=0 ;;
             esac
             sleep 10
           done
