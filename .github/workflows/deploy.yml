@@ -124,54 +124,92 @@ jobs:
           echo "port=${PORT}" >> $GITHUB_OUTPUT
           echo "indexable=${INDEXABLE}" >> $GITHUB_OUTPUT
 
-      - name: Deploy via SSM
+      # Refresh the app's env file on the host, then run the blue-green deploy
+      # script (shipped by the PORTAL repo — the single owner of deploy.sh).
+      # The script starts the new color on the idle port, health-gates it on its
+      # direct port (sha + DB readiness), flips Caddy gracefully, and drains the
+      # old container — zero downtime. The SSM invocation is SYNCHRONOUS: a
+      # deploy.sh abort fails this job.
+      - name: Deploy via SSM (blue-green)
         run: |
           SITE="${{ matrix.site }}"
-          PORT="${{ steps.config.outputs.port }}"
           CHANNEL_ID="${{ steps.config.outputs.channel_id }}"
           DOMAIN="${{ steps.config.outputs.domain }}"
           INDEXABLE="${{ steps.config.outputs.indexable }}"
-          IMAGE="ghcr.io/${{ github.repository_owner }}/keenan-channels-${SITE}:latest"
-          CONTAINER="keenan-channel-${SITE}"
 
-          # The Next data cache (unstable_cache — category listings, channel
-          # store reads) lives at .next/cache inside the app dir. Mount it from
-          # the host so the warmed cache SURVIVES deploys; uid 1001 = nextjs.
-          aws ssm send-command \
+          ENV_B64=$(cat <<EOF | base64 -w0
+          COMMERCE_DATABASE_URL=${{ secrets.COMMERCE_DATABASE_URL }}
+          CHANNEL_ID=${CHANNEL_ID}
+          CHANNEL_KEY=${SITE}
+          SITE_URL=https://${DOMAIN}
+          SITE_INDEXABLE=${INDEXABLE}
+          STOREFRONT_REVALIDATE_SECRET=${{ secrets.STOREFRONT_REVALIDATE_SECRET }}
+          CMS_PREVIEW_SECRET=${{ secrets.CMS_PREVIEW_SECRET }}
+          SESSION_SECRET=${{ secrets.SESSION_SECRET }}
+          E2E_LOGIN_SECRET=${{ secrets.E2E_LOGIN_SECRET }}
+          TEST_EMAIL_RECIPIENT=chrisbmosely@gmail.com
+          STAFF_NOTIFICATIONS_EMAIL=${{ secrets.STAFF_NOTIFICATIONS_EMAIL || 'chrisbmosely@gmail.com' }}
+          GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
+          GOOGLE_PLACES_API_KEY=${{ secrets.GOOGLE_PLACES_API_KEY }}
+          MEILI_URL=http://keenan-search:7700
+          MEILI_API_KEY=${{ secrets.MEILI_MASTER_KEY }}
+          AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION=ap-southeast-2
+          EOF
+          )
+
+          CMD_ID=$(aws ssm send-command \
             --instance-ids ${{ env.EC2_INSTANCE }} \
             --document-name "AWS-RunShellScript" \
+            --timeout-seconds 900 \
             --parameters "commands=[
               \"echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin\",
-              \"docker pull -q ${IMAGE}\",
-              \"mkdir -p /home/ubuntu/storefront-cache/${SITE} && chown -R 1001:1001 /home/ubuntu/storefront-cache/${SITE}\",
-              \"find /home/ubuntu/storefront-cache/${SITE} -type f -mtime +14 -delete 2>/dev/null || true\",
-              \"docker stop ${CONTAINER} || true\",
-              \"docker rm ${CONTAINER} || true\",
-              \"docker run -d --name ${CONTAINER} --log-opt max-size=50m --log-opt max-file=3 --restart unless-stopped --network ${DOCKER_NETWORK} -p 127.0.0.1:${PORT}:3000 -v /home/ubuntu/storefront-cache/${SITE}:/app/sites/${SITE}/.next/cache -e COMMERCE_DATABASE_URL=${{ secrets.COMMERCE_DATABASE_URL }} -e CHANNEL_ID=${CHANNEL_ID} -e CHANNEL_KEY=${SITE} -e SITE_URL=https://${DOMAIN} -e SITE_INDEXABLE=${INDEXABLE} -e STOREFRONT_REVALIDATE_SECRET=${{ secrets.STOREFRONT_REVALIDATE_SECRET }} -e CMS_PREVIEW_SECRET=${{ secrets.CMS_PREVIEW_SECRET }} -e SESSION_SECRET=${{ secrets.SESSION_SECRET }} -e E2E_LOGIN_SECRET=${{ secrets.E2E_LOGIN_SECRET }} -e TEST_EMAIL_RECIPIENT=chrisbmosely@gmail.com -e STAFF_NOTIFICATIONS_EMAIL=${{ secrets.STAFF_NOTIFICATIONS_EMAIL || 'chrisbmosely@gmail.com' }} -e GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} -e GOOGLE_PLACES_API_KEY=${{ secrets.GOOGLE_PLACES_API_KEY }} -e MEILI_URL=http://keenan-search:7700 -e MEILI_API_KEY=${{ secrets.MEILI_MASTER_KEY }} -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} -e AWS_REGION=ap-southeast-2 ${IMAGE}\",
-              \"docker image prune -af\",
-              \"if ! grep -q '${DOMAIN}' /etc/caddy/Caddyfile 2>/dev/null; then echo '' >> /etc/caddy/Caddyfile && echo '${DOMAIN} { reverse_proxy localhost:${PORT} }' >> /etc/caddy/Caddyfile && systemctl reload caddy && echo 'Added Caddy config for ${DOMAIN}'; else echo 'Caddy config for ${DOMAIN} already exists'; fi\"
+              \"echo ${ENV_B64} | base64 -d | sed 's/^[[:space:]]*//' > /home/ubuntu/deploy/env/${SITE}.env && chmod 600 /home/ubuntu/deploy/env/${SITE}.env\",
+              \"/home/ubuntu/deploy/deploy.sh deploy ${SITE} ${{ github.sha }}\"
             ]" \
-            --output text
+            --query 'Command.CommandId' --output text)
 
-          echo "Deploy command sent for ${SITE} (https://${DOMAIN} -> port ${PORT})"
-
-      - name: Wait for deployment
-        run: |
-          DOMAIN="${{ steps.config.outputs.domain }}"
-          echo "Waiting for https://${DOMAIN} to come up..."
-          sleep 20
-
-          for i in {1..12}; do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 "https://${DOMAIN}" 2>/dev/null || echo "000")
-
-            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "307" ]; then
-              echo "Site ${{ matrix.site }} is live at https://${DOMAIN}"
-              exit 0
-            fi
-
-            echo "Waiting... (attempt $i/12, status: $HTTP_CODE)"
-            sleep 5
+          echo "SSM command: $CMD_ID — waiting for completion…"
+          for i in {1..120}; do
+            STATUS=$(aws ssm get-command-invocation --command-id "$CMD_ID" \
+              --instance-id ${{ env.EC2_INSTANCE }} --query 'Status' --output text 2>/dev/null || echo Pending)
+            case "$STATUS" in
+              Success|Failed|Cancelled|TimedOut|DeliveryTimedOut) break ;;
+            esac
+            sleep 10
           done
 
-          echo "Warning: ${{ matrix.site }} did not respond within 80 seconds (may still be starting)"
+          echo "--- deploy.sh output ---"
+          aws ssm get-command-invocation --command-id "$CMD_ID" \
+            --instance-id ${{ env.EC2_INSTANCE }} --query 'StandardOutputContent' --output text
+          echo "--- deploy.sh stderr ---"
+          aws ssm get-command-invocation --command-id "$CMD_ID" \
+            --instance-id ${{ env.EC2_INSTANCE }} --query 'StandardErrorContent' --output text
+
+          if [ "$STATUS" != "Success" ]; then
+            echo "DEPLOY FAILED (SSM status: $STATUS)"
+            exit 1
+          fi
+
+      # Verify the FLIP took: the public domain must serve THIS commit. A 200
+      # alone proves nothing — the old container answers 200 right up until the
+      # flip. Hard-fails the job on timeout (the old warn-only check let broken
+      # deploys pass silently).
+      - name: Verify deployment (sha match)
+        run: |
+          DOMAIN="${{ steps.config.outputs.domain }}"
+          EXPECTED="${{ github.sha }}"
+          for i in {1..18}; do
+            BODY=$(curl -s --max-time 10 "https://${DOMAIN}/api/health" 2>/dev/null || echo "")
+            LIVE=$(echo "$BODY" | jq -r '.commit // "none"' 2>/dev/null || echo "none")
+            if [ "$LIVE" = "$EXPECTED" ]; then
+              echo "Deployment verified: https://${DOMAIN} serves $LIVE"
+              exit 0
+            fi
+            echo "Waiting for flip… (attempt $i/18, live: $LIVE)"
+            sleep 5
+          done
+          echo "FAILED: https://${DOMAIN} never served ${EXPECTED}"
+          exit 1
 
