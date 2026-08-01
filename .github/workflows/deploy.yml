@@ -83,10 +83,13 @@ jobs:
           context: .
           file: Dockerfile.site
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/keenan-channels-${{ matrix.site }}:latest
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/keenan-channels-${{ matrix.site }}:latest
+            ghcr.io/${{ github.repository_owner }}/keenan-channels-${{ matrix.site }}:${{ github.sha }}
           build-args: |
             SITE_NAME=${{ matrix.site }}
             CHANNEL_ID=${{ steps.config.outputs.channel_id }}
+            GIT_SHA=${{ github.sha }}
 
   # Deploy each site to EC2 via SSM
   deploy:

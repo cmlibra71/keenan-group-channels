@@ -2,6 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Blue-green deploys: clients bake in the build's git sha and send it as
+  // x-deployment-id on RSC/server-action requests (and ?dpl= on assets), which
+  // Caddy matches to route old-build requests to the draining container.
+  deploymentId: process.env.GIT_SHA || undefined,
   transpilePackages: ["@keenan/services"],
   serverExternalPackages: ["sharp", "quickjs-emscripten"],
   // Type errors FAIL the build — this is what prevents the snake_case/camelCase
