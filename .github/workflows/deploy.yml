@@ -1,8 +1,11 @@
 name: Deploy
 
+# main = live blue-green deploy (auto-promotes once it passes checks).
+# staging = deployed-but-NOT-live: each site's build lands on its staging port
+# behind the basic-auth preview.<domain> host; promote/discard from the host.
 on:
   push:
-    branches: [main]
+    branches: [main, staging]
 
 # Serialize deploys: only one build+deploy for main runs at a time. A newer push
 # that lands while a deploy is in flight is QUEUED (not cancelled) so the in-flight
@@ -77,15 +80,24 @@ jobs:
           CHANNEL_ID=$(jq -r '.channelId' "$CONFIG")
           echo "channel_id=${CHANNEL_ID}" >> $GITHUB_OUTPUT
 
+      # :latest only moves on main — a staged build must never be picked up by
+      # a live deploy.
+      - name: Compute image tags
+        id: tags
+        run: |
+          TAGS="ghcr.io/${{ github.repository_owner }}/keenan-channels-${{ matrix.site }}:${{ github.sha }}"
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            TAGS="$TAGS"$'\n'"ghcr.io/${{ github.repository_owner }}/keenan-channels-${{ matrix.site }}:latest"
+          fi
+          { echo "tags<<EOF"; echo "$TAGS"; echo "EOF"; } >> $GITHUB_OUTPUT
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.site
           push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/keenan-channels-${{ matrix.site }}:latest
-            ghcr.io/${{ github.repository_owner }}/keenan-channels-${{ matrix.site }}:${{ github.sha }}
+          tags: ${{ steps.tags.outputs.tags }}
           build-args: |
             SITE_NAME=${{ matrix.site }}
             CHANNEL_ID=${{ steps.config.outputs.channel_id }}
@@ -136,6 +148,9 @@ jobs:
           CHANNEL_ID="${{ steps.config.outputs.channel_id }}"
           DOMAIN="${{ steps.config.outputs.domain }}"
           INDEXABLE="${{ steps.config.outputs.indexable }}"
+          MODE=deploy
+          if [ "${{ github.ref }}" = "refs/heads/staging" ]; then MODE=stage; fi
+          echo "Mode: $MODE"
 
           ENV_B64=$(cat <<EOF | base64 -w0
           COMMERCE_DATABASE_URL=${{ secrets.COMMERCE_DATABASE_URL }}
@@ -166,7 +181,7 @@ jobs:
             --parameters "commands=[
               \"echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin\",
               \"echo ${ENV_B64} | base64 -d | sed 's/^[[:space:]]*//' > /home/ubuntu/deploy/env/${SITE}.env && chmod 600 /home/ubuntu/deploy/env/${SITE}.env\",
-              \"/home/ubuntu/deploy/deploy.sh deploy ${SITE} ${{ github.sha }}\"
+              \"/home/ubuntu/deploy/deploy.sh ${MODE} ${SITE} ${{ github.sha }}\"
             ]" \
             --query 'Command.CommandId' --output text)
 
@@ -203,7 +218,29 @@ jobs:
       # alone proves nothing — the old container answers 200 right up until the
       # flip. Hard-fails the job on timeout (the old warn-only check let broken
       # deploys pass silently).
+      - name: Verify staged build (staging branch)
+        if: github.ref == 'refs/heads/staging'
+        run: |
+          # staging port = site port + 20 (3001->3021, 3002->3022)
+          SPORT=$(( ${{ steps.config.outputs.port }} + 20 ))
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids ${{ env.EC2_INSTANCE }} \
+            --document-name "AWS-RunShellScript" \
+            --parameters "commands=[\"curl -s --max-time 10 http://127.0.0.1:${SPORT}/api/health\"]" \
+            --query 'Command.CommandId' --output text)
+          sleep 8
+          BODY=$(aws ssm get-command-invocation --command-id "$CMD_ID" \
+            --instance-id ${{ env.EC2_INSTANCE }} --query 'StandardOutputContent' --output text)
+          LIVE=$(echo "$BODY" | jq -r '.commit // "none"')
+          if [ "$LIVE" != "${{ github.sha }}" ]; then
+            echo "FAILED: staged ${{ matrix.site }} serves $LIVE, expected ${{ github.sha }}"; exit 1
+          fi
+          echo "Staged build verified on port ${SPORT}: $LIVE"
+          PUB=$(curl -s --max-time 10 -u "keenan:${{ secrets.PREVIEW_PASSWORD }}" "https://preview.${{ steps.config.outputs.domain }}/api/health" | jq -r '.commit // "unreachable"' 2>/dev/null || echo unreachable)
+          echo "Public preview host check (needs DNS+cert): $PUB"
+
       - name: Verify deployment (sha match)
+        if: github.ref == 'refs/heads/main'
         run: |
           DOMAIN="${{ steps.config.outputs.domain }}"
           EXPECTED="${{ github.sha }}"
