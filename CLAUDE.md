@@ -141,14 +141,18 @@ docker exec postgres psql -U admin -d commerce -c "GRANT ALL PRIVILEGES ON ALL T
 
 ## Deployment (blue-green, zero downtime)
 
+**Full design + runbook: `../keenan-group-portal/docs/deployment-blue-green.md`**
+(the portal repo owns the deploy system).
+
 Pushing to `main` deploys each storefront **blue-green**: CI builds the image
 (tagged `:latest` + `:<sha>`), then invokes `/home/ubuntu/deploy/deploy.sh`
 (owned and shipped by the PORTAL repo) via SSM. The script starts the new build
 on the site's idle port (industry-kitchens 3001/3011, chef-s-kitchen 3002/3012),
 health-gates it on its direct port (`/api/health?deep=1` must report the pushed
-sha), flips Caddy gracefully, and drains the old container for 15 minutes with
-old-build requests (Next `deploymentId` skew routing) still landing on it. The
-job FAILS loudly if the new build never becomes healthy — traffic never moves.
+sha), smoke-tests the home/product/category/cart pages, flips Caddy gracefully,
+and drains the old container for 15 minutes with old-build requests (Next
+`deploymentId` skew routing) still landing on it. The job FAILS loudly if the
+new build never becomes healthy — traffic never moves.
 
 - Never hand-edit `/etc/caddy/Caddyfile` — the portal's generator owns it.
 - Rollback: `sudo /home/ubuntu/deploy/deploy.sh rollback <site>` on the host.
