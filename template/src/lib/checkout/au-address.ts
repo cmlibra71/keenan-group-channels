@@ -55,3 +55,25 @@ export function normaliseAuState(value: string | null | undefined): string | nul
 export function isValidAuPostcode(value: string | null | undefined): boolean {
   return /^\d{4}$/.test((value ?? "").trim());
 }
+
+/**
+ * True when a stored address can't be used as-is for an Australian delivery —
+ * its state isn't one of the 8, or its postcode isn't 4 digits.
+ *
+ * Legacy rows carry both (94 of ~14.9k AU addresses had a non-4-digit postcode
+ * and a handful had no state at all when this shipped). Checkout uses this to
+ * offer the shopper an inline correction rather than rejecting their saved
+ * address at submit with no way to fix it. Non-AU addresses are never flagged:
+ * we have no region list for them.
+ */
+export function auAddressNeedsCorrection(address: {
+  countryCode?: string | null;
+  stateOrProvince?: string | null;
+  postalCode?: string | null;
+}): boolean {
+  const country = (address.countryCode ?? "AU").trim().toUpperCase() || "AU";
+  if (country !== "AU") return false;
+  return (
+    !normaliseAuState(address.stateOrProvince) || !isValidAuPostcode(address.postalCode)
+  );
+}

@@ -4,7 +4,12 @@ import { useActionState, useState, useRef, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation";
 import { placeOrder, confirmStripePayment } from "@/lib/actions/checkout";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
-import { AU_STATES, normaliseAuState } from "@/lib/checkout/au-address";
+import {
+  AU_STATES,
+  normaliseAuState,
+  isValidAuPostcode,
+  auAddressNeedsCorrection,
+} from "@/lib/checkout/au-address";
 import { Price } from "@/components/ui/Price";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
 import { ga4AddShippingInfo, ga4AddPaymentInfo, rowToGa4Item } from "@/components/analytics/ga4";
@@ -286,7 +291,7 @@ export function CheckoutForm({
         setShippingLoading(false);
       }
     },
-    [shippingEnabled, freeDelivery]
+    [shippingEnabled, freeDelivery, subtotal]
   );
 
   const handlePostcodeChange = useCallback(
@@ -317,12 +322,44 @@ export function CheckoutForm({
 
   const selectedAddress = savedAddresses.find((a) => a.id === selectedAddressId);
 
-  // Recalculate shipping when a saved address is selected
+  // A saved address written before the AU rules existed can carry a free-text
+  // state ("North Eastern Australia") or a junk postcode. The server now refuses
+  // those, so simply passing them through would strand the shopper on an error
+  // they have no way to clear from this page. Open the editable form pre-filled
+  // instead, so they can correct it for this order.
+  const needsCorrection = !!selectedAddress && auAddressNeedsCorrection(selectedAddress);
+  const showAddressForm =
+    savedAddresses.length === 0 || selectedAddressId === "new" || needsCorrection;
+  const prefill = needsCorrection ? selectedAddress : undefined;
+
+  // Seed the correction form from the saved address — once per address, so a
+  // re-render never wipes what the shopper has typed.
+  const prefilledFor = useRef<number | null>(null);
   useEffect(() => {
-    if (selectedAddress && shippingEnabled) {
+    if (!prefill || prefilledFor.current === prefill.id) return;
+    prefilledFor.current = prefill.id;
+    setCountry(prefill.countryCode || "AU");
+    setStateValue(normaliseAuState(prefill.stateOrProvince) ?? "");
+    const postcode = isValidAuPostcode(prefill.postalCode) ? prefill.postalCode.trim() : "";
+    setPostalCodeValue(postcode);
+    // Only the state was wrong — price the (valid) postcode straight away.
+    if (postcode) calculateShippingCost(postcode);
+  }, [prefill, calculateShippingCost]);
+
+  // Recalculate shipping when a saved address is selected. Skipped while
+  // correcting: the saved postcode is the unusable one, and the form's own
+  // onChange prices whatever the shopper types instead.
+  useEffect(() => {
+    if (selectedAddress && !needsCorrection && shippingEnabled) {
       calculateShippingCost(selectedAddress.postalCode);
     }
-  }, [selectedAddressId, selectedAddress, shippingEnabled, calculateShippingCost]);
+  }, [
+    selectedAddressId,
+    selectedAddress,
+    needsCorrection,
+    shippingEnabled,
+    calculateShippingCost,
+  ]);
 
   // ── GA4 funnel (single-page checkout) ──────────────────────────────────────
   // add_shipping_info fires once when the shipping cost resolves;
@@ -434,6 +471,11 @@ export function CheckoutForm({
                             Default
                           </span>
                         )}
+                        {auAddressNeedsCorrection(addr) && (
+                          <span className="ml-2 text-xs bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded">
+                            Needs details
+                          </span>
+                        )}
                       </div>
                     </label>
                   ))}
@@ -460,15 +502,25 @@ export function CheckoutForm({
               </div>
             )}
 
-            {/* Address form — hidden when using a saved address */}
-            {(selectedAddressId === "new" || savedAddresses.length === 0) && (
-              <div className="grid grid-cols-2 gap-4">
+            {/* A saved address we can't price — say so, and let them fix it here. */}
+            {needsCorrection && (
+              <div className="mb-4 rounded-lg border border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                This saved address is missing a valid state or postcode, so we can&rsquo;t work
+                out delivery for it. Please complete the details below — they apply to this
+                order.
+              </div>
+            )}
+
+            {/* Address form — hidden when using a saved address we can use as-is */}
+            {showAddressForm && (
+              <div className="grid grid-cols-2 gap-4" key={prefill ? `saved-${prefill.id}` : "new"}>
                 <div>
                   <label className="block text-sm font-medium text-ink-700">First Name</label>
                   <input
                     type="text"
                     name="firstName"
                     required
+                    defaultValue={prefill?.firstName ?? ""}
                     className="mt-1 block w-full rounded-lg border border-steel-300 px-3 py-2 text-sm focus:border-steel-500 focus:outline-none"
                   />
                 </div>
@@ -478,6 +530,7 @@ export function CheckoutForm({
                     type="text"
                     name="lastName"
                     required
+                    defaultValue={prefill?.lastName ?? ""}
                     className="mt-1 block w-full rounded-lg border border-steel-300 px-3 py-2 text-sm focus:border-steel-500 focus:outline-none"
                   />
                 </div>
@@ -489,6 +542,7 @@ export function CheckoutForm({
                     name="address1"
                     required
                     autoComplete="off"
+                    defaultValue={prefill?.address1 ?? ""}
                     className="mt-1 block w-full rounded-lg border border-steel-300 px-3 py-2 text-sm focus:border-steel-500 focus:outline-none"
                   />
                   {googlePlacesEnabled && (
@@ -505,6 +559,7 @@ export function CheckoutForm({
                   <input
                     type="text"
                     name="address2"
+                    defaultValue={prefill?.address2 ?? ""}
                     className="mt-1 block w-full rounded-lg border border-steel-300 px-3 py-2 text-sm focus:border-steel-500 focus:outline-none"
                   />
                 </div>
@@ -516,6 +571,7 @@ export function CheckoutForm({
                     type="tel"
                     name="phone"
                     autoComplete="tel"
+                    defaultValue={prefill?.phone ?? ""}
                     className="mt-1 block w-full rounded-lg border border-steel-300 px-3 py-2 text-sm focus:border-steel-500 focus:outline-none"
                   />
                 </div>
@@ -526,6 +582,7 @@ export function CheckoutForm({
                     type="text"
                     name="city"
                     required
+                    defaultValue={prefill?.city ?? ""}
                     className="mt-1 block w-full rounded-lg border border-steel-300 px-3 py-2 text-sm focus:border-steel-500 focus:outline-none"
                   />
                 </div>
@@ -602,8 +659,9 @@ export function CheckoutForm({
               </div>
             )}
 
-            {/* Hidden fields for saved address */}
-            {selectedAddress && selectedAddressId !== "new" && (
+            {/* Hidden fields for saved address (not while it's being corrected —
+                the visible form above supplies those values instead) */}
+            {selectedAddress && selectedAddressId !== "new" && !needsCorrection && (
               <>
                 <input type="hidden" name="firstName" value={selectedAddress.firstName} />
                 <input type="hidden" name="lastName" value={selectedAddress.lastName} />

@@ -16,6 +16,7 @@ import {
 } from "@/lib/contact-addresses";
 import { getStripeProvider } from "@/lib/stripe";
 import { getContactPermissions } from "@/lib/role-permissions";
+import { normaliseAuState, isValidAuPostcode } from "@/lib/checkout/au-address";
 
 type Result = { success: boolean; error?: string };
 
@@ -75,13 +76,36 @@ function toAddressData(input: AddressInput): ContactAddressData {
     address1: input.address1?.trim() || "",
     address2: input.address2?.trim() || "",
     city: input.city?.trim() || "",
-    stateOrProvince: input.state?.trim() || "",
+    // Canonical state code — the form is a dropdown, but never trust the client.
+    stateOrProvince: normaliseAuState(input.state) ?? "",
     postalCode: input.postalCode?.trim() || "",
     country: "Australia",
     countryCode: "AU",
     isDefaultBilling: Boolean(input.isDefaultBilling),
     isDefaultShipping: Boolean(input.isDefaultShipping),
   };
+}
+
+/**
+ * The address book stores AUSTRALIAN addresses only (toAddressData hard-codes
+ * AU), and these addresses are offered at checkout — so a free-text state or a
+ * junk postcode saved here becomes an order we can't price for freight. Same
+ * rules as placeOrder, enforced server-side. Returns an error Result, or null.
+ */
+function invalidAuAddress(input: AddressInput): Result | null {
+  if (!input.address1?.trim() || !input.city?.trim() || !input.postalCode?.trim()) {
+    return { success: false, error: "Address, city and postcode are required." };
+  }
+  if (!normaliseAuState(input.state)) {
+    return {
+      success: false,
+      error: "Please select an Australian state or territory from the list.",
+    };
+  }
+  if (!isValidAuPostcode(input.postalCode)) {
+    return { success: false, error: "Please enter a valid 4-digit Australian postcode." };
+  }
+  return null;
 }
 
 /** Edit the member's own profile (name, company, phone). Optional, non-blocking. */
@@ -138,9 +162,8 @@ export async function updateCustomerProfile(input: {
 export async function createCustomerAddress(input: AddressInput): Promise<Result> {
   const session = await getSession();
   if (!session) return { success: false, error: "Not authenticated" };
-  if (!input.address1?.trim() || !input.city?.trim() || !input.postalCode?.trim()) {
-    return { success: false, error: "Address, city and postcode are required." };
-  }
+  const invalid = invalidAuAddress(input);
+  if (invalid) return invalid;
   const denied = await denyAddressAction(session.contactId, "add_bill_to_address", "adding");
   if (denied) return denied;
   try {
@@ -155,6 +178,8 @@ export async function createCustomerAddress(input: AddressInput): Promise<Result
 export async function updateCustomerAddress(id: number, input: AddressInput): Promise<Result> {
   const session = await getSession();
   if (!session) return { success: false, error: "Not authenticated" };
+  const invalid = invalidAuAddress(input);
+  if (invalid) return invalid;
   const denied = await denyAddressAction(session.contactId, "edit_bill_to_address", "editing");
   if (denied) return denied;
   try {

@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
+import { AU_STATES, normaliseAuState } from "@/lib/checkout/au-address";
 import {
   createCustomerAddress,
   updateCustomerAddress,
@@ -158,14 +159,23 @@ function AddressForm({
   const [error, setError] = useState<string | null>(null);
   const address1Ref = useRef<HTMLInputElement>(null);
   const cityRef = useRef<HTMLInputElement>(null);
-  const stateRef = useRef<HTMLInputElement>(null);
-  const postalCodeRef = useRef<HTMLInputElement>(null);
+  // State and postcode are controlled — the address book stores AU addresses
+  // only, and these are the two fields that decide whether an order can be
+  // priced for freight. A legacy row's junk value normalises to "" so the
+  // required dropdown forces the member to pick a real state before saving.
+  const [stateValue, setStateValue] = useState(
+    () => normaliseAuState(initial?.state) ?? ""
+  );
+  const [postalCodeValue, setPostalCodeValue] = useState(() =>
+    (initial?.postalCode ?? "").replace(/\D/g, "").slice(0, 4)
+  );
 
   function handlePlaceSelect(place: { address1: string; city: string; state: string; postalCode: string }) {
     if (address1Ref.current) address1Ref.current.value = place.address1;
     if (cityRef.current) cityRef.current.value = place.city;
-    if (stateRef.current) stateRef.current.value = place.state;
-    if (postalCodeRef.current) postalCodeRef.current.value = place.postalCode;
+    // Places returns "VIC" or "Victoria" — normalise so the dropdown matches.
+    setStateValue(normaliseAuState(place.state) ?? "");
+    setPostalCodeValue(place.postalCode.replace(/\D/g, "").slice(0, 4));
   }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -233,12 +243,39 @@ function AddressForm({
           <input ref={cityRef} name="city" type="text" required defaultValue={initial?.city} className={INPUT} />
         </div>
         <div>
-          <label className={LABEL}>State</label>
-          <input ref={stateRef} name="state" type="text" defaultValue={initial?.state} className={INPUT} />
+          <label className={LABEL}>State / Territory</label>
+          <select
+            name="state"
+            required
+            value={stateValue}
+            onChange={(e) => setStateValue(e.target.value)}
+            className={`${INPUT} bg-white`}
+          >
+            <option value="">Select a state…</option>
+            {AU_STATES.map((s) => (
+              <option key={s.code} value={s.code}>
+                {s.name}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <label className={LABEL}>Postcode</label>
-          <input ref={postalCodeRef} name="postalCode" type="text" required defaultValue={initial?.postalCode} className={INPUT} />
+          <input
+            name="postalCode"
+            type="text"
+            required
+            value={postalCodeValue}
+            inputMode="numeric"
+            maxLength={4}
+            pattern="\d{4}"
+            title="Australian postcodes are 4 digits, e.g. 3140"
+            placeholder="e.g. 3140"
+            // 4 digits, enforced at the keystroke: a junk postcode here ends up
+            // on an order at checkout, where it matches no shipping zone.
+            onChange={(e) => setPostalCodeValue(e.target.value.replace(/\D/g, "").slice(0, 4))}
+            className={INPUT}
+          />
         </div>
       </div>
       <div className="flex flex-wrap gap-4 text-sm">
