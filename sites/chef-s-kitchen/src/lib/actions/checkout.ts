@@ -6,7 +6,9 @@ import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogS
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, resolveEmailBranding, wantsStripeTestMode, productImageService } from "@keenan/services";
-import { buildLineItems, withShipping, determinePaymentStatus } from "@/lib/checkout/order-draft";
+import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, type BelowCostLine } from "@/lib/checkout/order-draft";
+import { getLineCosts } from "@/lib/store";
+import { sendStaffNotification } from "@/lib/staff-email";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
 import { siteBaseUrl } from "@/lib/seo";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
@@ -202,6 +204,20 @@ export async function placeOrder(
   const subtotalIncTax = subtotal.incTax;
   const subtotalExTax = subtotal.exTax;
 
+  // Below-cost sentry: an order is never blocked, but any line about to sell
+  // under its current buy cost is stamped onto the order (metafields +
+  // internal memo) and alerted to staff further down, so nothing ships at a
+  // loss unseen. Check failure is non-fatal — checkout must not depend on it.
+  let belowCostLines: BelowCostLine[] = [];
+  try {
+    const costs = await getLineCosts(
+      lineItems.map((l) => ({ productId: l.productId, variantId: l.variantId }))
+    );
+    belowCostLines = findBelowCostLines(lineItems, costs);
+  } catch (e) {
+    console.error("[placeOrder] below-cost check failed (non-fatal):", e);
+  }
+
   // Zoey Conditions on `submit_orders` ("If Cart Total / Month-to-date / Year-to-date
   // order total is less than X"). ANDed; evaluated against the GST-inc cart total and
   // the contact's channel order history. A failed MTD/YTD lookup skips that condition
@@ -326,6 +342,16 @@ export async function placeOrder(
   // Stamp the cart uuid on card orders so a retry/double-submit can find and reuse
   // the existing awaiting_payment order instead of creating a duplicate (see below).
   if (paymentMethod === "stripe") orderMetafields.cart_uuid = uuid;
+  if (belowCostLines.length > 0) {
+    orderMetafields.below_cost_lines = belowCostLines.map((l) => ({
+      product_id: l.productId,
+      variant_id: l.variantId,
+      sku: l.sku,
+      quantity: l.quantity,
+      unit_ex_tax: l.unitExTax.toFixed(2),
+      cost: l.cost.toFixed(2),
+    }));
+  }
 
   // Idempotency guard for card payments: if THIS cart already has an open, unpaid
   // Stripe order (the shopper hit "Pay" twice, or retried after a network blip),
@@ -383,6 +409,15 @@ export async function placeOrder(
     totalTax: String(totalTax),
     itemsTotal: totalItems,
     billingAddress,
+    ...(belowCostLines.length > 0
+      ? {
+          internalMemo:
+            `BELOW-COST PRICING — review before fulfilment: ` +
+            belowCostLines
+              .map((l) => `${l.sku ?? `#${l.productId}`} sold $${l.unitExTax.toFixed(2)} ex GST vs cost $${l.cost.toFixed(2)}`)
+              .join("; "),
+        }
+      : {}),
     ...(Object.keys(orderMetafields).length ? { metafields: orderMetafields } : {}),
   }) as { id: number; order_number: string };
 
@@ -411,6 +446,27 @@ export async function placeOrder(
       }
     }
     return { error: err instanceof Error ? err.message : "We couldn't complete your order. Please try again." };
+  }
+
+  // Below-cost alert to staff. Sent for EVERY payment method (runs before the
+  // Stripe early-return) and best-effort — the order already exists, stamped
+  // with the same detail in internal_memo / metafields, so a failed email never
+  // blocks checkout.
+  if (belowCostLines.length > 0) {
+    try {
+      await sendStaffNotification({
+        subject: `Below-cost pricing on order ${order.order_number}`,
+        heading: "Order contains below-cost lines — review before fulfilment",
+        rows: belowCostLines.map((l) => [
+          l.sku ?? `#${l.productId}`,
+          `${l.name} — qty ${l.quantity}, sold $${l.unitExTax.toFixed(2)} ex GST, cost $${l.cost.toFixed(2)}`,
+        ]),
+        portalPath: `/dashboard/orders/${order.id}`,
+        linkLabel: "Review order",
+      });
+    } catch (e) {
+      console.error("[placeOrder] below-cost staff alert failed (non-fatal):", e);
+    }
   }
 
   // Persist the delivery address as an order_shipping_addresses row. The checkout
