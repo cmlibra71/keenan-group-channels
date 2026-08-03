@@ -153,8 +153,8 @@ jobs:
           echo "Mode: $MODE"
 
           # QUOTED heredoc: secrets may contain $ and an unquoted heredoc lets
-          # bash expand them into garbage. ${{ }} GitHub expressions substitute
-          # before bash runs, so all values below use those, not shell vars.
+          # bash expand them into garbage. GitHub-actions expressions
+          # substitute before bash runs, so all values below use those, not shell vars.
           ENV_B64=$(cat <<'EOF' | base64 -w0
           COMMERCE_DATABASE_URL=${{ secrets.COMMERCE_DATABASE_URL }}
           CHANNEL_ID=${{ steps.config.outputs.channel_id }}
