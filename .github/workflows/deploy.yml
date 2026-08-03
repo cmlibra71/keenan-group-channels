@@ -152,12 +152,15 @@ jobs:
           if [ "${{ github.ref }}" = "refs/heads/staging" ]; then MODE=stage; fi
           echo "Mode: $MODE"
 
-          ENV_B64=$(cat <<EOF | base64 -w0
+          # QUOTED heredoc: secrets may contain $ and an unquoted heredoc lets
+          # bash expand them into garbage. ${{ }} GitHub expressions substitute
+          # before bash runs, so all values below use those, not shell vars.
+          ENV_B64=$(cat <<'EOF' | base64 -w0
           COMMERCE_DATABASE_URL=${{ secrets.COMMERCE_DATABASE_URL }}
-          CHANNEL_ID=${CHANNEL_ID}
-          CHANNEL_KEY=${SITE}
-          SITE_URL=https://${DOMAIN}
-          SITE_INDEXABLE=${INDEXABLE}
+          CHANNEL_ID=${{ steps.config.outputs.channel_id }}
+          CHANNEL_KEY=${{ matrix.site }}
+          SITE_URL=https://${{ steps.config.outputs.domain }}
+          SITE_INDEXABLE=${{ steps.config.outputs.indexable }}
           STOREFRONT_REVALIDATE_SECRET=${{ secrets.STOREFRONT_REVALIDATE_SECRET }}
           CMS_PREVIEW_SECRET=${{ secrets.CMS_PREVIEW_SECRET }}
           SESSION_SECRET=${{ secrets.SESSION_SECRET }}
