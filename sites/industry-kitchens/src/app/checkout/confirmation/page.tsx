@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CheckCircle, Building2, FileText, CreditCard } from "lucide-react";
 import { getCheckoutSettings, orderService, orderItemService } from "@/lib/store";
 import { Ga4Purchase, type Ga4PurchaseProps } from "@/components/analytics/Ga4Purchase";
+import { ConfirmationRedirect } from "@/components/checkout/ConfirmationRedirect";
 import type { Ga4Item } from "@/components/analytics/ga4";
 
 export const metadata = {
@@ -209,6 +210,10 @@ export default async function ConfirmationPage({
           Continue Shopping
         </Link>
       </div>
+
+      {/* Hold the thank-you for a few seconds, then move the shopper on rather
+          than leaving them on a dead-end page they can only Back out of. */}
+      <ConfirmationRedirect to="/" seconds={15} />
     </div>
   );
 }

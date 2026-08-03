@@ -12,6 +12,7 @@ import {
 } from "@/lib/store";
 import { createAddressForContact } from "@/lib/contact-addresses";
 import { getStripeProvider } from "@/lib/stripe";
+import { normaliseAuState, isValidAuPostcode } from "@/lib/checkout/au-address";
 
 // Per-customer in-flight guard (per container): the active/pending check and the
 // Stripe+local create aren't atomic, so two concurrent submits (double-click / retry)
@@ -280,6 +281,20 @@ export async function completeMembershipProfile(input: {
     return { success: false, error: "Please fill in all required fields." };
   }
 
+  // Same Australian rules as the checkout and the address book: this writes the
+  // member's DEFAULT BILLING address, which is then offered at checkout — a
+  // free-text state or a junk postcode here becomes an order we can't price.
+  const state = normaliseAuState(input.state);
+  if (!state) {
+    return {
+      success: false,
+      error: "Please select an Australian state or territory from the list.",
+    };
+  }
+  if (!isValidAuPostcode(postalCode)) {
+    return { success: false, error: "Please enter a valid 4-digit Australian postcode." };
+  }
+
   try {
     // Must have a subscription (active or pending) to complete onboarding.
     const subs = await subscriptionService.listForContact(
@@ -315,7 +330,7 @@ export async function completeMembershipProfile(input: {
       address1,
       address2: input.address2?.trim() || "",
       city,
-      stateOrProvince: input.state?.trim() || "",
+      stateOrProvince: state,
       postalCode,
       country: "Australia",
       countryCode: "AU",

@@ -4,6 +4,12 @@ import { useActionState, useState, useRef, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation";
 import { placeOrder, confirmStripePayment } from "@/lib/actions/checkout";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
+import {
+  AU_STATES,
+  normaliseAuState,
+  isValidAuPostcode,
+  auAddressNeedsCorrection,
+} from "@/lib/checkout/au-address";
 import { Price } from "@/components/ui/Price";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
 import { ga4AddShippingInfo, ga4AddPaymentInfo, rowToGa4Item } from "@/components/analytics/ga4";
@@ -224,15 +230,27 @@ export function CheckoutForm({
   // Refs for address autocomplete
   const address1Ref = useRef<HTMLInputElement>(null);
   const cityRef = useRef<HTMLInputElement>(null);
-  const stateRef = useRef<HTMLInputElement>(null);
-  const postalCodeRef = useRef<HTMLInputElement>(null);
-  const countryRef = useRef<HTMLSelectElement>(null);
+
+  // Country / state / postcode are controlled: the State field is a fixed
+  // dropdown for Australia (free text elsewhere) and the postcode is restricted
+  // to 4 digits for Australia, so both need a value we own rather than a ref.
+  const [country, setCountry] = useState<string>(() => countries[0]?.code || "AU");
+  const [stateValue, setStateValue] = useState("");
+  const [postalCodeValue, setPostalCodeValue] = useState("");
+  const isAu = country === "AU";
 
   // Shipping calculation state
   const [shippingCost, setShippingCost] = useState<number | null>(null);
   const [shippingLoading, setShippingLoading] = useState(false);
   const [shippingError, setShippingError] = useState<string | null>(null);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const freeDelivery = qualifiesForFreeDelivery({
+    enabled: !!freeShippingEnabled,
+    isMember: !!isMember,
+    amount: subtotal,
+    threshold: freeShippingThreshold,
+  });
 
   const calculateShippingCost = useCallback(
     async (postcode: string) => {
@@ -243,7 +261,7 @@ export function CheckoutForm({
       }
 
       // Don't calculate if free shipping applies
-      if (qualifiesForFreeDelivery({ enabled: !!freeShippingEnabled, isMember: !!isMember, amount: subtotal, threshold: freeShippingThreshold })) {
+      if (freeDelivery) {
         setShippingCost(0);
         return;
       }
@@ -273,7 +291,7 @@ export function CheckoutForm({
         setShippingLoading(false);
       }
     },
-    [shippingEnabled, subtotal, freeShippingEnabled, isMember, freeShippingThreshold]
+    [shippingEnabled, freeDelivery, subtotal]
   );
 
   const handlePostcodeChange = useCallback(
@@ -290,9 +308,10 @@ export function CheckoutForm({
     (place: { address1: string; city: string; state: string; postalCode: string; countryCode: string }) => {
       if (address1Ref.current) address1Ref.current.value = place.address1;
       if (cityRef.current) cityRef.current.value = place.city;
-      if (stateRef.current) stateRef.current.value = place.state;
-      if (postalCodeRef.current) postalCodeRef.current.value = place.postalCode;
-      if (countryRef.current) countryRef.current.value = place.countryCode;
+      // Places returns "VIC" or "Victoria" — normalise so the dropdown matches.
+      setStateValue(normaliseAuState(place.state) ?? place.state);
+      setPostalCodeValue(place.postalCode);
+      if (place.countryCode) setCountry(place.countryCode);
       // Trigger shipping calculation when address is autocompleted
       if (place.postalCode) {
         calculateShippingCost(place.postalCode);
@@ -303,12 +322,44 @@ export function CheckoutForm({
 
   const selectedAddress = savedAddresses.find((a) => a.id === selectedAddressId);
 
-  // Recalculate shipping when a saved address is selected
+  // A saved address written before the AU rules existed can carry a free-text
+  // state ("North Eastern Australia") or a junk postcode. The server now refuses
+  // those, so simply passing them through would strand the shopper on an error
+  // they have no way to clear from this page. Open the editable form pre-filled
+  // instead, so they can correct it for this order.
+  const needsCorrection = !!selectedAddress && auAddressNeedsCorrection(selectedAddress);
+  const showAddressForm =
+    savedAddresses.length === 0 || selectedAddressId === "new" || needsCorrection;
+  const prefill = needsCorrection ? selectedAddress : undefined;
+
+  // Seed the correction form from the saved address — once per address, so a
+  // re-render never wipes what the shopper has typed.
+  const prefilledFor = useRef<number | null>(null);
   useEffect(() => {
-    if (selectedAddress && shippingEnabled) {
+    if (!prefill || prefilledFor.current === prefill.id) return;
+    prefilledFor.current = prefill.id;
+    setCountry(prefill.countryCode || "AU");
+    setStateValue(normaliseAuState(prefill.stateOrProvince) ?? "");
+    const postcode = isValidAuPostcode(prefill.postalCode) ? prefill.postalCode.trim() : "";
+    setPostalCodeValue(postcode);
+    // Only the state was wrong — price the (valid) postcode straight away.
+    if (postcode) calculateShippingCost(postcode);
+  }, [prefill, calculateShippingCost]);
+
+  // Recalculate shipping when a saved address is selected. Skipped while
+  // correcting: the saved postcode is the unusable one, and the form's own
+  // onChange prices whatever the shopper types instead.
+  useEffect(() => {
+    if (selectedAddress && !needsCorrection && shippingEnabled) {
       calculateShippingCost(selectedAddress.postalCode);
     }
-  }, [selectedAddressId, selectedAddress, shippingEnabled, calculateShippingCost]);
+  }, [
+    selectedAddressId,
+    selectedAddress,
+    needsCorrection,
+    shippingEnabled,
+    calculateShippingCost,
+  ]);
 
   // ── GA4 funnel (single-page checkout) ──────────────────────────────────────
   // add_shipping_info fires once when the shipping cost resolves;
@@ -321,21 +372,14 @@ export function CheckoutForm({
     (cost: number | null) => {
       if (shippingInfoFired.current) return;
       shippingInfoFired.current = true;
-      const free =
-        cost === 0 ||
-        qualifiesForFreeDelivery({
-          enabled: !!freeShippingEnabled,
-          isMember: !!isMember,
-          amount: subtotal,
-          threshold: freeShippingThreshold,
-        });
+      const free = cost === 0 || freeDelivery;
       ga4AddShippingInfo(
         items.map((it, i) => rowToGa4Item(it as unknown as Record<string, unknown>, i)),
         subtotal,
         free ? "Free Delivery" : "Standard Delivery"
       );
     },
-    [items, subtotal, freeShippingEnabled, isMember, freeShippingThreshold]
+    [items, subtotal, freeDelivery]
   );
 
   const firePaymentInfo = useCallback(
@@ -354,6 +398,12 @@ export function CheckoutForm({
   useEffect(() => {
     if (shippingCost !== null) fireShippingInfo(shippingCost);
   }, [shippingCost, fireShippingInfo]);
+
+  // The order must never be submitted with an unpriced delivery: a postcode we
+  // can't match to a zone used to show an error in the summary while the button
+  // stayed live, and the order was written with $0 freight. Block instead.
+  const shippingUnresolved =
+    shippingEnabled && !freeDelivery && (shippingLoading || shippingCost === null);
 
   return (
     <form
@@ -421,6 +471,11 @@ export function CheckoutForm({
                             Default
                           </span>
                         )}
+                        {auAddressNeedsCorrection(addr) && (
+                          <span className="ml-2 text-xs bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded">
+                            Needs details
+                          </span>
+                        )}
                       </div>
                     </label>
                   ))}
@@ -447,15 +502,25 @@ export function CheckoutForm({
               </div>
             )}
 
-            {/* Address form — hidden when using a saved address */}
-            {(selectedAddressId === "new" || savedAddresses.length === 0) && (
-              <div className="grid grid-cols-2 gap-4">
+            {/* A saved address we can't price — say so, and let them fix it here. */}
+            {needsCorrection && (
+              <div className="mb-4 rounded-lg border border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                This saved address is missing a valid state or postcode, so we can&rsquo;t work
+                out delivery for it. Please complete the details below — they apply to this
+                order.
+              </div>
+            )}
+
+            {/* Address form — hidden when using a saved address we can use as-is */}
+            {showAddressForm && (
+              <div className="grid grid-cols-2 gap-4" key={prefill ? `saved-${prefill.id}` : "new"}>
                 <div>
                   <label className="block text-sm font-medium text-zinc-700">First Name</label>
                   <input
                     type="text"
                     name="firstName"
                     required
+                    defaultValue={prefill?.firstName ?? ""}
                     className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
                   />
                 </div>
@@ -465,6 +530,7 @@ export function CheckoutForm({
                     type="text"
                     name="lastName"
                     required
+                    defaultValue={prefill?.lastName ?? ""}
                     className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
                   />
                 </div>
@@ -476,6 +542,7 @@ export function CheckoutForm({
                     name="address1"
                     required
                     autoComplete="off"
+                    defaultValue={prefill?.address1 ?? ""}
                     className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
                   />
                   {googlePlacesEnabled && (
@@ -492,6 +559,7 @@ export function CheckoutForm({
                   <input
                     type="text"
                     name="address2"
+                    defaultValue={prefill?.address2 ?? ""}
                     className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
                   />
                 </div>
@@ -503,6 +571,7 @@ export function CheckoutForm({
                     type="tel"
                     name="phone"
                     autoComplete="tel"
+                    defaultValue={prefill?.phone ?? ""}
                     className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
                   />
                 </div>
@@ -513,26 +582,60 @@ export function CheckoutForm({
                     type="text"
                     name="city"
                     required
+                    defaultValue={prefill?.city ?? ""}
                     className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-zinc-700">State / Province</label>
-                  <input
-                    ref={stateRef}
-                    type="text"
-                    name="state"
-                    className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
-                  />
+                  <label className="block text-sm font-medium text-zinc-700">
+                    {isAu ? "State / Territory" : "State / Province"}
+                  </label>
+                  {isAu ? (
+                    <select
+                      name="state"
+                      required
+                      value={stateValue}
+                      onChange={(e) => setStateValue(e.target.value)}
+                      className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none bg-white"
+                    >
+                      <option value="">Select a state…</option>
+                      {AU_STATES.map((s) => (
+                        <option key={s.code} value={s.code}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      name="state"
+                      value={stateValue}
+                      onChange={(e) => setStateValue(e.target.value)}
+                      className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-zinc-700">Postal Code</label>
                   <input
-                    ref={postalCodeRef}
                     type="text"
                     name="postalCode"
                     required
-                    onChange={(e) => handlePostcodeChange(e.target.value)}
+                    value={postalCodeValue}
+                    inputMode={isAu ? "numeric" : "text"}
+                    maxLength={isAu ? 4 : undefined}
+                    pattern={isAu ? "\\d{4}" : undefined}
+                    title={isAu ? "Australian postcodes are 4 digits, e.g. 3140" : undefined}
+                    placeholder={isAu ? "e.g. 3140" : undefined}
+                    onChange={(e) => {
+                      // AU postcodes are exactly 4 digits — reject anything else at
+                      // the keystroke so a junk code can never reach the order.
+                      const next = isAu
+                        ? e.target.value.replace(/\D/g, "").slice(0, 4)
+                        : e.target.value;
+                      setPostalCodeValue(next);
+                      handlePostcodeChange(next);
+                    }}
                     className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
                   />
                 </div>
@@ -540,9 +643,9 @@ export function CheckoutForm({
                   <div>
                     <label className="block text-sm font-medium text-zinc-700">Country</label>
                     <select
-                      ref={countryRef}
                       name="country"
-                      defaultValue={countries[0]?.code || "AU"}
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
                       className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none bg-white"
                     >
                       {countries.map((c) => (
@@ -556,15 +659,23 @@ export function CheckoutForm({
               </div>
             )}
 
-            {/* Hidden fields for saved address */}
-            {selectedAddress && selectedAddressId !== "new" && (
+            {/* Hidden fields for saved address (not while it's being corrected —
+                the visible form above supplies those values instead) */}
+            {selectedAddress && selectedAddressId !== "new" && !needsCorrection && (
               <>
                 <input type="hidden" name="firstName" value={selectedAddress.firstName} />
                 <input type="hidden" name="lastName" value={selectedAddress.lastName} />
                 <input type="hidden" name="address1" value={selectedAddress.address1} />
                 <input type="hidden" name="address2" value={selectedAddress.address2 || ""} />
                 <input type="hidden" name="city" value={selectedAddress.city} />
-                <input type="hidden" name="state" value={selectedAddress.stateOrProvince} />
+                <input
+                  type="hidden"
+                  name="state"
+                  value={
+                    normaliseAuState(selectedAddress.stateOrProvince) ??
+                    selectedAddress.stateOrProvince
+                  }
+                />
                 <input type="hidden" name="postalCode" value={selectedAddress.postalCode} />
                 <input type="hidden" name="country" value={selectedAddress.countryCode} />
                 <input type="hidden" name="phone" value={selectedAddress.phone || ""} />
@@ -709,7 +820,7 @@ export function CheckoutForm({
               </div>
               <div className="flex justify-between text-sm mt-2">
                 <span className="text-zinc-500">Shipping</span>
-                {qualifiesForFreeDelivery({ enabled: !!freeShippingEnabled, isMember: !!isMember, amount: subtotal, threshold: freeShippingThreshold }) ? (
+                {freeDelivery ? (
                   <span className="font-medium text-green-600">FREE</span>
                 ) : shippingLoading ? (
                   <span className="font-medium text-zinc-400 animate-pulse">Calculating...</span>
@@ -739,11 +850,24 @@ export function CheckoutForm({
 
             <button
               type="submit"
-              disabled={isPending || stripeProcessing || (selectedPaymentMethod === "stripe" && !cardReady)}
+              disabled={
+                isPending ||
+                stripeProcessing ||
+                (selectedPaymentMethod === "stripe" && !cardReady) ||
+                shippingUnresolved
+              }
               className="mt-6 w-full bg-zinc-900 text-white py-3 px-6 rounded-lg font-semibold hover:bg-zinc-800 transition-colors disabled:bg-zinc-300"
             >
               {isPending || stripeProcessing ? "Processing..." : selectedPaymentMethod === "stripe" ? "Pay Now" : "Place Order"}
             </button>
+
+            {shippingUnresolved && !shippingLoading && (
+              <p className="mt-2 text-center text-xs text-zinc-500">
+                {shippingError
+                  ? "We can't deliver to that postcode. Please check it, or contact us for a freight quote."
+                  : "Enter a delivery postcode to calculate shipping."}
+              </p>
+            )}
           </div>
         </div>
       </div>

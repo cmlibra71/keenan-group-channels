@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { completeMembershipProfile } from "@/lib/actions/subscription";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
+import { AU_STATES, normaliseAuState } from "@/lib/checkout/au-address";
 
 export function CompleteProfileForm({
   defaultCompany = "",
@@ -18,8 +19,11 @@ export function CompleteProfileForm({
 
   const address1Ref = useRef<HTMLInputElement>(null);
   const cityRef = useRef<HTMLInputElement>(null);
-  const stateRef = useRef<HTMLInputElement>(null);
-  const postalCodeRef = useRef<HTMLInputElement>(null);
+  // This form writes the member's DEFAULT BILLING address, which is offered at
+  // checkout — so state and postcode follow the same Australian rules as the
+  // checkout form: a fixed list of 8, and exactly 4 digits.
+  const [stateValue, setStateValue] = useState("");
+  const [postalCodeValue, setPostalCodeValue] = useState("");
 
   function handlePlaceSelect(place: {
     address1: string;
@@ -29,8 +33,9 @@ export function CompleteProfileForm({
   }) {
     if (address1Ref.current) address1Ref.current.value = place.address1;
     if (cityRef.current) cityRef.current.value = place.city;
-    if (stateRef.current) stateRef.current.value = place.state;
-    if (postalCodeRef.current) postalCodeRef.current.value = place.postalCode;
+    // Places returns "VIC" or "Victoria" — normalise so the dropdown matches.
+    setStateValue(normaliseAuState(place.state) ?? "");
+    setPostalCodeValue(place.postalCode.replace(/\D/g, "").slice(0, 4));
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -93,12 +98,39 @@ export function CompleteProfileForm({
           <input ref={cityRef} id="city" name="city" type="text" required className="mt-1 block w-full input" />
         </div>
         <div>
-          <label htmlFor="state" className="field-label">State</label>
-          <input ref={stateRef} id="state" name="state" type="text" className="mt-1 block w-full input" />
+          <label htmlFor="state" className="field-label">State / Territory</label>
+          <select
+            id="state"
+            name="state"
+            required
+            value={stateValue}
+            onChange={(e) => setStateValue(e.target.value)}
+            className="mt-1 block w-full input bg-white"
+          >
+            <option value="">Select a state…</option>
+            {AU_STATES.map((s) => (
+              <option key={s.code} value={s.code}>
+                {s.name}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <label htmlFor="postalCode" className="field-label">Postcode</label>
-          <input ref={postalCodeRef} id="postalCode" name="postalCode" type="text" required className="mt-1 block w-full input" />
+          <input
+            id="postalCode"
+            name="postalCode"
+            type="text"
+            required
+            value={postalCodeValue}
+            inputMode="numeric"
+            maxLength={4}
+            pattern="\d{4}"
+            title="Australian postcodes are 4 digits, e.g. 3140"
+            placeholder="e.g. 3140"
+            onChange={(e) => setPostalCodeValue(e.target.value.replace(/\D/g, "").slice(0, 4))}
+            className="mt-1 block w-full input"
+          />
         </div>
       </div>
 
