@@ -613,6 +613,8 @@ export async function placeOrder(
       .catch(() => new Map<number, string>());
 
     const confirmationParams = {
+      // Logs each send on the order's history panel in the portal (one entry per recipient copy).
+      orderId: order.id,
       orderNumber: order.order_number,
       customerName: `${firstName} ${lastName}`.trim() || undefined,
       storeName,
@@ -678,6 +680,7 @@ export async function placeOrder(
       const portalBase = (process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/$/, "");
       await sendOrderStaffNotificationEmail({
         to: recipients,
+        orderId: order.id,
         orderNumber: order.order_number,
         orderUrl: `${portalBase}/dashboard/orders/${order.id}`,
         customerEmail: email,
