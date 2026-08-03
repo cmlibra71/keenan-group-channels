@@ -466,6 +466,38 @@ export async function getGuestOrdersForEmail(
   return rows;
 }
 
+/**
+ * Current buy costs for a set of order lines, keyed `${productId}:${variantId ?? 0}`.
+ * Variant cost wins over the product cost (same precedence as the pricing
+ * engine's applyCostPlus). Feeds the checkout below-cost sentry — a slim raw
+ * read, deliberately not productService (no joins, no pricing resolution).
+ */
+export async function getLineCosts(
+  lines: Array<{ productId: number; variantId: number | null }>
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const sql = getCommerceClient();
+  if (!sql || lines.length === 0) return out;
+  const productIds = [...new Set(lines.map((l) => l.productId))];
+  const variantIds = [...new Set(lines.map((l) => l.variantId).filter((v): v is number => v != null))];
+  const [products, variants] = await Promise.all([
+    sql<{ id: number; cost_price: string | null }[]>`
+      SELECT id, cost_price FROM products WHERE id = ANY(${productIds})`,
+    variantIds.length
+      ? sql<{ id: number; cost_price: string | null }[]>`
+          SELECT id, cost_price FROM product_variants WHERE id = ANY(${variantIds})`
+      : Promise.resolve([]),
+  ]);
+  const productCost = new Map(products.map((p) => [p.id, p.cost_price]));
+  const variantCost = new Map(variants.map((v) => [v.id, v.cost_price]));
+  for (const line of lines) {
+    const raw = (line.variantId != null ? variantCost.get(line.variantId) : null) ?? productCost.get(line.productId);
+    const cost = raw == null ? NaN : parseFloat(raw);
+    if (Number.isFinite(cost) && cost > 0) out.set(`${line.productId}:${line.variantId ?? 0}`, cost);
+  }
+  return out;
+}
+
 /** Normalize an email for inbox-equivalent matching (mirrors the SQL above). */
 function normalizeEmailForMatch(email: string): string {
   const [rawLocal, rawDomain] = email.toLowerCase().trim().split("@");

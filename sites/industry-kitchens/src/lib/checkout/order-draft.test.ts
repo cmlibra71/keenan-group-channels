@@ -5,6 +5,7 @@ import {
   lineUnitPrice,
   buildLineItems,
   withShipping,
+  findBelowCostLines,
   type CartLineInput,
 } from "./order-draft.ts";
 
@@ -77,6 +78,34 @@ test("withShipping with zero shipping leaves the total at subtotal", () => {
   const subtotal = { exTax: 200, incTax: 220, tax: 20 };
   const { total } = withShipping(subtotal, 0);
   assert.equal(round(total.incTax), 220);
+});
+
+test("findBelowCostLines: flags lines under current cost, skips unknown costs and rounding noise", () => {
+  const { lineItems } = buildLineItems(
+    [
+      line({ product_id: 1, product_sku: "AT-COST", list_price: "100", sale_price: "460.00" }),
+      line({ product_id: 2, product_sku: "HEALTHY", list_price: "100", sale_price: "529.00" }),
+      line({ product_id: 3, product_sku: "NO-COST", list_price: "100", sale_price: "5.00" }),
+      line({ product_id: 4, variant_id: 44, product_sku: "VAR", list_price: "100", sale_price: "90.00" }),
+    ],
+    false
+  );
+  const costs = new Map<string, number>([
+    ["1:0", 460.32], // sold 460.00 → below cost (the FED-1200-6-DSBC shape)
+    ["2:0", 460.32], // sold 529.00 → fine
+    ["4:44", 95],    // variant cost wins → below
+  ]);
+  const flagged = findBelowCostLines(lineItems, costs);
+  assert.deepEqual(flagged.map((f) => f.sku), ["AT-COST", "VAR"]);
+  assert.equal(flagged[0].cost, 460.32);
+  assert.equal(flagged[0].unitExTax, 460);
+
+  // Half-cent tolerance: a price within rounding noise of cost is not flagged.
+  const { lineItems: noiseItems } = buildLineItems(
+    [line({ product_id: 5, product_sku: "NOISE", list_price: "100", sale_price: "460.318" })],
+    false
+  );
+  assert.deepEqual(findBelowCostLines(noiseItems, new Map([["5:0", 460.32]])), []);
 });
 
 function round(n: number): number {
