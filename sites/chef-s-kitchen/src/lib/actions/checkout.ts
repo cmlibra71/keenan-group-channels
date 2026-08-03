@@ -8,6 +8,8 @@ import { getSession } from "@/lib/auth";
 import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, resolveEmailBranding, wantsStripeTestMode, productImageService } from "@keenan/services";
 import { buildLineItems, withShipping, determinePaymentStatus } from "@/lib/checkout/order-draft";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
+import { normaliseAuState, isValidAuPostcode } from "@/lib/checkout/au-address";
+import { setLastOrder } from "@/lib/checkout/last-order";
 import { siteBaseUrl } from "@/lib/seo";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 import {
@@ -79,7 +81,7 @@ export async function placeOrder(
   const lastName = (formData.get("lastName") as string)?.trim();
   const address1 = (formData.get("address1") as string)?.trim();
   const city = (formData.get("city") as string)?.trim();
-  const state = (formData.get("state") as string)?.trim();
+  const rawState = (formData.get("state") as string)?.trim();
   const postalCode = (formData.get("postalCode") as string)?.trim();
   const country = (formData.get("country") as string)?.trim() || "AU";
   const phone = (formData.get("phone") as string)?.trim() || "";
@@ -87,6 +89,21 @@ export async function placeOrder(
 
   if (!email || !firstName || !lastName || !address1 || !city || !postalCode) {
     return { error: "Please fill in all required fields." };
+  }
+
+  // Australian address rules — the server half of the checkout form's dropdown +
+  // 4-digit postcode. Never trust the client: a free-text state ("North Eastern
+  // Australia") is unusable for freight, and a junk postcode matches no shipping
+  // zone, which used to be billed as $0 delivery.
+  const state =
+    country === "AU" ? normaliseAuState(rawState) ?? rawState ?? "" : rawState ?? "";
+  if (country === "AU") {
+    if (!state) {
+      return { error: "Please select a state or territory." };
+    }
+    if (!isValidAuPostcode(postalCode)) {
+      return { error: "Please enter a valid 4-digit Australian postcode." };
+    }
   }
 
   const billingAddress = {
@@ -266,9 +283,19 @@ export async function placeOrder(
       const shippingResult = await calculateShipping(postalCode, subtotalExTax);
       if (shippingResult.success) {
         shippingIncTax = shippingResult.cost;
+      } else if (shippingResult.rate_card_name) {
+        // A rate card IS configured for this channel but this address doesn't
+        // price against it (unknown postcode, or somewhere we don't deliver).
+        // REFUSE the order — silently writing it at $0 freight is a real money
+        // leak, and the shopper saw an error in the summary either way.
+        return {
+          error: `We can't calculate delivery for postcode "${postalCode}". Please check it, or contact us for a freight quote.`,
+        };
       }
-    } catch {
-      // Default to $0 if rate card not configured
+      // No rate card configured for this channel at all → $0 shipping is intended.
+    } catch (e) {
+      // Rate lookup unavailable (DB blip) — don't strand a paying customer.
+      console.error("[placeOrder] shipping rate lookup failed (non-fatal, $0 freight):", e);
       shippingIncTax = 0;
     }
   }
@@ -600,6 +627,10 @@ export async function placeOrder(
     console.error("[placeOrder] staff order notification failed (non-fatal):", e);
   }
 
+  // Breadcrumb so a shopper who comes BACK to /checkout after ordering lands on
+  // their confirmation instead of the now-empty cart.
+  await setLastOrder(order.order_number, paymentMethod);
+
   const pmParam = paymentMethod ? `&pm=${encodeURIComponent(paymentMethod)}` : "";
   redirect(`/checkout/confirmation?order=${order.order_number}${pmParam}`);
 }
@@ -641,6 +672,10 @@ export async function confirmStripePayment(
       if (cart) await cartService.markCompleted(cart.id);
       await clearCartUuid();
     }
+    // Same breadcrumb the bank/net-terms path sets: the card flow navigates to
+    // the confirmation client-side, so a Back button (or a lost push) must not
+    // drop the shopper on an empty cart.
+    await setLastOrder(orderNumber, "stripe");
   } catch {
     /* non-fatal: the webhook is the source of truth for payment status */
   }

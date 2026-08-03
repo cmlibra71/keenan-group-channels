@@ -7,6 +7,7 @@ import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, 
 import { gstSplit } from "@keenan/services/calc";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
+import { lastOrderConfirmationPath } from "@/lib/checkout/last-order";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
 import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-policy";
 import { CheckoutForm } from "@/components/checkout/CheckoutForm";
@@ -20,7 +21,11 @@ export default async function CheckoutPage() {
   const cart = await getCart();
 
   if (!cart || cart.items.length === 0) {
-    redirect("/cart");
+    // Placing an order empties the cart, so coming back to /checkout (Back
+    // button, bookmark, a second submit) used to dump the shopper on an EMPTY
+    // CART. If they just ordered, send them to that order's confirmation.
+    const justOrdered = await lastOrderConfirmationPath();
+    redirect(justOrdered ?? "/cart");
   }
 
   const [session, checkoutSettings] = await Promise.all([
