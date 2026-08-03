@@ -125,6 +125,51 @@ export function buildLineItems(items: CartLineInput[], pricesIncludeTax: boolean
   };
 }
 
+/** A line about to be sold under its current buy cost (all figures ex-GST). */
+export type BelowCostLine = {
+  productId: number;
+  variantId: number | null;
+  sku: string | null;
+  name: string;
+  quantity: number;
+  unitExTax: number;
+  cost: number;
+};
+
+/**
+ * Below-cost sentry: lines whose charged ex-GST unit price is under the CURRENT
+ * buy cost. The pricing engine already floors computed prices at cost, but a
+ * price frozen on the cart line can drift under a later cost update, and manual
+ * prices (account contracts, imported specials) bypass the engine entirely.
+ * `costs` is keyed `${productId}:${variantId ?? 0}` (see store.getLineCosts);
+ * lines with no known cost are skipped. A half-cent tolerance avoids flagging
+ * pure GST-split rounding noise.
+ */
+export function findBelowCostLines(
+  lineItems: OrderLineDraft[],
+  costs: Map<string, number>
+): BelowCostLine[] {
+  const out: BelowCostLine[] = [];
+  for (const line of lineItems) {
+    const cost = costs.get(`${line.productId}:${line.variantId ?? 0}`);
+    if (cost == null) continue;
+    const unitExTax = parseFloat(line.priceExTax);
+    if (!Number.isFinite(unitExTax)) continue;
+    if (unitExTax < cost - 0.005) {
+      out.push({
+        productId: line.productId,
+        variantId: line.variantId,
+        sku: line.sku,
+        name: line.name,
+        quantity: line.quantity,
+        unitExTax,
+        cost,
+      });
+    }
+  }
+  return out;
+}
+
 /**
  * Splits a shipping amount (always specified inc-tax) and rolls it into the order
  * total. Returns the shipping split and the combined subtotal + shipping total.
