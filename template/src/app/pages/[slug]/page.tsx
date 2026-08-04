@@ -1,9 +1,15 @@
 import { notFound } from "next/navigation";
 import { draftMode, headers } from "next/headers";
 import type { Metadata } from "next";
-import { getContentPage, getCmsPage } from "@/lib/store";
+import { getContentPage, getCmsPage, getCmsTemplate, getFeatureFlag, getNamedStyles, getComponents, getDraftComponents, getChannelSetting, CHANNEL_ID } from "@/lib/store";
+import { getMemberContext } from "@/lib/member";
+import { sanitizeHtml } from "@/lib/sanitize-html";
+import { composeContentPagePayload } from "@keenan/services/builder";
 import { RichContent } from "@/components/content/RichContent";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
+import { BuilderContentPage } from "@/builder/BuilderContentPage";
+import { cmsFunctionService } from "@keenan/services/services";
+import { loadJsSandbox, computeCallResults, type NodeTree } from "@keenan/services/builder";
 
 export async function generateMetadata({
   params,
@@ -14,7 +20,6 @@ export async function generateMetadata({
   const { isEnabled } = await draftMode();
   const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
 
-  // Prefer the new CMS page; fall back to the legacy content_pages setting.
   const cms = await getCmsPage(slug, draft);
   if (cms) {
     const meta = cms.page_meta as { meta_title?: string; meta_description?: string };
@@ -41,33 +46,108 @@ export default async function ContentPage({
   const { isEnabled } = await draftMode();
   const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
 
-  // New CMS page (block-composed) takes precedence.
   const cms = await getCmsPage(slug, draft);
   if (cms) {
-    // No wrapper — the content_page block is a full <article>, so a migrated page
-    // renders pixel-identically to the legacy path.
+    const pageKind = (cms as { page_kind?: string }).page_kind ?? "custom";
+
+    // The page's own authored tree (custom pages converted to the Site Builder).
+    const ownTree = (cms as { node_tree?: unknown }).node_tree as NodeTree | null;
+
+    // ═══ Shared POLICY LAYOUT — 'policy' pages (terms, privacy, returns,
+    // shipping, contact, warranty) render through ONE node template; the page
+    // supplies the data ({{page.heading}}, {{page.body_html}}…). Edit the
+    // template once → every policy page updates. Gated: flag for live, or
+    // draft mode when an authored layout draft exists. ═══
+    let tree: NodeTree | null = null;
+    let treeKind: "policy" | "custom" = "custom";
+    if (pageKind === "policy") {
+      const flag = await getFeatureFlag("node_policy_template_enabled");
+      if (flag || draft) {
+        if (ownTree) {
+          tree = ownTree;
+          treeKind = "policy";
+        } else {
+          const layout = (await getCmsTemplate("policy_layout", draft).catch(() => null)) as {
+            node_tree?: unknown;
+          } | null;
+          const layoutTree = (layout?.node_tree as NodeTree | null) ?? null;
+          if (layoutTree) {
+            tree = layoutTree;
+            treeKind = "policy";
+          }
+        }
+      }
+    } else if (ownTree) {
+      tree = ownTree;
+    }
+
+    // ═══ Site Builder node-tree path — renders through the shared BuilderTree
+    // with the portal-compiled builder CSS for authored classes. The payload is
+    // built by the SHARED composer (same one the designer samples with). ═══
+    if (tree) {
+      const contentBlock = (cms.blocks as Array<{ block_type: string; props?: Record<string, unknown> }>)?.find(
+        (b) => b.block_type === "content_page"
+      );
+      const legacyPage = await getContentPage(slug).catch(() => null);
+      const memberCtx = await getMemberContext().catch(() => null);
+      const payload = composeContentPagePayload({
+        channelId: CHANNEL_ID,
+        slug,
+        title: cms.title,
+        kind: treeKind,
+        blockProps: contentBlock?.props ?? null,
+        legacyPage: (legacyPage as Record<string, unknown> | null) ?? null,
+        customer: {
+          isMember: memberCtx?.isMember ?? false,
+          loggedIn: memberCtx?.loggedIn ?? false,
+        },
+        draft,
+        sanitizeHtml,
+      });
+      const namedStyles = await getNamedStyles().catch(() => ({}));
+      const components = (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<string, NodeTree>;
+      const builderCss =
+        ((await getChannelSetting("builder_published_css").catch(() => null)) as { css?: string } | null)?.css ?? "";
+      const jsFunctions = await cmsFunctionService.enabledMapForChannel(CHANNEL_ID).catch(() => ({}) as Record<string, string>);
+      let callResults: Record<string, unknown> = {};
+      if (Object.keys(jsFunctions).length > 0) {
+        await loadJsSandbox(jsFunctions).catch(() => null);
+        callResults = await computeCallResults(tree.root, jsFunctions, payload as object).catch(() => ({}));
+      }
+      return (
+        <>
+          {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
+          <BuilderContentPage
+            tree={tree}
+            payload={payload}
+            namedStyles={namedStyles}
+            components={components}
+            jsFunctions={jsFunctions}
+            callResults={callResults}
+            draft={draft}
+          />
+        </>
+      );
+    }
+    // No wrapper — blocks bring their own layout (the content_page block is a full
+    // <article>), so a migrated page renders pixel-identically to the legacy path.
     return <BlockRenderer blocks={cms.blocks as unknown as RenderedBlock[]} draft={draft} />;
   }
 
-  // Legacy fallback — existing content_pages entries render unchanged until migrated.
   const page = await getContentPage(slug);
   if (!page) notFound();
 
   return (
-    <article className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-12">
-      <h1 className="text-3xl sm:text-4xl font-bold text-zinc-900 mb-4">
+    <article className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+      <h1 className="heading-serif text-3xl sm:text-4xl text-text-primary mb-4">
         {page.heading || page.title}
       </h1>
       {page.summary && (
-        <p className="text-base text-zinc-600 leading-relaxed mb-8">{page.summary}</p>
+        <p className="text-base text-text-secondary leading-relaxed mb-8">{page.summary}</p>
       )}
-      <RichContent
-        html={page.body_html}
-        stripStyles
-        className="prose prose-zinc max-w-none text-zinc-700 leading-relaxed"
-      />
+      <RichContent html={page.body_html} stripStyles className="content-prose" />
       {page.updated && (
-        <p className="mt-12 text-xs text-zinc-400">Last updated: {page.updated}</p>
+        <p className="mt-12 caption">Last updated: {page.updated}</p>
       )}
     </article>
   );

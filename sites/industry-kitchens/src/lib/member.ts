@@ -12,6 +12,12 @@ import {
 export interface MemberContext {
   /** True only for a logged-in customer with an ACTIVE subscription. */
   isMember: boolean;
+  /**
+   * Signed in at all — independent of membership, and deliberately resolved
+   * even when member pricing is switched off. Builder conditions ask
+   * "is this visitor logged in?", which is not a membership question.
+   */
+  loggedIn: boolean;
   /** The member's customer group (tier) — what unlocks member pricing. */
   customerGroupId: number | null;
   /**
@@ -44,12 +50,18 @@ export const getAccountId = cache(async (): Promise<number | null> => {
  */
 export async function getMemberContext(): Promise<MemberContext> {
   const accountId = await getAccountId();
-  const none: MemberContext = { isMember: false, customerGroupId: null, accountId };
+  // Resolved BEFORE the member-pricing gate: a visitor is signed in or not
+  // regardless of whether member pricing is switched on.
+  const session = await getSession();
+  const none: MemberContext = {
+    isMember: false,
+    loggedIn: !!session,
+    customerGroupId: null,
+    accountId,
+  };
 
   const enabled = await getFeatureFlag("member_pricing_enabled");
   if (!enabled) return none;
-
-  const session = await getSession();
   if (!session) return none;
 
   const activeSub = await getActiveSubscriptionForContact(session.contactId);
@@ -59,7 +71,12 @@ export async function getMemberContext(): Promise<MemberContext> {
     customer_group_id: number | null;
   } | null;
 
-  return { isMember: true, customerGroupId: contact?.customer_group_id ?? null, accountId };
+  return {
+    isMember: true,
+    loggedIn: true,
+    customerGroupId: contact?.customer_group_id ?? null,
+    accountId,
+  };
 }
 
 /**

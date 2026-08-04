@@ -98,11 +98,31 @@ export const {
   getCmsPage,
   getCmsCategoryPage,
   getCmsTemplate,
+  getNamedStyles,
+  getComponents,
+  getDraftComponents,
   getDesignTokens,
   getDraftDesignTokens,
   getCheckoutSettings,
   calculateShipping,
 } = _store;
+
+// ============================================================================
+// Channel settings (raw accessor)
+//
+// Both storefronts independently grew typed wrappers over this same read
+// (header/footer/homepage config), which is what identified it as engine
+// rather than site code — see docs/architecture/seam-audit.md §2c.
+// ============================================================================
+
+export const getChannelSetting = async (key: string): Promise<unknown> => {
+  try {
+    const setting = await channelSettingsService.getByKey(CHANNEL_ID, key);
+    return setting.setting_value;
+  } catch {
+    return null;
+  }
+};
 
 export type { MegaMenuNode, MegaMenuFeatured, ContentPage } from "@keenan/services";
 
