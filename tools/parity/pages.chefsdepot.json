@@ -1,0 +1,11 @@
+{
+  "origin": "https://chefsdepot.com.au",
+  "pages": [
+    { "path": "/pages/contact" },
+    { "path": "/pages/returns" },
+    { "path": "/pages/shipping" },
+    { "path": "/pages/terms" },
+    { "path": "/pages/warranty" },
+    { "path": "/" }
+  ]
+}

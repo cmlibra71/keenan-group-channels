@@ -15,3 +15,6 @@ scripts/.work/
 # Local audit workspace (reports, crawls, large JSONL data) — not versioned
 /scripts/
 .worktrees/
+
+# parity harness output (screenshots + summary)
+tools/parity/report/
