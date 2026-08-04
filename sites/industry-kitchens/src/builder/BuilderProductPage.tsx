@@ -118,6 +118,7 @@ function ActionsBridge({
         images={payload.product.images as unknown as GalleryImage[]}
         productName={payload.product.name}
         variantImageUrl={variantImg}
+        videos={payload.product.videos ?? []}
       />
     ),
   };

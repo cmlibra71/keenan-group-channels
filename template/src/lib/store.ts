@@ -85,6 +85,7 @@ export const {
   getBrandBySlug,
   getProductReviews,
   getProductAttachments,
+  getProductVideos,
   getRelatedProducts,
   getProductPageData,
   getSubscriptionPlans,

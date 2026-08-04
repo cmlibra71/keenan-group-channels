@@ -1,7 +1,7 @@
 import { notFound, permanentRedirect } from "next/navigation";
 import { draftMode, headers } from "next/headers";
 import Link from "next/link";
-import { getRedirectForPath, getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsTemplate } from "@/lib/store";
+import { getRedirectForPath, getProductBySlug, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsTemplate } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { getSession } from "@/lib/auth";
@@ -48,9 +48,10 @@ export default async function ProductPage({
   const accountId = await getAccountId();
   const [product] = await applyAccountPrices([cachedProduct]);
 
-  const [reviewsRaw, attachmentsRaw, relatedRaw, brandRow] = await Promise.all([
+  const [reviewsRaw, attachmentsRaw, videos, relatedRaw, brandRow] = await Promise.all([
     getProductReviews(product.id),
     getProductAttachments(product.id),
+    getProductVideos(product.id),
     getRelatedProducts(product.id, product.categoryIds ?? []),
     product.brandId != null
       ? (brandService.getById(product.brandId) as Promise<{ name: string | null; metafields: ProductBrandMetafields | null } | null>)
@@ -156,6 +157,7 @@ export default async function ProductPage({
           extras: {
             reviews,
             attachments,
+            videos,
             relatedProducts,
             brandMeta,
             breadcrumbs,
@@ -247,6 +249,7 @@ export default async function ProductPage({
           availability: product.availability ?? "available",
           descriptionShort: product.descriptionShort,
           images: product.images,
+          videos,
           variants: product.variants,
           options: product.options ?? [],
           optionValues: product.optionValues ?? [],
