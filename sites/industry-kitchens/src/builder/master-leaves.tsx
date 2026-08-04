@@ -57,7 +57,9 @@ export function selectItemHandler(listId?: string, listName?: string) {
 export function enquireHandler(router: { push: (to: string) => void }) {
   return (args: Record<string, unknown>) => {
     const pid = args?.product_id ?? "";
-    router.push(`/contact?product=${pid}`);
+    // The enquiry form is the CMS page /pages/contact — there is no /contact
+    // route, so the old path 404'd every Enquire button on the site.
+    router.push(`/pages/contact?product=${pid}`);
     return { success: true };
   };
 }
