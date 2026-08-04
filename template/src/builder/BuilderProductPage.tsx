@@ -78,10 +78,24 @@ function ActionsBridge({
     },
     [setQuoteCount, open]
   );
+  // Configurable product with nothing chosen yet: the quote CTA stays live and
+  // this prompt names the option still to pick, instead of the click doing
+  // nothing at all (parity with the old coded button's disabled state, plus an
+  // actual explanation).
+  const [optionsPrompt, setOptionsPrompt] = React.useState<string | null>(null);
+  const onOptionsRequired = React.useCallback((missing: string[]) => {
+    const names = missing.filter(Boolean);
+    setOptionsPrompt(
+      names.length
+        ? `Please choose ${names.join(" and ")} before adding this to your quote.`
+        : "That combination isn't available — please choose a different configuration."
+    );
+  }, []);
   const handlers = useProductPageHandlers({
     productId,
     addToCart: countingAddToCart,
     addToQuote: countingAddToQuote,
+    onOptionsRequired,
   });
   const scope = useProductPageScope(payload, { inclusive, pricesIncludeTax });
   // Overlay the live GST toggle onto context.gst so any card-rail price-block
@@ -121,7 +135,9 @@ function ActionsBridge({
       },
       enquire: (args?: Record<string, unknown>) => {
         const pid = args?.product_id ?? productId;
-        router.push(`/contact?product=${pid}`);
+        // The enquiry form is the CMS page /pages/contact — there is no
+        // /contact route, so the old path 404'd every Enquire button.
+        router.push(`/pages/contact?product=${pid}`);
       },
     }),
     [handlers, router, productId]
@@ -141,6 +157,25 @@ function ActionsBridge({
         imageComponent={Image as unknown as React.ComponentType<Record<string, unknown>>}
         scope={scope}
       />
+      {optionsPrompt ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setOptionsPrompt(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-md bg-white p-6 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-1 text-base font-semibold text-text-primary">Choose an option</p>
+            <p className="mb-4 text-sm text-text-secondary">{optionsPrompt}</p>
+            <button className="btn-primary" type="button" autoFocus onClick={() => setOptionsPrompt(null)}>
+              OK
+            </button>
+          </div>
+        </div>
+      ) : null}
     </BuilderActionsProvider>
   );
 }
