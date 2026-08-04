@@ -103,18 +103,18 @@ export default async function CategoryPage({
   const priceBands = (sp.price?.split(",").filter(Boolean) ?? []).filter((b) =>
     ["lt1000", "1000to3000", "gt3000"].includes(b)
   ) as ("lt1000" | "1000to3000" | "gt3000")[];
-  // "In stock" was retired as a shopper-facing facet — Clearance is the only
-  // availability filter. Anything else in ?stock= (e.g. a bookmarked
-  // ?stock=in_stock link) is dropped and the URL canonicalised, so old links
-  // neither filter silently nor leave an orphan chip in the toolbar.
-  const stockValues = sp.stock?.split(",").filter(Boolean) ?? [];
-  const availability = stockValues.filter((a) => a === "clearance") as "clearance"[];
-  if (availability.length !== stockValues.length) {
+  // Availability is no longer a shopper-facing facet at all: "In stock" was
+  // retired first and Clearance followed (clearance products are browsed via the
+  // dedicated /clearance page). ANY ?stock= value — a bookmarked
+  // ?stock=clearance or the older ?stock=in_stock — is dropped and the URL
+  // canonicalised to the same category, so old links neither filter silently nor
+  // leave an orphan chip in the toolbar. `stock` is never written back here:
+  // doing so would redirect to itself forever.
+  if (sp.stock !== undefined) {
     const next = new URLSearchParams(
       Object.entries(sp).filter((e): e is [string, string] => typeof e[1] === "string")
     );
-    if (availability.length > 0) next.set("stock", availability.join(","));
-    else next.delete("stock");
+    next.delete("stock");
     const qs = next.toString();
     redirect(`/categories/${slug}${qs ? `?${qs}` : ""}`);
   }
@@ -129,13 +129,14 @@ export default async function CategoryPage({
       // The counts the filter rail ADVERTISES come from the same `facets`, while
       // selecting a facet re-queries live. getCategoryListing now bounds how stale
       // the materialized base row may get (refreshed in the background once it
-      // passes the live listings' own TTL), so "Clearance (43)" and "showing 31"
+      // passes the live listings' own TTL), so "Stoddart (43)" and "showing 31"
       // can no longer disagree.
       limit: PER_PAGE * page,
       subcategoryIds: parseIds(sp.sub),
       brandIds: parseIds(sp.brand),
       priceBands,
-      availability,
+      // No `availability` — the shopper can no longer filter on it (the option
+      // stays in the data layer, unused by this route).
       sort,
     }),
     getCategoryBreadcrumbs(category.path_ids || []),
@@ -162,7 +163,6 @@ export default async function CategoryPage({
     if (sp.sub) next.set("sub", sp.sub);
     if (sp.brand) next.set("brand", sp.brand);
     if (sp.price) next.set("price", sp.price);
-    if (sp.stock) next.set("stock", sp.stock);
     if (sp.sort) next.set("sort", sp.sort);
     next.set("page", String(page + 1));
     return `/categories/${slug}?${next.toString()}`;
@@ -209,10 +209,11 @@ export default async function CategoryPage({
           sub: sp.sub?.split(",").filter(Boolean) ?? [],
           brand: sp.brand?.split(",").filter(Boolean) ?? [],
           price: sp.price?.split(",").filter(Boolean) ?? [],
-          // Validated, not raw: the authored rail's `selected` state and its
-          // active-filter chips must reflect what was actually applied to the
-          // listing (a retired ?stock= value is dropped above, not filtered on).
-          stock: availability,
+          // Always empty: availability is no longer a filter, and a ?stock=
+          // value never reaches here (it is redirected away above). Keeping the
+          // key explicit stops the authored rail's `selected` state and its
+          // active-filter chips from ever lighting up on stock.
+          stock: [],
         },
         customer: {
           isMember: memberCtx?.isMember ?? false,
