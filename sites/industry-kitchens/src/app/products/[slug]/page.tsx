@@ -1,5 +1,5 @@
 import { notFound, permanentRedirect } from "next/navigation";
-import { draftMode } from "next/headers";
+import { draftMode, headers } from "next/headers";
 import Link from "next/link";
 import { getRedirectForPath, getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsPage, getCmsTemplate } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
@@ -14,6 +14,8 @@ import { ProductTabs } from "@/components/product/ProductTabs";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { BrandWarrantyNotes } from "@/components/product/BrandWarrantyNotes";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
+import { renderProductNodeBranch } from "@/builder/product-node-branch";
+import { getMemberContext } from "@/lib/member";
 
 type ProductBrandMetafields = {
   intro_html?: string;
@@ -141,12 +143,53 @@ export default async function ProductPage({
 
   // Editable CMS zones on every product page (global product template) — empty
   // unless set, so the page renders exactly as before.
-  const { isEnabled: draft } = await draftMode();
+  // `x-kg-json` is the parity surface: /json/products/<slug> forces the node
+  // path and the draft tree, so a conversion can be diffed against this page.
+  const { isEnabled } = await draftMode();
+  const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
   const productCms = await getCmsPage("__product__", draft).catch(() => null);
   const prodRegion = (r: string): RenderedBlock[] =>
     ((productCms?.blocks as unknown as RenderedBlock[]) ?? []).filter((b) => b.region === r);
   const aboveDetail = prodRegion("above_detail");
   const belowDetail = prodRegion("below_detail");
+
+  // Site Builder node path — additive. Returns null (and we fall through to the
+  // block/legacy paths below) until node_product_template_enabled is on here.
+  // No jsonLd is passed: this route emits no JSON-LD, and the node branch must
+  // not invent structured data the native page does not claim.
+  {
+    const memberCtx = await getMemberContext().catch(() => null);
+    const nodeRendered = await renderProductNodeBranch({
+      slug,
+      member: {
+        customerGroupId: memberCtx?.customerGroupId ?? null,
+        isMember: memberCtx?.isMember ?? false,
+        loggedIn: memberCtx?.loggedIn ?? false,
+        // Industry Kitchens has no membership plan teaser, so it has neither of
+        // the two fields Chefs Depot uses to build one.
+        planPrice: null,
+        teaserCustomerGroupId: null,
+        accountId: memberCtx?.accountId ?? null,
+      },
+      viewedProduct: {
+        id: product.id,
+        sku: product.sku,
+        name: product.name,
+        price:
+          product.salePrice != null
+            ? parseFloat(String(product.salePrice))
+            : product.price != null
+              ? parseFloat(String(product.price))
+              : null,
+        imageUrl:
+          ((product.images as Array<Record<string, unknown>> | undefined)?.[0]?.urlStandard as string) ?? null,
+        categories: breadcrumbs.map((c: { name: string }) => c.name),
+        brand: brandRow?.name ?? null,
+      },
+      draft,
+    });
+    if (nodeRendered) return nodeRendered;
+  }
 
   // ═══ CMS product TEMPLATE path (kill switch: flag off → legacy) ═══
   // The whole page as a block document; this route stays the data owner — the

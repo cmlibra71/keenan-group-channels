@@ -8,11 +8,7 @@ import { assertProductVisible, applyCatalogScope } from "@/lib/catalog-scope";
 import { ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
-import { getProductPageData, getNamedStyles, getComponents, getDraftComponents, getChannelSetting } from "@/lib/store";
-import { BuilderProductPage } from "@/builder/BuilderProductPage";
-import { cmsFunctionService } from "@keenan/services/services";
-import { loadJsSandbox, computeCallResults } from "@keenan/services/builder";
-import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
+import { renderProductNodeBranch } from "@/builder/product-node-branch";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 import {
   ProductBuyBox,
@@ -291,84 +287,40 @@ export default async function ProductPage({
   };
 
   // ═══ Site Builder node-tree path (flag: node_product_template_enabled) ═══
-  // Precedence: nodes → v2 blocks → v1 → legacy. One aggregate read feeds the
-  // NodeRenderer; the route stays SEO/JSON-LD owner. Env CMS_NODES_FORCE=1 for
-  // local testing (never in prod). Phase 1 uses the seed tree; a stored
-  // node_tree template supersedes it once authored.
-  const forceNodes = process.env.CMS_NODES_FORCE === "1";
-  if (forceNodes || (await getFeatureFlag("node_product_template_enabled"))) {
-    const payload = await getProductPageData(slug, {
-      memberContext: {
+  // Precedence: nodes → v2 blocks → v1 → legacy. The body of this branch used
+  // to live here, and only here, which is why Industry Kitchens could not have
+  // one; it is now engine (src/builder/product-node-branch.tsx) shared by both
+  // sites. The route stays SEO/JSON-LD and tracking owner.
+  {
+    const nodeRendered = await renderProductNodeBranch({
+      slug,
+      member: {
         customerGroupId: memberCtx.customerGroupId,
         isMember,
         loggedIn: memberCtx.loggedIn,
         planPrice: memberCtx.planPrice ? parseFloat(memberCtx.planPrice).toFixed(2) : null,
-        // Non-members get a savings PERCENTAGE for the join teaser — never a price.
         teaserCustomerGroupId: memberCtx.teaserCustomerGroupId,
+        accountId: memberCtx.accountId,
       },
-      // Per-account contract prices override every layer; the payload's product + related cards
-      // and its variant pricing are all resolved with the account in scope.
-      accountId: memberCtx.accountId,
+      jsonLd,
+      viewedProduct: {
+        id: product.id,
+        sku: product.sku,
+        name: product.name,
+        price:
+          product.salePrice != null
+            ? parseFloat(String(product.salePrice))
+            : product.price != null
+              ? parseFloat(String(product.price))
+              : null,
+        imageUrl:
+          ((product.images as Array<Record<string, unknown>> | undefined)?.[0]?.urlStandard as string) ?? null,
+        categories: breadcrumbs.map((c: { name: string }) => c.name),
+        brand: brandRow?.name ?? null,
+      },
       draft,
-    }).catch(() => null);
-    // The AUTHORED tree wins: the product template doc (builder_kind='nodes' —
-    // published version live, draft in preview). Seed only as fallback.
-    const nodesDoc = (await getCmsTemplate("product", draft).catch(() => null)) as {
-      builder_kind?: string;
-      node_tree?: unknown;
-    } | null;
-    const storedTree =
-      nodesDoc?.builder_kind === "nodes" && nodesDoc.node_tree
-        ? (nodesDoc.node_tree as typeof SEED_PRODUCT_TREE)
-        : null;
-    const namedStyles = await getNamedStyles().catch(() => ({}));
-    const components = (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<string, typeof SEED_PRODUCT_TREE>;
-    // CSS for AUTHORED classes: the static Tailwind sheet only covers classes
-    // in this repo's source, so the portal compiles the channel's designer
-    // vocabulary (arbitrary values, lg:/hover: variants, palette colours…) on
-    // publish/save and stores it in channel_settings. Injected server-side so
-    // the first paint matches the editor canvas exactly.
-    const builderCss =
-      ((await getChannelSetting("builder_published_css").catch(() => null)) as { css?: string } | null)?.css ?? "";
-    if (payload) {
-      const nodeTree = storedTree ?? SEED_PRODUCT_TREE;
-      // JavaScript function library: SSR evaluates call-conditions live (the
-      // sandbox is awaited here), and callResults keeps the client's first
-      // paint identical until its wasm loads.
-      const jsFunctions = await cmsFunctionService.enabledMapForChannel(CHANNEL_ID).catch(() => ({}) as Record<string, string>);
-      let callResults: Record<string, unknown> = {};
-      if (Object.keys(jsFunctions).length > 0) {
-        await loadJsSandbox(jsFunctions).catch(() => null);
-        callResults = await computeCallResults(nodeTree.root, jsFunctions, payload as object).catch(() => ({}));
-      }
-      return (
-        <div>
-          <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
-          />
-          {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
-          <ViewedProductTracker
-            product={{
-              id: product.id,
-              sku: product.sku,
-              name: product.name,
-              price:
-                product.salePrice != null
-                  ? parseFloat(String(product.salePrice))
-                  : product.price != null
-                    ? parseFloat(String(product.price))
-                    : null,
-              imageUrl:
-                ((product.images as Array<Record<string, unknown>> | undefined)?.[0]?.urlStandard as string) ?? null,
-              categories: breadcrumbs.map((c: { name: string }) => c.name),
-              brand: brandRow?.name ?? null,
-            }}
-          />
-          <BuilderProductPage tree={nodeTree} payload={payload} namedStyles={namedStyles} components={components} jsFunctions={jsFunctions} callResults={callResults} />
-        </div>
-      );
-    }
+    });
+    if (nodeRendered) return nodeRendered;
   }
 
   // ═══ CMS product TEMPLATE path (kill switch: flag off → legacy) ═══

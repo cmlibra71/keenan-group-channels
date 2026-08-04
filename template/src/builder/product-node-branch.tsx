@@ -1,0 +1,152 @@
+import {
+  getFeatureFlag,
+  getCmsTemplate,
+  getProductPageData,
+  getNamedStyles,
+  getComponents,
+  getDraftComponents,
+  getChannelSetting,
+} from "@/lib/store";
+import { CHANNEL_ID } from "@/lib/channel";
+import { loadJsSandbox, computeCallResults } from "@keenan/services/builder";
+import { cmsFunctionService } from "@keenan/services/services";
+import { BuilderProductPage } from "@/builder/BuilderProductPage";
+import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
+import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
+
+// ============================================================================
+// The product template's Site Builder branch — ENGINE.
+//
+// Extracted from Chefs Depot's product route, where it was the only copy. Same
+// seam as brand and category: identical on every site, the route stays owner of
+// SEO and tracking (it passes the JSON-LD and the tracker's product in), and
+// this returns null when the node path does not apply.
+//
+// Precedence is unchanged: an AUTHORED template doc wins, the seed tree is the
+// fallback, and a null payload falls through to the route's block/legacy paths.
+// ============================================================================
+
+export interface ViewedProduct {
+  id: number;
+  sku: string | null;
+  name: string;
+  price: number | null;
+  imageUrl: string | null;
+  categories: string[];
+  brand: string | null;
+}
+
+export interface ProductMemberContext {
+  customerGroupId: number | null;
+  isMember: boolean;
+  loggedIn: boolean;
+  planPrice: string | null;
+  /** Non-members get a savings PERCENTAGE for the join teaser — never a price. */
+  teaserCustomerGroupId: number | null;
+  accountId: number | null;
+}
+
+export interface ProductNodeBranchArgs {
+  slug: string;
+  member: ProductMemberContext;
+  /** The route owns SEO and hands the assembled JSON-LD in. Optional: a site
+   *  whose product route emits no JSON-LD gets none here either — this branch
+   *  must never invent structured data the native page does not claim. */
+  jsonLd?: unknown;
+  viewedProduct: ViewedProduct;
+  /** draftMode() OR the `x-kg-json` parity header. */
+  draft: boolean;
+}
+
+/**
+ * Renders the product template's node tree, or returns null if the node path
+ * does not apply (flag off, or no payload for this product).
+ */
+export async function renderProductNodeBranch({
+  slug,
+  member,
+  jsonLd,
+  viewedProduct,
+  draft,
+}: ProductNodeBranchArgs): Promise<React.ReactElement | null> {
+  // CMS_NODES_FORCE=1 is for local testing only — never set in production.
+  const forceNodes = process.env.CMS_NODES_FORCE === "1";
+  if (!forceNodes && !(await getFeatureFlag("node_product_template_enabled"))) return null;
+
+  const payload = await getProductPageData(slug, {
+    memberContext: {
+      customerGroupId: member.customerGroupId,
+      isMember: member.isMember,
+      loggedIn: member.loggedIn,
+      planPrice: member.planPrice,
+      teaserCustomerGroupId: member.teaserCustomerGroupId,
+    },
+    // Per-account contract prices override every layer; the payload's product +
+    // related cards and its variant pricing are all resolved with the account
+    // in scope.
+    accountId: member.accountId,
+    draft,
+  }).catch(() => null);
+  if (!payload) return null;
+
+  // The AUTHORED tree wins: the product template doc (builder_kind='nodes' —
+  // published version live, draft in preview). Seed only as fallback.
+  const nodesDoc = (await getCmsTemplate("product", draft).catch(() => null)) as {
+    builder_kind?: string;
+    node_tree?: unknown;
+  } | null;
+  const storedTree =
+    nodesDoc?.builder_kind === "nodes" && nodesDoc.node_tree
+      ? (nodesDoc.node_tree as typeof SEED_PRODUCT_TREE)
+      : null;
+  const nodeTree = storedTree ?? SEED_PRODUCT_TREE;
+
+  const namedStyles = await getNamedStyles().catch(() => ({}));
+  const components = (await (draft ? getDraftComponents() : getComponents()).catch(
+    () => ({})
+  )) as Record<string, typeof SEED_PRODUCT_TREE>;
+  // CSS for AUTHORED classes: the static Tailwind sheet only covers classes in
+  // this repo's source, so the portal compiles the channel's designer
+  // vocabulary (arbitrary values, lg:/hover: variants, palette colours…) on
+  // publish/save and stores it in channel_settings. Injected server-side so the
+  // first paint matches the editor canvas exactly.
+  const builderCss =
+    ((await getChannelSetting("builder_published_css").catch(() => null)) as {
+      css?: string;
+    } | null)?.css ?? "";
+
+  // JavaScript function library: SSR evaluates call-conditions live (the
+  // sandbox is awaited here), and callResults keeps the client's first paint
+  // identical until its wasm loads.
+  const jsFunctions = await cmsFunctionService
+    .enabledMapForChannel(CHANNEL_ID)
+    .catch(() => ({}) as Record<string, string>);
+  let callResults: Record<string, unknown> = {};
+  if (Object.keys(jsFunctions).length > 0) {
+    await loadJsSandbox(jsFunctions).catch(() => null);
+    callResults = await computeCallResults(nodeTree.root, jsFunctions, payload as object).catch(
+      () => ({})
+    );
+  }
+
+  return (
+    <div>
+      {jsonLd !== undefined && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
+        />
+      )}
+      {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
+      <ViewedProductTracker product={viewedProduct} />
+      <BuilderProductPage
+        tree={nodeTree}
+        payload={payload}
+        namedStyles={namedStyles}
+        components={components}
+        jsFunctions={jsFunctions}
+        callResults={callResults}
+      />
+    </div>
+  );
+}

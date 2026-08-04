@@ -86,6 +86,7 @@ export const {
   getProductReviews,
   getProductAttachments,
   getRelatedProducts,
+  getProductPageData,
   getSubscriptionPlans,
   getActiveSubscription,
   getMemberPriceMap,
