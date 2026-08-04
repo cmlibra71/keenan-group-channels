@@ -15,6 +15,7 @@ import type { RenderContext } from "@keenan/services";
 import {
   getProductReviews,
   getProductAttachments,
+  getProductVideos,
   getRelatedProducts,
   getFeatureFlag,
   getEffectivePrice,
@@ -36,6 +37,7 @@ import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, SubBlockRenderer, effectiveSubBlocks, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BLOCK_REGISTRY } from "@keenan/services";
 import { ProductPurchaseProvider, type PurchaseProduct } from "@/components/product/ProductPurchaseProvider";
+import type { FacadeVideo } from "@keenan/services/product-page";
 import { buildBindingData } from "@/blocks/binding-data";
 import { buildConditionContext } from "@/lib/condition-context";
 import { buildPartialResolver, CHANNEL_KEY } from "@/blocks/partials";
@@ -60,6 +62,7 @@ type ProductBrandMetafields = {
 export type ProductExtras = {
   reviews?: unknown[];
   attachments?: unknown[];
+  videos?: FacadeVideo[];
   relatedProducts?: unknown[];
   brandMeta?: ProductBrandMetafields;
   breadcrumbs?: Crumb[];
@@ -356,6 +359,7 @@ async function ProductOverviewBlock({ props, ctx }: BlockProps) {
     availability: product.availability ?? "available",
     descriptionShort: product.descriptionShort,
     images: product.images,
+    videos: extras.videos ?? (await getProductVideos(product.id).catch(() => [])),
     variants: product.variants,
     options: product.options ?? [],
     optionValues: product.optionValues ?? [],

@@ -1,7 +1,7 @@
 import { notFound, permanentRedirect } from "next/navigation";
 import { draftMode, headers } from "next/headers";
 import Link from "next/link";
-import { getRedirectForPath, getProductBySlug, getProductReviews, getProductAttachments, getRelatedProducts, getFeatureFlag, getEffectivePrice, getMemberSavingsPctMap, brandService, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice, getCmsPage, getCmsTemplate } from "@/lib/store";
+import { getRedirectForPath, getProductBySlug, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getMemberSavingsPctMap, brandService, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice, getCmsPage, getCmsTemplate } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
 import { getMemberContext, getListingPricing, applyAccountPrices } from "@/lib/member";
 import { assertProductVisible, applyCatalogScope } from "@/lib/catalog-scope";
@@ -73,9 +73,10 @@ export default async function ProductPage({
   // shoppers, so the account's price is overlaid onto a copy at read time (never into the cache).
   const [product] = await applyAccountPrices([cachedProduct]);
 
-  const [reviewsRaw, attachmentsRaw, relatedRaw, brandRow] = await Promise.all([
+  const [reviewsRaw, attachmentsRaw, videos, relatedRaw, brandRow] = await Promise.all([
     getProductReviews(product.id),
     getProductAttachments(product.id),
+    getProductVideos(product.id),
     getRelatedProducts(product.id, product.categoryIds ?? []),
     product.brandId != null
       ? (brandService.getById(product.brandId) as Promise<{ name?: string | null; slug?: string | null } | null>)
@@ -251,6 +252,7 @@ export default async function ProductPage({
         availability: product.availability ?? "available",
         descriptionShort: product.descriptionShort,
         images: product.images,
+        videos,
         variants: product.variants,
         options: product.options ?? [],
         optionValues: product.optionValues ?? [],
@@ -354,6 +356,7 @@ export default async function ProductPage({
             reviews,
             reviewSummary,
             attachments,
+            videos,
             relatedProducts,
             relatedPricing: relatedPricing as unknown as Record<string, unknown>,
             brandRow,

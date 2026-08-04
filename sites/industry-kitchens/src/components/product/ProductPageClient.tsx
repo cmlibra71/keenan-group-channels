@@ -25,6 +25,7 @@ function ProductOverviewInner() {
         images={product.images}
         productName={product.name}
         variantImageUrl={variantImageUrl}
+        videos={product.videos ?? []}
       />
 
       {/* Details */}

@@ -44,6 +44,7 @@ export const ProductGalleryWidget: WidgetComponent = () => {
       images={product.images}
       productName={product.name}
       variantImageUrl={variantImageUrl}
+      videos={product.videos ?? []}
     />
   );
 };

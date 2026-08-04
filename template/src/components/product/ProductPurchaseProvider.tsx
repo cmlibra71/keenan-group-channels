@@ -13,6 +13,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ProductImage } from "./ProductImageGallery";
+import type { FacadeVideo } from "@keenan/services/product-page";
 
 export type PurchaseVariant = {
   id: number;
@@ -67,6 +68,9 @@ export interface PurchaseProduct {
   availability: string | null;
   descriptionShort: string | null;
   images: ProductImage[];
+  /** Resolved product videos — the gallery plays them alongside the images.
+   *  Optional: callers that predate the video strip simply pass none. */
+  videos?: FacadeVideo[];
   variants: PurchaseVariant[];
   options: PurchaseOption[];
   optionValues: PurchaseOptionValue[];
