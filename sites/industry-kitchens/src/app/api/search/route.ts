@@ -3,6 +3,7 @@ import { searchProducts } from "@keenan/services/search";
 import { shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { CHANNEL_ID } from "@/lib/channel";
 import { applyCatalogScope } from "@/lib/catalog-scope";
+import { parsePublicSearchParams } from "@/lib/search-params";
 
 /**
  * Fields this PUBLIC endpoint may serialise, as an ALLOWLIST.
@@ -59,23 +60,20 @@ function toPublicHit(hit: unknown): Record<string, unknown> {
 }
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = request.nextUrl;
-  const q = searchParams.get("q")?.trim() || "";
-  const limit = Math.min(parseInt(searchParams.get("limit") || "20", 10), 100);
-  const offset = parseInt(searchParams.get("offset") || "0", 10);
-  const filter = searchParams.get("filter") || undefined;
-  const sort = searchParams.get("sort")?.split(",").filter(Boolean) || undefined;
-  const facets = searchParams.get("facets")?.split(",").filter(Boolean) || undefined;
+  // Every parameter is clamped or allowlisted — see lib/search-params.ts for
+  // why `filter` no longer exists at all.
+  const { q, limit, offset, sort, facets, tooShort } = parsePublicSearchParams(
+    request.nextUrl.searchParams
+  );
 
-  if (!q) {
-    return NextResponse.json({ hits: [], query: "", estimatedTotalHits: 0 });
+  if (tooShort) {
+    return NextResponse.json({ hits: [], query: q, estimatedTotalHits: 0 });
   }
 
   try {
     const result = await searchProducts(CHANNEL_ID, q, {
       limit,
       offset,
-      filter,
       sort,
       facets,
     });
@@ -102,7 +100,10 @@ export async function GET(request: NextRequest) {
     // Narrow to the public field set LAST, so nothing added above can widen it.
     result.hits = result.hits.map(toPublicHit) as unknown as typeof result.hits;
 
-    return NextResponse.json(result);
+    // Hits are viewer-scoped by applyCatalogScope above, so this response is
+    // PER-USER and must never be stored in a shared cache. Do not "optimise"
+    // this into a public max-age.
+    return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch {
     // Meilisearch unavailable — return empty results with 503
     return NextResponse.json(

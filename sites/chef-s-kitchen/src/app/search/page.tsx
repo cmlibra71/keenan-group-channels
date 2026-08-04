@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { getProducts, getFeatureFlag, CHANNEL_ID, shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { getListingPricing } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
@@ -11,6 +12,9 @@ export const metadata = {
 };
 
 const PER_PAGE = 40;
+// Mirrors the category page's cap. `page` was previously unbounded, so
+// `offset = (page - 1) * 40` let anyone page straight through the catalogue.
+const MAX_PAGES = 8;
 const PRICE_KEYS = ["lt1000", "1000to3000", "gt3000"] as const;
 const PRICE_LABELS: Record<string, string> = {
   lt1000: "Under $1,000",
@@ -142,9 +146,30 @@ async function searchWithMeilisearch(
   }
 }
 
+/**
+ * The Meilisearch outage path — an UNCACHED full-text scan of the shared
+ * commerce database. Without a cache in front, a flood of distinct `?q=` values
+ * while Meili is down degrades straight into expensive DB queries, so a search
+ * outage becomes a database outage.
+ *
+ * Safe to cache: these rows are the SHARED, unscoped set — per-account
+ * visibility and pricing are applied downstream in ProductGrid at render time
+ * (the same contract as category_listing_cache and the Meili index).
+ */
+const cachedPostgresSearch = unstable_cache(
+  async (query: string, page: number): Promise<SearchResult> => {
+    const results = await getProducts({ search: query, limit: PER_PAGE, page });
+    return { products: results.products, total: results.total, groups: [] };
+  },
+  ["search-pg-fallback", String(CHANNEL_ID)],
+  { revalidate: 300, tags: ["search-fallback"] }
+);
+
 async function searchWithPostgres(query: string, page: number): Promise<SearchResult> {
-  const results = await getProducts({ search: query, limit: PER_PAGE, page });
-  return { products: results.products, total: results.total, groups: [] };
+  // Very short queries match almost everything and are the cheapest way to
+  // enumerate the catalogue through the fallback.
+  if (query.length < 3) return { products: [], total: 0, groups: [] };
+  return cachedPostgresSearch(query.toLowerCase(), page);
 }
 
 export default async function SearchPage({
@@ -161,7 +186,7 @@ export default async function SearchPage({
 }) {
   const sp = await searchParams;
   const query = sp.q?.trim() || "";
-  const page = Math.max(1, parseInt(sp.page || "1", 10) || 1);
+  const page = Math.min(MAX_PAGES, Math.max(1, parseInt(sp.page || "1", 10) || 1));
 
   const brandVals = parseMulti(sp.brand);
   const categoryVals = parseMulti(sp.category);
@@ -178,7 +203,8 @@ export default async function SearchPage({
   const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
   const groups = results?.groups ?? [];
   const showRail = groups.length > 0;
-  const totalPages = results ? Math.ceil(results.total / PER_PAGE) : 0;
+  // Capped too, so the pager never offers a page the route will refuse to serve.
+  const totalPages = Math.min(MAX_PAGES, results ? Math.ceil(results.total / PER_PAGE) : 0);
 
   const pageHref = (n: number) => {
     const u = new URLSearchParams();

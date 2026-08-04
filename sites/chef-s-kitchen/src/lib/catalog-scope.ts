@@ -65,11 +65,21 @@ export async function applyCatalogScopeBy<T>(
   return filterProductsByCatalogScope(rows, await getCatalogScope(), getId);
 }
 
+/**
+ * The guest scope, memoised per request like `getCatalogScope`.
+ *
+ * The sitemap applies guest scope once per 10,000-row batch, so without this
+ * every batch re-resolved the whole scope — 4–5 redundant round trips per build.
+ */
+export const getGuestCatalogScope = cache(
+  async (): Promise<CatalogViewerScope> =>
+    resolveCatalogScope({ contactId: null, accountId: null })
+);
+
 /** The GUEST view — for shared/crawler artefacts (sitemap): the public catalogue minus every account's exclusives. */
 export async function applyGuestCatalogScope<T extends { id: number }>(products: T[]): Promise<T[]> {
   if (products.length === 0) return products;
-  const scope = await resolveCatalogScope({ contactId: null, accountId: null });
-  return filterProductsByCatalogScope(products, scope);
+  return filterProductsByCatalogScope(products, await getGuestCatalogScope());
 }
 
 /** May this shopper reach this product at all? (PDP, add-to-cart, add-to-quote.) */

@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getCacheKey } from "@keenan/services/utils";
 import { isAllowedImageUrl } from "@/lib/image-origin";
+import { normaliseWidth, normaliseQuality } from "@/lib/image-params";
 
 const S3_BUCKET = process.env.IMAGE_CACHE_S3_BUCKET || "keenan-group-images";
 const S3_REGION = process.env.IMAGE_CACHE_S3_REGION || "ap-southeast-2";
@@ -11,8 +12,10 @@ const s3 = new S3Client({ region: S3_REGION });
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const url = searchParams.get("url");
-  const width = Math.min(parseInt(searchParams.get("w") || "800", 10), 3840);
-  const quality = Math.min(parseInt(searchParams.get("q") || "80", 10), 100);
+  // Snapped to a fixed set, NOT merely clamped: every distinct (w, q) pair is a
+  // sharp encode plus an S3 PUT, so an open range is a cost-amplification lever.
+  const width = normaliseWidth(searchParams.get("w"));
+  const quality = normaliseQuality(searchParams.get("q"));
 
   if (!url) {
     return NextResponse.json({ error: "Missing url parameter" }, { status: 400 });

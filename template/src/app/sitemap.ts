@@ -1,5 +1,7 @@
 import type { MetadataRoute } from "next";
+import { unstable_cache } from "next/cache";
 import * as store from "@/lib/store";
+import { CHANNEL_ID } from "@/lib/channel";
 import {
   getSiteConfig,
   getCategories,
@@ -43,7 +45,7 @@ async function getBlogRoutes(base: string): Promise<MetadataRoute.Sitemap> {
   ];
 }
 
-export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+async function buildSitemap(): Promise<MetadataRoute.Sitemap> {
   // Noindex sites (e.g. the Industry Kitchens build mirror) expose an empty
   // sitemap rather than leaking the full catalogue.
   if (!isIndexable()) return [];
@@ -115,4 +117,23 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   return [...nonProduct, ...productRoutes];
+}
+
+/**
+ * Cached for an hour, which is far fresher than any crawler's revisit cadence
+ * and turns a ~40,000-row catalogue enumeration per request into one per hour.
+ *
+ * THE TAG IS LOAD-BEARING. `api/revalidate/route.ts` documents that tag
+ * revalidation is a HARD expiry on this Next version, and it fires on every
+ * product save in the portal. Tagging this `products` or `channel-${id}` would
+ * have the webhook bust it all day long and the cache would buy nothing — so it
+ * gets a dedicated tag that nothing currently purges.
+ */
+const cachedSitemap = unstable_cache(buildSitemap, ["sitemap", String(CHANNEL_ID)], {
+  revalidate: 3600,
+  tags: ["sitemap"],
+});
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  return cachedSitemap();
 }

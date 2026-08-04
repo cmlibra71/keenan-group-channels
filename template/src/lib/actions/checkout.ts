@@ -679,8 +679,9 @@ export async function placeOrder(
       const branding = await resolveEmailBranding(CHANNEL_ID).catch(() => undefined);
       const portalBase = (process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/$/, "");
       await sendOrderStaffNotificationEmail({
+        // No orderId: this email's params carry the id via `orderUrl` only, and
+        // passing it was a type error the compiler flagged as an excess property.
         to: recipients,
-        orderId: order.id,
         orderNumber: order.order_number,
         orderUrl: `${portalBase}/dashboard/orders/${order.id}`,
         customerEmail: email,
