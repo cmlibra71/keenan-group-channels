@@ -4,6 +4,11 @@ import Image from "next/image";
 import { Crown, ArrowRight, ChevronRight } from "lucide-react";
 import { StatsBanner } from "@/components/home/StatsBanner";
 import { ProductGridClient, type GridProduct } from "@/components/product/ProductGridClient";
+import type { NativeComponents } from "@keenan/services/builder-react";
+import { TrustBar } from "@/components/home/TrustBar";
+import { SeoFaq } from "@/components/home/SeoFaq";
+import { BrandShowcase } from "@/components/home/BrandShowcase";
+import { ClearanceSpotlight } from "@/components/home/ClearanceSpotlight";
 
 // ============================================================================
 // CLIENT views of the homepage sections that were previously inlined in the
@@ -269,4 +274,62 @@ export function FeaturedProductsView({
       <ProductGridClient products={products} memberPricingAvailable={memberPricingAvailable} {...pricing} />
     </section>
   );
+}
+
+// ============================================================================
+// Chefs Depot's sealed homepage SECTIONS, registered under the shared native
+// keys. Lifted out of BuilderHomePage when that became engine — the wrapper
+// used to import TrustBar/SeoFaq/BrandShowcase/ClearanceSpotlight directly,
+// which is exactly what made it unportable.
+//
+// hero-side-panel / membership-value-strip / draw-spotlight are component
+// MASTERS (they bind home.prize / home.stats / home.plan from the composer
+// payload). Natives win over same-key masters, so they must NOT appear here.
+// ============================================================================
+
+type Pricing = { memberPriceMap?: Record<number, number>; isMember?: boolean; planPrice?: string | null };
+
+/** Prefetched section data for the sealed natives — this site's shape. */
+export interface HomeNativeData {
+  hero: HomeHeroData | null;
+  categories: CategoryTile[];
+  shopByCategoryCopy: { eyebrow: string; heading: string };
+  membershipStrip: { planPrice: number; billingInterval: string; benefits: string[] } | null;
+  brands: unknown[];
+  clearance: { products: GridProduct[]; pricing: Pricing; heading: string; eyebrow: string } | null;
+  featured: {
+    products: GridProduct[];
+    pricing: Pricing;
+    memberPricingAvailable: boolean;
+    heading: string;
+    eyebrow: string;
+  } | null;
+  seoFaq: { heading?: string; body?: string; faqs?: { q: string; a: string }[] } | null;
+  drawSpotlight: { prize: unknown; draw: unknown } | null;
+}
+
+export function homeSectionNatives(home: HomeNativeData): NativeComponents {
+  return {
+    "home-hero": () => (home.hero ? <HomeHeroView {...home.hero} /> : null),
+    "trust-bar": () => <TrustBar />,
+    "shop-by-category": () => (
+      <ShopByCategoryView
+        categories={home.categories}
+        eyebrow={home.shopByCategoryCopy.eyebrow}
+        heading={home.shopByCategoryCopy.heading}
+      />
+    ),
+    "brand-showcase": () => <BrandShowcase brands={home.brands as never} />,
+    "clearance-spotlight": () =>
+      home.clearance ? (
+        <ClearanceSpotlight
+          products={home.clearance.products as never}
+          pricing={home.clearance.pricing as never}
+          heading={home.clearance.heading}
+          eyebrow={home.clearance.eyebrow}
+        />
+      ) : null,
+    "featured-products": () => (home.featured ? <FeaturedProductsView {...home.featured} /> : null),
+    "seo-faq": () => (home.seoFaq ? <SeoFaq {...home.seoFaq} /> : null),
+  };
 }

@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
-import { draftMode } from "next/headers";
+import { draftMode, headers } from "next/headers";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { getBrandBySlug, getProducts, getFeatureFlag, getCmsPage } from "@/lib/store";
 import { getListingMemberPrices } from "@/lib/member";
+import { renderBrandNodeBranch } from "@/builder/brand-node-branch";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BrandIntro } from "@/components/brand/BrandIntro";
@@ -53,8 +54,25 @@ export default async function BrandPage({
   const pageTitle = (brand.page_title as string | null) || (brand.name as string);
 
   // Editable CMS zones on every brand page (global brand template) — empty unless set.
-  const { isEnabled: draft } = await draftMode();
+  // `x-kg-json` is the parity surface: /json/brands/<slug> forces the node path
+  // and the draft tree, so a conversion can be diffed against this live page.
+  const { isEnabled } = await draftMode();
+  const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
   const brandCms = await getCmsPage("__brand__", draft).catch(() => null);
+
+  // Site Builder node path — additive. Returns null (and we fall through to the
+  // blocks below) until a brand tree is authored and the flag is on.
+  const nodeRendered = await renderBrandNodeBranch({
+    brandCms,
+    brand: brand as unknown as Record<string, unknown>,
+    products,
+    total,
+    pricing: { memberPriceMap: await getListingMemberPrices(products) },
+    memberPricingEnabled,
+    draft,
+  });
+  if (nodeRendered) return nodeRendered;
+
   const brandRegion = (r: string): RenderedBlock[] =>
     ((brandCms?.blocks as unknown as RenderedBlock[]) ?? []).filter((b) => b.region === r);
   const aboveBrand = brandRegion("above_listing");

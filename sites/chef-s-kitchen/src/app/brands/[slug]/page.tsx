@@ -1,15 +1,10 @@
 import { notFound } from "next/navigation";
-import { draftMode, cookies, headers } from "next/headers";
-import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
+import { draftMode, headers } from "next/headers";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { getBrandBySlug, getProducts, getFeatureFlag, getCmsPage, getNamedStyles, getComponents, getDraftComponents, getChannelSetting, CHANNEL_ID } from "@/lib/store";
-import { getListingPricing, getMemberContext, applyAccountPrices } from "@/lib/member";
-import { applyCatalogScope } from "@/lib/catalog-scope";
-import { composeBrandPagePayload, loadJsSandbox, computeCallResults, type NodeTree } from "@keenan/services/builder";
-import { cmsFunctionService } from "@keenan/services/services";
-import { BuilderBrandPage } from "@/builder/BuilderBrandPage";
-import type { GridProduct } from "@/components/product/ProductGridClient";
+import { getBrandBySlug, getProducts, getFeatureFlag, getCmsPage } from "@/lib/store";
+import { getListingPricing } from "@/lib/member";
+import { renderBrandNodeBranch, type BrandListingPricing } from "@/builder/brand-node-branch";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BrandHero, BrandProducts, DEFAULT_BRAND_BLOCKS } from "@/blocks/brand-page-blocks";
 import { TemplateRenderer } from "@/blocks/TemplateRenderer";
@@ -53,60 +48,20 @@ export default async function BrandPage({
   const brandCms = await getCmsPage("__brand__", draft).catch(() => null);
 
   // ═══ Site Builder node path — the 'brand' template authored in the node
-  // designer, gated by node_brand_template_enabled (or draft mode with an
-  // authored draft). The route stays data owner: scoped + account-priced rows
-  // feed the sealed "brand-products" native; bindables come from the SHARED
-  // composeBrandPagePayload (identical to the designer sample). ═══
-  const nodeTree = ((brandCms as { node_tree?: unknown } | null)?.node_tree as NodeTree | null) ?? null;
-  if (nodeTree && ((await getFeatureFlag("node_brand_template_enabled")) || draft)) {
-    const scoped = (await applyAccountPrices(await applyCatalogScope(products))) as unknown as GridProduct[];
-    const memberCtx = await getMemberContext().catch(() => null);
-    const [pricesIncludeTax, cookieStore] = await Promise.all([
-      getFeatureFlag("prices_include_tax"),
-      cookies(),
-    ]);
-    const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
-    const payload = composeBrandPagePayload({
-      channelId: CHANNEL_ID,
-      brand: brand as unknown as Record<string, unknown>,
-      products: scoped as unknown as Record<string, unknown>[],
-      total,
-      pricing: productCtx.pricing as { memberPriceMap?: Record<number, number>; isMember?: boolean; planPrice?: string | null },
-      customer: {
-        isMember: memberCtx?.isMember ?? false,
-        loggedIn: memberCtx?.loggedIn ?? false,
-      },
-      gst: { inclusive: gstInclusive, pricesIncludeTax },
-      draft,
-    });
-    const namedStyles = await getNamedStyles().catch(() => ({}));
-    const components = (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<string, NodeTree>;
-    const builderCss =
-      ((await getChannelSetting("builder_published_css").catch(() => null)) as { css?: string } | null)?.css ?? "";
-    const jsFunctions = await cmsFunctionService.enabledMapForChannel(CHANNEL_ID).catch(() => ({}) as Record<string, string>);
-    let callResults: Record<string, unknown> = {};
-    if (Object.keys(jsFunctions).length > 0) {
-      await loadJsSandbox(jsFunctions).catch(() => null);
-      callResults = await computeCallResults(nodeTree.root, jsFunctions, payload as object).catch(() => ({}));
-    }
-    return (
-      <>
-        {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
-        <BuilderBrandPage
-          tree={nodeTree}
-          payload={payload}
-          products={scoped}
-          pricing={productCtx.pricing}
-          memberPricingAvailable={memberPricingEnabled}
-          namedStyles={namedStyles}
-          components={components}
-          jsFunctions={jsFunctions}
-          callResults={callResults}
-          draft={draft}
-        />
-      </>
-    );
-  }
+  // designer. The body of this branch used to live here, and only here, which
+  // is exactly why Industry Kitchens could not have one; it is now engine
+  // (src/builder/brand-node-branch.tsx) shared by both sites. The route stays
+  // data owner and hands its own pricing shape in. ═══
+  const nodeRendered = await renderBrandNodeBranch({
+    brandCms,
+    brand: brand as unknown as Record<string, unknown>,
+    products,
+    total,
+    pricing: productCtx.pricing as BrandListingPricing,
+    memberPricingEnabled,
+    draft,
+  });
+  if (nodeRendered) return nodeRendered;
   const mainBlocks = ((brandCms?.blocks as unknown as RenderedBlock[]) ?? []).filter(
     (b) => b.region === "main"
   );

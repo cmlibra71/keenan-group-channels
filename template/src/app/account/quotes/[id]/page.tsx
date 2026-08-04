@@ -7,6 +7,7 @@ import { getSession } from "@/lib/auth";
 import { quoteService, productImageService, CHANNEL_ID } from "@/lib/store";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import { Price } from "@/components/ui/Price";
+import { QuoteActions } from "./quote-actions";
 
 // QuoteService returns snake_case rows (transformRow convention).
 interface QuoteDetail {
@@ -222,6 +223,9 @@ export default async function QuoteDetailPage({
           <p className="text-sm text-zinc-600 whitespace-pre-wrap">{quote.customer_notes}</p>
         </div>
       )}
+
+      {/* Customer self-service actions */}
+      <QuoteActions quoteId={quote.id} status={status} />
     </div>
   );
 }

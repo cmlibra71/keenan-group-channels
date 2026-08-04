@@ -1,6 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { draftMode, cookies, headers } from "next/headers";
-import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
+import { draftMode, headers } from "next/headers";
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
@@ -15,14 +14,10 @@ import {
   getCmsTemplate,
 } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
-import { getListingPricing, getMemberContext, applyAccountPrices } from "@/lib/member";
+import { getListingPricing } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
-import { assertCategoryVisible, applyCatalogScope } from "@/lib/catalog-scope";
-import { getNamedStyles, getComponents, getDraftComponents, CHANNEL_ID } from "@/lib/store";
-import { composeCategoryPagePayload, loadJsSandbox, computeCallResults, type NodeTree } from "@keenan/services/builder";
-import { cmsFunctionService } from "@keenan/services/services";
-import { BuilderCategoryPage } from "@/builder/BuilderCategoryPage";
-import type { GridProduct } from "@/components/product/ProductGridClient";
+import { assertCategoryVisible } from "@/lib/catalog-scope";
+import { renderCategoryNodeBranch, type CategoryListingPricing } from "@/builder/category-node-branch";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
 import { RichContent } from "@/components/content/RichContent";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
@@ -169,96 +164,38 @@ export default async function CategoryPage({
   })();
 
   // ═══ Site Builder node path — the 'category_layout' template authored in
-  // the node designer, gated by node_category_template_enabled (or draft mode
-  // with an authored draft). The route stays data owner: the sealed
-  // "category-listing" native gets the SAME scoped/priced listing the native
-  // page renders; bindables come from the SHARED composeCategoryPagePayload. ═══
+  // the node designer. The body of this branch used to live here, and only
+  // here, which is why Industry Kitchens could not have one; it is now engine
+  // (src/builder/category-node-branch.tsx) shared by both sites. The route
+  // stays data owner and hands its own listing and pricing in. ═══
   {
-    const catTemplate = (await getCmsTemplate("category_layout", draft).catch(() => null)) as {
-      node_tree?: unknown;
-    } | null;
-    const nodeTree = (catTemplate?.node_tree as NodeTree | null) ?? null;
-    if (nodeTree && ((await getFeatureFlag("node_category_template_enabled")) || draft)) {
-      const scoped = (await applyAccountPrices(await applyCatalogScope(products))) as unknown as GridProduct[];
-      const memberCtx = await getMemberContext().catch(() => null);
-      // GST facts for the price-block masters: the composer emits both ex/inc
-      // labels; the SSR cookie sets the first-paint choice (the wrapper overlays
-      // the live toggle thereafter).
-      const [pricesIncludeTax, cookieStore] = await Promise.all([
-        getFeatureFlag("prices_include_tax"),
-        cookies(),
-      ]);
-      const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
-      const payload = composeCategoryPagePayload({
-        channelId: CHANNEL_ID,
-        category: category as unknown as Record<string, unknown>,
-        listing: {
-          products: scoped as unknown as Record<string, unknown>[],
-          total,
-          facets,
-        },
-        page,
-        hasMore,
-        nextPageHref,
-        sort,
-        pricing: pricing as { memberPriceMap?: Record<number, number>; isMember?: boolean; planPrice?: string | null },
-        breadcrumbs: breadcrumbs as { id: number; name: string; slug: string }[],
-        // Current URL selections → facet options gain `selected` (the facet-
-        // option master renders its checked state from it).
-        selections: {
-          sub: sp.sub?.split(",").filter(Boolean) ?? [],
-          brand: sp.brand?.split(",").filter(Boolean) ?? [],
-          price: sp.price?.split(",").filter(Boolean) ?? [],
-          // Always empty: availability is no longer a filter, and a ?stock=
-          // value never reaches here (it is redirected away above). Keeping the
-          // key explicit stops the authored rail's `selected` state and its
-          // active-filter chips from ever lighting up on stock.
-          stock: [],
-        },
-        customer: {
-          isMember: memberCtx?.isMember ?? false,
-          loggedIn: memberCtx?.loggedIn ?? false,
-        },
-        gst: { inclusive: gstInclusive, pricesIncludeTax },
-        draft,
-      });
-      const namedStyles = await getNamedStyles().catch(() => ({}));
-      const components = (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<string, NodeTree>;
-      const builderCss =
-        ((await getChannelSetting("builder_published_css").catch(() => null)) as { css?: string } | null)?.css ?? "";
-      const jsFunctions = await cmsFunctionService.enabledMapForChannel(CHANNEL_ID).catch(() => ({}) as Record<string, string>);
-      let callResults: Record<string, unknown> = {};
-      if (Object.keys(jsFunctions).length > 0) {
-        await loadJsSandbox(jsFunctions).catch(() => null);
-        callResults = await computeCallResults(nodeTree.root, jsFunctions, payload as object).catch(() => ({}));
-      }
-      return (
-        <>
-          {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
-          <BuilderCategoryPage
-            tree={nodeTree}
-            payload={payload}
-            listing={{
-              products: scoped,
-              total,
-              shown,
-              facets,
-              hasMore,
-              nextPageHref,
-              memberPricingAvailable: memberPricingEnabled,
-              pricing: pricing as { memberPriceMap?: Record<number, number>; isMember?: boolean; planPrice?: string | null },
-              categoryName: category.name,
-              categorySlug: category.slug ?? slug,
-            }}
-            namedStyles={namedStyles}
-            components={components}
-            jsFunctions={jsFunctions}
-            callResults={callResults}
-            draft={draft}
-          />
-        </>
-      );
-    }
+    const nodeRendered = await renderCategoryNodeBranch({
+      category: category as unknown as Record<string, unknown> & { id: number; name: string; slug?: string | null },
+      products,
+      total,
+      shown,
+      facets,
+      page,
+      hasMore,
+      nextPageHref,
+      sort,
+      pricing: pricing as CategoryListingPricing,
+      breadcrumbs: breadcrumbs as { id: number; name: string; slug: string }[],
+      selections: {
+        sub: sp.sub?.split(",").filter(Boolean) ?? [],
+        brand: sp.brand?.split(",").filter(Boolean) ?? [],
+        price: sp.price?.split(",").filter(Boolean) ?? [],
+        // Always empty: availability is no longer a filter, and a ?stock= value
+        // never reaches here (it is redirected away above). Keeping the key
+        // explicit stops the authored rail's `selected` state and its active-
+        // filter chips from ever lighting up on stock.
+        stock: [],
+      },
+      memberPricingEnabled,
+      categorySlugFallback: slug,
+      draft,
+    });
+    if (nodeRendered) return nodeRendered;
   }
 
   // ═══ CMS category-layout TEMPLATE path (kill switch: flag off → legacy) ═══
