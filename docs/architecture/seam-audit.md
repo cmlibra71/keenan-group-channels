@@ -56,13 +56,31 @@ prerequisite** — one job, two payoffs.
 
 | File(s) | Direction | Evidence |
 |---|---|---|
-| **`sites/industry-kitchens/src/lib/actions/quote.ts`** | **IK behind — functional gap** | template & CD call `sendStaffNotification` ×2 + rate-limit + contact pre-link; IK has **zero** of the three, despite `lib/staff-email.ts` existing on IK. A quote request on IK likely emails no staff. |
+| **`sites/industry-kitchens/src/lib/actions/quote.ts`** | **IK behind — missing feature, not a broken one** (corrected 2026-08-04, see below) | IK lacks `acceptQuote` and `duplicateQuote` entirely (212 lines vs template's 330), and its quote detail page renders no `QuoteActions`. **IK customers cannot accept a quote.** |
 | Account suite: `app/account/page.tsx`, `profile/page.tsx`, `AccountContacts`, `ProfileEditForm`, `AddressBook` (5 files) | CD behind template | Template got the "port chef account-details suite" commit (2026-07-11); CD — the origin of that code — was never re-synced |
 | `components/product/WarrantyDirectory.tsx` | CD behind by one commit | Template touched 07-28, CD 07-27 |
 
 Drift-by-porting is the mechanism: code originates in one site, gets copied (with fixes) to
 the template, and the origin never picks the fixes back up. Nothing detects this today; the
 scan script in this audit's scratchpad does, in ~30s.
+
+> **Correction (2026-08-04).** The first version of this table claimed *"template & CD call
+> `sendStaffNotification` ×2 + rate-limit + contact pre-link; IK has zero of the three… a
+> quote request on IK likely emails no staff."* That was **wrong**, and wrong in a way worth
+> recording. Those counts came from `grep -c`, which counted an **import plus a single call**
+> as "×2" — and I inferred behaviour without reading the call sites. Reading them:
+>
+> - `sendStaffNotification` is called **once**, inside `acceptQuote`.
+> - `slidingWindowAllow` is called **once**, inside `duplicateQuote`.
+> - the contact pre-link is **identical** on both sites (1 each).
+>
+> All three "gaps" collapse into a single fact: **IK never had the accept/duplicate-quote
+> feature** — actions and UI both. Quote *submission* notifies nobody on **either** site, by
+> design (sales review in the portal). So this is a **missing feature and a product
+> decision**, not a live defect silently losing enquiries.
+>
+> Method lesson for the rest of this audit: a grep count is a lead, never a finding. Every
+> behavioural claim here should name the call site it read.
 
 ### 2c. Convergent evolution — the strongest evidence for the engine seam
 
@@ -116,8 +134,9 @@ mechanisms, minting per-site masters — gives "shared functionality, per-site v
 
 ## 5. Recommended sequence (not started; needs approval)
 
-1. **Fix the IK quote-notification drift now** — small, customer-facing, independent of
-   everything else.
+1. **Decide on accept-quote for IK** (product call, not a hotfix — see the correction in
+   §2b). Porting `acceptQuote`/`duplicateQuote` + `QuoteActions` gives IK customers a way to
+   accept a quote, and brings the staff alert with it. Independent of all builder work.
 2. **Promote the stranded engine (§2a) into `template/`** — this *is* the IK builder port.
    After it, the IK enquiry form is content work in the designer, not engineering.
 3. **Re-sync the drifted account suite + WarrantyDirectory** back into CD.
