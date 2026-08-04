@@ -52,6 +52,43 @@ These are **not visuals**. They exist only in `sites/chef-s-kitchen`, absent fro
 down to `@keenan/services`. **This list is also, exactly, the "port the builder to IK"
 prerequisite** — one job, two payoffs.
 
+> **Status (2026-08-04): the builder render path is promoted.** All five `Builder*Page`
+> wrappers, `master-leaves`, `live-gst`, `use-form-handlers` and `seeds/product` are now
+> identical on `template/` and both sites, and the node branches of the content, brand,
+> category and product routes are shared modules (`*-node-branch.tsx`) rather than code
+> living in one site. IK's `/json/{pages,brands,categories,products}/<slug>` parity surfaces
+> resolve.
+>
+> **The shape the promotion took, and why.** Each wrapper splits into an engine half and a
+> `*-natives` module: the site registers ITS OWN components under SHARED KEYS, so the same
+> tree renders CD's look on CD and IK's on IK. Two rules fell out of doing it:
+>
+> - **A component both sites already have under the same `@/` path stays in the engine.**
+>   `masterLeafNatives`, `useGst`, `ProductImageGallery` — the import resolves per-site, so
+>   the path itself is the seam and a natives split would add indirection for nothing.
+> - **A native must never share a key with a component MASTER.** Natives win, so registering
+>   `filter-rail`, `facet-option`, `filter-controls`, `hero-side-panel` or `draw-spotlight`
+>   as a native silently un-explodes an editable section. The legacy keys that remain
+>   (`category-listing`, `facet-toggle`, `filter-rail-mobile`) exist only for trees published
+>   before those sections were exploded; a new site correctly registers none of them.
+>
+> **What is deliberately NOT promoted:** IK's home sections (13 block types), its home-data
+> assembly, and its `product/category` template trees. Those are site visuals and site data —
+> the things this seam exists to keep apart — so they are authoring work, not engineering.
+>
+> **Two accidents worth naming**, because both looked like site divergence and were not:
+> `getProductPageData` already existed in the SHARED channel store and simply was not
+> re-exported by IK's or the template's `store.ts`; and `ProductGrid` is a *server* component
+> on IK, so a native importing it dragged `next/headers` into the client bundle. `tsc` was
+> silent on the second one — only a production build caught it.
+>
+> **Verification method used throughout** (worth reusing): serve the local build and diff its
+> rendered HTML against production, normalising away script tags and asset hashes. When a
+> difference appears, do not guess — rebuild with the change reverted and compare all three.
+> That is how the 778-char delta on CD's `/json/categories` was attributed to *undeployed
+> code in the checkout*, not to the refactor: baseline-vs-refactor was byte-identical, and
+> baseline-vs-production was not.
+
 ### 2b. Drift — same intent, versions out of sync
 
 | File(s) | Direction | Evidence |
