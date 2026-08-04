@@ -1,11 +1,13 @@
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
-import { brandedEmailLayout, brandedButton } from "@keenan/services";
+import { brandedEmailLayout, brandedButton, emailSource, resolveEmailBranding } from "@keenan/services";
 import { channelSettingsService, CHANNEL_ID } from "@/lib/store";
 
 // Internal staff notifications (quote accepted, new review, …) — NOT customer
-// mail. Customer-facing email lives in @keenan/services with per-channel
-// branding; this is a deliberately plain "something needs your attention in
-// the portal" note to the Keenan team.
+// mail, but still CHANNEL mail: it is branded with the storefront the event
+// happened on (logo, accent, sender, footer) so a Chef's Depot alert never
+// arrives looking like Keenan Group. Branding comes from the same
+// `resolveEmailBranding` every customer email uses; a channel with nothing
+// configured falls back to Keenan, as before.
 //
 // Recipient resolution: the per-channel `staff_notifications_email` setting
 // (editable at portal Settings → Notifications, no redeploy) wins, then the
@@ -18,7 +20,6 @@ const sesClient = new SESClient({
   region: process.env.AWS_SES_REGION || process.env.AWS_REGION || "ap-southeast-2",
 });
 
-const FROM_EMAIL = process.env.AWS_SES_FROM_EMAIL || "noreply@keenan-group.com.au";
 const PORTAL_URL = "https://keenan-group.com.au";
 
 function escapeHtml(s: string): string {
@@ -71,17 +72,18 @@ export async function sendStaffNotification({
     )
     .join("");
 
-  // Staff mail rides the canonical layout with NO branding — Keenan Group header,
-  // not the storefront's, since it's an internal "look at the portal" note.
+  // Never fatal: an unresolvable channel just leaves the Keenan default in place.
+  const branding = await resolveEmailBranding(CHANNEL_ID).catch(() => undefined);
+
   const content = `
     <h1 style="margin: 0 0 16px 0; color: #1e293b; font-size: 22px; font-weight: 700; text-align: center;">${escapeHtml(heading)}</h1>
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:0 auto 24px auto;">${tableRows}</table>
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
-      <tr><td align="center" style="padding: 8px 0;">${brandedButton(escapeHtml(linkLabel), link)}</td></tr>
+      <tr><td align="center" style="padding: 8px 0;">${brandedButton(escapeHtml(linkLabel), link, branding?.brandColor ?? undefined)}</td></tr>
     </table>
     <p style="margin: 24px 0 0 0; color: #94a3b8; font-size: 12px; text-align: center;">Automated notification from the storefront.</p>`;
 
-  const html = brandedEmailLayout(subject, content);
+  const html = brandedEmailLayout(subject, content, undefined, branding);
 
   const text =
     `${heading}\n\n` +
@@ -90,7 +92,7 @@ export async function sendStaffNotification({
 
   await sesClient.send(
     new SendEmailCommand({
-      Source: FROM_EMAIL,
+      Source: emailSource(branding),
       Destination: { ToAddresses: [to] },
       Message: {
         Subject: { Data: subject, Charset: "UTF-8" },
