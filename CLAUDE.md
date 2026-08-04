@@ -156,6 +156,12 @@ new build never becomes healthy — traffic never moves.
 
 - Never hand-edit `/etc/caddy/Caddyfile` — the portal's generator owns it.
 - Rollback: `sudo /home/ubuntu/deploy/deploy.sh rollback <site>` on the host.
+- **main vs staging:** WIP stays on feature branches; routine locally-verified
+  changes go straight to `main` (gated auto-deploy, ~10 s rollback); changes a
+  human should SEE first (visual, pricing, checkout) merge to `staging` → review
+  at `preview.<domain>` (basic auth) → merge to `main` or `promote`. Staging
+  holds ONE build per site (each push replaces it; runs on the LIVE database) —
+  don't let it sit stale, and never promote a build older than live.
 - **MIGRATION RULE:** old + new builds share Postgres during the drain window
   (and rollback needs one release of slack) — schema changes must be
   backward-compatible one release back: additive first, remove later.
