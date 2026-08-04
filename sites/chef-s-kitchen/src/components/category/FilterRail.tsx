@@ -30,11 +30,11 @@ const PRICE_LABELS: Record<string, string> = {
   "1000to3000": "$1,000–$3,000",
   gt3000: "$3,000+",
 };
-// Stock availability is deliberately NOT a shopper-facing facet — "In stock" was
-// retired, so Clearance is the only availability option we label (and render).
-const AVAIL_LABELS: Record<string, string> = {
-  clearance: "Clearance",
-};
+// Stock availability is NOT a shopper-facing facet: "In stock" was retired first
+// and Clearance followed, so the rail has no Availability section at all.
+// `CategoryFacets.availability` is still supplied by getCategoryListing (the
+// materialized listing cache keeps the counts) — it is simply never rendered.
+// Clearance products are browsed via the dedicated /clearance page.
 
 /** Map the category page's CategoryFacets into the generic group list. */
 function categoryGroups(facets: CategoryFacets): FacetGroupDef[] {
@@ -55,13 +55,6 @@ function categoryGroups(facets: CategoryFacets): FacetGroupDef[] {
     param: "price",
     title: "Price (ex GST)",
     options: facets.price.map((f) => ({ value: f.key, label: PRICE_LABELS[f.key] ?? f.key, count: f.count })),
-  });
-  groups.push({
-    param: "stock",
-    title: "Availability",
-    options: facets.availability
-      .filter((f) => f.key in AVAIL_LABELS)
-      .map((f) => ({ value: f.key, label: AVAIL_LABELS[f.key], count: f.count })),
   });
   return groups;
 }
@@ -119,7 +112,7 @@ export function FacetRail({ groups, clearParams }: { groups: FacetGroupDef[]; cl
  *  authored DESKTOP rail pairs with this sealed mobile unit. */
 export function MobileFilterRail({ facets }: { facets: CategoryFacets }) {
   const groups = categoryGroups(facets);
-  const clearParams = ["sub", "brand", "price", "stock"];
+  const clearParams = ["sub", "brand", "price"];
   const [drawerOpen, setDrawerOpen] = useState(false);
   return (
     <>
@@ -152,7 +145,7 @@ export function ClearFiltersButton() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const clearParams = ["sub", "brand", "price", "stock"];
+  const clearParams = ["sub", "brand", "price"];
   const hasAny = clearParams.some((p) => searchParams.get(p));
   if (!hasAny) return null;
   return (
@@ -171,7 +164,7 @@ export function ClearFiltersButton() {
 
 /** Category-page adapter — keeps the existing `<FilterRail facets={…} />` call site. */
 export function FilterRail({ facets }: { facets: CategoryFacets }) {
-  return <FacetRail groups={categoryGroups(facets)} clearParams={["sub", "brand", "price", "stock"]} />;
+  return <FacetRail groups={categoryGroups(facets)} clearParams={["sub", "brand", "price"]} />;
 }
 
 function useFacetParam(param: string) {
