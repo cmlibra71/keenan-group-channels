@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ChevronRight, Package } from "lucide-react";
-import { draftMode } from "next/headers";
+import { draftMode, headers } from "next/headers";
 import type { Metadata } from "next";
 import {
   getCategoryBySlug,
@@ -15,6 +15,7 @@ import {
 } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
 import { getListingMemberPrices } from "@/lib/member";
+import { renderCategoryNodeBranch } from "@/builder/category-node-branch";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { assertCategoryVisible } from "@/lib/catalog-scope";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
@@ -135,7 +136,10 @@ export default async function CategoryPage({
   const hasMore = shown < total && page < MAX_PAGES;
 
   // Editable CMS content zones around the (system) listing — empty unless set.
-  const { isEnabled: draft } = await draftMode();
+  // `x-kg-json` is the parity surface: /json/categories/<slug> forces the node
+  // path and the draft tree, so a conversion can be diffed against this page.
+  const { isEnabled } = await draftMode();
+  const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
   const cmsCat = await getCmsCategoryPage(category.id, draft).catch(() => null);
   const region = (r: string): RenderedBlock[] =>
     ((cmsCat?.blocks as unknown as RenderedBlock[]) ?? []).filter((b) => b.region === r);
@@ -151,6 +155,34 @@ export default async function CategoryPage({
     next.set("page", String(page + 1));
     return `/categories/${slug}?${next.toString()}`;
   })();
+
+  // Site Builder node path — additive. Returns null (and we fall through to the
+  // block/legacy paths below) until a category_layout tree is authored.
+  {
+    const nodeRendered = await renderCategoryNodeBranch({
+      category: category as unknown as Record<string, unknown> & { id: number; name: string; slug?: string | null },
+      products,
+      total,
+      shown,
+      facets,
+      page,
+      hasMore,
+      nextPageHref,
+      sort,
+      pricing: { memberPriceMap },
+      breadcrumbs: breadcrumbs as { id: number; name: string; slug: string }[],
+      selections: {
+        sub: sp.sub?.split(",").filter(Boolean) ?? [],
+        brand: sp.brand?.split(",").filter(Boolean) ?? [],
+        price: sp.price?.split(",").filter(Boolean) ?? [],
+        stock: [],
+      },
+      memberPricingEnabled,
+      categorySlugFallback: slug,
+      draft,
+    });
+    if (nodeRendered) return nodeRendered;
+  }
 
   // ═══ CMS category-layout TEMPLATE path (kill switch: flag off → legacy) ═══
   // The whole page as a block document (category_header / category_slot /
