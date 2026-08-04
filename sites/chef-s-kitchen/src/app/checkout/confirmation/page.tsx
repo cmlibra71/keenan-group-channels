@@ -3,6 +3,7 @@ import { CheckCircle, Building2, FileText, CreditCard } from "lucide-react";
 import { getCheckoutSettings, orderService, orderItemService } from "@/lib/store";
 import { Ga4Purchase, type Ga4PurchaseProps } from "@/components/analytics/Ga4Purchase";
 import { ConfirmationRedirect } from "@/components/checkout/ConfirmationRedirect";
+import { canViewOrderConfirmation } from "@/lib/checkout/confirmation-access";
 import type { Ga4Item } from "@/components/analytics/ga4";
 
 export const metadata = {
@@ -15,6 +16,13 @@ export default async function ConfirmationPage({
   searchParams: Promise<{ order?: string; pm?: string }>;
 }) {
   const { order, pm } = await searchParams;
+
+  // Never render someone else's order. The number arrives straight from the
+  // URL, so it is only ours to show if this visitor owns it (signed in) or
+  // just placed it (the guest breadcrumb cookie). Unverified visitors still
+  // get the confirmation page — just none of the order's data.
+  const mayView = order ? await canViewOrderConfirmation(order) : false;
+  const orderRef = mayView ? order : undefined;
 
   // Load the configured bank-transfer / net-terms details so the customer has
   // what they need to pay even though there is no confirmation email yet.
@@ -34,11 +42,11 @@ export default async function ConfirmationPage({
   }
   // Net Terms is account-specific — prefer the actual term length stamped on the
   // order at checkout over the flat channel default.
-  if (pm === "net_terms" && order) {
+  if (pm === "net_terms" && orderRef) {
     try {
       const res = await orderService.list({
         page: 1, limit: 1, sort: "id", direction: "desc",
-        filters: { order_number: { type: "eq", value: order } },
+        filters: { order_number: { type: "eq", value: orderRef } },
       });
       const stored = (res.data[0] as { metafields?: { net_terms_days?: number } } | undefined)?.metafields?.net_terms_days;
       if (typeof stored === "number") netTermsDays = stored;
@@ -47,17 +55,17 @@ export default async function ConfirmationPage({
     }
   }
 
-  const reference = bankDetails?.reference?.trim() || order;
+  const reference = bankDetails?.reference?.trim() || orderRef;
 
   // Build the GA4 client-side purchase from the order header. This client event
   // is the sole purchase source — GA4 does NOT dedupe by transaction_id, so the
   // channel must keep the worker server-side MP purchase OFF or it double-counts.
   let ga4Purchase: Ga4PurchaseProps | null = null;
-  if (order) {
+  if (orderRef) {
     try {
       const res = await orderService.list({
         page: 1, limit: 1, sort: "id", direction: "desc",
-        filters: { order_number: { type: "eq", value: order } },
+        filters: { order_number: { type: "eq", value: orderRef } },
       });
       const o = res.data[0] as Record<string, unknown> | undefined;
       if (o) {
@@ -90,7 +98,7 @@ export default async function ConfirmationPage({
           index,
         }));
         ga4Purchase = {
-          transactionId: String(o.order_number ?? order),
+          transactionId: String(o.order_number ?? orderRef),
           value: num(o.total_inc_tax),
           tax: num(o.total_tax),
           shipping: num(o.shipping_cost_inc_tax),
