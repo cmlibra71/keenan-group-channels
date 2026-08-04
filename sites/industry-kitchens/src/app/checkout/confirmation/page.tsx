@@ -123,7 +123,7 @@ export default async function ConfirmationPage({
       </p>
 
       {order && (
-        <p className="mt-2 text-xl font-semibold text-ink-900">{order}</p>
+        <p className="mt-2 text-xl font-semibold text-ink-900">{orderRef}</p>
       )}
 
       <p className="mt-4 text-sm text-steel-500">
