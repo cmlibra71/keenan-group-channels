@@ -98,8 +98,33 @@ prerequisite** — one job, two payoffs.
 | `components/product/WarrantyDirectory.tsx` | CD behind by one commit | Template touched 07-28, CD 07-27 |
 
 Drift-by-porting is the mechanism: code originates in one site, gets copied (with fixes) to
-the template, and the origin never picks the fixes back up. Nothing detects this today; the
-scan script in this audit's scratchpad does, in ~30s.
+the template, and the origin never picks the fixes back up.
+
+> **Correction (2026-08-04): every entry in the table above is wrong, and the re-sync it
+> recommends would have caused damage.** Acting on it meant reading the diffs, and they say:
+>
+> - **`app/account/profile/page.tsx` and `ProfileEditForm.tsx` — zero functional difference.**
+>   They differ only in design tokens (`text-text-secondary` / `page-title` / `rounded-card`
+>   vs template's raw `zinc-*`). That is the seam working exactly as intended, not drift.
+> - **`app/account/page.tsx`, `AccountContacts.tsx`, `AddressBook.tsx` — no stranded fixes.**
+>   What is left after normalising class names is JSX line-wrapping, extracted style
+>   constants, and one CD-only "SIGN IN" eyebrow. No behaviour anywhere.
+> - **`WarrantyDirectory.tsx` — CD is AHEAD, not behind.** It has `matchesBrand()` (loose
+>   brand matching across compound entries like "Adande / Stoddart") and an `EntryCard`
+>   component that template does not. "Template touched 07-28, CD 07-27" was read as
+>   *CD is stale*; the newer file was simply the one with less in it. **Re-syncing template
+>   → CD would have deleted working features from a live page.**
+>
+> **The method error, which is the same one §2b already carried a correction for:** the drift
+> list came from byte-divergence plus git last-touch dates. Neither signal can tell styling
+> from behaviour, and a date cannot tell you which side is ahead. `tools/seam/seam-scan.mjs`
+> now reports *functional* difference — class values, comments and JSX wrapping normalised
+> away — and says so in its own output: a non-zero count is a lead, and direction must be
+> read from the diff.
+>
+> **Current state (`node tools/seam/seam-scan.mjs`):** CD 136 identical · 28 style-only · 84
+> functional · 13 absent. IK 228 identical · 9 style-only · 24 functional · 0 absent. Most of
+> CD's 84 are its own components — expected, and the point of the seam.
 
 > **Correction (2026-08-04).** The first version of this table claimed *"template & CD call
 > `sendStaffNotification` ×2 + rate-limit + contact pre-link; IK has zero of the three… a
@@ -131,6 +156,20 @@ offer them:
 
 Where two deliberately-different sites write the same code twice, that code is engine by
 definition.
+
+> **Status (2026-08-04): partly done, and the rest must NOT be done.**
+>
+> - `getChannelSetting` / `getJsonSetting` were promoted with the Phase-2 engine work. Their
+>   bodies are now byte-identical on template and both sites — genuinely converged.
+> - `getHomepageCopy` is already identical on template and IK.
+> - **`getHeaderNav` must stay per-site.** Template and IK read a flat `header_nav` setting;
+>   CD reads `nav_structure` and takes `.header` from it. Same name, different stored data
+>   model. Promoting either version would break the other site's navigation. Same for
+>   `getFooterConfig` — three distinct versions, because three distinct settings shapes.
+>
+> The lesson refines the §2c rule: **a shared NAME is not convergent evolution — a shared
+> implementation is.** Two sites naming a reader the same way while reading different
+> settings is divergence wearing a matching label.
 
 ### 2d. Visual identity + CD-only features — stays in `sites/*`, never shared
 
