@@ -6,12 +6,15 @@ import { quoteService, CHANNEL_ID } from "@/lib/store";
 import { getQuoteUuid } from "@/lib/quote";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import { Price } from "@/components/ui/Price";
+import { quoteHidesPrices, redactQuotePrices } from "@/lib/quotes/price-visibility";
+import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
 
 // QuoteService returns snake_case rows (transformRow convention).
 interface QuoteRecord {
   id: number;
   uuid: string;
   status: string | null;
+  hide_prices: boolean | null;
   contact_id: number | null;
   quote_number: string | null;
   quote_amount: string | null;
@@ -112,10 +115,16 @@ export default async function QuotesPage() {
     );
   }
 
+  const hideStatuses = await getHidePriceStatuses();
   const quotesWithItems = await Promise.all(
     customerQuotes.map(async (quote) => {
-      const result = await quoteService.getWithItems(quote.id) as QuoteWithItems | null;
-      return result || { ...quote, items: [] };
+      const result = (await quoteService.getWithItems(quote.id)) as QuoteWithItems | null;
+      const row = result || { ...quote, items: [] };
+      // Redact server-side rather than rendering around the number, so a hidden
+      // amount never ships in the page source.
+      return quoteHidesPrices(row, hideStatuses)
+        ? { ...redactQuotePrices(row), hidden_prices: true }
+        : { ...row, hidden_prices: false };
     })
   );
 
@@ -155,8 +164,10 @@ export default async function QuotesPage() {
                   }`}>
                     {statusLabels[status] || status}
                   </span>
-                  {parseFloat(quote.quote_amount || "0") > 0 ? (
-                    <Price amount={quote.quote_amount || "0"} className="font-semibold text-zinc-900" />
+                  {/* Show the amount whenever prices are visible — including
+                      $0.00. "To be quoted" means "not priced yet", not "zero". */}
+                  {!quote.hidden_prices && Number.isFinite(parseFloat(quote.quote_amount ?? "")) ? (
+                    <Price amount={quote.quote_amount!} className="font-semibold text-zinc-900" />
                   ) : (
                     <span className="text-sm font-medium text-zinc-500">To be quoted</span>
                   )}
