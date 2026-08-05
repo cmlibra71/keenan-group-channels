@@ -69,6 +69,13 @@ export type OrderLineDraft = {
   totalExTax: string;
   totalIncTax: string;
   totalTax: string;
+  /**
+   * Buy cost AT TIME OF SALE, ex GST — set by `withLineCosts` from the same cost
+   * map the below-cost sentry already reads. Omitted (never 0) when no cost is
+   * known, so the portal's below-floor report never mistakes "unknown" for "free".
+   */
+  baseCostPrice?: string;
+  costPriceExTax?: string;
 };
 
 export type MoneySplit = { exTax: number; incTax: number; tax: number };
@@ -168,6 +175,31 @@ export function findBelowCostLines(
     }
   }
   return out;
+}
+
+/**
+ * Freeze the buy cost onto each line so the order records what it cost US at the
+ * time of sale. Costs move; without this the portal's minimum-margin-floor
+ * report would have to re-derive every historic order's margin from TODAY's
+ * cost, which is simply a different number.
+ *
+ * `costs` is the SAME map `findBelowCostLines` reads (keyed
+ * `${productId}:${variantId ?? 0}` — see store.getLineCosts). Lines with no
+ * known cost, or a non-positive one, come back untouched: an absent cost must
+ * stay absent rather than being written as 0, which would read as "free".
+ *
+ * Pure — returns new drafts, mutates nothing.
+ */
+export function withLineCosts(
+  lineItems: OrderLineDraft[],
+  costs: Map<string, number>
+): OrderLineDraft[] {
+  return lineItems.map((line) => {
+    const cost = costs.get(`${line.productId}:${line.variantId ?? 0}`);
+    if (cost == null || !Number.isFinite(cost) || cost <= 0) return line;
+    const asString = String(cost);
+    return { ...line, baseCostPrice: asString, costPriceExTax: asString };
+  });
 }
 
 /**
