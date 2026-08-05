@@ -11,12 +11,17 @@ import {
   productImageService,
   getLinkableProductPaths,
   getCheckoutSettings,
+  getAccountNetTermsDays,
   isGuestOrderForEmail,
   CHANNEL_ID,
 } from "@/lib/store";
 import { canViewOrder } from "@/lib/orders/order-access";
-import { orderStatusLabel, visibleTransaction } from "@/lib/orders/order-presentation";
-import { OrderMoney, GstBasisNote } from "@/components/account/OrderMoney";
+import {
+  orderStatusChipClass,
+  orderTotalRows,
+  visibleTransaction,
+} from "@/lib/orders/order-presentation";
+import { OrderMoney, OrderTotals } from "@/components/account/OrderMoney";
 import { PaymentSection } from "./payment-section";
 import { ShipmentsSection } from "./shipments-section";
 
@@ -74,6 +79,7 @@ interface OrderDetail {
   id: number;
   channel_id: number;
   contact_id: number | null;
+  account_id: number | null;
   order_number: string | null;
   status: string | null;
   payment_status: string | null;
@@ -85,6 +91,11 @@ interface OrderDetail {
   subtotal_inc_tax: string | null;
   shipping_cost_ex_tax: string | null;
   shipping_cost_inc_tax: string | null;
+  handling_cost_ex_tax: string | null;
+  handling_cost_inc_tax: string | null;
+  store_credit_amount: string | null;
+  discount_amount: string | null;
+  refunded_amount: string | null;
   total_ex_tax: string | null;
   total_inc_tax: string | null;
   total_tax: string | null;
@@ -145,9 +156,11 @@ export default async function OrderDetailPage({
   const session = await getSession();
   if (!session) redirect("/account");
 
+  // Exactly the order's own id, or nothing: parseInt would read "12abc" — and
+  // "0012" — as order 12 and serve it under a URL that is not this order's.
   const { id } = await params;
-  const orderId = Number.parseInt(id, 10);
-  if (!Number.isFinite(orderId) || orderId <= 0) notFound();
+  if (!/^[1-9]\d{0,14}$/.test(id)) notFound();
+  const orderId = Number(id);
 
   // Channel-scoped read. getByIdScoped reports an out-of-scope row as MISSING
   // rather than telling the caller it exists, which is what an id-probing request
@@ -197,20 +210,26 @@ export default async function OrderDetailPage({
     ...new Set(items.map((i) => i.product_id).filter((v): v is number => typeof v === "number")),
   ];
 
-  const [thumbs, linkablePaths, checkoutSettings, shipmentPage] = await Promise.all([
-    productImageService.getThumbnailsForProducts(productIds) as Promise<
-      { product_id: number; url_thumbnail: string | null; url_standard: string | null }[]
-    >,
-    getLinkableProductPaths(productIds),
-    getCheckoutSettings(),
-    shipmentService.listForParent(order.id, {
-      page: 1,
-      limit: 50,
-      sort: "id",
-      direction: "asc",
-      includes: ["items"],
-    }) as Promise<{ data: unknown[] }>,
-  ]);
+  const [thumbs, linkablePaths, checkoutSettings, shipmentPage, accountNetTermsDays] =
+    await Promise.all([
+      productImageService.getThumbnailsForProducts(productIds) as Promise<
+        { product_id: number; url_thumbnail: string | null; url_standard: string | null }[]
+      >,
+      getLinkableProductPaths(productIds),
+      getCheckoutSettings(),
+      shipmentService.listForParent(order.id, {
+        page: 1,
+        limit: 50,
+        sort: "id",
+        direction: "asc",
+        includes: ["items"],
+      }) as Promise<{ data: unknown[] }>,
+      // The term agreed with the account this order bills to, for when the order
+      // itself carries none. Only worth a query on a net-terms order.
+      order.payment_method === "net_terms"
+        ? getAccountNetTermsDays(order.account_id, order.contact_id)
+        : Promise.resolve(null),
+    ]);
 
   const thumbByProduct = new Map(
     thumbs.map((t) => [t.product_id, t.url_thumbnail || t.url_standard])
@@ -220,31 +239,46 @@ export default async function OrderDetailPage({
   const orderNumber = order.order_number || `#${order.id}`;
   const placed = formatDate(order.created_at);
 
-  const subtotalEx = money(order.subtotal_ex_tax);
-  const subtotalInc = money(order.subtotal_inc_tax);
-  const shippingEx = money(order.shipping_cost_ex_tax);
-  const shippingInc = money(order.shipping_cost_inc_tax);
   const totalEx = money(order.total_ex_tax);
   const totalInc = money(order.total_inc_tax);
   const gst = money(order.total_tax);
 
+  // Subtotal / delivery / handling, plus the row that reconciles them to the
+  // stored total — real orders carry store credits and imported ones do not
+  // always balance, and a breakdown that fails to add up reads as a mistake.
+  const totalRows = orderTotalRows({
+    subtotalExTax: money(order.subtotal_ex_tax),
+    subtotalIncTax: money(order.subtotal_inc_tax),
+    shippingExTax: money(order.shipping_cost_ex_tax),
+    shippingIncTax: money(order.shipping_cost_inc_tax),
+    handlingExTax: money(order.handling_cost_ex_tax),
+    handlingIncTax: money(order.handling_cost_inc_tax),
+    totalExTax: totalEx,
+    totalIncTax: totalInc,
+    storeCreditAmount: money(order.store_credit_amount),
+    discountAmount: money(order.discount_amount),
+  });
+
   return (
     <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <Link
-          href="/account/orders"
-          className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text-primary"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Back to Order History
-        </Link>
-      </div>
+      <Link
+        href="/account/orders"
+        className="inline-flex items-center gap-1 mb-6 text-sm text-text-muted hover:text-text-primary"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        Back to Order History
+      </Link>
 
       <p className="eyebrow mb-3">ORDER</p>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
         <h1 className="page-title">Order {orderNumber}</h1>
-        <span className="text-xs font-medium px-2 py-1 rounded-full bg-surface-secondary text-text-secondary">
-          {orderStatusLabel(order.status)}
+        {/* The status the customer just read on Order History — same word, same
+            colour. Its wording is owned by a separate card, and that card must be
+            able to change both surfaces at once. */}
+        <span
+          className={`text-xs font-medium px-2 py-1 rounded-full ${orderStatusChipClass(order.status)}`}
+        >
+          {order.status}
         </span>
       </div>
       <p className="text-sm text-text-muted mb-8">
@@ -320,31 +354,7 @@ export default async function OrderDetailPage({
       </div>
 
       {/* ── Totals ────────────────────────────────────────────────────────── */}
-      <div className="mt-4 border-t border-border pt-4 space-y-2">
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-text-secondary">Subtotal</span>
-          <OrderMoney exTax={subtotalEx} incTax={subtotalInc} className="text-text-primary" />
-        </div>
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-text-secondary">Delivery</span>
-          <OrderMoney exTax={shippingEx} incTax={shippingInc} className="text-text-primary" />
-        </div>
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-text-secondary">GST</span>
-          {/* GST is the same figure either way — it is the tax, not a basis. */}
-          <OrderMoney exTax={gst} incTax={gst} className="text-text-primary" />
-        </div>
-        <div className="flex items-center justify-between border-t border-border pt-2">
-          <span className="text-sm font-medium text-text-secondary">
-            Order Total <GstBasisNote className="text-xs text-text-muted" />
-          </span>
-          <OrderMoney
-            exTax={totalEx}
-            incTax={totalInc}
-            className="text-lg font-semibold text-text-primary"
-          />
-        </div>
-      </div>
+      <OrderTotals rows={totalRows} totalExTax={totalEx} totalIncTax={totalInc} gst={gst} />
 
       {/* ── Payment ─────────────────────────────────────────────────────────
           `transactions` is whitelisted at THIS boundary: the raw rows carry the
@@ -354,6 +364,7 @@ export default async function OrderDetailPage({
         paymentMethod={order.payment_method}
         paymentStatus={order.payment_status}
         totalIncTax={totalInc}
+        refundedAmount={money(order.refunded_amount)}
         transactions={(order.transactions ?? []).map(visibleTransaction)}
         paymentMethods={checkoutSettings.paymentMethods}
         orderNumber={order.order_number}
@@ -362,6 +373,7 @@ export default async function OrderDetailPage({
             ? (order.metafields.net_terms_days as number)
             : null
         }
+        netTermsDaysOnAccount={accountNetTermsDays}
         xeroInvoiceNumber={order.xero_invoice_number}
         xeroInvoiceStatus={order.xero_invoice_status}
       />

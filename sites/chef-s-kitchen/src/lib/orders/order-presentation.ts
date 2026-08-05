@@ -70,31 +70,79 @@ export function paymentStatusLabel(status: string | null | undefined): string {
   return PAYMENT_STATUS_LABELS[key] ?? key.replace(/_/g, " ");
 }
 
-const ORDER_STATUS_LABELS: Record<string, string> = {
-  pending: "Received",
-  processing: "Being prepared",
-  awaiting_fulfillment: "Being prepared",
-  shipped: "Dispatched",
-  partially_shipped: "Partly dispatched",
-  completed: "Completed",
-  cancelled: "Cancelled",
-  declined: "Declined",
-  refund_in_progress: "Refund in progress",
-  refunded: "Refunded",
-};
+/**
+ * Colours for the order-status chip.
+ *
+ * Deliberately the SAME expression the Order History list uses inline, so the
+ * status a customer sees on the list and the status they see one click later are
+ * the same word in the same colour. The wording of that chip (today the raw
+ * `orders.status` value) is owned by a separate card; when it lands it changes
+ * BOTH surfaces at once rather than leaving the list saying "awaiting_fulfillment"
+ * and the detail page saying "Being prepared".
+ */
+export function orderStatusChipClass(status: string | null | undefined): string {
+  if (status === "completed") return "text-accent bg-accent-subtle";
+  if (status === "shipped") return "bg-accent-subtle text-accent-dark";
+  return "bg-surface-secondary text-text-secondary";
+}
+
+/** One line of the money breakdown, carried in both bases so the GST toggle can pick. */
+export interface OrderTotalRow {
+  label: string;
+  exTax: number;
+  incTax: number;
+}
 
 /**
- * Customer-facing wording for `orders.status`.
+ * The rows above the order total, in order.
  *
- * Deliberately a NEW helper used only by the order detail page: the wording and
- * colours of the chip on the Order History list are owned by a separate card and
- * are left exactly as they are. When that card lands, this is where the two
- * surfaces converge.
+ * Subtotal and delivery are always shown; handling only when it was charged. The
+ * last row is the reason the column adds up: on real orders the stored total does
+ * NOT always equal subtotal + delivery — a store credit was applied, or (on a
+ * handful of imported orders) the total was written without the delivery line.
+ * Rather than print a column of figures that visibly fails to sum — the fastest
+ * way to earn a support call — the residual is stated as its own row, named after
+ * its cause where the order records one.
+ *
+ * Computed independently on each basis, because the ex-tax and inc-tax columns are
+ * stored separately and a credit is a single figure applied to both.
  */
-export function orderStatusLabel(status: string | null | undefined): string {
-  const key = (status ?? "").trim().toLowerCase();
-  if (!key) return "Received";
-  return ORDER_STATUS_LABELS[key] ?? key.replace(/_/g, " ");
+export function orderTotalRows(input: {
+  subtotalExTax: number;
+  subtotalIncTax: number;
+  shippingExTax: number;
+  shippingIncTax: number;
+  handlingExTax: number;
+  handlingIncTax: number;
+  totalExTax: number;
+  totalIncTax: number;
+  storeCreditAmount?: number;
+  discountAmount?: number;
+}): OrderTotalRow[] {
+  const rows: OrderTotalRow[] = [
+    { label: "Subtotal", exTax: input.subtotalExTax, incTax: input.subtotalIncTax },
+    { label: "Delivery", exTax: input.shippingExTax, incTax: input.shippingIncTax },
+  ];
+  if (input.handlingExTax > 0 || input.handlingIncTax > 0) {
+    rows.push({ label: "Handling", exTax: input.handlingExTax, incTax: input.handlingIncTax });
+  }
+
+  const residualEx =
+    input.totalExTax - (input.subtotalExTax + input.shippingExTax + input.handlingExTax);
+  const residualInc =
+    input.totalIncTax - (input.subtotalIncTax + input.shippingIncTax + input.handlingIncTax);
+
+  if (Math.abs(residualEx) > 0.005 || Math.abs(residualInc) > 0.005) {
+    const label =
+      (input.storeCreditAmount ?? 0) > 0
+        ? "Store credit applied"
+        : (input.discountAmount ?? 0) > 0
+          ? "Discount"
+          : "Adjustment";
+    rows.push({ label, exTax: residualEx, incTax: residualInc });
+  }
+
+  return rows;
 }
 
 /** A transaction as it may be shown to the customer. NOTHING else escapes this module. */
@@ -162,22 +210,32 @@ export function transactionOutcomeLabel(tx: {
   return `${noun} — ${status.replace(/_/g, " ")}`;
 }
 
-/**
- * Money actually received against the order: completed transactions summed with
- * refunds negated.
- *
- * Byte-for-byte the rule PaymentService.recordManualPayment applies when it
- * decides `paid` vs `partially_paid`, so the number shown and the status stored
- * can never contradict each other.
- */
-export function paidFromTransactions(rows: readonly TransactionRowLike[]): number {
-  let paid = 0;
-  for (const row of rows) {
-    if (String(row.status ?? "").trim().toLowerCase() !== "completed") continue;
-    const sign = String(row.event ?? "").trim().toLowerCase() === "refund" ? -1 : 1;
-    paid += sign * num(row.amount);
-  }
-  return paid;
+// ── The money. ───────────────────────────────────────────────────────────────
+// Completed rows only, refunds separated from payments — byte-for-byte the rule
+// PaymentService.recordManualPayment applies when it decides `paid` vs
+// `partially_paid`, so the figure shown and the status stored cannot contradict
+// each other.
+
+function isCompleted(row: TransactionRowLike): boolean {
+  return String(row.status ?? "").trim().toLowerCase() === "completed";
+}
+
+function isRefund(row: TransactionRowLike): boolean {
+  return String(row.event ?? "").trim().toLowerCase() === "refund";
+}
+
+/** Money the customer handed over: completed, non-refund transactions. */
+export function creditsFromTransactions(rows: readonly TransactionRowLike[]): number {
+  let total = 0;
+  for (const row of rows) if (isCompleted(row) && !isRefund(row)) total += num(row.amount);
+  return total;
+}
+
+/** Money given back through the ledger: completed refund transactions, positive. */
+export function refundsFromTransactions(rows: readonly TransactionRowLike[]): number {
+  let total = 0;
+  for (const row of rows) if (isCompleted(row) && isRefund(row)) total += Math.abs(num(row.amount));
+  return total;
 }
 
 /** What is still owed, never negative, with the service's sub-cent tolerance. */
@@ -199,4 +257,100 @@ export function isSettled(paymentStatus: string | null | undefined, owed: number
   if (key === "paid" || key === "refunded") return true;
   if (key === "net_terms") return false;
   return owed === 0;
+}
+
+/** Where the money on an order stands, as the customer should read it. */
+export interface PaymentPosition {
+  /** Net of refunds — what the customer is actually out of pocket. */
+  paid: number;
+  /** Money given back. Zero unless the order was refunded in whole or in part. */
+  refunded: number;
+  /** Still to pay. Zero once the order is settled or fully refunded. */
+  owed: number;
+  /** Nothing further is owed. */
+  settled: boolean;
+}
+
+/**
+ * The whole payment position in one pure step, so the page renders it rather than
+ * deriving it.
+ *
+ * Three realities have to agree here:
+ *
+ *   * a Zoey-imported order is stamped `paid` with NO ledger rows at all, so an
+ *     empty ledger cannot be read as "nothing has been paid";
+ *   * a refund can be recorded EITHER as a ledger row or (for imported orders)
+ *     only as `orders.refunded_amount`, so both are consulted and the larger
+ *     wins — they are two records of the same money, never two refunds;
+ *   * a refund reduces what is due, so a fully refunded order shows $0 paid and
+ *     $0 outstanding rather than the full amount in both columns.
+ */
+export function paymentPosition(input: {
+  paymentStatus: string | null | undefined;
+  totalIncTax: number;
+  refundedAmount?: number | null;
+  transactions: readonly TransactionRowLike[];
+}): PaymentPosition {
+  const { paymentStatus, totalIncTax, transactions } = input;
+  const key = (paymentStatus ?? "").trim().toLowerCase();
+  const storedRefund = Math.max(0, num(input.refundedAmount));
+
+  const ledgerCredits = creditsFromTransactions(transactions);
+  // No completed payment on the ledger but the business calls it paid (or
+  // refunded, which implies it was paid first): the order total is what moved.
+  const grossPaid =
+    ledgerCredits === 0 && (key === "paid" || key === "refunded") ? totalIncTax : ledgerCredits;
+
+  // A 'refunded' order was refunded in full even when nothing recorded how much.
+  const refunded = Math.max(
+    refundsFromTransactions(transactions),
+    storedRefund,
+    key === "refunded" ? grossPaid : 0
+  );
+
+  const paid = Math.max(grossPaid - refunded, 0);
+  const due = Math.max(totalIncTax - refunded, 0);
+  const owedRaw = outstanding(due, paid);
+  const settled = isSettled(paymentStatus, owedRaw);
+
+  return { paid, refunded, owed: settled ? 0 : owedRaw, settled };
+}
+
+/**
+ * The payment term to quote on a net-terms order, or `null` when nobody has
+ * agreed one.
+ *
+ * Order of truth: the term stamped on the order at checkout, then the term on the
+ * account the order bills to, then the channel's configured default. If none of
+ * those exist the answer is `null` and the page says so in words — inventing a
+ * number here would tell a customer the business agreed a commercial term it
+ * never agreed. (`accounts.net_terms_days` defaults to 0, which means "not set",
+ * not "due immediately".)
+ */
+export function resolveNetTermsDays(
+  onOrder: number | null | undefined,
+  onAccount: number | null | undefined,
+  channelDefault: number | null | undefined
+): number | null {
+  for (const candidate of [onOrder, onAccount, channelDefault]) {
+    if (typeof candidate === "number" && Number.isFinite(candidate) && candidate > 0) {
+      return Math.round(candidate);
+    }
+  }
+  return null;
+}
+
+/**
+ * What the page tells a customer about an order billed to their account.
+ *
+ * The sentence lives here, not in the markup, because the rule it encodes is
+ * commercial: with no agreed term on record it must NOT name one. Kept testable
+ * for exactly that reason.
+ */
+export function netTermsMessage(days: number | null, invoiceNumber?: string | null): string {
+  const opening = days
+    ? `This order is on your account with Net ${days} payment terms.`
+    : "This order is on your account, to be paid on your agreed payment terms.";
+  const invoice = invoiceNumber ? ` (${invoiceNumber})` : "";
+  return `${opening} An invoice${invoice} will be issued for it — no action is required here.`;
 }

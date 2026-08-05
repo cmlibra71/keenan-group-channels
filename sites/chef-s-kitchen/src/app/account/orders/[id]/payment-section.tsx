@@ -4,9 +4,9 @@ import { Price } from "@/components/ui/Price";
 import {
   paymentMethodLabel,
   paymentStatusLabel,
-  paidFromTransactions,
-  outstanding,
-  isSettled,
+  paymentPosition,
+  resolveNetTermsDays,
+  netTermsMessage,
   transactionOutcomeLabel,
   type VisibleTransaction,
 } from "@/lib/orders/order-presentation";
@@ -19,6 +19,10 @@ import {
 // nothing has been paid as when it has. When money is still owing on a bank
 // transfer it repeats the bank details from the SAME channel setting the checkout
 // confirmation page reads, so the customer can pay without hunting for an email.
+//
+// Two figures here are commercial statements, not display: what the customer still
+// owes, and the term an account order will be invoiced on. Both are computed in
+// order-presentation.ts, where they are unit-tested — and neither is ever guessed.
 //
 // A server component. Every figure is derived here; the raw transaction rows never
 // arrive — the page projects them through `visibleTransaction` first, so gateway
@@ -36,36 +40,48 @@ export function PaymentSection({
   paymentMethod,
   paymentStatus,
   totalIncTax,
+  refundedAmount,
   transactions,
   paymentMethods,
   orderNumber,
   netTermsDaysOnOrder,
+  netTermsDaysOnAccount,
   xeroInvoiceNumber,
   xeroInvoiceStatus,
 }: {
   paymentMethod: string | null;
   paymentStatus: string | null;
   totalIncTax: number;
+  refundedAmount: number;
   transactions: VisibleTransaction[];
   paymentMethods: PaymentMethodConfig[];
   orderNumber: string | null;
   netTermsDaysOnOrder: number | null;
+  netTermsDaysOnAccount: number | null;
   xeroInvoiceNumber: string | null;
   xeroInvoiceStatus: string | null;
 }) {
-  const ledgerPaid = paidFromTransactions(transactions);
-  const owedFromLedger = outstanding(totalIncTax, ledgerPaid);
-  // The stored status is authoritative for "settled": orders imported from Zoey
-  // are marked paid with no ledger rows at all, and telling that customer they
-  // still owe the full amount would be plainly wrong.
-  const settled = isSettled(paymentStatus, owedFromLedger);
-  const paid = settled && ledgerPaid === 0 ? totalIncTax : ledgerPaid;
-  const owed = settled ? 0 : outstanding(totalIncTax, paid);
+  // Paid / refunded / outstanding in one pure step. The stored status is
+  // authoritative for "settled" — orders imported from Zoey are marked paid with
+  // no ledger rows at all — and a refund, whether recorded as a ledger row or
+  // only as orders.refunded_amount, reduces both what was paid and what is due.
+  const { paid, refunded, owed, settled } = paymentPosition({
+    paymentStatus,
+    totalIncTax,
+    refundedAmount,
+    transactions,
+  });
 
   const methodConfig = paymentMethods.find((m) => m.id === (paymentMethod ?? ""));
   const bankDetails = methodConfig?.bankDetails;
   const reference = bankDetails?.reference?.trim() || orderNumber || undefined;
-  const netTermsDays = netTermsDaysOnOrder ?? methodConfig?.netTermsDays ?? 30;
+  // Order → account → channel default, and NO further. A number nobody agreed is
+  // worse than no number: this is the term the business will invoice on.
+  const netTermsDays = resolveNetTermsDays(
+    netTermsDaysOnOrder,
+    netTermsDaysOnAccount,
+    methodConfig?.netTermsDays
+  );
 
   const showBankDetails = paymentMethod === "bank_transfer" && owed > 0;
   const showNetTerms = paymentMethod === "net_terms";
@@ -108,6 +124,14 @@ export function PaymentSection({
               <Price amount={owed} />
             </dd>
           </div>
+          {refunded > 0 && (
+            <div>
+              <dt className="text-text-muted">Refunded (inc GST)</dt>
+              <dd className="text-text-primary font-medium">
+                <Price amount={refunded} />
+              </dd>
+            </div>
+          )}
           {xeroInvoiceNumber && (
             <div>
               <dt className="text-text-muted">Invoice</dt>
@@ -204,9 +228,7 @@ export function PaymentSection({
               <h3 className="text-sm font-semibold text-member-text">Invoice &amp; payment terms</h3>
             </div>
             <p className="text-sm text-member-text">
-              This order is on your account with Net {netTermsDays} payment terms. An invoice
-              {xeroInvoiceNumber ? ` (${xeroInvoiceNumber})` : ""} will be issued for it — no
-              action is required here.
+              {netTermsMessage(netTermsDays, xeroInvoiceNumber)}
             </p>
           </div>
         )}

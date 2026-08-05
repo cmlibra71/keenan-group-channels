@@ -27,8 +27,68 @@ export function OrderMoney({
   return <Price amount={inclusive ? incTax : exTax} className={className} />;
 }
 
-/** "inc GST" / "ex GST" — which basis the figures above are currently showing. */
-export function GstBasisNote({ className }: { className?: string }) {
+/**
+ * The money breakdown of an order: the rows, the total, and the GST line.
+ *
+ * Client-side only because the GST toggle decides both the figures AND the shape:
+ * showing GST-exclusive prices means the total is quoted ex GST with the tax and
+ * the inc-GST total stated beneath it — exactly how the cart summary reads — while
+ * inclusive prices carry the tax as a single "includes GST" memo. Every row is
+ * handed in already reconciled to the total (see `orderTotalRows`), so the column
+ * a customer reads always adds up.
+ *
+ * Numbers and row labels are the only props: the order row never crosses to the
+ * client, since an RSC prop ships in the flight payload even when nothing renders it.
+ */
+export function OrderTotals({
+  rows,
+  totalExTax,
+  totalIncTax,
+  gst,
+}: {
+  rows: Array<{ label: string; exTax: number; incTax: number }>;
+  totalExTax: number;
+  totalIncTax: number;
+  gst: number;
+}) {
   const { inclusive } = useGst();
-  return <span className={className}>{inclusive ? "inc GST" : "ex GST"}</span>;
+
+  return (
+    <div className="mt-4 border-t border-border pt-4 space-y-2">
+      {rows.map((row) => (
+        <div key={row.label} className="flex items-center justify-between text-sm">
+          <span className="text-text-secondary">{row.label}</span>
+          <Price amount={inclusive ? row.incTax : row.exTax} className="text-text-primary" />
+        </div>
+      ))}
+
+      <div className="flex items-center justify-between border-t border-border pt-2">
+        <span className="text-sm font-medium text-text-secondary">
+          Order Total {inclusive ? "(inc GST)" : "(ex GST)"}
+        </span>
+        <Price
+          amount={inclusive ? totalIncTax : totalExTax}
+          className="text-lg font-semibold text-text-primary"
+        />
+      </div>
+
+      {inclusive ? (
+        <div className="flex items-center justify-between text-sm text-text-muted">
+          <span>Includes GST</span>
+          <Price amount={gst} />
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between text-sm text-text-muted">
+            <span>GST</span>
+            <Price amount={gst} />
+          </div>
+          <div className="flex items-center justify-between text-sm text-text-secondary">
+            <span>Total (inc GST)</span>
+            <Price amount={totalIncTax} className="font-medium" />
+          </div>
+        </>
+      )}
+    </div>
+  );
 }

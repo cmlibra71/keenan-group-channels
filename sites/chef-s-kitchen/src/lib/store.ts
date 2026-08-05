@@ -331,6 +331,52 @@ export async function isGuestOrderForEmail(orderId: number, email: string): Prom
 }
 
 /**
+ * The payment term agreed with the account an order bills to, in days, or `null`
+ * when no term is on record.
+ *
+ * Orders placed through the storefront stamp the term they were quoted; orders
+ * created elsewhere (and most of the historical ones) do not, and the account is
+ * then the only place the real term lives. Both routes to it are tried in one
+ * round trip — the order's own `account_id`, then the account behind the order's
+ * contact — because on this channel most net-terms orders carry a contact but no
+ * account id.
+ *
+ * `accounts.net_terms_days` defaults to 0, which means "no term recorded", not
+ * "due immediately" — hence the `> 0` test. A null answer must stay null: the
+ * page says the invoice follows on the agreed terms rather than quoting a number
+ * the business never agreed.
+ */
+export async function getAccountNetTermsDays(
+  accountId: number | null | undefined,
+  contactId: number | null | undefined
+): Promise<number | null> {
+  const sql = getCommerceClient();
+  if (!sql) return null;
+  const account = Number.isFinite(accountId) ? Number(accountId) : 0;
+  const contact = Number.isFinite(contactId) ? Number(contactId) : 0;
+  if (account <= 0 && contact <= 0) return null;
+  try {
+    const rows = await sql<{ days: number | null; rank: number }[]>`
+      SELECT a.net_terms_days AS days, 1 AS rank
+        FROM accounts a
+       WHERE a.id = ${account}
+      UNION ALL
+      SELECT a.net_terms_days AS days, 2 AS rank
+        FROM contacts c
+        JOIN accounts a ON a.id = c.account_id
+       WHERE c.id = ${contact}
+      ORDER BY rank`;
+    for (const row of rows) {
+      const days = Number(row.days);
+      if (Number.isFinite(days) && days > 0) return Math.round(days);
+    }
+  } catch {
+    // Best-effort: no term on record reads the same as a lookup that failed.
+  }
+  return null;
+}
+
+/**
  * Storefront URLs for the products a customer may still open, keyed by product id.
  *
  * An order keeps its line items forever, but the product behind a line can be
