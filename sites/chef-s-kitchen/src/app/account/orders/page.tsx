@@ -133,9 +133,12 @@ export default async function OrdersPage() {
             <div key={order.id} className="card-padded">
               <div className="flex items-center justify-between mb-2">
                 <div>
-                  <span className="font-semibold text-text-primary">
+                  <Link
+                    href={`/account/orders/${order.id}`}
+                    className="font-semibold text-text-primary hover:underline"
+                  >
                     Order #{order.order_number}
-                  </span>
+                  </Link>
                   <span className="ml-3 text-sm text-text-secondary">
                     {order.created_at ? new Date(order.created_at).toLocaleDateString() : ""}
                   </span>

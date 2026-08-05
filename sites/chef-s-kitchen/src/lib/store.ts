@@ -26,6 +26,8 @@ import {
   orderService,
   orderItemService,
   orderShippingAddressService,
+  shipmentService,
+  orderTransactionService,
   subscriptionPlanService,
   subscriptionService,
   subscriptionEventService,
@@ -277,17 +279,84 @@ export async function getGuestOrdersForEmail(
   const rows = await sql<{ id: number; order_number: string; status: string; total_inc_tax: string; created_at: string | Date | null }[]>`
     SELECT id, order_number, status, total_inc_tax, created_at
     FROM orders
-    WHERE customer_id IS NULL
+    WHERE ${guestOrderForEmailCondition(sql, target)}
+    ORDER BY id DESC
+    LIMIT 50`;
+  return rows;
+}
+
+/**
+ * THE guest-order rule, as one SQL fragment: a channel order with no customer and
+ * no contact whose billing email resolves to the same inbox as `normalizedEmail`.
+ *
+ * Deliberately shared by {@link getGuestOrdersForEmail} (the history list) and
+ * {@link isGuestOrderForEmail} (the per-order access gate). Two copies of this
+ * CASE expression would drift, and a drift here is not cosmetic: a looser copy
+ * WIDENS who can read an order, a tighter one 404s an order the list is showing.
+ */
+function guestOrderForEmailCondition(
+  sql: NonNullable<ReturnType<typeof getCommerceClient>>,
+  normalizedEmail: string
+) {
+  return sql`customer_id IS NULL
       AND contact_id IS NULL
       AND channel_id = ${CHANNEL_ID}
       AND CASE
         WHEN split_part(lower(billing_address->>'email'), '@', 2) IN ('gmail.com','googlemail.com')
         THEN regexp_replace(split_part(split_part(lower(billing_address->>'email'), '@', 1), '+', 1), '\\.', '', 'g')
         ELSE split_part(split_part(lower(billing_address->>'email'), '@', 1), '+', 1)
-      END || '@' || split_part(lower(billing_address->>'email'), '@', 2) = ${target}
-    ORDER BY id DESC
-    LIMIT 50`;
-  return rows;
+      END || '@' || split_part(lower(billing_address->>'email'), '@', 2) = ${normalizedEmail}`;
+}
+
+/**
+ * True when THIS order is a guest order on this channel that belongs to `email`'s
+ * inbox — the single-row form of {@link getGuestOrdersForEmail}, for the order
+ * detail page's access gate.
+ *
+ * Not expressed as "is it in the list?": the list is capped at 50 rows, so a
+ * shopper with a long guest history would be 404'd on their own older orders.
+ * Same normalisation, no cap, one order.
+ */
+export async function isGuestOrderForEmail(orderId: number, email: string): Promise<boolean> {
+  const sql = getCommerceClient();
+  if (!sql || !email || !Number.isFinite(orderId)) return false;
+  const target = normalizeEmailForMatch(email);
+  if (!target) return false;
+  const rows = await sql<{ id: number }[]>`
+    SELECT id FROM orders
+    WHERE id = ${orderId}
+      AND ${guestOrderForEmailCondition(sql, target)}
+    LIMIT 1`;
+  return rows.length > 0;
+}
+
+/**
+ * Storefront URLs for the products a customer may still open, keyed by product id.
+ *
+ * An order keeps its line items forever, but the product behind a line can be
+ * retired or pulled from this channel — linking to it would land the customer on
+ * a 404 inside their own order history. Same channel-visibility join the sitemap
+ * uses ({@link getSitemapProducts}); anything absent renders as plain text.
+ */
+export async function getLinkableProductPaths(productIds: number[]): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  const sql = getCommerceClient();
+  const ids = [...new Set(productIds.filter((id) => Number.isFinite(id)))];
+  if (!sql || ids.length === 0) return out;
+  const rows = await sql<{ id: number; url_path: string | null }[]>`
+    SELECT p.id, p.url_path
+    FROM product_channel_assignments a
+    JOIN products p ON p.id = a.product_id
+    WHERE a.channel_id = ${CHANNEL_ID}
+      AND a.is_visible = true
+      AND p.is_visible = true
+      AND p.id = ANY(${ids})`;
+  for (const row of rows) {
+    // Product routes are keyed by url_path, falling back to the numeric id
+    // (mirrors ProductGrid: `slug={product.urlPath || String(product.id)}`).
+    out.set(Number(row.id), row.url_path || String(row.id));
+  }
+  return out;
 }
 
 /**
@@ -362,6 +431,8 @@ export {
   orderService,
   orderItemService,
   orderShippingAddressService,
+  shipmentService,
+  orderTransactionService,
   subscriptionPlanService,
   subscriptionService,
   subscriptionEventService,
