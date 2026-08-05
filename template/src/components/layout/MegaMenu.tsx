@@ -77,14 +77,21 @@ function MegaPanel({ dept, feat }: { dept: MegaMenuNode; feat?: MegaMenuFeatured
     weights[i] += g.children.length + 2;
   }
 
+  // The panel is full-bleed and drops straight over the page below the bar (the
+  // breadcrumb sits ~50px under it), so two guards keep it from stealing clicks
+  // meant for the page: a hover-intent delay, so merely sweeping the pointer
+  // down across a department never opens it (it stays `invisible`, and hidden
+  // means un-hoverable, so the delayed transition is abandoned); and
+  // pointer-events only on the white card, so the transparent gutters beside it
+  // are click-through. Keyboard (:focus-within) opens with no delay.
   return (
     <div
-      className="mega-panel invisible absolute left-0 right-0 top-full z-[110] translate-y-2 opacity-0 transition-all duration-200
-                 group-hover/nav:visible group-hover/nav:translate-y-0 group-hover/nav:opacity-100
+      className="mega-panel pointer-events-none invisible absolute left-0 right-0 top-full z-[110] translate-y-2 opacity-0 transition-all delay-0 duration-200
+                 group-hover/nav:visible group-hover/nav:translate-y-0 group-hover/nav:opacity-100 group-hover/nav:delay-[300ms]
                  group-focus-within/nav:visible group-focus-within/nav:translate-y-0 group-focus-within/nav:opacity-100"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid max-w-[1100px] grid-cols-[1fr_1fr_1fr_240px] gap-6 rounded-b-lg border border-zinc-200 border-t-[3px] border-t-teal-600 bg-white p-6 shadow-lg">
+        <div className="pointer-events-none grid max-w-[1100px] grid-cols-[1fr_1fr_1fr_240px] gap-6 rounded-b-lg border border-zinc-200 border-t-[3px] border-t-teal-600 bg-white p-6 shadow-lg group-hover/nav:pointer-events-auto group-focus-within/nav:pointer-events-auto">
           {columns.map((col, i) => (
             <div key={i} className="space-y-5">
               {col.map((group) => (
