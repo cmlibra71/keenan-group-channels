@@ -197,9 +197,14 @@ export default async function ConfirmationPage({
             <FileText className="h-4 w-4 text-member-text" />
             <h3 className="text-sm font-semibold text-member-text">Invoice &amp; Payment Terms</h3>
           </div>
+          {/* Never quote a term nobody agreed: channel 2 configures no default,
+              so `?? 30` promised every net-terms customer 30 days regardless of
+              what their account actually says. */}
           <p className="text-sm text-member-text">
-            An invoice with Net {netTermsDays ?? 30} payment terms will be sent to you. No action
-            is required at this time.
+            {netTermsDays
+              ? `An invoice with Net ${netTermsDays} payment terms will be sent to you.`
+              : "An invoice will be sent to you, payable on your agreed account terms."}{" "}
+            No action is required at this time.
           </p>
         </div>
       )}
