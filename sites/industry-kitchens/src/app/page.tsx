@@ -1,4 +1,5 @@
-import { draftMode } from "next/headers";
+import { draftMode, headers } from "next/headers";
+import { renderHomeNodeBranch } from "@/builder/home-node-branch";
 import {
   getProducts,
   getCategoryBySlug,
@@ -16,11 +17,19 @@ import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 type CarouselProducts = Awaited<ReturnType<typeof getProducts>>["products"];
 
 export default async function HomePage() {
+  // ═══ Site Builder node path — additive. Returns null (and we fall through to
+  // the CMS/legacy paths below) until a home tree is authored and published.
+  // `/json` sets x-kg-json, which forces the draft tree so a conversion can be
+  // diffed against this page before anything is published. ═══
+  const node = await renderHomeNodeBranch();
+  if (node) return node.element;
+
   // ═══ CMS home path (kill switch: flag off → legacy homepage_sections) ═══
   // The block document was migrated 1:1 from homepage_sections; adapters render
   // through HomeSections, so both paths produce identical markup.
   if (await getFeatureFlag("cms_pages_enabled")) {
-    const { isEnabled: draft } = await draftMode();
+    const { isEnabled } = await draftMode();
+    const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
     const cmsHome = await getCmsPage("home", draft).catch(() => null);
     if (cmsHome && cmsHome.blocks.length > 0) {
       return (

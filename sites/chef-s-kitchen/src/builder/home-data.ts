@@ -35,6 +35,11 @@ export interface HomePathNeeds {
   prize?: boolean;
   stats?: boolean;
   plan?: boolean;
+  /** home.sectionList[*] — a channel passing its own ordered sections through.
+   *  Chefs Depot's homepage is built from the typed slots above, so it never
+   *  populates this; the field exists so the shared branch can ask every site
+   *  the same question. */
+  sectionList?: boolean;
 }
 
 export async function loadHomeNativeData(
