@@ -6,7 +6,11 @@ import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissi
 import { quoteService, CHANNEL_ID } from "@/lib/store";
 import { getQuoteUuid } from "@/lib/quote";
 import { Price } from "@/components/ui/Price";
-import { quoteHidesPrices, redactQuotePrices } from "@/lib/quotes/price-visibility";
+import {
+  quoteHidesPrices,
+  redactQuotePrices,
+  resolveQuoteTotal,
+} from "@/lib/quotes/price-visibility";
 import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
 
 // QuoteService returns snake_case rows (transformRow convention).
@@ -26,6 +30,10 @@ interface QuoteItemRecord {
   id: number;
   product_name: string;
   quantity: number;
+  // getWithItems returns the priced row; these are declared so the total can tell a
+  // genuine $0 quote from a stale zero header (see resolveQuoteTotal).
+  sale_price?: string | null;
+  list_price?: string | null;
 }
 
 interface QuoteWithItems extends QuoteRecord {
@@ -163,10 +171,10 @@ export default async function QuotesPage() {
                   }`}>
                     {statusLabels[status] || status}
                   </span>
-                  {/* Show the amount whenever prices are visible — including
-                      $0.00. "To be quoted" means "not priced yet", not "zero". */}
-                  {!quote.hidden_prices && Number.isFinite(parseFloat(quote.quote_amount ?? "")) ? (
-                    <Price amount={quote.quote_amount!} className="font-semibold text-zinc-900" />
+                  {/* Show the amount whenever prices are visible — including $0.00.
+                      "To be quoted" means "not priced yet", not "zero". */}
+                  {!quote.hidden_prices && resolveQuoteTotal(quote) !== null ? (
+                    <Price amount={resolveQuoteTotal(quote)!} className="font-semibold text-zinc-900" />
                   ) : (
                     <span className="text-sm font-medium text-zinc-500">To be quoted</span>
                   )}

@@ -12,6 +12,7 @@ import {
   quoteHidesPrices,
   redactQuotePrices,
   resolveQuoteAcceptState,
+  resolveQuoteTotal,
 } from "@/lib/quotes/price-visibility";
 import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
 
@@ -121,10 +122,9 @@ export default async function QuoteDetailPage({
     thumbs.map((t) => [t.product_id, t.url_thumbnail || t.url_standard])
   );
 
-  // Show the real total whenever prices are visible — including $0.00. Falling back
-  // to "To be quoted" just because the number is zero misreads a deliberate $0 as
-  // "not priced yet".
-  const total = parseFloat(quote.quote_amount ?? quote.base_amount ?? "");
+  // Show the real total whenever prices are visible — including $0.00 — but not a
+  // stale zero on a quote whose lines carry money. See resolveQuoteTotal.
+  const total = resolveQuoteTotal(quote);
 
   return (
     <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
@@ -233,7 +233,7 @@ export default async function QuoteDetailPage({
       {/* Totals */}
       <div className="mt-4 flex items-center justify-between border-t border-zinc-200 pt-4">
         <span className="text-sm font-medium text-zinc-600">Quote Total</span>
-        {!hidePrices && Number.isFinite(total) ? (
+        {!hidePrices && total !== null ? (
           <Price amount={total} className="text-lg font-semibold text-zinc-900" />
         ) : (
           <span className="text-sm font-medium text-zinc-500">To be quoted</span>

@@ -2,6 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
   FALLBACK_HIDE_PRICE_STATUSES,
+  resolveQuoteTotal,
   quoteHidesPrices,
   redactQuotePrices,
   resolveQuoteAcceptState,
@@ -193,5 +194,44 @@ describe("resolveQuoteAcceptState", () => {
       kind: "disabled",
       reason: ACCEPT_REASON_PRICING_PENDING,
     });
+  });
+});
+
+describe("resolveQuoteTotal", () => {
+  const priced = [{ list_price: "100.00" }];
+  const zeroLines = [{ list_price: "0" }, { sale_price: "0.00" }];
+
+  test("returns the total when there is one", () => {
+    assert.equal(resolveQuoteTotal({ quote_amount: "1250.50", items: priced }), 1250.5);
+  });
+
+  test("falls back to base_amount only when quote_amount is absent", () => {
+    assert.equal(resolveQuoteTotal({ quote_amount: null, base_amount: "99", items: priced }), 99);
+  });
+
+  test("shows $0.00 for a genuinely zero-value quote", () => {
+    assert.equal(resolveQuoteTotal({ quote_amount: "0", items: zeroLines }), 0);
+    assert.equal(resolveQuoteTotal({ quote_amount: "0", items: [] }), 0);
+  });
+
+  test("refuses a stale zero total when the lines carry money", () => {
+    // 62 production quotes look like this — recalculateTotals only fires on item
+    // mutation, so the header sits at 0 while the lines are priced. Printing
+    // "$0.00" would tell the customer they owe nothing.
+    assert.equal(resolveQuoteTotal({ quote_amount: "0", items: priced }), null);
+    assert.equal(
+      resolveQuoteTotal({ quote_amount: "0.00", items: [{ sale_price: "250" }] }),
+      null
+    );
+  });
+
+  test("returns null when there is no usable number at all", () => {
+    assert.equal(resolveQuoteTotal({ quote_amount: null, base_amount: null, items: priced }), null);
+    assert.equal(resolveQuoteTotal({ quote_amount: "not-a-number", items: priced }), null);
+  });
+
+  test("tolerates a missing items array", () => {
+    assert.equal(resolveQuoteTotal({ quote_amount: "0" }), 0);
+    assert.equal(resolveQuoteTotal({ quote_amount: "50" }), 50);
   });
 });

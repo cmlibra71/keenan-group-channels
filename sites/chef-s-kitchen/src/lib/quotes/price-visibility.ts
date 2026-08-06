@@ -155,3 +155,36 @@ export function resolveQuoteAcceptState(
     reason: quote.hidesPrices ? ACCEPT_REASON_PRICING_PENDING : ACCEPT_REASON_NOT_READY,
   };
 }
+
+export interface QuoteTotalInput {
+  quote_amount?: string | number | null;
+  base_amount?: string | number | null;
+  items?: ReadonlyArray<{
+    sale_price?: string | number | null;
+    list_price?: string | number | null;
+  }> | null;
+}
+
+const num = (v: unknown): number =>
+  typeof v === "number" ? v : parseFloat(String(v ?? ""));
+
+/**
+ * The quote total to show the customer, or null for "To be quoted".
+ *
+ * A quote can legitimately total $0.00, and we say so. But a total of zero on a
+ * quote whose LINES carry real money is not a zero-value quote — it is a stale
+ * header (`recalculateTotals` only fires on item mutation, so pricing a quote
+ * without touching a line leaves `quote_amount` at its "0" default). Printing
+ * "$0.00" there tells the customer they owe nothing, which is worse than saying
+ * the total isn't ready. 62 production quotes are in exactly that state.
+ */
+export function resolveQuoteTotal(quote: QuoteTotalInput): number | null {
+  const total = num(quote.quote_amount ?? quote.base_amount ?? "");
+  if (!Number.isFinite(total)) return null;
+  if (total !== 0) return total;
+  const anyPricedLine = (quote.items || []).some((i) => {
+    const v = num(i?.sale_price ?? i?.list_price ?? "");
+    return Number.isFinite(v) && v > 0;
+  });
+  return anyPricedLine ? null : 0;
+}
