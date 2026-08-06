@@ -109,8 +109,30 @@ export async function loadHomeNativeData(
       memberPriceMap,
       memberPricingAvailable: !!memberPricingEnabled,
     },
-    // The same list, bindable, so authored nodes around a section can read its
-    // copy (`home.sectionList[3].heading`) as sections get exploded.
-    sections: { sectionList: sections as unknown as Row[] },
+    // The bindable list the EXPLODED section masters read.
+    //
+    // Three section types carry no inline content — category_tiles, value_bar
+    // and customer_logos each live in their own settings key, and
+    // HomeSections.tsx passes them in separately. An authored master binds
+    // `home.sectionList[N].tiles`, so they have to be resolved INTO the list or
+    // the master sees undefined, renders nothing, and the page silently loses a
+    // section. That cost a 1,647px regression before the flag caught it.
+    sections: {
+      sectionList: sections.map((sec) => {
+        const base = { ...(sec as unknown as Row) };
+        switch (sec.type) {
+          case "category_tiles":
+            return { ...base, tiles: categoryTiles, heading: (copy as Row).categories_heading ?? "" };
+          case "value_bar":
+            return { ...base, items: valueBarItems };
+          case "customer_logos": {
+            const cl = customerLogos as { heading?: string; logos?: unknown[] };
+            return { ...base, logos: cl.logos ?? [], heading: cl.heading ?? "" };
+          }
+          default:
+            return base;
+        }
+      }) as Row[],
+    },
   };
 }
