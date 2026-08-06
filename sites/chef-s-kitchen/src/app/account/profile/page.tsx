@@ -1,12 +1,11 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { contactService, customerAddressService, getCheckoutSettings } from "@/lib/store";
 import { ProfileEditForm } from "@/components/account/ProfileEditForm";
 import { AddressBook, type Address } from "@/components/account/AddressBook";
 import { AccountContacts } from "@/components/account/AccountContacts";
 import type { AccountContact } from "@/lib/actions/account";
+import { AccountShell } from "@/components/account/AccountShell";
 
 export const metadata = { title: "Account details" };
 
@@ -51,10 +50,7 @@ export default async function ProfilePage() {
   const contacts = (metafields.account_contacts as AccountContact[]) || [];
 
   return (
-    <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
-      <Link href="/account" className="inline-flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary mb-4">
-        <ArrowLeft className="h-4 w-4" /> Back to account
-      </Link>
+    <AccountShell>
       <h1 className="page-title mb-8">Account details</h1>
 
       <section className="mb-10">
@@ -86,6 +82,6 @@ export default async function ProfilePage() {
           <AccountContacts initial={contacts} />
         </div>
       </section>
-    </div>
+    </AccountShell>
   );
 }
