@@ -76,9 +76,22 @@ export function BuilderBrandPage({
   // masterLeafNatives is engine — every dependency it has exists on both
   // sites. Only the products grid is site-specific, so only that is delegated:
   // shared keys, each site's own look.
+  const brandIdentity = (() => {
+    const b = (payload as { brand?: Record<string, unknown> }).brand ?? {};
+    return { slug: String(b.slug ?? b.id ?? ""), name: String(b.name ?? "") };
+  })();
+
   const nativeComponents: NativeComponents = {
     ...masterLeafNatives(),
-    ...brandNatives({ products, pricing, memberPricingAvailable }),
+    // Brand identity comes from the composed payload so the site's grid can
+    // emit the same GA4 list id/name the legacy page does.
+    ...brandNatives({
+      products,
+      pricing,
+      memberPricingAvailable,
+      brandSlug: brandIdentity.slug,
+      brandName: brandIdentity.name,
+    }),
   };
   const formHandlers = useFormHandlers();
   const brandHandlers = React.useMemo(
