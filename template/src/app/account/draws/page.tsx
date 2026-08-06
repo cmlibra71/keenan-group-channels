@@ -12,6 +12,7 @@ import {
 import { EntryHero } from "@/components/draws/EntryHero";
 import { PrizeCard } from "@/components/draws/PrizeCard";
 import { DrawCountdown } from "@/components/draws/DrawCountdown";
+import { AccountShell } from "@/components/account/AccountShell";
 
 export const metadata = {
   title: "My Draws",
@@ -59,7 +60,7 @@ export default async function DrawsPage() {
   const featuredDraw = featuredPrize ? upcomingDraws[0] ?? null : null;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
+    <AccountShell>
       <h1 className="text-3xl font-bold text-zinc-900 mb-8">My Draws</h1>
 
       {/* Entry Accumulation Hero */}
@@ -156,6 +157,6 @@ export default async function DrawsPage() {
           </div>
         </>
       )}
-    </div>
+    </AccountShell>
   );
 }

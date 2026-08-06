@@ -21,9 +21,11 @@ import {
   orderTotalRows,
   visibleTransaction,
 } from "@/lib/orders/order-presentation";
+import { customerOrderStage } from "@/lib/orders/order-status-label";
 import { OrderMoney, OrderTotals } from "@/components/account/OrderMoney";
 import { PaymentSection } from "./payment-section";
 import { ShipmentsSection } from "./shipments-section";
+import { AccountShell } from "@/components/account/AccountShell";
 
 export const metadata = {
   title: "Order",
@@ -260,7 +262,7 @@ export default async function OrderDetailPage({
   });
 
   return (
-    <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
+    <AccountShell>
       <Link
         href="/account/orders"
         className="inline-flex items-center gap-1 mb-6 text-sm text-text-muted hover:text-text-primary"
@@ -273,12 +275,12 @@ export default async function OrderDetailPage({
       <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
         <h1 className="page-title">Order {orderNumber}</h1>
         {/* The status the customer just read on Order History — same word, same
-            colour. Its wording is owned by a separate card, and that card must be
-            able to change both surfaces at once. */}
+            colour. Both surfaces render customerOrderStage(), never the raw
+            `orders.status` column. */}
         <span
           className={`text-xs font-medium px-2 py-1 rounded-full ${orderStatusChipClass(order.status)}`}
         >
-          {order.status}
+          {customerOrderStage(order.status)}
         </span>
       </div>
       <p className="text-sm text-text-muted mb-8">
@@ -386,6 +388,6 @@ export default async function OrderDetailPage({
         shipments={shipments}
         items={items.map((i) => ({ id: i.id, name: i.name }))}
       />
-    </div>
+    </AccountShell>
   );
 }

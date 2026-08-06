@@ -12,6 +12,8 @@ import {
   resolveQuoteTotal,
 } from "@/lib/quotes/price-visibility";
 import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
+import { quoteStatusLabel } from "@/lib/quotes/quote-status-label";
+import { AccountShell } from "@/components/account/AccountShell";
 
 // QuoteService returns snake_case rows (transformRow convention).
 interface QuoteRecord {
@@ -50,16 +52,6 @@ const statusStyles: Record<string, string> = {
   converted_to_order: "bg-green-100 text-green-700",
   quote_expired: "bg-zinc-100 text-zinc-600",
   quote_cancelled: "bg-red-100 text-red-700",
-};
-const statusLabels: Record<string, string> = {
-  quote_pending: "awaiting review",
-  quote_available: "quote ready",
-  open_change_request: "change requested",
-  quote_accepted: "accepted",
-  quote_on_hold: "on hold",
-  converted_to_order: "ordered",
-  quote_expired: "expired",
-  quote_cancelled: "cancelled",
 };
 
 export const metadata = {
@@ -106,7 +98,7 @@ export default async function QuotesPage() {
 
   if (customerQuotes.length === 0) {
     return (
-      <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
+      <AccountShell>
         <h1 className="text-3xl font-bold text-zinc-900 mb-8">My Quotes</h1>
         <div className="text-center py-16">
           <FileText className="h-16 w-16 text-zinc-300 mx-auto" />
@@ -118,7 +110,7 @@ export default async function QuotesPage() {
             Start Shopping
           </Link>
         </div>
-      </div>
+      </AccountShell>
     );
   }
 
@@ -148,10 +140,6 @@ export default async function QuotesPage() {
         {quotesWithItems.map((quote) => {
           const itemsList = quote.items || [];
           const totalItems = itemsList.reduce((sum, i) => sum + i.quantity, 0);
-          const itemNames = itemsList
-            .slice(0, 3)
-            .map((i) => i.product_name)
-            .join(", ");
           const status = quote.status || "quote_pending";
 
           return (
@@ -169,7 +157,7 @@ export default async function QuotesPage() {
                   <span className={`text-xs font-medium px-2 py-1 rounded-full ${
                     statusStyles[status] || "bg-zinc-100 text-zinc-600"
                   }`}>
-                    {statusLabels[status] || status}
+                    {quoteStatusLabel(status)}
                   </span>
                   {/* Show the amount whenever prices are visible — including $0.00.
                       "To be quoted" means "not priced yet", not "zero". */}
@@ -182,8 +170,6 @@ export default async function QuotesPage() {
               </div>
               <p className="text-sm text-zinc-500">
                 {totalItems} item{totalItems !== 1 ? "s" : ""}
-                {itemNames ? `: ${itemNames}` : ""}
-                {itemsList.length > 3 ? "..." : ""}
               </p>
               <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-zinc-700">
                 View quote
