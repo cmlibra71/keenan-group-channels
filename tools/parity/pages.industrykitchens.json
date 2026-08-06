@@ -1,19 +1,65 @@
 {
   "origin": "https://industrialkitchens.com.au",
   "pages": [
-    { "path": "/pages/about" },
-    { "path": "/pages/case-study" },
-    { "path": "/pages/energy-incentives" },
-    { "path": "/pages/catalogue" },
-    { "path": "/pages/catering-equipment-finance" },
-    { "path": "/pages/contact" },
-    { "path": "/pages/customer-service" },
-    { "path": "/pages/privacy" },
-    { "path": "/pages/returns" },
-    { "path": "/pages/shipping" },
-    { "path": "/pages/silverchef" },
-    { "path": "/pages/skope-finance" },
-    { "path": "/pages/terms-conditions" },
-    { "path": "/pages/warranty" }
+    {
+      "path": "/pages/about"
+    },
+    {
+      "path": "/pages/case-study"
+    },
+    {
+      "path": "/pages/energy-incentives"
+    },
+    {
+      "path": "/pages/catalogue"
+    },
+    {
+      "path": "/pages/catering-equipment-finance"
+    },
+    {
+      "path": "/pages/contact"
+    },
+    {
+      "path": "/pages/customer-service"
+    },
+    {
+      "path": "/pages/privacy"
+    },
+    {
+      "path": "/pages/returns"
+    },
+    {
+      "path": "/pages/shipping"
+    },
+    {
+      "path": "/pages/silverchef"
+    },
+    {
+      "path": "/pages/skope-finance"
+    },
+    {
+      "path": "/pages/terms-conditions"
+    },
+    {
+      "path": "/pages/warranty"
+    },
+    {
+      "path": "/brands/adande"
+    },
+    {
+      "path": "/brands/rational"
+    },
+    {
+      "path": "/brands/winterhalter"
+    },
+    {
+      "path": "/brands/skope"
+    },
+    {
+      "path": "/categories/ovens"
+    },
+    {
+      "path": "/categories/combi-ovens"
+    }
   ]
 }
