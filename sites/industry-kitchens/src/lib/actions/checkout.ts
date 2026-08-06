@@ -5,7 +5,7 @@ import { cartService, cartItemService, orderService, orderItemService, orderShip
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
-import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, resolveEmailBranding, wantsStripeTestMode, productImageService } from "@keenan/services";
+import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, resolveEmailBranding, wantsStripeTestMode, productImageService, type EmailLineItem } from "@keenan/services";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, type BelowCostLine } from "@/lib/checkout/order-draft";
 import { getLineCosts } from "@/lib/store";
 import { sendStaffNotification } from "@/lib/staff-email";
@@ -604,6 +604,35 @@ export async function placeOrder(
   await cartService.markCompleted(cartWithItems.id);
   await clearCartUuid();
 
+  // Product rows for BOTH emails below. The customer confirmation and the staff
+  // alert list the same products, so the rows are decorated once here: the staff
+  // alert used to pass bare name + quantity, which rendered the empty grey
+  // placeholder box where every product thumbnail should be (and dropped the SKU
+  // and the product link with it). Best-effort — if the image/site lookup fails
+  // the rows degrade to name + quantity rather than blocking the order.
+  let emailItems: EmailLineItem[] = fullCart.items.map((i) => ({
+    name: i.product_name,
+    quantity: i.quantity,
+    sku: i.product_sku ?? null,
+  }));
+  try {
+    // Resolve the site origin through the shared SEO helper so email links use the exact
+    // same precedence as every canonical/OG link (was DB-first here vs env-first in seo.ts).
+    const linkBase = siteBaseUrl((await getSiteConfig()).site?.url);
+    const imageMap = await productImageService
+      .primaryImageUrlsForProducts(fullCart.items.map((i) => i.product_id))
+      .catch(() => new Map<number, string>());
+    emailItems = fullCart.items.map((i) => ({
+      name: i.product_name,
+      quantity: i.quantity,
+      sku: i.product_sku ?? null,
+      imageUrl: imageMap.get(i.product_id) ?? null,
+      url: i.product_slug ? `${linkBase}/products/${i.product_slug}` : null,
+    }));
+  } catch (e) {
+    console.error("[placeOrder] email product rows degraded (non-fatal):", e);
+  }
+
   // Order confirmation email — best-effort, never blocks the order. The email
   // helper redirects any @e2e.test (test) recipient to the test inbox, so test
   // orders never email a real person. Branded with THIS channel's name/logo/from
@@ -615,13 +644,7 @@ export async function placeOrder(
     // `email_template`), resolved by @keenan/services so every sender matches.
     const branding = await resolveEmailBranding(CHANNEL_ID).catch(() => undefined);
     const storeName = branding?.storeName || site?.siteName || channel?.name || undefined;
-    // Resolve the site origin through the shared SEO helper so email links use the exact
-    // same precedence as every canonical/OG link (was DB-first here vs env-first in seo.ts).
     const siteUrl = siteBaseUrl(site?.url);
-    // Decorate the email lines with a primary product thumbnail (best-effort).
-    const imageMap = await productImageService
-      .primaryImageUrlsForProducts(fullCart.items.map((i) => i.product_id))
-      .catch(() => new Map<number, string>());
 
     const confirmationParams = {
       // Logs each send on the order's history panel in the portal (one entry per recipient copy).
@@ -631,13 +654,7 @@ export async function placeOrder(
       storeName,
       paymentMethod,
       total: String(totalIncTax),
-      items: fullCart.items.map((i) => ({
-        name: i.product_name,
-        quantity: i.quantity,
-        sku: i.product_sku ?? null,
-        imageUrl: imageMap.get(i.product_id) ?? null,
-        url: i.product_slug ? `${siteUrl}/products/${i.product_slug}` : null,
-      })),
+      items: emailItems,
       bankDetails: method?.bankDetails ?? null,
       // Use the customer's actual account terms for a net-terms invoice email.
       netTermsDays: paymentMethod === "net_terms" && netTerms ? netTerms.netTermsDays : (method?.netTermsDays ?? null),
@@ -681,7 +698,12 @@ export async function placeOrder(
   // are notified by the portal Stripe webhook once paid (placeOrder returns early
   // on the stripe branch), so this path covers bank-transfer / net-terms orders.
   try {
-    const recipients = await resolveOrderNotificationRecipients(CHANNEL_ID);
+    // A staff member who orders as a customer already has the confirmation email;
+    // sending them the internal alert as well means two emails for one order.
+    const purchaser = email.trim().toLowerCase();
+    const recipients = (await resolveOrderNotificationRecipients(CHANNEL_ID)).filter(
+      (r) => r.trim().toLowerCase() !== purchaser
+    );
     if (recipients.length > 0) {
       const { site, channel } = await getSiteConfig();
       const storeName = site?.siteName || channel?.name || null;
@@ -707,7 +729,7 @@ export async function placeOrder(
         brandColor: branding?.brandColor ?? null,
         bannerBgColor: branding?.bannerBgColor ?? null,
         footerText: branding?.footerText ?? null,
-        items: fullCart.items.map((i) => ({ name: i.product_name, quantity: i.quantity })),
+        items: emailItems,
         testMode: isTestMode,
       });
     }
