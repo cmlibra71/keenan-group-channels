@@ -129,6 +129,28 @@ export async function loadHomeNativeData(
             const cl = customerLogos as { heading?: string; logos?: unknown[] };
             return { ...base, logos: cl.logos ?? [], heading: cl.heading ?? "" };
           }
+          // The rail's products, already catalog-scoped and account-priced
+          // above. composeHomePagePayload runs them through the SAME card
+          // enrichment the fixed featured/clearance slots get, so the section
+          // masters bind href/image/price halves without deriving anything.
+          //
+          // `max_save_pct` is the one thing a tree cannot work out for itself:
+          // ClearanceSpotlight reduces over the whole list for its "save up to
+          // N%" line, and there is no reduce in a binding expression.
+          case "product_carousel": {
+            const products = (scopedCarousels[sec.category_slug]?.products ?? []) as Row[];
+            const pct = (p: Row) => {
+              const price = parseFloat(String(p.price ?? ""));
+              const sale = p.salePrice != null ? parseFloat(String(p.salePrice)) : NaN;
+              if (!Number.isFinite(sale) || !Number.isFinite(price) || sale <= 0 || sale >= price) return 0;
+              return Math.round(((price - sale) / price) * 100);
+            };
+            return {
+              ...base,
+              products,
+              max_save_pct: products.reduce((max, p) => Math.max(max, pct(p)), 0),
+            };
+          }
           default:
             return base;
         }
