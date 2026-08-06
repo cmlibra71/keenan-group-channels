@@ -32,6 +32,13 @@ export async function getLastOrder(): Promise<{ order: string; pm: string } | nu
   return order ? { order, pm } : null;
 }
 
+/** Drop the breadcrumb. Sign-out calls this so the next person on a shared
+ * device cannot open the previous customer's order confirmation. */
+export async function clearLastOrder(): Promise<void> {
+  const cookieStore = await cookies();
+  cookieStore.delete(LAST_ORDER_COOKIE);
+}
+
 /** The confirmation URL for a just-placed order, or null when there isn't one. */
 export async function lastOrderConfirmationPath(): Promise<string | null> {
   const last = await getLastOrder();
