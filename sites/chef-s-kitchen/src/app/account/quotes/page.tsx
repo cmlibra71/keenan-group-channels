@@ -6,12 +6,19 @@ import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissi
 import { quoteService, CHANNEL_ID } from "@/lib/store";
 import { getQuoteUuid } from "@/lib/quote";
 import { Price } from "@/components/ui/Price";
+import {
+  quoteHidesPrices,
+  redactQuotePrices,
+  resolveQuoteTotal,
+} from "@/lib/quotes/price-visibility";
+import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
 
 // QuoteService returns snake_case rows (transformRow convention).
 interface QuoteRecord {
   id: number;
   uuid: string;
   status: string | null;
+  hide_prices: boolean | null;
   contact_id: number | null;
   quote_number: string | null;
   quote_amount: string | null;
@@ -23,6 +30,10 @@ interface QuoteItemRecord {
   id: number;
   product_name: string;
   quantity: number;
+  // getWithItems returns the priced row; these are declared so the total can tell a
+  // genuine $0 quote from a stale zero header (see resolveQuoteTotal).
+  sale_price?: string | null;
+  list_price?: string | null;
 }
 
 interface QuoteWithItems extends QuoteRecord {
@@ -112,10 +123,16 @@ export default async function QuotesPage() {
     );
   }
 
+  const hideStatuses = await getHidePriceStatuses();
   const quotesWithItems = await Promise.all(
     customerQuotes.map(async (quote) => {
-      const result = await quoteService.getWithItems(quote.id) as QuoteWithItems | null;
-      return result || { ...quote, items: [] };
+      const result = (await quoteService.getWithItems(quote.id)) as QuoteWithItems | null;
+      const row = result || { ...quote, items: [] };
+      // Redact server-side rather than rendering around the number, so a hidden
+      // amount never ships in the page source.
+      return quoteHidesPrices(row, hideStatuses)
+        ? { ...redactQuotePrices(row), hidden_prices: true }
+        : { ...row, hidden_prices: false };
     })
   );
 
@@ -158,8 +175,10 @@ export default async function QuotesPage() {
                   }`}>
                     {statusLabels[status] || status}
                   </span>
-                  {parseFloat(quote.quote_amount || "0") > 0 ? (
-                    <Price amount={quote.quote_amount || "0"} className="font-semibold text-text-primary" />
+                  {/* Show the amount whenever prices are visible — including $0.00.
+                      "To be quoted" means "not priced yet", not "zero". */}
+                  {!quote.hidden_prices && resolveQuoteTotal(quote) !== null ? (
+                    <Price amount={resolveQuoteTotal(quote)!} className="font-semibold text-text-primary" />
                   ) : (
                     <span className="text-sm font-medium text-text-muted">To be quoted</span>
                   )}

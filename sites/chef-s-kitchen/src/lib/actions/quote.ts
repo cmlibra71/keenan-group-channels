@@ -9,6 +9,12 @@ import { isProductVisibleToViewer, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalo
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
 import { slidingWindowAllow } from "@/lib/rate-limit";
 import { sendStaffNotification } from "@/lib/staff-email";
+import {
+  quoteHidesPrices,
+  resolveQuoteAcceptState,
+  isQuoteExpired,
+} from "@/lib/quotes/price-visibility";
+import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
 
 // QuoteService returns snake_case rows (transformRow convention).
 type QuoteRow = { id: number; uuid: string; contact_id?: number | null; [key: string]: unknown };
@@ -213,14 +219,34 @@ export async function getQuotesForCustomer() {
   return { quotes: contactQuotes };
 }
 
-// Customer self-service: accept a finalised quote (B2B). quote_available / open_change_request → accepted.
+// Customer self-service: accept a finalised quote (B2B). Only a priced, sent,
+// in-date quote (quote_available) can be accepted.
 export async function acceptQuote(quoteId: number) {
   const session = await getSession();
   if (!session?.contactId) return { error: "Please sign in." };
-  const q = (await quoteService.getWithItems(quoteId)) as (QuoteRow & { status?: string }) | null;
+  const q = (await quoteService.getWithItems(quoteId)) as
+    | (QuoteRow & { status?: string; hide_prices?: boolean | null; expires_at?: Date | string | null })
+    | null;
   if (!q || q.contact_id !== session.contactId || q.channel_id !== CHANNEL_ID) return { error: "Quote not found." };
-  if (!["quote_available", "open_change_request"].includes(String(q.status))) {
-    return { error: "This quote can't be accepted yet." };
+
+  // Enforced HERE, not just hidden in the UI — the action is callable directly.
+  // Same resolver the page renders the button from, so the two can't drift.
+  // Note this deliberately no longer accepts `open_change_request`: while a change
+  // request is open there is no settled quote to accept.
+  const acceptState = resolveQuoteAcceptState({
+    status: q.status,
+    hidesPrices: quoteHidesPrices(
+      { status: q.status, hide_prices: q.hide_prices },
+      await getHidePriceStatuses()
+    ),
+    expires_at: q.expires_at,
+  });
+  if (acceptState.kind !== "enabled") {
+    return {
+      error: isQuoteExpired(q.expires_at)
+        ? "This quote has expired. Please contact your sales rep for an updated quote."
+        : "This quote can't be accepted yet.",
+    };
   }
 
   // B2B account-role gates (docs/crm-parity/10-role-enforcement.md). Accepting a
