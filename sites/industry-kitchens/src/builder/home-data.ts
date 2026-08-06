@@ -4,21 +4,25 @@ import {
   getValueBarItems,
   getCustomerLogos,
   getHomepageCopy,
+  getFeatureFlag,
+  getProducts,
+  getCategoryBySlug,
 } from "@/lib/store";
-import type { HomeNativeData } from "./BuilderHomePage";
+import { applyAccountPrices, getListingMemberPrices } from "@/lib/member";
+import { applyCatalogScope } from "@/lib/catalog-scope";
+import type { HomeNativeData } from "./home-natives";
 import type { HomeSectionsInput } from "@keenan/services/builder";
 
 // ============================================================================
 // SERVER data assembly for Industry Kitchens' node homepage.
 //
-// IK's homepage is an ORDERED LIST of configured sections (`homepage_sections`
-// in channel settings), not the fixed slot set Chefs Depot has. So almost
-// everything travels through `sectionList` — the authored tree binds
-// `home.sectionList[N].*` — and only the two sections whose content lives in
-// their own settings keys are resolved into the list here.
+// A line-for-line mirror of what app/page.tsx fetches, because the sealed
+// `home-section` native renders the SAME components the live page does — give
+// it different data and the two diverge no matter how faithful the markup is.
 //
-// This mirrors what `HomeSections.tsx` does at render time today, which is the
-// point: the node tree must produce the same page from the same data.
+// IK's homepage is an ordered list of configured sections rather than Chefs
+// Depot's fixed slots, so the bindable half travels through `sectionList` (see
+// HomeSectionsInput) while the native half travels in HomeNativeData.
 // ============================================================================
 
 export interface HomePathNeeds {
@@ -32,60 +36,81 @@ export interface HomePathNeeds {
   prize?: boolean;
   stats?: boolean;
   plan?: boolean;
-  /** home.sectionList[*] — IK's ordered sections. This is the one that matters here. */
+  /** home.sectionList[*] — IK's ordered sections. */
   sectionList?: boolean;
 }
 
 type Row = Record<string, unknown>;
+type CarouselProducts = Awaited<ReturnType<typeof getProducts>>["products"];
 
 export async function loadHomeNativeData(
   keys: Set<string>,
   pathNeeds: HomePathNeeds = {}
 ): Promise<{ home: HomeNativeData; sections: HomeSectionsInput }> {
-  // Any authored home tree needs the section list; the key scan is kept so a
-  // sealed native placed by key pulls its data too, exactly as on CD.
-  const needSections = keys.size > 0 || !!pathNeeds.sectionList || !!pathNeeds.cats;
-  if (!needSections) return { home: {}, sections: {} };
+  // Any authored home tree needs the sections: they are both the native's data
+  // and the bindable list. The key scan is kept so a tree that places sections
+  // by key pulls them too.
+  const needed = keys.size > 0 || !!pathNeeds.sectionList || !!pathNeeds.cats;
+  if (!needed) return { home: {}, sections: {} };
 
-  const sections = await getHomepageSections().catch(() => []);
+  const [sections, categoryTiles, valueBarItems, customerLogos, copy, memberPricingEnabled] =
+    await Promise.all([
+      getHomepageSections().catch(() => []),
+      getHomepageCategoryTiles().catch(() => []),
+      getValueBarItems().catch(() => []),
+      getCustomerLogos().catch(() => ({}) as { heading?: string; logos?: unknown[] }),
+      getHomepageCopy().catch(() => ({}) as Row),
+      getFeatureFlag("member_pricing_enabled").catch(() => false),
+    ]);
 
-  // `category_tiles`, `value_bar` and `customer_logos` carry no content inline —
-  // HomeSections.tsx fetches theirs from separate settings keys. Resolve them
-  // into the list so a bound tree sees the same rows the live page renders.
-  const needsTiles = sections.some((s) => s.type === "category_tiles");
-  const needsValueBar = sections.some((s) => s.type === "value_bar");
-  const needsLogos = sections.some((s) => s.type === "customer_logos");
+  // Products for every product_carousel section — same queries, same limits,
+  // same de-duplication by category_slug as the live route.
+  const carousels: Record<string, { products: CarouselProducts }> = {};
+  await Promise.all(
+    sections
+      .filter((s) => s.type === "product_carousel")
+      .map(async (s) => {
+        if (s.type !== "product_carousel") return;
+        if (carousels[s.category_slug]) return;
+        if (s.variant === "clearance") {
+          const { products } = await getProducts({ onSale: true, limit: 9 });
+          carousels[s.category_slug] = { products };
+          return;
+        }
+        const category = await getCategoryBySlug(s.category_slug);
+        const { products } = category
+          ? await getProducts({ categoryId: category.id, limit: 8 })
+          : { products: [] as CarouselProducts };
+        carousels[s.category_slug] = { products };
+      })
+  );
 
-  const [tiles, valueBarItems, customerLogos, copy] = await Promise.all([
-    needsTiles ? getHomepageCategoryTiles().catch(() => []) : Promise.resolve([]),
-    needsValueBar ? getValueBarItems().catch(() => []) : Promise.resolve([]),
-    needsLogos ? getCustomerLogos().catch(() => []) : Promise.resolve([]),
-    needsTiles ? getHomepageCopy().catch(() => ({})) : Promise.resolve({}),
-  ]);
-
-  const sectionList: Row[] = sections.map((s) => {
-    const base = { ...(s as unknown as Row) };
-    switch (s.type) {
-      case "category_tiles":
-        return {
-          ...base,
-          tiles,
-          heading: (copy as Row).categories_heading ?? "",
-        };
-      case "value_bar":
-        return { ...base, items: valueBarItems };
-      case "customer_logos":
-        return { ...base, logos: customerLogos };
-      default:
-        return base;
+  // ProductGrid does the catalog-scope and account-price passes at READ time on
+  // the live page. The native renders client-side and cannot, so both passes
+  // move up here — exactly the shape the brand and category branches use.
+  const scopedCarousels: Record<string, { products: CarouselProducts }> = {};
+  let memberPriceMap: Record<number, number> = {};
+  for (const [slug, entry] of Object.entries(carousels)) {
+    const scoped = await applyAccountPrices(await applyCatalogScope(entry.products));
+    scopedCarousels[slug] = { products: scoped };
+    if (scoped.length) {
+      memberPriceMap = { ...memberPriceMap, ...(await getListingMemberPrices(scoped)) };
     }
-  });
+  }
 
   return {
-    // No sealed section natives on IK — its sections are authored nodes, so the
-    // native data bag stays empty. It exists because the engine wrapper passes
-    // one through; see home-natives.tsx.
-    home: {},
-    sections: { sectionList },
+    home: {
+      sections,
+      categoryTiles,
+      categoryTilesHeading: (copy as Row).categories_heading as string | undefined,
+      valueBarItems,
+      customerLogos: customerLogos as { heading?: string; logos?: unknown[] },
+      carousels: scopedCarousels,
+      memberPriceMap,
+      memberPricingAvailable: !!memberPricingEnabled,
+    },
+    // The same list, bindable, so authored nodes around a section can read its
+    // copy (`home.sectionList[3].heading`) as sections get exploded.
+    sections: { sectionList: sections as unknown as Row[] },
   };
 }
