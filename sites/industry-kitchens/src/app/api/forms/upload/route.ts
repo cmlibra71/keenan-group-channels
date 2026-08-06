@@ -48,6 +48,13 @@ export async function POST(req: NextRequest) {
   try {
     form = await req.formData();
   } catch {
+    // The platform caps the request body at 10MB, so a file AT the advertised
+    // limit fails to parse rather than arriving — the size check below never
+    // gets to run. Without this, the one visitor who picks a 10MB file is told
+    // "Malformed upload", which they can do nothing with. Tell them the real
+    // reason, in the same words the explicit cap uses.
+    if (declaredLength > ABSOLUTE_MAX_BYTES - 8192)
+      return fail(413, `Files must be under ${sizeLabel(ABSOLUTE_MAX_BYTES)}.`);
     return fail(400, "Malformed upload.");
   }
 
