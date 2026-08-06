@@ -6,7 +6,7 @@ import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogS
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, resolveEmailBranding, wantsStripeTestMode, productImageService } from "@keenan/services";
-import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, type BelowCostLine } from "@/lib/checkout/order-draft";
+import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, type BelowCostLine } from "@/lib/checkout/order-draft";
 import { getLineCosts } from "@/lib/store";
 import { sendStaffNotification } from "@/lib/staff-email";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
@@ -220,7 +220,7 @@ export async function placeOrder(
   }
 
   // Calculate line items + subtotal (pure; GST math delegated to gstSplit).
-  const { subtotal, itemsTotal: totalItems, lineItems } = buildLineItems(
+  const { subtotal, itemsTotal: totalItems, lineItems: builtLineItems } = buildLineItems(
     fullCart.items,
     pricesIncludeTax
   );
@@ -232,11 +232,17 @@ export async function placeOrder(
   // internal memo) and alerted to staff further down, so nothing ships at a
   // loss unseen. Check failure is non-fatal — checkout must not depend on it.
   let belowCostLines: BelowCostLine[] = [];
+  // The same cost read also FREEZES the buy cost onto each line, so the order
+  // records what it cost us at the time of sale (the portal's minimum-margin-floor
+  // report reads it). Still inside the existing non-fatal try: if the cost lookup
+  // fails the order places exactly as it does today, just without costs.
+  let lineItems = builtLineItems;
   try {
     const costs = await getLineCosts(
       lineItems.map((l) => ({ productId: l.productId, variantId: l.variantId }))
     );
     belowCostLines = findBelowCostLines(lineItems, costs);
+    lineItems = withLineCosts(lineItems, costs);
   } catch (e) {
     console.error("[placeOrder] below-cost check failed (non-fatal):", e);
   }

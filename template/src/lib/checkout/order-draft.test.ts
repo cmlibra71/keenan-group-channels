@@ -6,6 +6,7 @@ import {
   buildLineItems,
   withShipping,
   findBelowCostLines,
+  withLineCosts,
   type CartLineInput,
 } from "./order-draft.ts";
 
@@ -106,6 +107,56 @@ test("findBelowCostLines: flags lines under current cost, skips unknown costs an
     false
   );
   assert.deepEqual(findBelowCostLines(noiseItems, new Map([["5:0", 460.32]])), []);
+});
+
+test("withLineCosts: freezes the buy cost onto each line at the time of sale", () => {
+  const { lineItems } = buildLineItems(
+    [
+      line({ product_id: 1, product_sku: "COSTED", list_price: "100", sale_price: "120.00" }),
+      line({ product_id: 2, product_sku: "NO-COST", list_price: "100", sale_price: "120.00" }),
+      line({ product_id: 4, variant_id: 44, product_sku: "VAR", list_price: "100", sale_price: "120.00" }),
+    ],
+    false
+  );
+  const costs = new Map<string, number>([
+    ["1:0", 90],
+    ["4:44", 95],
+    ["9:0", 1], // a cost for a product not in the cart — ignored
+  ]);
+  const withCosts = withLineCosts(lineItems, costs);
+
+  assert.equal(withCosts[0].baseCostPrice, "90");
+  assert.equal(withCosts[0].costPriceExTax, "90");
+  // A line with no known cost carries NO cost fields at all — never 0, which
+  // downstream would read as "we got it for free".
+  assert.equal(withCosts[1].baseCostPrice, undefined);
+  assert.equal(withCosts[1].costPriceExTax, undefined);
+  assert.equal("baseCostPrice" in withCosts[1], false);
+  // Variant cost is keyed by variant id.
+  assert.equal(withCosts[2].baseCostPrice, "95");
+
+  // Pure: the input drafts are untouched.
+  assert.equal("baseCostPrice" in lineItems[0], false);
+});
+
+test("withLineCosts: a zero or negative cost is treated as unknown", () => {
+  const { lineItems } = buildLineItems(
+    [line({ product_id: 1, product_sku: "ZERO", list_price: "100", sale_price: "120.00" })],
+    false
+  );
+  assert.equal(withLineCosts(lineItems, new Map([["1:0", 0]]))[0].baseCostPrice, undefined);
+  assert.equal(withLineCosts(lineItems, new Map([["1:0", -5]]))[0].baseCostPrice, undefined);
+  assert.equal(withLineCosts(lineItems, new Map([["1:0", NaN]]))[0].baseCostPrice, undefined);
+});
+
+test("withLineCosts: costs and the below-cost sentry read the SAME map", () => {
+  const { lineItems } = buildLineItems(
+    [line({ product_id: 1, product_sku: "AT-COST", list_price: "100", sale_price: "460.00" })],
+    false
+  );
+  const costs = new Map<string, number>([["1:0", 460.32]]);
+  assert.equal(findBelowCostLines(lineItems, costs).length, 1);
+  assert.equal(withLineCosts(lineItems, costs)[0].costPriceExTax, "460.32");
 });
 
 function round(n: number): number {
