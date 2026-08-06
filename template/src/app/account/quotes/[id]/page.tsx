@@ -8,6 +8,13 @@ import { quoteService, productImageService, CHANNEL_ID } from "@/lib/store";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import { Price } from "@/components/ui/Price";
 import { QuoteActions } from "./quote-actions";
+import {
+  quoteHidesPrices,
+  redactQuotePrices,
+  resolveQuoteAcceptState,
+  resolveQuoteTotal,
+} from "@/lib/quotes/price-visibility";
+import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
 
 // QuoteService returns snake_case rows (transformRow convention).
 interface QuoteDetail {
@@ -77,18 +84,31 @@ export default async function QuoteDetailPage({
   const quoteId = parseInt(id, 10);
   if (Number.isNaN(quoteId)) notFound();
 
-  const quote = (await quoteService.getWithItems(quoteId)) as QuoteDetail | null;
+  const raw = (await quoteService.getWithItems(quoteId)) as QuoteDetail | null;
   // Only the owning contact, on this channel, may view a quote — UNLESS their B2B
   // account role grants `view_company_quotes`, in which case any quote belonging to
   // an active member of their account is visible (docs/crm-parity/10-role-enforcement.md).
-  if (!quote || quote.channel_id !== CHANNEL_ID) notFound();
-  if (quote.contact_id !== session.contactId) {
+  if (!raw || raw.channel_id !== CHANNEL_ID) notFound();
+  if (raw.contact_id !== session.contactId) {
     const perms = await getContactPermissions(session.contactId);
     const canSeeAccountQuotes =
       perms.isB2B && perms.accountId !== null && perms.can("view_company_quotes");
     const memberIds = canSeeAccountQuotes ? await getAccountContactIds(perms.accountId!) : [];
-    if (!quote.contact_id || !memberIds.includes(quote.contact_id)) notFound();
+    if (!raw.contact_id || !memberIds.includes(raw.contact_id)) notFound();
   }
+
+  const status = raw.status || "quote_pending";
+  // Price visibility is the quote's own hide_prices value, falling back to the
+  // portal-configured price-hiding statuses only when that column is null.
+  const hidePrices = quoteHidesPrices(raw, await getHidePriceStatuses());
+  // Strip the numbers server-side when they're hidden: rendering around them still
+  // ships the raw prices in the page source / RSC payload.
+  const quote = hidePrices ? redactQuotePrices(raw) : raw;
+  const acceptState = resolveQuoteAcceptState({
+    status,
+    hidesPrices: hidePrices,
+    expires_at: raw.expires_at,
+  });
 
   // Item thumbnails (quote items don't carry images themselves).
   const productIds = [...new Set(quote.items.map((i) => i.product_id))];
@@ -101,11 +121,9 @@ export default async function QuoteDetailPage({
     thumbs.map((t) => [t.product_id, t.url_thumbnail || t.url_standard])
   );
 
-  const status = quote.status || "quote_pending";
-  // Zoey rule: prices are hidden from the customer while the sales team is
-  // still preparing them (quote_pending / open_change_request).
-  const hidePrices = quote.hide_prices ?? status === "quote_pending";
-  const total = parseFloat(quote.quote_amount || quote.base_amount || "0");
+  // Show the real total whenever prices are visible — including $0.00 — but not a
+  // stale zero on a quote whose lines carry money. See resolveQuoteTotal.
+  const total = resolveQuoteTotal(quote);
 
   return (
     <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
@@ -147,7 +165,9 @@ export default async function QuoteDetailPage({
           const unitPrice = item.sale_price
             ? parseFloat(item.sale_price)
             : parseFloat(item.list_price ?? "");
-          const hasPrice = Number.isFinite(unitPrice) && unitPrice > 0;
+          // $0.00 IS a price — a line someone deliberately zeroed reads like every
+          // other line. Only a missing/unparsable number counts as "no price".
+          const hasPrice = Number.isFinite(unitPrice);
           return (
             <div key={item.id} className="p-4 flex items-center gap-4">
               <div className="relative h-16 w-16 flex-shrink-0 rounded border border-zinc-200 bg-white overflow-hidden">
@@ -187,7 +207,10 @@ export default async function QuoteDetailPage({
                     </>
                   )}
                 </p>
-                {!hasPrice && (
+                {/* "Requires quote" is reserved for a quote whose pricing hasn't
+                    been prepared yet — never for a priced line that happens to
+                    come to $0.00. */}
+                {hidePrices && (
                   <span className="mt-1 inline-block bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded text-xs font-medium">
                     Requires quote
                   </span>
@@ -209,7 +232,7 @@ export default async function QuoteDetailPage({
       {/* Totals */}
       <div className="mt-4 flex items-center justify-between border-t border-zinc-200 pt-4">
         <span className="text-sm font-medium text-zinc-600">Quote Total</span>
-        {!hidePrices && total > 0 ? (
+        {!hidePrices && total !== null ? (
           <Price amount={total} className="text-lg font-semibold text-zinc-900" />
         ) : (
           <span className="text-sm font-medium text-zinc-500">To be quoted</span>
@@ -225,7 +248,7 @@ export default async function QuoteDetailPage({
       )}
 
       {/* Customer self-service actions */}
-      <QuoteActions quoteId={quote.id} status={status} />
+      <QuoteActions quoteId={quote.id} status={status} acceptState={acceptState} />
     </div>
   );
 }
