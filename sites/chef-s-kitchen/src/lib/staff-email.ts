@@ -1,20 +1,40 @@
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
-import { brandedEmailLayout, brandedButton, emailSource, resolveEmailBranding } from "@keenan/services";
-import { channelSettingsService, CHANNEL_ID } from "@/lib/store";
+import {
+  brandedEmailLayout,
+  brandedButton,
+  emailSource,
+  resolveEmailBranding,
+  resolveChannelStaffNotificationRecipients,
+  resolveOrderNotificationRecipients,
+} from "@keenan/services";
+import { CHANNEL_ID } from "@/lib/store";
 
-// Internal staff notifications (quote accepted, new review, …) — NOT customer
-// mail, but still CHANNEL mail: it is branded with the storefront the event
-// happened on (logo, accent, sender, footer) so a Chef's Depot alert never
+// Internal staff notifications (new review, below-cost order lines, …) — NOT
+// customer mail, but still CHANNEL mail: it is branded with the storefront the
+// event happened on (logo, accent, sender, footer) so a Chef's Depot alert never
 // arrives looking like Keenan Group. Branding comes from the same
 // `resolveEmailBranding` every customer email uses; a channel with nothing
 // configured falls back to Keenan, as before.
 //
-// Recipient resolution: the per-channel `staff_notifications_email` setting
-// (editable at portal Settings → Notifications, no redeploy) wins, then the
-// STAFF_NOTIFICATIONS_EMAIL env var. When neither is set the send is skipped
-// with a warning so customer actions never depend on it. Sends are
-// best-effort: callers must swallow failures (the customer's action already
-// succeeded by the time we notify).
+// NOTE quote acceptance is deliberately NOT sent from here. `markAccepted` in
+// @keenan/services already alerts staff on every acceptance path (storefront,
+// magic link, portal); a second send from this helper would put two
+// near-identical emails in every inbox.
+//
+// Recipient resolution is shared with the portal, and each alert goes to the
+// list the portal's Settings → Notifications page actually governs for it:
+//
+//   audience "staff"  → `staff_notification_emails` (quote + storefront alerts),
+//                       then the legacy single-address key, then the
+//                       STAFF_NOTIFICATIONS_EMAIL env var.
+//   audience "orders" → `order_notification_emails` (the people already told
+//                       about every order), falling back to the staff list so an
+//                       unconfigured channel still alerts someone rather than
+//                       silently dropping the warning.
+//
+// When nothing resolves the send is skipped with a warning so customer actions
+// never depend on it. Sends are best-effort: callers must swallow failures (the
+// customer's action already succeeded by the time we notify).
 
 const sesClient = new SESClient({
   region: process.env.AWS_SES_REGION || process.env.AWS_REGION || "ap-southeast-2",
@@ -30,12 +50,33 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/** Which configured recipient list an alert belongs to. */
+export type StaffNotificationAudience = "staff" | "orders";
+
+/** Resolve the audience's recipient list; never throws. */
+async function resolveRecipients(audience: StaffNotificationAudience): Promise<string[]> {
+  const staffList = () =>
+    resolveChannelStaffNotificationRecipients(CHANNEL_ID, {
+      envFallback: process.env.STAFF_NOTIFICATIONS_EMAIL,
+    }).catch(() => []);
+
+  if (audience !== "orders") return staffList();
+
+  // Order-scoped alerts go to the "Order notifications" list. That list has no
+  // env fallback of its own (an absent key means opt-out for order confirmations),
+  // so fall back to the staff list here rather than silently dropping a warning
+  // staff currently receive on a channel that has not configured one.
+  const orderRecipients = await resolveOrderNotificationRecipients(CHANNEL_ID).catch(() => []);
+  return orderRecipients.length > 0 ? orderRecipients : staffList();
+}
+
 export async function sendStaffNotification({
   subject,
   heading,
   rows,
   portalPath,
   linkLabel,
+  audience = "staff",
 }: {
   subject: string;
   heading: string;
@@ -44,21 +85,14 @@ export async function sendStaffNotification({
   /** Portal path (e.g. `/dashboard/quotes/123`) the action button links to. */
   portalPath: string;
   linkLabel: string;
+  /** Which portal recipient list to notify. Defaults to the staff list. */
+  audience?: StaffNotificationAudience;
 }): Promise<void> {
   // EMAIL_GLOBAL_REDIRECT mirrors the @keenan/services test-safety guard: a
   // staging build must never notify the real staff inbox.
-  let to = process.env.EMAIL_GLOBAL_REDIRECT || null;
-  if (!to) {
-    try {
-      const setting = await channelSettingsService.getByKey(CHANNEL_ID, "staff_notifications_email");
-      const value = setting?.setting_value;
-      if (typeof value === "string" && value.trim()) to = value.trim();
-    } catch {
-      // Setting not configured for this channel — fall through to the env var.
-    }
-  }
-  if (!to) to = process.env.STAFF_NOTIFICATIONS_EMAIL || null;
-  if (!to) {
+  const redirect = process.env.EMAIL_GLOBAL_REDIRECT?.trim();
+  const recipients = redirect ? [redirect] : await resolveRecipients(audience);
+  if (recipients.length === 0) {
     console.warn(`[staff-email] no staff notification recipient configured — skipping "${subject}"`);
     return;
   }
@@ -93,7 +127,7 @@ export async function sendStaffNotification({
   await sesClient.send(
     new SendEmailCommand({
       Source: emailSource(branding),
-      Destination: { ToAddresses: [to] },
+      Destination: { ToAddresses: recipients },
       Message: {
         Subject: { Data: subject, Charset: "UTF-8" },
         Body: {

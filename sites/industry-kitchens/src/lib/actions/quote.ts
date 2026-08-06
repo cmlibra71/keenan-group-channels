@@ -6,7 +6,6 @@ import { wantsStripeTestMode } from "@keenan/services";
 import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
 import { getSession } from "@/lib/auth";
 import { slidingWindowAllow } from "@/lib/rate-limit";
-import { sendStaffNotification } from "@/lib/staff-email";
 import {
   quoteHidesPrices,
   resolveQuoteAcceptState,
@@ -281,7 +280,12 @@ export async function acceptQuote(quoteId: number) {
   // Lifecycle method, NOT a bare status update: stamps accepted_at and writes
   // the quote.accepted audit row. The generic update() fired no side effects,
   // which is why acceptances used to be invisible to staff.
-  await quoteService.markAccepted(quoteId);
+  // `markAccepted` is also the SINGLE sender of the "customer accepted a quote"
+  // staff alert (it fires on every acceptance path, including the magic link and
+  // the portal). The approval restriction is passed in so that one email still
+  // tells staff the conversion needs sign-off — this action must NOT send its
+  // own copy, or every configured recipient gets the acceptance twice.
+  await quoteService.markAccepted(quoteId, { requiresAdminApproval });
 
   // Flag the acceptance so staff know this contact's conversions need sign-off
   // before the quote becomes an order. Best-effort — never fail the acceptance.
@@ -294,29 +298,6 @@ export async function acceptQuote(quoteId: number) {
     } catch (e) {
       console.error("[acceptQuote] approval flag not stamped (non-fatal):", e);
     }
-  }
-
-  // Best-effort staff alert — the acceptance already succeeded; never fail the
-  // customer's action because the notification couldn't send.
-  try {
-    const label = String(q.quote_number ?? `#${quoteId}`);
-    await sendStaffNotification({
-      subject: `Quote ${label} accepted by customer`,
-      heading: "A customer accepted a quote",
-      rows: [
-        ["Quote", label],
-        ["Name", String(q.quote_name ?? "—")],
-        ["Customer email", String(q.email ?? "—")],
-        ["Amount", q.quote_amount == null ? "—" : `$${Number(q.quote_amount).toFixed(2)}`],
-        ...(requiresAdminApproval
-          ? ([["Approval", "Requires admin approval before conversion (account role)"]] as Array<[string, string]>)
-          : []),
-      ],
-      portalPath: `/dashboard/quotes/${quoteId}`,
-      linkLabel: "Open quote in portal",
-    });
-  } catch (e) {
-    console.error("[acceptQuote] staff notification failed (non-fatal):", e);
   }
   revalidatePath(`/account/quotes/${quoteId}`);
   revalidatePath("/account/quotes");
