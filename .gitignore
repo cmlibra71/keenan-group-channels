@@ -18,3 +18,5 @@ scripts/.work/
 
 # parity harness output (screenshots + summary)
 tools/parity/report/
+# tab-panel captures (baseline/after/diff PNGs) — regenerated on demand
+tools/parity/tabs/

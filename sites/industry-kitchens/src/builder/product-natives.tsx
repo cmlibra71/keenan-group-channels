@@ -1,26 +1,25 @@
 "use client";
 import type { NativeComponents } from "@keenan/services/builder-react";
 import { ProductImageGallery, type ProductImage as GalleryImage } from "@/components/product/ProductImageGallery";
-import { ProductPageClient } from "@/components/product/ProductPageClient";
-import { ProductTabs } from "@/components/product/ProductTabs";
+import { WarrantyDirectory } from "@/components/product/WarrantyDirectory";
 
 // ============================================================================
 // Industry Kitchens' sealed product-page leaves.
 //
 // The wrapper is engine; WHICH parts of a product page a site keeps as coded
-// components is not. Chefs Depot seals only the gallery — its buybox, actions
-// row and tabs are exploded masters. IK seals two more, and deliberately:
+// components is not. Two are left, and both are the same KIND of thing Chefs
+// Depot seals — a widget with behaviour or data of its own, never a layout:
 //
-//   product-overview — the whole gallery + details + purchase column. It owns
-//     variant selection, option validation and the member-price display, all of
-//     it live React state. Exploding it is a separate job with its own parity
-//     gate; sealing it first is what makes the surrounding page editable TODAY
-//     without risking the thing that actually takes the money.
+//   product-gallery    — zoom, pan, thumbnail rail, video slides.
+//   warranty-directory — the 100-brand claims table with its search box. The
+//     dataset lives inside the component; a tree can lay out a list, it cannot
+//     carry the list.
 //
-//   product-tabs — description / reviews / warranty / downloads / lease, with
-//     a review form that posts. Same reasoning.
-//
-// Both stay pixel-identical because they ARE the live components.
+// Everything else on this page is now authored: the buybox (price, options,
+// CTAs, bulk tiers) and, as of this change, the tab strip and its panels. The
+// keys those used to occupy — product-overview, product-tabs — are gone from
+// here ON PURPOSE: natives win over masters by key, so leaving either behind
+// would silently un-explode the section the moment someone re-published it.
 //
 // `data` is the route's own bag; the shapes below mirror what the legacy page
 // passes to each component.
@@ -34,19 +33,7 @@ export interface ProductNativesArgs {
 
 export function productNatives({ payload, variantImageUrl, data }: ProductNativesArgs): NativeComponents {
   const product = (payload.product ?? {}) as Record<string, unknown>;
-  const d = data as {
-    purchaseProduct?: unknown;
-    memberPrice?: number | null;
-    memberPriceMap?: Record<number, number>;
-    isMember?: boolean;
-    membershipTeaser?: { fromPrice: string | null } | null;
-    reviews?: unknown[];
-    attachments?: unknown[];
-    description?: string | null;
-    warranty?: string | null;
-    customFields?: Record<string, unknown> | null;
-    productId?: number;
-  };
+  void data;
 
   return {
     "product-gallery": () => (
@@ -57,25 +44,6 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
         videos={(product.videos ?? []) as never}
       />
     ),
-    "product-overview": () =>
-      d.purchaseProduct ? (
-        <ProductPageClient
-          product={d.purchaseProduct as never}
-          memberPrice={d.memberPrice ?? null}
-          memberPriceMap={d.memberPriceMap ?? {}}
-          isMember={d.isMember ?? false}
-          membershipTeaser={d.membershipTeaser ?? null}
-        />
-      ) : null,
-    "product-tabs": () => (
-      <ProductTabs
-        description={d.description ?? null}
-        warranty={d.warranty ?? null}
-        customFields={d.customFields ?? null}
-        reviews={(d.reviews ?? []) as never}
-        attachments={(d.attachments ?? []) as never}
-        productId={Number(d.productId ?? 0)}
-      />
-    ),
+    "warranty-directory": () => <WarrantyDirectory />,
   };
 }

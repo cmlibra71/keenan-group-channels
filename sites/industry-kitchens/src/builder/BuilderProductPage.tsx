@@ -14,6 +14,7 @@ import {
 } from "@keenan/services/product-page";
 import { addToCart } from "@/lib/actions/cart";
 import { addToQuote } from "@/lib/actions/quote";
+import { submitReview } from "@/lib/actions/reviews";
 import { useGst } from "@/lib/gst";
 import { overlayLiveGst } from "./live-gst";
 import { useCartQuoteCounts, useHeaderPanels } from "@/lib/cart-quote-counts";
@@ -110,9 +111,10 @@ function ActionsBridge({
   );
 
   // Coded (non-exploded) components slotted in by key. WHICH ones a site seals
-  // is the site's business — Chefs Depot seals only the gallery, Industry
-  // Kitchens also seals its purchase panel and tab strip — so they come from
-  // the per-site ./product-natives under shared KEYS. The variant-image guard
+  // is the site's business — both sites now seal only widgets that carry their
+  // own behaviour or data (the gallery either side, plus IK's warranty
+  // directory) — so they come from the per-site ./product-natives under shared
+  // KEYS. The variant-image guard
   // stays here because every site needs it: relative Zoey media paths would
   // 403 the S3-only proxy, so they fall back to the product images.
   const variantImg =
@@ -135,6 +137,22 @@ function ActionsBridge({
       goBack: (args?: Record<string, unknown>) => {
         if (window.history.length > 1) router.back();
         else router.push(String(args?.fallbackHref ?? "/products"));
+      },
+      // The authored review form's submit. `@form` hands over the live
+      // FormData, so the rating arrives as the hidden input the star picker
+      // writes; everything else is the same server action the coded form
+      // called. The result is returned verbatim — {error} is what turns into
+      // submit.error on the tree, {success} into the thank-you panel.
+      submitReview: async (args?: Record<string, unknown>) => {
+        const form = args?.form;
+        if (!(form instanceof FormData)) return { error: "Couldn't read the form." };
+        const str = (k: string) => String(form.get(k) ?? "").trim();
+        return submitReview(Number(args?.productId ?? productId), {
+          rating: Number(form.get("rating") ?? 0),
+          title: str("title"),
+          text: str("text"),
+          authorName: str("authorName"),
+        });
       },
       enquire: (args?: Record<string, unknown>) => {
         const pid = args?.product_id ?? productId;
