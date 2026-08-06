@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { contactService } from "@/lib/store";
 import { ChangePasswordForm } from "@/components/account/ChangePasswordForm";
 import { ChangeEmailForm } from "@/components/account/ChangeEmailForm";
+import { AccountShell } from "@/components/account/AccountShell";
 
 export const metadata = {
   title: "Security",
@@ -18,7 +19,7 @@ export default async function SecurityPage() {
   } | null;
 
   return (
-    <div className="mx-auto max-w-lg px-4 sm:px-6 lg:px-8 py-8">
+    <AccountShell>
       <h1 className="text-3xl font-bold text-zinc-900 mb-8">Security</h1>
 
       <section className="mb-10">
@@ -39,6 +40,6 @@ export default async function SecurityPage() {
           Back to my account
         </Link>
       </p>
-    </div>
+    </AccountShell>
   );
 }

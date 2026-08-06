@@ -8,6 +8,7 @@ import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissi
 import { quoteService, productImageService, CHANNEL_ID } from "@/lib/store";
 import { Price } from "@/components/ui/Price";
 import { QuoteActions } from "./quote-actions";
+import { AccountShell } from "@/components/account/AccountShell";
 import {
   quoteHidesPrices,
   redactQuotePrices,
@@ -15,6 +16,7 @@ import {
   resolveQuoteTotal,
 } from "@/lib/quotes/price-visibility";
 import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
+import { quoteStatusLabel } from "@/lib/quotes/quote-status-label";
 
 // QuoteService returns snake_case rows (transformRow convention).
 interface QuoteDetail {
@@ -57,16 +59,6 @@ const statusStyles: Record<string, string> = {
   quote_cancelled: "bg-sale-bg text-sale-deep",
 };
 
-const statusLabels: Record<string, string> = {
-  quote_pending: "awaiting review",
-  quote_available: "quote ready",
-  open_change_request: "change requested",
-  quote_accepted: "accepted",
-  quote_on_hold: "on hold",
-  converted_to_order: "ordered",
-  quote_expired: "expired",
-  quote_cancelled: "cancelled",
-};
 
 export const metadata = {
   title: "Quote",
@@ -127,7 +119,7 @@ export default async function QuoteDetailPage({
   const total = resolveQuoteTotal(quote);
 
   return (
-    <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
+    <AccountShell>
       <Link
         href="/account/quotes"
         className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text-primary mb-6"
@@ -145,7 +137,7 @@ export default async function QuoteDetailPage({
             statusStyles[status] || "bg-surface-secondary text-text-secondary"
           }`}
         >
-          {statusLabels[status] || status}
+          {quoteStatusLabel(status)}
         </span>
       </div>
       <p className="text-sm text-text-muted mb-8">
@@ -250,6 +242,6 @@ export default async function QuoteDetailPage({
 
       {/* Customer self-service actions */}
       <QuoteActions quoteId={quote.id} status={status} acceptState={acceptState} />
-    </div>
+    </AccountShell>
   );
 }

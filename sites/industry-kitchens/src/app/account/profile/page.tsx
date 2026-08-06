@@ -7,6 +7,7 @@ import { ProfileEditForm } from "@/components/account/ProfileEditForm";
 import { AddressBook, type Address } from "@/components/account/AddressBook";
 import { AccountContacts } from "@/components/account/AccountContacts";
 import type { AccountContact } from "@/lib/actions/account";
+import { AccountShell } from "@/components/account/AccountShell";
 
 export const metadata = { title: "Account details" };
 
@@ -51,7 +52,7 @@ export default async function ProfilePage() {
   const contacts = (metafields.account_contacts as AccountContact[]) || [];
 
   return (
-    <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
+    <AccountShell>
       <Link href="/account" className="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-900 mb-4">
         <ArrowLeft className="h-4 w-4" /> Back to account
       </Link>
@@ -86,6 +87,6 @@ export default async function ProfilePage() {
           <AccountContacts initial={contacts} />
         </div>
       </section>
-    </div>
+    </AccountShell>
   );
 }

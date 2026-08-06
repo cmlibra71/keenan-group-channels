@@ -12,6 +12,7 @@ import {
 import { EntryHero } from "@/components/draws/EntryHero";
 import { PrizeCard } from "@/components/draws/PrizeCard";
 import { DrawCountdown } from "@/components/draws/DrawCountdown";
+import { AccountShell } from "@/components/account/AccountShell";
 
 export const metadata = {
   title: "My Draws",
@@ -59,7 +60,7 @@ export default async function DrawsPage() {
   const featuredDraw = featuredPrize ? upcomingDraws[0] ?? null : null;
 
   return (
-    <div className="mx-auto max-w-3xl px-6 lg:px-8 section-padding">
+    <AccountShell>
       <p className="eyebrow mb-3">PRIZES</p>
       <h1 className="text-3xl heading-serif text-text-primary mb-8">My Draws</h1>
 
@@ -159,6 +160,6 @@ export default async function DrawsPage() {
           </div>
         </>
       )}
-    </div>
+    </AccountShell>
   );
 }
