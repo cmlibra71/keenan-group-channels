@@ -10,6 +10,7 @@ import {
 } from "@/lib/store";
 import { getCommerceClient } from "@keenan/services";
 import { CopyCodeButton } from "./CopyCodeButton";
+import { AccountShell } from "@/components/account/AccountShell";
 
 // Discount-code row shape mirroring partnerDiscountCodeService.getForCustomer,
 // but keyed by CONTACT (identity unification): the query matches contact-keyed
@@ -82,7 +83,7 @@ export default async function PartnerOffersPage() {
   // Non-member: show preview with masked codes
   if (!subscription) {
     return (
-      <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
+      <AccountShell>
         <h1 className="text-3xl font-bold text-zinc-900 mb-2">Partner Offers</h1>
         <p className="text-zinc-600 mb-8">
           Exclusive discounts from our partner network, available to members.
@@ -159,7 +160,7 @@ export default async function PartnerOffersPage() {
             </Link>
           </div>
         )}
-      </div>
+      </AccountShell>
     );
   }
 

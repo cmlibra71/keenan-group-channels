@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { contactService, getFeatureFlag, getActiveSubscriptionForContact, getUpcomingDraws, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { logout } from "@/lib/actions/auth";
+import { AccountShell } from "@/components/account/AccountShell";
 
 export const metadata = {
   title: "Account",
@@ -14,10 +15,10 @@ export default async function AccountPage() {
 
   if (!session) {
     return (
-      <div className="mx-auto max-w-lg px-4 sm:px-6 lg:px-8 py-8">
+      <AccountShell>
         <h1 className="text-3xl font-bold text-zinc-900 mb-8">My Account</h1>
         <LoginForm />
-      </div>
+      </AccountShell>
     );
   }
 

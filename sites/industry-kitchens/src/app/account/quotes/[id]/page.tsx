@@ -16,6 +16,7 @@ import {
 } from "@/lib/quotes/price-visibility";
 import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
 import { quoteStatusLabel } from "@/lib/quotes/quote-status-label";
+import { AccountShell } from "@/components/account/AccountShell";
 
 // QuoteService returns snake_case rows (transformRow convention).
 interface QuoteDetail {
@@ -118,7 +119,7 @@ export default async function QuoteDetailPage({
   const total = resolveQuoteTotal(quote);
 
   return (
-    <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
+    <AccountShell>
       <Link
         href="/account/quotes"
         className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900 mb-6"
@@ -241,6 +242,6 @@ export default async function QuoteDetailPage({
 
       {/* Customer self-service actions */}
       <QuoteActions quoteId={quote.id} status={status} acceptState={acceptState} />
-    </div>
+    </AccountShell>
   );
 }

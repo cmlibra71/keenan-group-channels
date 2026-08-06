@@ -13,6 +13,7 @@ import {
 } from "@/lib/quotes/price-visibility";
 import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
 import { quoteStatusLabel } from "@/lib/quotes/quote-status-label";
+import { AccountShell } from "@/components/account/AccountShell";
 
 // QuoteService returns snake_case rows (transformRow convention).
 interface QuoteRecord {
@@ -98,7 +99,7 @@ export default async function QuotesPage() {
 
   if (customerQuotes.length === 0) {
     return (
-      <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
+      <AccountShell>
         <h1 className="text-3xl font-bold text-zinc-900 mb-8">My Quotes</h1>
         <div className="text-center py-16">
           <FileText className="h-16 w-16 text-zinc-300 mx-auto" />
@@ -110,7 +111,7 @@ export default async function QuotesPage() {
             Start Shopping
           </Link>
         </div>
-      </div>
+      </AccountShell>
     );
   }
 

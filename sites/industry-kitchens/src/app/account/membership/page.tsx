@@ -12,6 +12,7 @@ import {
 } from "@/lib/store";
 import { CancelConfirmationModal } from "@/components/membership/CancelConfirmationModal";
 import { ManageBillingButton } from "@/components/membership/ManageBillingButton";
+import { AccountShell } from "@/components/account/AccountShell";
 
 export const metadata = {
   title: "Membership",
@@ -42,7 +43,7 @@ export default async function MembershipPage() {
     const isCancelling = activeSub.cancel_at_period_end;
 
     return (
-      <div className="mx-auto max-w-2xl px-4 sm:px-6 lg:px-8 py-8">
+      <AccountShell>
         <h1 className="text-3xl font-bold text-zinc-900 mb-8">Membership</h1>
 
         {/* Past due warning */}
@@ -126,7 +127,7 @@ export default async function MembershipPage() {
             />
           )}
         </div>
-      </div>
+      </AccountShell>
     );
   }
 

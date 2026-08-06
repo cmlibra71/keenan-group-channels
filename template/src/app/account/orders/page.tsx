@@ -6,6 +6,7 @@ import { customerOrderStage } from "@/lib/orders/order-status-label";
 import { orderService, CHANNEL_ID, getGuestOrdersForEmail } from "@/lib/store";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import { Price } from "@/components/ui/Price";
+import { AccountShell } from "@/components/account/AccountShell";
 
 // orderService returns snake_case keys (transformRow).
 interface OrderRecord {
@@ -79,7 +80,7 @@ export default async function OrdersPage() {
 
   if (customerOrders.length === 0) {
     return (
-      <div className="mx-auto max-w-3xl px-6 lg:px-8 section-padding">
+      <AccountShell>
         <p className="eyebrow mb-3">ORDERS</p>
         <h1 className="text-3xl heading-serif text-text-primary mb-8">Order History</h1>
         <div className="text-center section-padding">
@@ -92,7 +93,7 @@ export default async function OrdersPage() {
             Start Shopping
           </Link>
         </div>
-      </div>
+      </AccountShell>
     );
   }
 
