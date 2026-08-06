@@ -171,6 +171,7 @@ export default async function CategoryPage({
       sort,
       pricing: { memberPriceMap },
       breadcrumbs: breadcrumbs as { id: number; name: string; slug: string }[],
+      subcategories: subcategories as unknown as Record<string, unknown>[],
       selections: {
         sub: sp.sub?.split(",").filter(Boolean) ?? [],
         brand: sp.brand?.split(",").filter(Boolean) ?? [],
