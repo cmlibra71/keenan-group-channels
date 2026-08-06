@@ -1,6 +1,9 @@
 import { cookies } from "next/headers";
 import { CHANNEL_ID } from "./channel";
 import { signSessionToken, verifySessionToken, type SessionPayload } from "./token";
+import { clearCartUuid } from "./cart";
+import { clearQuoteUuid } from "./quote";
+import { clearLastOrder } from "./checkout/last-order";
 
 const SESSION_COOKIE = "session";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
@@ -51,4 +54,18 @@ export async function setSession(contactId: number, email: string): Promise<void
 export async function clearSession(): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE);
+}
+
+// The signed-in shopper is carried by FOUR independent cookies, not one: the
+// session, the cart, the quote and the just-placed-order breadcrumb. Clearing
+// only `session` left the cart and quote (with that customer's prices) attached
+// to the browser, so the next person on a shared device inherited the basket,
+// could submit the quote and could reopen the confirmation. Every sign-out path
+// must go through here. The cart/quote ROWS are untouched in the database — this
+// only detaches them from this browser.
+export async function endShopperSession(): Promise<void> {
+  await clearSession();
+  await clearCartUuid();
+  await clearQuoteUuid();
+  await clearLastOrder();
 }

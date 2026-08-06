@@ -2,7 +2,7 @@
 
 import { refresh } from "next/cache";
 import { contactService, CHANNEL_ID } from "@/lib/store";
-import { getSession, setSession, clearSession } from "@/lib/auth";
+import { getSession, setSession, endShopperSession } from "@/lib/auth";
 import { verifyPassword } from "@/lib/password";
 import { createAccountlessContact, EmailTakenError, type LoginCandidate } from "@/lib/contact-auth";
 import { tooManyAttempts, recordFailure } from "@/lib/login-throttle";
@@ -129,6 +129,6 @@ export async function registerFromPanel(formData: FormData): Promise<{
 }
 
 export async function logoutFromPanel() {
-  await clearSession();
+  await endShopperSession();
   refresh(); // acting user's view refreshes; shared data cache stays intact
 }
