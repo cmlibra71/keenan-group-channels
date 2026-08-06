@@ -90,8 +90,12 @@ export async function renderHomeNodeBranch(
     getMemberContext().catch(() => null),
   ]);
 
-  const [pricesIncludeTax, cookieStore] = await Promise.all([
+  const [pricesIncludeTax, memberPricingEnabled, cookieStore] = await Promise.all([
     getFeatureFlag("prices_include_tax"),
+    // A home rail that places the shared product-card needs the same fact the
+    // category and brand grids pass it, or every card on the homepage decides
+    // member pricing is off.
+    getFeatureFlag("member_pricing_enabled"),
     cookies(),
   ]);
   const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
@@ -104,6 +108,7 @@ export async function renderHomeNodeBranch(
       loggedIn: memberCtx?.loggedIn ?? false,
     },
     gst: { inclusive: gstInclusive, pricesIncludeTax },
+    memberPricingAvailable: memberPricingEnabled,
     draft,
   });
 

@@ -10,8 +10,11 @@ import {
   enquireHandler,
   masterLeafNatives,
   selectItemHandler,
+  selectPromotionHandler,
   useAddToCartHandler,
   useAddToQuoteHandler,
+  viewItemListHandler,
+  viewPromotionHandler,
 } from "./master-leaves";
 import { useGst } from "@/lib/gst";
 import { overlayLiveGst } from "./live-gst";
@@ -68,7 +71,16 @@ export function BuilderHomePage({
   // Memoized: a fresh object literal each render defeats the actions
   // provider's useMemo and re-creates every handler on every paint.
   const homeHandlers = React.useMemo(
-    () => ({ ...formHandlers, selectItem: selectItemHandler(), addToCart, addToQuote, enquire: enquireHandler(router) }),
+    () => ({
+      ...formHandlers,
+      selectItem: selectItemHandler(),
+      addToCart,
+      addToQuote,
+      enquire: enquireHandler(router),
+      viewPromotion: viewPromotionHandler(),
+      viewItemList: viewItemListHandler(),
+      selectPromotion: selectPromotionHandler(),
+    }),
     [formHandlers, addToCart, addToQuote, router]
   );
   const nativeComponents: NativeComponents = {
