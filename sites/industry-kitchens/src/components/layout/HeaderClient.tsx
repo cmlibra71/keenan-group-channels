@@ -9,12 +9,15 @@ export function HeaderClient({
   quoteCount: serverQuoteCount,
   isMember,
   entryCount,
+  drawsEnabled,
   variant = "full",
 }: {
   cartCount: number;
   quoteCount: number;
   isMember?: boolean;
   entryCount?: number;
+  /** Prize draws live (channel setting draws_enabled) — gates the account crown + entry-count badge. */
+  drawsEnabled?: boolean;
   /** full: account + quote + cart with labels · compact: quote + cart icons · account: account button only */
   variant?: "full" | "compact" | "account";
 }) {
@@ -41,7 +44,10 @@ export function HeaderClient({
       className="inline-flex items-center gap-1.5 text-[13px] font-medium text-zinc-600 hover:text-[#D94B2B] transition-colors whitespace-nowrap"
       aria-label="Account"
     >
-      {isMember ? (
+      {/* Prize-draw badge — dormant while draws_enabled is off; members then get
+          the plain person icon. The "Account" vs "Sign In/Register" label below
+          still keys off membership/session and is unaffected. */}
+      {isMember && drawsEnabled ? (
         <span className="relative">
           <Crown className="h-4 w-4 text-amber-500" />
           {entryCount != null && entryCount > 0 && (

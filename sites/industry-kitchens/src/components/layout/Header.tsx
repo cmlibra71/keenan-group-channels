@@ -44,13 +44,23 @@ export async function Header({
 
   let isMember = false;
   let entryCount = 0;
-  const subscriptionsEnabled = await getFeatureFlag("subscriptions_enabled");
+  // The header's prize-draw badge (crown + entry count) is gated on the SAME
+  // draws_enabled channel flag as every other draw surface, so switching draws
+  // on/off in channel settings switches the badge with them. Membership itself
+  // still keys off subscriptions_enabled, so the "Account" vs "Sign In/Register"
+  // label is unchanged. getFeatureFlag swallows its own errors and returns
+  // false, so a transient DB failure hides the badge rather than taking the
+  // storefront down.
+  const [subscriptionsEnabled, drawsEnabled] = await Promise.all([
+    getFeatureFlag("subscriptions_enabled"),
+    getFeatureFlag("draws_enabled"),
+  ]);
   if (subscriptionsEnabled) {
     const session = await getSession().catch(() => null);
     if (session) {
       const activeSub = await getActiveSubscriptionForContact(session.contactId).catch(() => null);
       isMember = !!activeSub;
-      if (isMember) {
+      if (isMember && drawsEnabled) {
         type DrawEntry = {
           entry: { id: number; entryCount: number | null; status: string };
         };
@@ -106,6 +116,7 @@ export async function Header({
                   quoteCount={quoteCount}
                   isMember={isMember}
                   entryCount={entryCount}
+                  drawsEnabled={drawsEnabled}
                 />
               </div>
 
@@ -121,6 +132,7 @@ export async function Header({
                   quoteCount={quoteCount}
                   isMember={isMember}
                   entryCount={entryCount}
+                  drawsEnabled={drawsEnabled}
                   variant="compact"
                 />
                 <span className="p-2 text-zinc-700 xl:hidden">
@@ -149,6 +161,7 @@ export async function Header({
                 quoteCount={quoteCount}
                 isMember={isMember}
                 entryCount={entryCount}
+                drawsEnabled={drawsEnabled}
                 variant="account"
               />
             </div>
