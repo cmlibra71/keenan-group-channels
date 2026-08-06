@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cmsFormService, cmsFormSubmissionFileService } from "@keenan/services/services";
-import { isAcceptableUpload } from "@keenan/services";
+import { declaredUploadType, isAcceptableUpload } from "@keenan/services";
 import { CHANNEL_ID } from "@/lib/channel";
 import { slidingWindowAllow } from "@/lib/rate-limit";
 import { formUploadKey, putFormUpload, sizeLabel } from "@/lib/form-uploads";
@@ -80,8 +80,10 @@ export async function POST(req: NextRequest) {
   if (bytes.byteLength > maxBytes) return fail(413, `Files must be under ${sizeLabel(maxBytes)}.`);
 
   // The declared type and the extension are both attacker-controlled; the
-  // leading bytes must corroborate them.
-  const declaredType = file.type || "application/octet-stream";
+  // leading bytes must corroborate them. The browser's own hint is missing
+  // altogether for some legitimate files (Chrome on Windows sends no type at
+  // all for .heic), so fall back to the filename — the bytes still decide.
+  const declaredType = declaredUploadType(file.name, file.type);
   const verdict = isAcceptableUpload(declaredType, new Uint8Array(bytes.subarray(0, 32)));
   if (!verdict.ok) return fail(415, verdict.reason ?? "That file type isn't accepted.");
 
