@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { Package, FileText, MapPin, LogOut, Crown, Trophy, Gift, ArrowRight, Calendar, Ticket, KeyRound } from "lucide-react";
 import { getSession } from "@/lib/auth";
-import { contactService, getFeatureFlag, getActiveSubscriptionForContact, getUpcomingDraws, drawEntryService, CHANNEL_ID } from "@/lib/store";
+import { contactService, getActiveSubscriptionForContact, getUpcomingDraws, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { logout } from "@/lib/actions/auth";
+import { AccountShell, readAccountNavFlags } from "@/components/account/AccountShell";
 
 export const metadata = {
   title: "Account",
@@ -22,16 +23,17 @@ export default async function AccountPage() {
     );
   }
 
-  const [customer, subscriptionsEnabled, drawsEnabled, partnerOffersEnabled] =
+  // The same request-cached flag read the account shell uses for its menu, so
+  // the card grid and the menu can never disagree about which features exist,
+  // and the three channel_settings lookups happen once per request, not twice.
+  const [customer, { subscriptionsEnabled, drawsEnabled, partnerOffersEnabled }] =
     await Promise.all([
       contactService.getById(session.contactId) as Promise<{
         first_name: string;
         last_name: string;
         email: string;
       } | null>,
-      getFeatureFlag("subscriptions_enabled"),
-      getFeatureFlag("draws_enabled"),
-      getFeatureFlag("partner_offers_enabled"),
+      readAccountNavFlags(),
     ]);
 
   const activeSub = subscriptionsEnabled
@@ -58,7 +60,7 @@ export default async function AccountPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-6 lg:px-8 section-padding">
+    <AccountShell>
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
           <h1 className="text-3xl heading-serif text-text-primary">My Account</h1>
@@ -266,6 +268,6 @@ export default async function AccountPage() {
           </div>
         </Link>
       </div>
-    </div>
+    </AccountShell>
   );
 }

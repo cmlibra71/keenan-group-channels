@@ -13,6 +13,7 @@ import {
 import { CancelConfirmationModal } from "@/components/membership/CancelConfirmationModal";
 import { ManageBillingButton } from "@/components/membership/ManageBillingButton";
 import { getMembershipProfile } from "@/lib/membership";
+import { AccountShell } from "@/components/account/AccountShell";
 
 export const metadata = {
   title: "Membership",
@@ -47,7 +48,7 @@ export default async function MembershipPage() {
     const isCancelling = activeSub.cancel_at_period_end;
 
     return (
-      <div className="mx-auto max-w-2xl px-4 sm:px-6 lg:px-8 py-8">
+      <AccountShell>
         <h1 className="page-title mb-8">Membership</h1>
 
         {/* Past due warning */}
@@ -167,7 +168,7 @@ export default async function MembershipPage() {
             />
           )}
         </div>
-      </div>
+      </AccountShell>
     );
   }
 
@@ -177,7 +178,7 @@ export default async function MembershipPage() {
 
   // Show available plans
   return (
-    <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-8">
+    <AccountShell>
       <h1 className="page-title mb-2">
         {isReturningMember ? "Welcome Back" : "Membership"}
       </h1>
@@ -233,6 +234,6 @@ export default async function MembershipPage() {
           No membership plans are currently available.
         </p>
       )}
-    </div>
+    </AccountShell>
   );
 }

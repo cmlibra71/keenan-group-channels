@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Package } from "lucide-react";
 import { getSession } from "@/lib/auth";
+import { customerOrderStage } from "@/lib/orders/order-status-label";
 import { orderService, CHANNEL_ID, getGuestOrdersForEmail } from "@/lib/store";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import { Price } from "@/components/ui/Price";
@@ -124,10 +125,6 @@ export default async function OrdersPage() {
         {ordersWithItems.map((order) => {
           const orderItemsList = order.items || [];
           const totalItems = orderItemsList.reduce((sum, i) => sum + i.quantity, 0);
-          const itemNames = orderItemsList
-            .slice(0, 3)
-            .map((i) => i.name)
-            .join(", ");
 
           return (
             <div key={order.id} className="card-padded">
@@ -148,15 +145,13 @@ export default async function OrdersPage() {
                         ? "bg-accent-subtle text-accent-dark"
                         : "bg-surface-secondary text-text-secondary"
                   }`}>
-                    {order.status}
+                    {customerOrderStage(order.status)}
                   </span>
                   <Price amount={order.total_inc_tax} className="font-semibold text-text-primary" />
                 </div>
               </div>
               <p className="text-sm text-text-secondary">
                 {totalItems} item{totalItems !== 1 ? "s" : ""}
-                {itemNames ? `: ${itemNames}` : ""}
-                {orderItemsList.length > 3 ? "..." : ""}
               </p>
             </div>
           );

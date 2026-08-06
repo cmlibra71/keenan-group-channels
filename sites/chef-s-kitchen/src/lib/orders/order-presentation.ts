@@ -75,10 +75,14 @@ export function paymentStatusLabel(status: string | null | undefined): string {
  *
  * Deliberately the SAME expression the Order History list uses inline, so the
  * status a customer sees on the list and the status they see one click later are
- * the same word in the same colour. The wording of that chip (today the raw
- * `orders.status` value) is owned by a separate card; when it lands it changes
- * BOTH surfaces at once rather than leaving the list saying "awaiting_fulfillment"
- * and the detail page saying "Being prepared".
+ * the same word in the same colour.
+ *
+ * The WORDING of that chip is not decided here — it comes from
+ * `customerOrderStage()` in ./order-status-label.ts, which both the list and the
+ * detail page call. That pairing is the whole point: the raw `orders.status`
+ * column is a staff column carrying finance-company names and internal shorthand,
+ * so neither surface may ever render it, and neither may render a different word
+ * from the other. Change the wording there and both surfaces change together.
  */
 export function orderStatusChipClass(status: string | null | undefined): string {
   if (status === "completed") return "text-accent bg-accent-subtle";

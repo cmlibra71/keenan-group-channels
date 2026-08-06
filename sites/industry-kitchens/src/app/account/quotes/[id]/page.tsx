@@ -15,6 +15,7 @@ import {
   resolveQuoteTotal,
 } from "@/lib/quotes/price-visibility";
 import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
+import { quoteStatusLabel } from "@/lib/quotes/quote-status-label";
 
 // QuoteService returns snake_case rows (transformRow convention).
 interface QuoteDetail {
@@ -57,16 +58,6 @@ const statusStyles: Record<string, string> = {
   quote_cancelled: "bg-red-100 text-red-700",
 };
 
-const statusLabels: Record<string, string> = {
-  quote_pending: "awaiting review",
-  quote_available: "quote ready",
-  open_change_request: "change requested",
-  quote_accepted: "accepted",
-  quote_on_hold: "on hold",
-  converted_to_order: "ordered",
-  quote_expired: "expired",
-  quote_cancelled: "cancelled",
-};
 
 export const metadata = {
   title: "Quote",
@@ -145,7 +136,7 @@ export default async function QuoteDetailPage({
             statusStyles[status] || "bg-zinc-100 text-zinc-600"
           }`}
         >
-          {statusLabels[status] || status}
+          {quoteStatusLabel(status)}
         </span>
       </div>
       <p className="text-sm text-zinc-500 mb-8">
