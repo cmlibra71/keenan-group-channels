@@ -494,9 +494,14 @@ export async function placeOrder(
   // Stripe early-return) and best-effort — the order already exists, stamped
   // with the same detail in internal_memo / metafields, so a failed email never
   // blocks checkout.
+  //
+  // This is an ORDER alert, so it goes to the portal's "Order notifications"
+  // recipients — the people already told about every order — rather than the
+  // quote/storefront staff list.
   if (belowCostLines.length > 0) {
     try {
       await sendStaffNotification({
+        audience: "orders",
         subject: `Below-cost pricing on order ${order.order_number}`,
         heading: "Order contains below-cost lines — review before fulfilment",
         rows: belowCostLines.map((l) => [

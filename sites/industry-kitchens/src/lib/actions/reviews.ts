@@ -38,6 +38,7 @@ export async function submitReview(
   // tell staff one arrived. Best-effort: the review is already saved.
   try {
     await sendStaffNotification({
+      audience: "staff",
       subject: `New product review pending approval (${data.rating}/5)`,
       heading: "A customer submitted a product review",
       rows: [
