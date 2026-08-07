@@ -7,7 +7,6 @@ import { getSession } from "@/lib/auth";
 import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, getHeaderNav, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 import { HeaderPanels } from "./HeaderPanels";
-import { GstToggle } from "./GstToggle";
 import { MegaMenu } from "./MegaMenu";
 import { MobileNavDrawer } from "./MobileNavDrawer";
 
@@ -134,7 +133,6 @@ export async function Header({
 
             {/* Actions */}
             <div className="flex items-center gap-4">
-              <GstToggle className="hidden md:inline-flex" />
               <Link href="/search" className="text-zinc-600 hover:text-zinc-900">
                 <Search className="h-5 w-5" />
               </Link>

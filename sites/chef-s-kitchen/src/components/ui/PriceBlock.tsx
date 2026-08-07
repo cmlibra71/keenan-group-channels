@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Star } from "lucide-react";
 import { useGst, adjustForGst } from "@/lib/gst";
+import { GstToggle } from "@/components/layout/GstToggle";
 import { derivePriceDisplay } from "./price-display";
 
 /**
@@ -99,6 +100,13 @@ export function PriceBlock({
           )}
         </p>
       )}
+
+      {/* The ex/inc-GST switch, PDP only — directly under the price and its RRP
+          line, above the join funnel. It used to live in the masthead; it now
+          sits with the price it controls, in normal flow so it renders at every
+          breakpoint. Listing cards (size="card") deliberately get nothing — the
+          setting is site-wide and only changeable from a product page. */}
+      {size === "pdp" && <GstToggle variant="light" className="mt-3" />}
 
       {/* Member saving on cards */}
       {d.savings > 0 && size === "card" && (
