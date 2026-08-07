@@ -7,14 +7,13 @@ import { getSession } from "@/lib/auth";
 import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, getHeaderNav, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 import { HeaderPanels } from "./HeaderPanels";
-import { GstToggle } from "./GstToggle";
 import { MegaMenu } from "./MegaMenu";
 import { MobileNavDrawer } from "./MobileNavDrawer";
 import { SearchTypeahead } from "../search/SearchTypeahead";
 
 /**
  * Design-system header: Green-500 masthead (white logo, centred glass
- * search, GST switch, quote/cart/account) over the Green-700 nav bar with
+ * search, quote/cart/account) over the Green-700 nav bar with
  * mega panels. Sticky as a unit.
  */
 export async function Header({ storeName, logoUrl, logoAlt }: { storeName: string; logoUrl?: string | null; logoAlt?: string | null }) {
@@ -94,7 +93,6 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
 
               {/* Actions */}
               <div className="ml-auto flex items-center gap-5">
-                <GstToggle className="hidden md:inline-flex" />
                 <Link href="/search" className="md:hidden text-white transition-colors duration-200 hover:text-white/80" aria-label="Search">
                   <Search className="h-[22px] w-[22px]" strokeWidth={1.7} />
                 </Link>

@@ -12,6 +12,7 @@ import { AddToCartButton } from "./AddToCartButton";
 import { AddToQuoteButton } from "./AddToQuoteButton";
 import { OptionSelector } from "./OptionSelector";
 import { Price } from "@/components/ui/Price";
+import { GstToggle } from "@/components/layout/GstToggle";
 import { useProductPurchase } from "./ProductPurchaseProvider";
 
 export function ProductDetail() {
@@ -69,6 +70,12 @@ export function ProductDetail() {
           )}
         </div>
       )}
+
+      {/* The ex/inc-GST switch. It used to sit in the header; it now lives with
+          the price it controls, in normal flow so it renders at every
+          breakpoint (phones included). A "Call for Price" product has no price
+          to convert, so it gets none. */}
+      {displayPrice > 0 && <GstToggle className="mt-3" />}
 
       {/* Membership teaser — generic pitch only; the exact member price is
           reserved for active subscribers. */}

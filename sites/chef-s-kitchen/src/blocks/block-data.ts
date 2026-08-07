@@ -57,7 +57,7 @@ const PROVIDERS: Record<string, Provider> = {
                 { q: "How does Chef's Depot membership pricing work?", a: "Members pay wholesale, cost-plus pricing across the catalogue — typically 10–25% below retail. Join from $14.95/month and your member price is applied automatically at cart and checkout." },
                 { q: "Do you deliver Australia-wide?", a: "Yes — we deliver commercial kitchen equipment and supplies right across Australia. Freight is calculated at checkout based on your delivery address and the items in your order." },
                 { q: "Can I get a quote for a large or fit-out order?", a: "Absolutely. Add items to a quote and our team will prepare pricing you can take to approval or finance. Items without a listed price (made-to-order or freight-only) go to quote for confirmation." },
-                { q: "Are prices shown with or without GST?", a: "Prices default to ex-GST for trade. Use the GST switch in the header to flip every price between excluding and including GST — your choice is remembered." },
+                { q: "Are prices shown with or without GST?", a: "Prices default to ex-GST for trade. Use the GST switch on any product page to flip every price between excluding and including GST — your choice is remembered." },
               ],
       },
     };

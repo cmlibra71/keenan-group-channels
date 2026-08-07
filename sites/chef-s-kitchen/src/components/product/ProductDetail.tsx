@@ -18,6 +18,7 @@ import { Price } from "@/components/ui/Price";
 import { PriceBlock } from "@/components/ui/PriceBlock";
 import { Minus, Plus, Truck, ShieldCheck, PackageCheck } from "lucide-react";
 import { useProductPurchase } from "./ProductPurchaseProvider";
+import { useGst } from "@/lib/gst";
 
 export function ProductDetail() {
   const {
@@ -40,6 +41,9 @@ export function ProductDetail() {
   } = useProductPurchase();
 
   const { id: productId, options, optionValues, bulkPricing } = product;
+  // The sticky buy bar labels its own figure. It used to hard-code "ex GST",
+  // which was only ever invisible because CD phones had no way to switch.
+  const { inclusive } = useGst();
 
   return (
     <div>
@@ -196,7 +200,7 @@ export function ProductDetail() {
               gst
               className="text-lg font-bold text-text-primary"
             />
-            <span className="ml-1 text-[10px] font-semibold text-steel-400">{isMember && memberPrice != null ? "member" : "ex GST"}</span>
+            <span className="ml-1 text-[10px] font-semibold text-steel-400">{isMember && memberPrice != null ? "member" : inclusive ? "inc GST" : "ex GST"}</span>
           </div>
           <AddToCartButton
             productId={productId}

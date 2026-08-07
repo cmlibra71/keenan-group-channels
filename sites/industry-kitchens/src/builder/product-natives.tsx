@@ -2,6 +2,7 @@
 import type { NativeComponents } from "@keenan/services/builder-react";
 import { ProductImageGallery, type ProductImage as GalleryImage } from "@/components/product/ProductImageGallery";
 import { WarrantyDirectory } from "@/components/product/WarrantyDirectory";
+import { GstToggle } from "@/components/layout/GstToggle";
 
 // ============================================================================
 // Industry Kitchens' sealed product-page leaves.
@@ -45,5 +46,10 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
       />
     ),
     "warranty-directory": () => <WarrantyDirectory />,
+    // Storewide ex/inc-GST switch, now that it has left the header. Sealed for
+    // the same reason as the two above: it carries behaviour of its own (writes
+    // the GST cookie, flips a site-wide React context). It sits in normal flow
+    // with no `hidden md:` gating, so phones get it too.
+    "gst-toggle": () => <GstToggle className="mt-3" />,
   };
 }

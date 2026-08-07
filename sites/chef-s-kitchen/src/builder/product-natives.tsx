@@ -20,6 +20,7 @@ export interface ProductNativesArgs {
 }
 
 import { ProductImageGallery, type ProductImage as GalleryImage } from "@/components/product/ProductImageGallery";
+import { GstToggle } from "@/components/layout/GstToggle";
 
 export function productNatives({ payload, variantImageUrl }: ProductNativesArgs): NativeComponents {
   const product = (payload.product ?? {}) as Record<string, unknown>;
@@ -33,5 +34,12 @@ export function productNatives({ payload, variantImageUrl }: ProductNativesArgs)
         videos={(product.videos ?? []) as never}
       />
     ),
+    // Storewide ex/inc-GST switch, now that it has left the masthead. Sealed
+    // because it writes the GST cookie and flips a site-wide React context —
+    // behaviour a tree cannot carry. `variant="light"` is not optional: the
+    // default masthead variant is white-on-green and would be invisible on the
+    // price card's steel-50 background. No `hidden md:` gating anywhere — the
+    // node sits in normal flow so phones get it too.
+    "gst-toggle": () => <GstToggle variant="light" className="mt-3" />,
   };
 }

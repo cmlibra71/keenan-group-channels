@@ -9,7 +9,6 @@ import type { HeaderNavItem, HeaderConfig } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 import { HeaderPanels } from "./HeaderPanels";
 import { HeaderSearch } from "./HeaderSearch";
-import { GstToggle } from "./GstToggle";
 import { MobileNav } from "./MobileNav";
 import { MegaMenu } from "./MegaMenu";
 import { MobileNavDrawer } from "./MobileNavDrawer";
@@ -108,9 +107,8 @@ export async function Header({
                 className="hidden xl:block flex-1 max-w-3xl"
               />
 
-              {/* Account / GST / Quote / Cart — desktop */}
+              {/* Account / Quote / Cart — desktop */}
               <div className="hidden xl:flex items-center gap-4 shrink-0">
-                <GstToggle />
                 <HeaderClient
                   cartCount={cartCount}
                   quoteCount={quoteCount}
@@ -151,11 +149,13 @@ export async function Header({
           </div>
         </div>
 
-        {/* Sub-desktop GST + sign-in row */}
+        {/* Sub-desktop sign-in row */}
         <div className="xl:hidden border-b border-zinc-200 bg-zinc-50">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between py-1.5">
-              <GstToggle />
+            {/* justify-END, not between: the GST switch used to hold the left
+                edge of this strip. With it gone the account links are the only
+                child and would flush left, away from where shoppers look. */}
+            <div className="flex items-center justify-end py-1.5">
               <HeaderClient
                 cartCount={cartCount}
                 quoteCount={quoteCount}

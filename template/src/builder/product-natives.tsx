@@ -20,6 +20,7 @@ export interface ProductNativesArgs {
 }
 
 import { ProductImageGallery, type ProductImage as GalleryImage } from "@/components/product/ProductImageGallery";
+import { GstToggle } from "@/components/layout/GstToggle";
 
 export function productNatives({ payload, variantImageUrl }: ProductNativesArgs): NativeComponents {
   const product = (payload.product ?? {}) as Record<string, unknown>;
@@ -32,5 +33,9 @@ export function productNatives({ payload, variantImageUrl }: ProductNativesArgs)
         videos={(product.videos ?? []) as never}
       />
     ),
+    // Storewide ex/inc-GST switch — it lives beside the price now, not in the
+    // header. Sealed because it writes the GST cookie and flips a site-wide
+    // React context. Normal flow, no breakpoint gating: phones get it too.
+    "gst-toggle": () => <GstToggle className="mt-3" />,
   };
 }
