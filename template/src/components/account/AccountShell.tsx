@@ -7,7 +7,7 @@ import { AccountNav } from "./AccountNav";
  * The two-column frame every SIGNED-IN account page renders inside.
  *
  * It is an explicit wrapper rather than a Next route layout on purpose. The nav
- * must appear on /account/quotes but NOT on /account/register, /account/verify-email,
+ * must appear on /account/quotes but NOT on /account/register, /account/reset-password,
  * the membership subscribe flow, or the signed-out /account login form — a layout
  * cannot see the pathname, and a route group to carve out the exceptions would
  * collide with the nested /account/membership/subscribe segment. Opting each page

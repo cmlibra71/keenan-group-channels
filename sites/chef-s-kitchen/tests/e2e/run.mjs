@@ -35,7 +35,6 @@ import * as memberExtras from "./flows/09-member-extras.mjs";
 import * as orderScoping from "./flows/10-order-scoping.mjs";
 import * as realStripe from "./flows/11-real-stripe.mjs";
 import * as passwordReset from "./flows/12-password-reset.mjs";
-import * as emailChange from "./flows/13-email-change.mjs";
 
 loadSiteEnv();
 const args = parseArgs(process.argv.slice(2));
@@ -66,7 +65,7 @@ if (!args.smokeOnly && !secret) {
 const artifactsDir = ensureDir(join(E2E_ROOT, "artifacts", runId));
 const report = new Report({ runId, base: args.base, artifactsDir });
 
-const FULL = [register, auth, browse, checkout, quote, membership, memberPricing, account, memberExtras, orderScoping, realStripe, passwordReset, emailChange];
+const FULL = [register, auth, browse, checkout, quote, membership, memberPricing, account, memberExtras, orderScoping, realStripe, passwordReset];
 const FLOWS = args.smokeOnly ? [smoke] : [smoke, ...FULL];
 
 console.log(`\nChef's Depot E2E — run ${runId}`);
