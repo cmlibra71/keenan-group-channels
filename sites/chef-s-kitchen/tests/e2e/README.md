@@ -70,16 +70,14 @@ removed in teardown but stock adjustments are not reverted, so the suite uses qu
 | Concern | Mechanism |
 | --- | --- |
 | Login | `POST /api/test/login { secret, email }` → signs a session cookie (test emails only) |
-| Password reset / email change | `POST /api/test/auth-token { secret, email, type, newEmail? }` → mints a real single-use token and returns the **plaintext** (test emails only). The live flows only store the token's hash and deliver the link by email, so this route is how the suite obtains a usable token to drive `/account/reset-password/<token>` and `/account/verify-email/<token>`. Returns **404 unless `E2E_LOGIN_SECRET` is set**. |
+| Password reset / account activation | `POST /api/test/auth-token { secret, email, type }` → mints a real single-use token and returns the **plaintext** (test emails only). The live flows only store the token's hash and deliver the link by email, so this route is how the suite obtains a usable token to drive `/account/reset-password/<token>`. Returns **404 unless `E2E_LOGIN_SECRET` is set**. |
 | Membership | Staff test card `4242 4242 4242 4242` (`MEMBERSHIP_TEST_CARD`; spaces/dashes ignored) → membership with no Stripe charge |
 | Checkout | `bank_transfer` / `net_terms` payment methods → order with no card charge (Stripe 4242 attempted only if it's the only method and a testMode gateway is configured) |
 
-The `password-reset` (flow 12) and `email-change` (flow 13) flows exercise the full
-self-service auth surface: reset requests are enumeration-safe (neutral response), the reset
-completes with a minted token and the **new** password is proven to authenticate, and the
-email change verifies the current password, confirms via a minted token, and checks the new
-address becomes the active login. The change-to email stays inside the test domain so the
-`e2e-%@e2e.test` teardown sweep still reclaims it.
+The `password-reset` flow (flow 12) exercises the self-service auth surface: reset requests
+are enumeration-safe (neutral response), and the reset completes with a minted token with the
+**new** password proven to authenticate. There is no email-change flow — customers cannot
+change their own email address; staff do it on the contact record in the portal.
 
 ## Adding a flow
 

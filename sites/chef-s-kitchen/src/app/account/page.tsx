@@ -209,7 +209,7 @@ export default async function AccountPage() {
           <KeyRound className="h-8 w-8 text-text-muted" />
           <div>
             <h3 className="font-semibold text-text-primary">Password &amp; Security</h3>
-            <p className="text-sm text-text-secondary">Change password or email</p>
+            <p className="text-sm text-text-secondary">Change your password</p>
           </div>
         </Link>
         <Link

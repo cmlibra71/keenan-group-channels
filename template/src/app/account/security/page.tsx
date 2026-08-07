@@ -3,7 +3,6 @@ import Link from "next/link";
 import { getSession } from "@/lib/auth";
 import { contactService } from "@/lib/store";
 import { ChangePasswordForm } from "@/components/account/ChangePasswordForm";
-import { ChangeEmailForm } from "@/components/account/ChangeEmailForm";
 import { AccountShell } from "@/components/account/AccountShell";
 
 export const metadata = {
@@ -27,12 +26,20 @@ export default async function SecurityPage() {
         <ChangePasswordForm />
       </section>
 
+      {/* Read-only by design: customers cannot change their own email address.
+          Staff update it on the contact record in the portal on request. */}
       <section>
-        <h2 className="text-lg font-semibold text-zinc-900 mb-1">Change email</h2>
-        <p className="text-sm text-zinc-500 mb-3">
+        <h2 className="text-lg font-semibold text-zinc-900 mb-1">Email</h2>
+        <p className="text-sm text-zinc-500">
           Current email: <span className="font-medium text-zinc-700">{customer?.email}</span>
         </p>
-        <ChangeEmailForm />
+        <p className="mt-2 text-sm text-zinc-500">
+          To change the email on your account, please{" "}
+          <Link href="/pages/contact" className="text-zinc-900 font-medium hover:underline">
+            contact us
+          </Link>
+          .
+        </p>
       </section>
 
       <p className="mt-8 text-center text-sm text-zinc-500">

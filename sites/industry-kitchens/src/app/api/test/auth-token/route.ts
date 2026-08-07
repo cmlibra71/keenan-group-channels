@@ -3,10 +3,10 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { contactService, customerAuthTokenService, CHANNEL_ID } from "@/lib/store";
 
 // Guarded test-only helper that MINTS a customer auth token (password reset /
-// email change) and returns the plaintext, so the E2E suite can drive the
-// /account/reset-password/<token> and /account/verify-email/<token> pages
-// directly. The real flows only ever store the token's sha256, so a test can't
-// read the emailed link — this route is the seam that lets it obtain one.
+// account activation) and returns the plaintext, so the E2E suite can drive the
+// /account/reset-password/<token> page directly. The real flows only ever store
+// the token's sha256, so a test can't read the emailed link — this route is the
+// seam that lets it obtain one.
 //
 // Same safety envelope as /api/test/login:
 //   1. Returns 404 unless E2E_LOGIN_SECRET is set (feature does not exist).
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     return new NextResponse("Not found", { status: 404 });
   }
 
-  let body: { secret?: unknown; email?: unknown; type?: unknown; newEmail?: unknown };
+  let body: { secret?: unknown; email?: unknown; type?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -39,7 +39,6 @@ export async function POST(request: NextRequest) {
   const secret = typeof body.secret === "string" ? body.secret : "";
   const email = (typeof body.email === "string" ? body.email : "").trim().toLowerCase();
   const type = typeof body.type === "string" ? body.type : "";
-  const newEmail = (typeof body.newEmail === "string" ? body.newEmail : "").trim().toLowerCase();
 
   if (!secret || !secretsMatch(secret, configuredSecret)) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
@@ -52,16 +51,9 @@ export async function POST(request: NextRequest) {
       { status: 403 }
     );
   }
-  if (type !== "password_reset" && type !== "email_change" && type !== "account_activation") {
+  if (type !== "password_reset" && type !== "account_activation") {
     return NextResponse.json(
-      { error: "type must be password_reset, email_change or account_activation." },
-      { status: 400 }
-    );
-  }
-  // An email_change token must also target a test-domain address.
-  if (type === "email_change" && (!newEmail || !newEmail.endsWith(`@${domain}`))) {
-    return NextResponse.json(
-      { error: `email_change requires a newEmail ending @${domain}.` },
+      { error: "type must be password_reset or account_activation." },
       { status: 400 }
     );
   }
@@ -77,7 +69,6 @@ export async function POST(request: NextRequest) {
   const { token } = await customerAuthTokenService.createToken({
     contactId: contact.id,
     type,
-    payload: type === "email_change" ? { newEmail } : undefined,
   });
 
   return NextResponse.json({ ok: true, token });
