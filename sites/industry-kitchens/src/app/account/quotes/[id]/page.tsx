@@ -15,6 +15,7 @@ import {
   resolveQuoteTotal,
 } from "@/lib/quotes/price-visibility";
 import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
+import { quoteGstTotals } from "@/lib/quotes/quote-gst";
 import { quoteStatusLabel } from "@/lib/quotes/quote-status-label";
 import { AccountShell } from "@/components/account/AccountShell";
 
@@ -27,6 +28,9 @@ interface QuoteDetail {
   contact_id: number | null;
   quote_number: string | null;
   quote_amount: string | null;
+  // Basis of the stored total — a Zoey-ingested total already includes GST.
+  tax_inclusive: boolean | null;
+  external_source: string | null;
   base_amount: string | null;
   customer_notes: string | null;
   hide_prices: boolean | null;
@@ -117,6 +121,9 @@ export default async function QuoteDetailPage({
   // Show the real total whenever prices are visible — including $0.00 — but not a
   // stale zero on a quote whose lines carry money. See resolveQuoteTotal.
   const total = resolveQuoteTotal(quote);
+  // The quote total is the amount payable, so GST is broken out rather than left
+  // implicit — the same split the cart summary and the emailed quote show.
+  const gst = quoteGstTotals(total ?? 0, quote);
 
   return (
     <AccountShell>
@@ -222,13 +229,28 @@ export default async function QuoteDetailPage({
         })}
       </div>
 
-      {/* Totals */}
-      <div className="mt-4 flex items-center justify-between border-t border-zinc-200 pt-4">
-        <span className="text-sm font-medium text-zinc-600">Quote Total</span>
+      {/* Totals — GST shown, because the quote total is what the customer pays. */}
+      <div className="mt-4 border-t border-zinc-200 pt-4">
         {!hidePrices && total !== null ? (
-          <Price amount={total} className="text-lg font-semibold text-zinc-900" />
+          <dl className="ml-auto w-full max-w-xs space-y-1 text-sm">
+            <div className="flex items-center justify-between">
+              <dt className="text-zinc-600">Subtotal (ex GST)</dt>
+              <dd><Price amount={gst.exTax} className="text-zinc-900" /></dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt className="text-zinc-600">GST</dt>
+              <dd><Price amount={gst.tax} className="text-zinc-900" /></dd>
+            </div>
+            <div className="flex items-center justify-between border-t border-zinc-200 pt-1">
+              <dt className="font-medium text-zinc-600">Quote Total (inc GST)</dt>
+              <dd><Price amount={gst.incTax} className="text-lg font-semibold text-zinc-900" /></dd>
+            </div>
+          </dl>
         ) : (
-          <span className="text-sm font-medium text-zinc-500">To be quoted</span>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-zinc-600">Quote Total</span>
+            <span className="text-sm font-medium text-zinc-500">To be quoted</span>
+          </div>
         )}
       </div>
 

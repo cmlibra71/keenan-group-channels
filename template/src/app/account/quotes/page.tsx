@@ -12,6 +12,7 @@ import {
   resolveQuoteTotal,
 } from "@/lib/quotes/price-visibility";
 import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
+import { quoteGstTotals } from "@/lib/quotes/quote-gst";
 import { quoteStatusLabel } from "@/lib/quotes/quote-status-label";
 import { AccountShell } from "@/components/account/AccountShell";
 
@@ -24,6 +25,9 @@ interface QuoteRecord {
   contact_id: number | null;
   quote_number: string | null;
   quote_amount: string | null;
+  // Basis of the stored total — a Zoey-ingested total already includes GST.
+  tax_inclusive: boolean | null;
+  external_source: string | null;
   attributes: Record<string, unknown> | null;
   created_at: Date | string | null;
 }
@@ -163,7 +167,13 @@ export default async function QuotesPage() {
                   {/* Show the amount whenever prices are visible — including $0.00.
                       "To be quoted" means "not priced yet", not "zero". */}
                   {!quote.hidden_prices && resolveQuoteTotal(quote) !== null ? (
-                    <Price amount={resolveQuoteTotal(quote)!} className="font-semibold text-zinc-900" />
+                    <span className="flex items-baseline gap-1">
+                      <Price
+                        amount={quoteGstTotals(resolveQuoteTotal(quote)!, quote).incTax}
+                        className="font-semibold text-zinc-900"
+                      />
+                      <span className="text-xs text-zinc-500">inc GST</span>
+                    </span>
                   ) : (
                     <span className="text-sm font-medium text-zinc-500">To be quoted</span>
                   )}
