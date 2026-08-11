@@ -4,6 +4,7 @@ import Image from "next/image";
 import { ChevronLeft, Package } from "lucide-react";
 import { ApiError } from "@keenan/services";
 import { getSession } from "@/lib/auth";
+import { signInRedirect } from "@/lib/account-redirect";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import {
   orderService,
@@ -155,14 +156,18 @@ export default async function OrderDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await getSession();
-  if (!session) redirect("/account");
-
   // Exactly the order's own id, or nothing: parseInt would read "12abc" — and
   // "0012" — as order 12 and serve it under a URL that is not this order's.
+  // Purely syntactic, so it stays ahead of the session guard without disclosing
+  // anything; the guard needs the id to send the customer back here afterwards.
   const { id } = await params;
   if (!/^[1-9]\d{0,14}$/.test(id)) notFound();
   const orderId = Number(id);
+
+  // An emailed order link always arrives session-less: carry the destination so
+  // signing in lands the customer back on THIS order, not the account panel.
+  const session = await getSession();
+  if (!session) redirect(signInRedirect(`/account/orders/${orderId}`));
 
   // Channel-scoped read. getByIdScoped reports an out-of-scope row as MISSING
   // rather than telling the caller it exists, which is what an id-probing request

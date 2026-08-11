@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { FileText, ChevronRight } from "lucide-react";
 import { getSession } from "@/lib/auth";
+import { signInRedirect } from "@/lib/account-redirect";
 import { quoteService, CHANNEL_ID } from "@/lib/store";
 import { getQuoteUuid } from "@/lib/quote";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
@@ -75,7 +76,7 @@ export const metadata = {
 
 export default async function QuotesPage() {
   const session = await getSession();
-  if (!session) redirect("/account");
+  if (!session) redirect(signInRedirect("/account/quotes"));
 
   // listForCustomer hides quote_pending entirely, but a SUBMITTED request is
   // also quote_pending (Zoey lifecycle) — the customer should still see it as

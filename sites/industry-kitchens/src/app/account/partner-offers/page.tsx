@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ExternalLink, Lock, ArrowRight } from "lucide-react";
 import { getSession } from "@/lib/auth";
+import { signInRedirect } from "@/lib/account-redirect";
 import {
   getFeatureFlag,
   getPartnerOffers,
@@ -73,7 +74,7 @@ export default async function PartnerOffersPage() {
   if (!enabled) redirect("/account");
 
   const session = await getSession();
-  if (!session) redirect("/account");
+  if (!session) redirect(signInRedirect("/account/partner-offers"));
 
   const [subscription, allOffers] = await Promise.all([
     getActiveSubscriptionForContact(session.contactId),

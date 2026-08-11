@@ -5,7 +5,11 @@ import Link from "next/link";
 import { User } from "lucide-react";
 import { login } from "@/lib/actions/auth";
 
-export function LoginForm() {
+// `next` is the page the customer was trying to reach when the account guard
+// bounced them here (an emailed order link, typically). It rides the form so the
+// login action can finish the journey, and the register link so someone who has
+// to create an account first still ends up where they were headed.
+export function LoginForm({ next }: { next?: string | null }) {
   const [state, formAction, isPending] = useActionState(login, null);
 
   return (
@@ -22,6 +26,7 @@ export function LoginForm() {
       )}
 
       <form action={formAction} className="space-y-4">
+        {next && <input type="hidden" name="next" value={next} />}
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-zinc-700">
             Email
@@ -68,7 +73,7 @@ export function LoginForm() {
 
       <p className="mt-4 text-center text-sm text-zinc-500">
         Don&apos;t have an account?{" "}
-        <Link href="/account/register" className="text-zinc-900 font-medium hover:underline">
+        <Link href={next ? `/account/register?next=${encodeURIComponent(next)}` : "/account/register"} className="text-zinc-900 font-medium hover:underline">
           Create one
         </Link>
       </p>
