@@ -9,11 +9,14 @@ export function HeaderClient({
   quoteCount: serverQuoteCount,
   isMember,
   entryCount,
+  drawsEnabled,
 }: {
   cartCount: number;
   quoteCount: number;
   isMember?: boolean;
   entryCount?: number;
+  /** Prize draws live (channel setting draws_enabled) — gates the account crown + entry-count badge. */
+  drawsEnabled?: boolean;
 }) {
   // The panels themselves live in <HeaderPanels />, rendered once outside the
   // header — these buttons only raise the shared open signal.
@@ -66,7 +69,9 @@ export function HeaderClient({
         className="hidden sm:flex items-center gap-1.5 text-sm font-medium text-zinc-600 hover:text-zinc-900"
         aria-label="Open account"
       >
-        {isMember && (
+        {/* Prize-draw badge — dormant while draws_enabled is off; turning the
+            channel setting back on restores it exactly as it was. */}
+        {drawsEnabled && isMember && (
           <span className="relative">
             <Crown className="h-4 w-4 text-amber-500" />
             {entryCount != null && entryCount > 0 && (

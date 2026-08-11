@@ -56,6 +56,8 @@ export interface ProductNodeBranchArgs {
   viewedProduct: ViewedProduct;
   /** draftMode() OR the `x-kg-json` parity header. */
   draft: boolean;
+  /** Route-owned data this site's sealed product natives need. Opaque here. */
+  nativeData?: Record<string, unknown>;
 }
 
 /**
@@ -68,10 +70,17 @@ export async function renderProductNodeBranch({
   jsonLd,
   viewedProduct,
   draft,
+  nativeData,
 }: ProductNodeBranchArgs): Promise<React.ReactElement | null> {
   // CMS_NODES_FORCE=1 is for local testing only — never set in production.
   const forceNodes = process.env.CMS_NODES_FORCE === "1";
-  if (!forceNodes && !(await getFeatureFlag("node_product_template_enabled"))) return null;
+  // `draft` counts as an opt-in, exactly like the brand and category branches.
+  // Without it /json/products/<slug> renders the BLOCK template no matter what
+  // is authored, so a product conversion could not be previewed or parity-
+  // checked at all until its flag was already on — which is backwards, since
+  // the flag is what the parity run is meant to justify. Chefs Depot never hit
+  // this because its flag has been on since the template shipped.
+  if (!forceNodes && !draft && !(await getFeatureFlag("node_product_template_enabled"))) return null;
 
   const payload = await getProductPageData(slug, {
     memberContext: {
@@ -146,6 +155,7 @@ export async function renderProductNodeBranch({
         components={components}
         jsFunctions={jsFunctions}
         callResults={callResults}
+        nativeData={nativeData}
       />
     </div>
   );

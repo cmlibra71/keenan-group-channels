@@ -14,14 +14,15 @@ import {
 } from "@keenan/services/product-page";
 import { addToCart } from "@/lib/actions/cart";
 import { addToQuote } from "@/lib/actions/quote";
+import { submitReview } from "@/lib/actions/reviews";
 import { useGst } from "@/lib/gst";
 import { overlayLiveGst } from "./live-gst";
 import { useCartQuoteCounts, useHeaderPanels } from "@/lib/cart-quote-counts";
-import { ProductImageGallery, type ProductImage as GalleryImage } from "@/components/product/ProductImageGallery";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { BuilderTree, type NativeComponents } from "@keenan/services/builder-react";
 import { BuilderActionsProvider } from "@keenan/services/builder-react";
 import { useFormHandlers } from "./use-form-handlers";
+import { productNatives } from "./product-natives";
 
 // ============================================================================
 // The product page rendered from a node tree. Thin wrapper over the SHARED
@@ -39,6 +40,7 @@ function ActionsBridge({
   jsFunctions,
   callResults,
   components,
+  nativeData,
 }: {
   productId: number;
   tree: NodeTree;
@@ -47,6 +49,9 @@ function ActionsBridge({
   jsFunctions?: Record<string, string>;
   callResults?: Record<string, unknown>;
   components?: Record<string, NodeTree>;
+  /** Route-owned data this site's sealed product natives need. Opaque here;
+   *  each site's product-natives knows its own shape. */
+  nativeData?: Record<string, unknown>;
 }) {
   const purchase = useProductPurchase();
   const router = useRouter();
@@ -105,23 +110,22 @@ function ActionsBridge({
     [payload, inclusive, pricesIncludeTax]
   );
 
-  // Coded (non-exploded) components slotted in by key — the gallery keeps its
-  // real zoom/pan/thumbnail behaviour. Variant images that are relative Zoey
-  // media paths would 403 the S3-only proxy → fall back to product images.
+  // Coded (non-exploded) components slotted in by key. WHICH ones a site seals
+  // is the site's business — both sites now seal only widgets that carry their
+  // own behaviour or data (the gallery either side, plus IK's warranty
+  // directory) — so they come from the per-site ./product-natives under shared
+  // KEYS. The variant-image guard
+  // stays here because every site needs it: relative Zoey media paths would
+  // 403 the S3-only proxy, so they fall back to the product images.
   const variantImg =
     purchase.variantImageUrl && /^https?:\/\//i.test(purchase.variantImageUrl)
       ? purchase.variantImageUrl
       : null;
-  const nativeComponents: NativeComponents = {
-    "product-gallery": () => (
-      <ProductImageGallery
-        images={payload.product.images as unknown as GalleryImage[]}
-        productName={payload.product.name}
-        variantImageUrl={variantImg}
-        videos={payload.product.videos ?? []}
-      />
-    ),
-  };
+  const nativeComponents: NativeComponents = productNatives({
+    payload: payload as unknown as Record<string, unknown>,
+    variantImageUrl: variantImg,
+    data: nativeData ?? {},
+  });
 
   // goBack drives the exploded back-to-products master's click Action — mirrors
   // the old BackButton native (history-back with a /products fallback).
@@ -133,6 +137,22 @@ function ActionsBridge({
       goBack: (args?: Record<string, unknown>) => {
         if (window.history.length > 1) router.back();
         else router.push(String(args?.fallbackHref ?? "/products"));
+      },
+      // The authored review form's submit. `@form` hands over the live
+      // FormData, so the rating arrives as the hidden input the star picker
+      // writes; everything else is the same server action the coded form
+      // called. The result is returned verbatim — {error} is what turns into
+      // submit.error on the tree, {success} into the thank-you panel.
+      submitReview: async (args?: Record<string, unknown>) => {
+        const form = args?.form;
+        if (!(form instanceof FormData)) return { error: "Couldn't read the form." };
+        const str = (k: string) => String(form.get(k) ?? "").trim();
+        return submitReview(Number(args?.productId ?? productId), {
+          rating: Number(form.get("rating") ?? 0),
+          title: str("title"),
+          text: str("text"),
+          authorName: str("authorName"),
+        });
       },
       enquire: (args?: Record<string, unknown>) => {
         const pid = args?.product_id ?? productId;
@@ -188,6 +208,7 @@ export function BuilderProductPage({
   jsFunctions,
   callResults,
   components = {},
+  nativeData,
 }: {
   tree: NodeTree;
   payload: ProductPagePayload;
@@ -195,6 +216,8 @@ export function BuilderProductPage({
   jsFunctions?: Record<string, string>;
   callResults?: Record<string, unknown>;
   components?: Record<string, NodeTree>;
+  /** Route-owned data for this site's sealed product natives. */
+  nativeData?: Record<string, unknown>;
 }) {
   const product = payload.product as unknown as PurchaseProduct;
   const enriched = React.useMemo(() => enrichProductPayload(payload, { sanitizeHtml }), [payload]);
@@ -210,7 +233,7 @@ export function BuilderProductPage({
       accountPricing={!payload.pricing.isMember && payload.pricing.memberPrice != null}
       membershipTeaser={payload.pricing.membershipTeaser}
     >
-      <ActionsBridge productId={payload.product.id} tree={tree} payload={enriched} namedStyles={namedStyles} components={components} jsFunctions={jsFunctions} callResults={callResults} />
+      <ActionsBridge productId={payload.product.id} tree={tree} payload={enriched} namedStyles={namedStyles} components={components} jsFunctions={jsFunctions} callResults={callResults} nativeData={nativeData} />
     </ProductPurchaseProvider>
   );
 }

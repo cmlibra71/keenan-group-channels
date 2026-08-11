@@ -1,3 +1,9 @@
+"use client";
+// Pure presentational — it only ever imported a TYPE from the store, so the
+// boundary move changes what ships to the browser, not what is drawn. Needed so
+// the Site Builder natives can render the same component the live page does,
+// rather than a second copy that would drift.
+
 import Link from "next/link";
 import Image from "next/image";
 import type { CategoryTile } from "@/lib/store";

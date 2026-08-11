@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { contactService, CHANNEL_ID } from "@/lib/store";
-import { setSession, clearSession } from "@/lib/auth";
+import { setSession, endShopperSession } from "@/lib/auth";
 import { verifyPassword, validatePasswordStrength } from "@/lib/password";
 import { createAccountlessContact, EmailTakenError, type LoginCandidate } from "@/lib/contact-auth";
 // Shared login throttle so the form login and the account-panel login share ONE keyspace.
@@ -105,6 +105,6 @@ export async function register(
 }
 
 export async function logout() {
-  await clearSession();
+  await endShopperSession();
   redirect("/account");
 }

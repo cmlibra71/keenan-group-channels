@@ -50,6 +50,8 @@ export interface CategoryNodeBranchArgs {
   sort: string | undefined;
   pricing: CategoryListingPricing;
   breadcrumbs: { id: number; name: string; slug: string }[];
+  /** Child categories for the tile strip; [] when the route has none. */
+  subcategories?: Record<string, unknown>[];
   /** Current URL facet selections, comma-split, per param. */
   selections: { sub: string[]; brand: string[]; price: string[]; stock: string[] };
   memberPricingEnabled: boolean;
@@ -74,6 +76,7 @@ export async function renderCategoryNodeBranch({
   sort,
   pricing,
   breadcrumbs,
+  subcategories,
   selections,
   memberPricingEnabled,
   categorySlugFallback,
@@ -113,12 +116,14 @@ export async function renderCategoryNodeBranch({
     sort,
     pricing,
     breadcrumbs,
+    subcategories,
     selections,
     customer: {
       isMember: memberCtx?.isMember ?? false,
       loggedIn: memberCtx?.loggedIn ?? false,
     },
     gst: { inclusive: gstInclusive, pricesIncludeTax },
+    memberPricingAvailable: memberPricingEnabled,
     draft,
   });
 

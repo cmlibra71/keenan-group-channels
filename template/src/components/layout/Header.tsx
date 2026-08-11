@@ -7,7 +7,6 @@ import { getSession } from "@/lib/auth";
 import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, getHeaderNav, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 import { HeaderPanels } from "./HeaderPanels";
-import { GstToggle } from "./GstToggle";
 import { MegaMenu } from "./MegaMenu";
 import { MobileNavDrawer } from "./MobileNavDrawer";
 
@@ -42,13 +41,22 @@ export async function Header({
 
   let isMember = false;
   let entryCount = 0;
-  const subscriptionsEnabled = await getFeatureFlag("subscriptions_enabled");
+  // The header's prize-draw badge (crown + entry count) is gated on the SAME
+  // draws_enabled channel flag as every other draw surface, so switching draws
+  // on/off in channel settings switches the badge with them. Membership itself
+  // still keys off subscriptions_enabled — that is what drives the "Membership"
+  // nav link below. getFeatureFlag swallows its own errors and returns false, so
+  // a transient DB failure hides the badge rather than taking the storefront down.
+  const [subscriptionsEnabled, drawsEnabled] = await Promise.all([
+    getFeatureFlag("subscriptions_enabled"),
+    getFeatureFlag("draws_enabled"),
+  ]);
   if (subscriptionsEnabled) {
     const session = await getSession().catch(() => null);
     if (session) {
       const activeSub = await getActiveSubscriptionForContact(session.contactId).catch(() => null);
       isMember = !!activeSub;
-      if (isMember) {
+      if (isMember && drawsEnabled) {
         type DrawEntry = {
           entry: { id: number; entryCount: number | null; status: string };
         };
@@ -125,11 +133,10 @@ export async function Header({
 
             {/* Actions */}
             <div className="flex items-center gap-4">
-              <GstToggle className="hidden md:inline-flex" />
               <Link href="/search" className="text-zinc-600 hover:text-zinc-900">
                 <Search className="h-5 w-5" />
               </Link>
-              <HeaderClient cartCount={cartCount} quoteCount={quoteCount} isMember={isMember} entryCount={entryCount} />
+              <HeaderClient cartCount={cartCount} quoteCount={quoteCount} isMember={isMember} entryCount={entryCount} drawsEnabled={drawsEnabled} />
               <MobileNavDrawer departments={megaMenu.departments} />
             </div>
           </div>

@@ -13,14 +13,18 @@ import { mergeContactMetafields } from "@/lib/contact-auth";
 import { siteBaseUrl } from "@/lib/seo";
 import {
   sendPasswordResetEmail,
-  sendEmailChangeVerificationEmail,
   resolveEmailBranding,
   wantsStripeTestMode,
 } from "@keenan/services";
 
-// Self-service password + email management. These are pure, channel-agnostic auth
+// Self-service password management. These are pure, channel-agnostic auth
 // flows shared byte-identically across template + every site (see
 // orchestrator/shared-modules.json) — no per-channel Stripe/design wiring lives here.
+//
+// There is deliberately NO self-service email change: customers cannot move the
+// address on their own account. Staff change it on the contact record in the
+// portal on request, which is treated as proven (see the portal's
+// updateContactAction).
 //
 // Identity unification: every flow is keyed by CONTACT id. requestPasswordReset
 // resolves its subject with contactService.findLoginCandidate, which also reaches
@@ -39,8 +43,8 @@ import {
 type ActionResult = { error?: string; success?: boolean; message?: string };
 
 // Basic in-memory throttle (per container), mirroring lib/actions/auth.ts. Keyed
-// per (flow:identifier) so password-reset and email-change requests are bounded
-// independently. Not a cross-replica store, but it blunts abuse of a single node.
+// per (flow:identifier) so each flow's requests are bounded independently. Not a
+// cross-replica store, but it blunts abuse of a single node.
 const attempts = new Map<string, number[]>();
 const WINDOW_MS = 15 * 60_000;
 const MAX_ATTEMPTS = 5;
@@ -221,113 +225,4 @@ export async function changePassword(
   await contactService.update(session.contactId, { password });
   await setSession(session.contactId, session.email); // refresh this device's cookie
   return { success: true, message: "Your password has been updated." };
-}
-
-const NEUTRAL_EMAIL_CHANGE_MESSAGE =
-  "Check your new inbox — if that address is available we've sent a link to confirm the change.";
-
-/** Step 1 of email change: verify identity, email a confirmation link to the NEW address. */
-export async function requestEmailChange(
-  _prev: ActionResult | null,
-  formData: FormData
-): Promise<ActionResult> {
-  const session = await getSession();
-  if (!session) return { error: "You must be signed in to change your email." };
-
-  const newEmail = (formData.get("newEmail") as string)?.trim().toLowerCase();
-  const current = formData.get("currentPassword") as string;
-
-  if (!newEmail || !isValidEmail(newEmail)) {
-    return { error: "Please enter a valid email address." };
-  }
-  if (newEmail === session.email.toLowerCase()) {
-    return { error: "That's already the email on your account." };
-  }
-  if (!current) return { error: "Please enter your current password to confirm." };
-
-  // Re-verify the password so a stolen session cookie can't silently move the
-  // account's email (which would let an attacker take over the login).
-  const contact = (await contactService.getById(session.contactId)) as {
-    password_hash: string | null;
-    first_name?: string | null;
-    last_name?: string | null;
-  } | null;
-  const { valid } = await verifyPassword(current, contact?.password_hash);
-  if (!contact || !valid) {
-    return { error: "Your password is incorrect." };
-  }
-
-  if (tooManyAttempts(`email-change:${session.contactId}`)) {
-    return { success: true, message: NEUTRAL_EMAIL_CHANGE_MESSAGE };
-  }
-
-  // Enumeration-safe: only mint + send when the address is actually free, but
-  // always return the same message. A real collision is also re-checked at confirm.
-  if (await contactService.isEmailAvailableForChannel(newEmail, CHANNEL_ID)) {
-    try {
-      const { token } = await customerAuthTokenService.createToken({
-        contactId: session.contactId,
-        type: "email_change",
-        payload: { newEmail },
-      });
-      const { branding, siteUrl, testMode } = await emailContext();
-      await sendEmailChangeVerificationEmail({
-        to: newEmail,
-        verifyUrl: `${siteUrl}/account/verify-email/${token}`,
-        customerName: displayName(contact),
-        branding,
-        testMode,
-      });
-    } catch (e) {
-      console.error("[requestEmailChange] failed:", e);
-    }
-  }
-
-  return { success: true, message: NEUTRAL_EMAIL_CHANGE_MESSAGE };
-}
-
-/**
- * Step 2 of email change: consume the token and apply the new email. Invoked on an
- * explicit click from the verify-email page (not on GET), so link scanners can't
- * burn the token. Re-issues the session cookie since it embeds the email.
- */
-export async function confirmEmailChange(token: string): Promise<ActionResult> {
-  const consumed = await customerAuthTokenService.consumeToken(token?.trim(), "email_change");
-  // contactId-subject only: pre-cutover tokens (customerId-subject) are not
-  // honoured — the bearer just requests a fresh link.
-  if (!consumed || consumed.contactId == null) {
-    return { error: "This confirmation link is invalid or has expired." };
-  }
-
-  const newEmail = (consumed.payload?.newEmail as string | undefined)?.trim().toLowerCase();
-  if (!newEmail || !isValidEmail(newEmail)) {
-    return { error: "This confirmation link is invalid or has expired." };
-  }
-
-  // Guard the race between request and confirm — the address may have been taken
-  // by another registration in the interim.
-  if (!(await contactService.isEmailAvailableForChannel(newEmail, CHANNEL_ID))) {
-    return { error: "That email address is no longer available." };
-  }
-
-  const contact = (await contactService.getById(consumed.contactId)) as {
-    metafields?: Record<string, unknown> | null;
-  } | null;
-  if (!contact) {
-    return { error: "This confirmation link is invalid or has expired." };
-  }
-
-  const metafields = { ...((contact.metafields as Record<string, unknown>) || {}), email_verified: true };
-  try {
-    await contactService.update(consumed.contactId, { email: newEmail, metafields });
-  } catch (e) {
-    // e.g. the (account_id, email) unique tripped for a B2B contact whose account
-    // already has another contact on that address.
-    console.error("[confirmEmailChange] email update failed:", e);
-    return { error: "That email address is no longer available." };
-  }
-
-  // The session HMAC embeds the email — re-issue so the current device stays valid.
-  await setSession(consumed.contactId, newEmail);
-  return { success: true, message: "Your email address has been updated.", };
 }

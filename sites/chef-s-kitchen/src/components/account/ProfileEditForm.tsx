@@ -66,9 +66,13 @@ export function ProfileEditForm({
         <label htmlFor="email" className="field-label">Email</label>
         <input id="email" type="email" value={email} disabled className="mt-1 block w-full input bg-steel-50 text-steel-500 cursor-not-allowed" />
         <p className="mt-1 text-xs text-text-secondary">
-          Manage your email address and password on the{" "}
+          Manage your password on the{" "}
           <a href="/account/security" className="text-text-primary font-medium hover:underline">
             security page
+          </a>
+          . To change the email on your account, please{" "}
+          <a href="/pages/contact" className="text-text-primary font-medium hover:underline">
+            contact us
           </a>
           .
         </p>

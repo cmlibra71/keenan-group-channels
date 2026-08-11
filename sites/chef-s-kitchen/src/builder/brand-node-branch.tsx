@@ -96,6 +96,7 @@ export async function renderBrandNodeBranch({
       loggedIn: memberCtx?.loggedIn ?? false,
     },
     gst: { inclusive: gstInclusive, pricesIncludeTax },
+    memberPricingAvailable: memberPricingEnabled,
     draft,
   });
 

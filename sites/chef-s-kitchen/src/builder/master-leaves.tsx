@@ -3,7 +3,7 @@ import { addToCart } from "@/lib/actions/cart";
 import { addToQuote } from "@/lib/actions/quote";
 import { useCartQuoteCounts, useHeaderPanels } from "@/lib/cart-quote-counts";
 import { trackAddedToCart } from "@/components/analytics/klaviyo";
-import { ga4SelectItem, ga4AddToCart } from "@/components/analytics/ga4";
+import { ga4SelectItem, ga4AddToCart, ga4ViewPromotion, ga4SelectPromotion, ga4ViewItemList } from "@/components/analytics/ga4";
 import type { NativeComponents } from "@keenan/services/builder-react";
 
 // ============================================================================
@@ -49,6 +49,69 @@ export function selectItemHandler(listId?: string, listName?: string) {
       },
       listId,
       listName
+    );
+    return { success: true };
+  };
+}
+
+/**
+ * The GA4 internal-promotion events, as Actions.
+ *
+ * The coded homepage wraps each creative in <Ga4Promotion>, which fires
+ * view_promotion once at 30% visibility and select_promotion on any click
+ * inside. An authored section has no wrapper to inherit that from, and the
+ * events render no markup — so when the homepage sections became masters the
+ * tracking went silently missing, with pixel parity none the wiser.
+ *
+ * The node model already has both triggers: `in-view` fires once at the same
+ * 0.3 threshold and disconnects, and `click` bubbles from the CTA. So the
+ * creative descriptor moves from a component prop to Action args, and the
+ * section master carries its own tracking.
+ */
+const promo = (args: Record<string, unknown>) => ({
+  creative_name: String(args.creative_name ?? ""),
+  creative_slot: String(args.creative_slot ?? ""),
+  promotion_name: strOr(args.promotion_name),
+  promotion_id: strOr(args.promotion_id),
+});
+
+export function viewPromotionHandler() {
+  return (args: Record<string, unknown>) => {
+    ga4ViewPromotion(promo(args));
+    return { success: true };
+  };
+}
+
+export function selectPromotionHandler() {
+  return (args: Record<string, unknown>) => {
+    ga4SelectPromotion(promo(args));
+    return { success: true };
+  };
+}
+
+/**
+ * view_item_list for an AUTHORED product rail.
+ *
+ * The coded grid renders <Ga4ViewItemList>, which fires once per list identity.
+ * A tree fires the same event from an `in-view` on the grid — once, because the
+ * renderer disconnects its observer after the first intersection. `items` is
+ * the enriched card array the rail is already binding, so nothing extra is
+ * fetched or shaped for analytics.
+ */
+export function viewItemListHandler() {
+  return (args: Record<string, unknown>) => {
+    const rows = Array.isArray(args.items) ? (args.items as Record<string, unknown>[]) : [];
+    if (rows.length === 0) return { success: true };
+    ga4ViewItemList(
+      rows.map((r, index) => ({
+        item_id: String(r.id ?? ""),
+        item_name: String(r.name ?? ""),
+        price: num(r.salePrice ?? r.sale_price ?? r.price) ?? undefined,
+        quantity: 1,
+        index,
+      })),
+      strOr(args.list_id),
+      strOr(args.list_name)
     );
     return { success: true };
   };

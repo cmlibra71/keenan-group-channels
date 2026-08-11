@@ -255,15 +255,17 @@ export function assert(cond, msg) {
 }
 
 /**
- * Mint a customer auth token via the guarded test route. The real reset/email-
- * change flows only store the token hash, so a test can't read the emailed link —
- * this returns a fresh plaintext token to drive /account/reset-password/<token>
- * and /account/verify-email/<token> directly. Test-domain accounts only.
+ * Mint a customer auth token via the guarded test route. The real password-reset
+ * and account-activation flows only store the token hash, so a test can't read the
+ * emailed link — this returns a fresh plaintext token to drive
+ * /account/reset-password/<token> directly. Test-domain accounts only.
+ * `type` is password_reset or account_activation; the route accepts nothing else
+ * (there is no self-service email change, so no newEmail payload).
  */
-export async function mintAuthToken(page, { base, secret, email, type, newEmail }) {
+export async function mintAuthToken(page, { base, secret, email, type }) {
   if (!secret) throw new Error("E2E_LOGIN_SECRET not set — cannot mint an auth token.");
   const res = await page.request.post(`${base}/api/test/auth-token`, {
-    data: { secret, email, type, ...(newEmail ? { newEmail } : {}) },
+    data: { secret, email, type },
     headers: { "content-type": "application/json" },
   });
   if (!res.ok()) {

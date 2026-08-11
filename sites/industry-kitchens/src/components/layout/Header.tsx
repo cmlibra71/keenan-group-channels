@@ -9,7 +9,6 @@ import type { HeaderNavItem, HeaderConfig } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 import { HeaderPanels } from "./HeaderPanels";
 import { HeaderSearch } from "./HeaderSearch";
-import { GstToggle } from "./GstToggle";
 import { MobileNav } from "./MobileNav";
 import { MegaMenu } from "./MegaMenu";
 import { MobileNavDrawer } from "./MobileNavDrawer";
@@ -44,13 +43,23 @@ export async function Header({
 
   let isMember = false;
   let entryCount = 0;
-  const subscriptionsEnabled = await getFeatureFlag("subscriptions_enabled");
+  // The header's prize-draw badge (crown + entry count) is gated on the SAME
+  // draws_enabled channel flag as every other draw surface, so switching draws
+  // on/off in channel settings switches the badge with them. Membership itself
+  // still keys off subscriptions_enabled, so the "Account" vs "Sign In/Register"
+  // label is unchanged. getFeatureFlag swallows its own errors and returns
+  // false, so a transient DB failure hides the badge rather than taking the
+  // storefront down.
+  const [subscriptionsEnabled, drawsEnabled] = await Promise.all([
+    getFeatureFlag("subscriptions_enabled"),
+    getFeatureFlag("draws_enabled"),
+  ]);
   if (subscriptionsEnabled) {
     const session = await getSession().catch(() => null);
     if (session) {
       const activeSub = await getActiveSubscriptionForContact(session.contactId).catch(() => null);
       isMember = !!activeSub;
-      if (isMember) {
+      if (isMember && drawsEnabled) {
         type DrawEntry = {
           entry: { id: number; entryCount: number | null; status: string };
         };
@@ -98,14 +107,14 @@ export async function Header({
                 className="hidden xl:block flex-1 max-w-3xl"
               />
 
-              {/* Account / GST / Quote / Cart — desktop */}
+              {/* Account / Quote / Cart — desktop */}
               <div className="hidden xl:flex items-center gap-4 shrink-0">
-                <GstToggle />
                 <HeaderClient
                   cartCount={cartCount}
                   quoteCount={quoteCount}
                   isMember={isMember}
                   entryCount={entryCount}
+                  drawsEnabled={drawsEnabled}
                 />
               </div>
 
@@ -121,6 +130,7 @@ export async function Header({
                   quoteCount={quoteCount}
                   isMember={isMember}
                   entryCount={entryCount}
+                  drawsEnabled={drawsEnabled}
                   variant="compact"
                 />
                 <span className="p-2 text-zinc-700 xl:hidden">
@@ -139,16 +149,19 @@ export async function Header({
           </div>
         </div>
 
-        {/* Sub-desktop GST + sign-in row */}
+        {/* Sub-desktop sign-in row */}
         <div className="xl:hidden border-b border-zinc-200 bg-zinc-50">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between py-1.5">
-              <GstToggle />
+            {/* justify-END, not between: the GST switch used to hold the left
+                edge of this strip. With it gone the account links are the only
+                child and would flush left, away from where shoppers look. */}
+            <div className="flex items-center justify-end py-1.5">
               <HeaderClient
                 cartCount={cartCount}
                 quoteCount={quoteCount}
                 isMember={isMember}
                 entryCount={entryCount}
+                drawsEnabled={drawsEnabled}
                 variant="account"
               />
             </div>

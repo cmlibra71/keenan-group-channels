@@ -188,6 +188,22 @@ export default async function ProductPage({
         brand: brandRow?.name ?? null,
       },
       draft,
+      // Everything IK's sealed product natives need. The node branch fetches
+      // the bindable payload itself; these are the route's own reads, which it
+      // already does for the block path's RenderContext extras.
+      nativeData: {
+        purchaseProduct: product,
+        memberPrice,
+        memberPriceMap,
+        isMember,
+        membershipTeaser,
+        reviews,
+        attachments,
+        description: product.description ?? null,
+        warranty: brandMeta.warranty_text ?? null,
+        customFields: (product.metafields as Record<string, unknown> | null) ?? null,
+        productId: product.id,
+      },
     });
     if (nodeRendered) return nodeRendered;
   }

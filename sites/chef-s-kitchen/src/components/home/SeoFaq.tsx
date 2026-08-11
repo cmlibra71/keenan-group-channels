@@ -38,7 +38,7 @@ export function SeoFaq({
           },
           {
             q: "Are prices shown with or without GST?",
-            a: "Prices default to ex-GST for trade. Use the GST switch in the header to flip every price between excluding and including GST — your choice is remembered.",
+            a: "Prices default to ex-GST for trade. Use the GST switch on any product page to flip every price between excluding and including GST — your choice is remembered.",
           },
         ];
 
