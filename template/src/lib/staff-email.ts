@@ -6,6 +6,7 @@ import {
   resolveEmailBranding,
   resolveChannelStaffNotificationRecipients,
   resolveOrderNotificationRecipients,
+  excludePurchaser,
 } from "@keenan/services";
 import { CHANNEL_ID } from "@/lib/store";
 
@@ -77,6 +78,7 @@ export async function sendStaffNotification({
   portalPath,
   linkLabel,
   audience = "staff",
+  excludeEmail,
 }: {
   subject: string;
   heading: string;
@@ -87,11 +89,21 @@ export async function sendStaffNotification({
   linkLabel: string;
   /** Which portal recipient list to notify. Defaults to the staff list. */
   audience?: StaffNotificationAudience;
+  /**
+   * Address to drop from the resolved list — the person whose own action raised
+   * the alert. A staff member who is on the notification list and buys from the
+   * storefront already gets their customer email; the internal copy about their
+   * own order is the second, unexpected email. Omit to notify everyone.
+   */
+  excludeEmail?: string | null;
 }): Promise<void> {
   // EMAIL_GLOBAL_REDIRECT mirrors the @keenan/services test-safety guard: a
   // staging build must never notify the real staff inbox.
   const redirect = process.env.EMAIL_GLOBAL_REDIRECT?.trim();
-  const recipients = redirect ? [redirect] : await resolveRecipients(audience);
+  // The redirect inbox is a test-safety override and is deliberately never filtered.
+  const recipients = redirect
+    ? [redirect]
+    : excludePurchaser(await resolveRecipients(audience), excludeEmail);
   if (recipients.length === 0) {
     console.warn(`[staff-email] no staff notification recipient configured — skipping "${subject}"`);
     return;
