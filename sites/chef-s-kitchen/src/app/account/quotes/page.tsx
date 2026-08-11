@@ -12,6 +12,9 @@ import {
   resolveQuoteTotal,
 } from "@/lib/quotes/price-visibility";
 import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
+import { quoteGstTotals } from "@/lib/quotes/quote-gst";
+import { resolveQuoteGstRate } from "@/lib/quotes/quote-gst-rate";
+import { GST_RATE } from "@keenan/services/calc";
 import { quoteStatusLabel } from "@/lib/quotes/quote-status-label";
 import { AccountShell } from "@/components/account/AccountShell";
 
@@ -24,6 +27,17 @@ interface QuoteRecord {
   contact_id: number | null;
   quote_number: string | null;
   quote_amount: string | null;
+  // Basis of the stored total (a Zoey-ingested total already includes GST) plus
+  // the components that reconcile to it — see quoteGstTotals.
+  tax_inclusive: boolean | null;
+  external_source: string | null;
+  tax_class_id: number | null;
+  base_amount: string | null;
+  discount_amount: string | null;
+  coupon_discount: string | null;
+  gift_certificate_amount: string | null;
+  store_credit_amount: string | null;
+  shipping_cost: string | null;
   attributes: Record<string, unknown> | null;
   created_at: Date | string | null;
 }
@@ -128,6 +142,22 @@ export default async function QuotesPage() {
     })
   );
 
+  // GST rate per tax class, resolved ONCE for the whole list (all but two quotes in
+  // production carry no class at all, so this is usually zero queries). Same rate the
+  // portal's /q page uses, so the two never disagree about a GST-free quote.
+  const classIds = [
+    ...new Set(
+      quotesWithItems.map((q) => q.tax_class_id).filter((id): id is number => id != null)
+    ),
+  ];
+  const rateByClass = new Map(
+    await Promise.all(classIds.map(async (id) => [id, await resolveQuoteGstRate(id)] as const))
+  );
+  // An explicit null check, not `id && map.get(id)`: a tax_class_id of 0 is falsy and
+  // `0 ?? DEFAULT` is 0, which would silently drop GST from that row.
+  const rateFor = (id: number | null): number =>
+    (id == null ? undefined : rateByClass.get(id)) ?? GST_RATE;
+
   return (
     <AccountShell>
       <div className="flex items-center justify-between mb-8">
@@ -163,7 +193,19 @@ export default async function QuotesPage() {
                   {/* Show the amount whenever prices are visible — including $0.00.
                       "To be quoted" means "not priced yet", not "zero". */}
                   {!quote.hidden_prices && resolveQuoteTotal(quote) !== null ? (
-                    <Price amount={resolveQuoteTotal(quote)!} className="font-semibold text-text-primary" />
+                    <span className="flex items-baseline gap-1">
+                      <Price
+                        amount={
+                          quoteGstTotals(
+                            resolveQuoteTotal(quote)!,
+                            quote,
+                            rateFor(quote.tax_class_id)
+                          ).incTax
+                        }
+                        className="font-semibold text-text-primary"
+                      />
+                      <span className="text-xs text-text-muted">inc GST</span>
+                    </span>
                   ) : (
                     <span className="text-sm font-medium text-text-muted">To be quoted</span>
                   )}
