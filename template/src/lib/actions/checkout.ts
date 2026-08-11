@@ -7,6 +7,7 @@ import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, resolveEmailBranding, wantsStripeTestMode, productImageService, type EmailLineItem } from "@keenan/services";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, type BelowCostLine } from "@/lib/checkout/order-draft";
+import { excludePurchaser } from "@/lib/checkout/staff-alert-recipients";
 import { getLineCosts } from "@/lib/store";
 import { sendStaffNotification } from "@/lib/staff-email";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
@@ -700,9 +701,9 @@ export async function placeOrder(
   try {
     // A staff member who orders as a customer already has the confirmation email;
     // sending them the internal alert as well means two emails for one order.
-    const purchaser = email.trim().toLowerCase();
-    const recipients = (await resolveOrderNotificationRecipients(CHANNEL_ID)).filter(
-      (r) => r.trim().toLowerCase() !== purchaser
+    const recipients = excludePurchaser(
+      await resolveOrderNotificationRecipients(CHANNEL_ID),
+      email
     );
     if (recipients.length > 0) {
       const { site, channel } = await getSiteConfig();
