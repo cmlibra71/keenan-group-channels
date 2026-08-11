@@ -5,9 +5,8 @@ import { cartService, cartItemService, orderService, orderItemService, orderShip
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
-import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, resolveEmailBranding, wantsStripeTestMode, productImageService, type EmailLineItem } from "@keenan/services";
+import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveEmailBranding, wantsStripeTestMode, productImageService, type EmailLineItem } from "@keenan/services";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, type BelowCostLine } from "@/lib/checkout/order-draft";
-import { excludePurchaser } from "@/lib/checkout/staff-alert-recipients";
 import { getLineCosts } from "@/lib/store";
 import { sendStaffNotification } from "@/lib/staff-email";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
@@ -503,6 +502,9 @@ export async function placeOrder(
     try {
       await sendStaffNotification({
         audience: "orders",
+        // Same list as the "new order" alert below, so it needs the same rule:
+        // don't send the buyer an internal warning about their own order.
+        excludeEmail: email,
         subject: `Below-cost pricing on order ${order.order_number}`,
         heading: "Order contains below-cost lines — review before fulfilment",
         rows: belowCostLines.map((l) => [
@@ -713,8 +715,11 @@ export async function placeOrder(
       const branding = await resolveEmailBranding(CHANNEL_ID).catch(() => undefined);
       const portalBase = (process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/$/, "");
       await sendOrderStaffNotificationEmail({
-        // No orderId: this email's params carry the id via `orderUrl` only, and
-        // passing it was a type error the compiler flagged as an excess property.
+        // Records the send on the order's history panel, exactly like the
+        // customer confirmation above — without it a storefront order's staff
+        // alert leaves no trace in the portal, so nobody can confirm from the
+        // order who was (or was not) emailed about it.
+        orderId: order.id,
         to: recipients,
         orderNumber: order.order_number,
         orderUrl: `${portalBase}/dashboard/orders/${order.id}`,
