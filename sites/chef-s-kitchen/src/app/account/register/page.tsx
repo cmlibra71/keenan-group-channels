@@ -1,14 +1,21 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { RegisterForm } from "@/components/auth/RegisterForm";
+import { safeNextPath } from "@/lib/account-redirect";
 
 export const metadata = {
   title: "Register",
 };
 
-export default async function RegisterPage() {
+export default async function RegisterPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
   const session = await getSession();
-  if (session) redirect("/account");
+  // Already signed in — honour the destination they were headed for, if any.
+  const next = safeNextPath((await searchParams).next);
+  if (session) redirect(next ?? "/account");
 
   return (
     <section className="relative overflow-hidden">
@@ -21,7 +28,7 @@ export default async function RegisterPage() {
         <div className="backdrop-blur-xl bg-white/30 border border-white/25 rounded-[28px] p-10 shadow-[0_8px_40px_rgba(0,0,0,0.15)] max-w-lg">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/70 mb-3">JOIN US</p>
           <h1 className="text-3xl heading-serif text-white mb-8">Create Membership Account</h1>
-          <RegisterForm />
+          <RegisterForm next={next} />
         </div>
       </div>
     </section>

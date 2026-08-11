@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { contactService, CHANNEL_ID } from "@/lib/store";
 import { setSession, endShopperSession } from "@/lib/auth";
+import { safeNextPath } from "@/lib/account-redirect";
 import { verifyPassword, validatePasswordStrength } from "@/lib/password";
 import { createAccountlessContact, EmailTakenError, type LoginCandidate } from "@/lib/contact-auth";
 // Shared login throttle so the form login and the account-panel login share ONE keyspace.
@@ -49,7 +50,10 @@ export async function login(
   }
 
   await setSession(candidate.id, candidate.email);
-  redirect("/account");
+  // Finish the journey the customer started — an emailed order link bounced here
+  // by the account guard carries its destination in `next`. Only same-site paths
+  // survive safeNextPath, so this can't be pushed off-site.
+  redirect(safeNextPath(formData.get("next")) ?? "/account");
 }
 
 export async function register(
@@ -101,7 +105,7 @@ export async function register(
   }
 
   await setSession(contact.id, contact.email);
-  redirect("/account");
+  redirect(safeNextPath(formData.get("next")) ?? "/account");
 }
 
 export async function logout() {
