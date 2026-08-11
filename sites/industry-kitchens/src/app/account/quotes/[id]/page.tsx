@@ -15,7 +15,8 @@ import {
   resolveQuoteTotal,
 } from "@/lib/quotes/price-visibility";
 import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
-import { quoteGstTotals } from "@/lib/quotes/quote-gst";
+import { quoteGstTotals, isMoneyRow } from "@/lib/quotes/quote-gst";
+import { resolveQuoteGstRate } from "@/lib/quotes/quote-gst-rate";
 import { quoteStatusLabel } from "@/lib/quotes/quote-status-label";
 import { AccountShell } from "@/components/account/AccountShell";
 
@@ -28,9 +29,16 @@ interface QuoteDetail {
   contact_id: number | null;
   quote_number: string | null;
   quote_amount: string | null;
-  // Basis of the stored total — a Zoey-ingested total already includes GST.
+  // Basis of the stored total (a Zoey-ingested total already includes GST) plus
+  // every component that reconciles to it — see quoteGstTotals.
   tax_inclusive: boolean | null;
   external_source: string | null;
+  tax_class_id: number | null;
+  discount_amount: string | null;
+  coupon_discount: string | null;
+  gift_certificate_amount: string | null;
+  store_credit_amount: string | null;
+  shipping_cost: string | null;
   base_amount: string | null;
   customer_notes: string | null;
   hide_prices: boolean | null;
@@ -122,8 +130,9 @@ export default async function QuoteDetailPage({
   // stale zero on a quote whose lines carry money. See resolveQuoteTotal.
   const total = resolveQuoteTotal(quote);
   // The quote total is the amount payable, so GST is broken out rather than left
-  // implicit — the same split the cart summary and the emailed quote show.
-  const gst = quoteGstTotals(total ?? 0, quote);
+  // implicit — the same split the cart summary and the emailed quote show, at the
+  // same per-quote rate the portal resolves.
+  const gst = quoteGstTotals(total ?? 0, quote, await resolveQuoteGstRate(raw.tax_class_id));
 
   return (
     <AccountShell>
@@ -229,14 +238,46 @@ export default async function QuoteDetailPage({
         })}
       </div>
 
-      {/* Totals — GST shown, because the quote total is what the customer pays. */}
+      {/* Totals — GST shown, because the quote total is what the customer pays.
+          Every non-zero component is printed, so Subtotal … Total is arithmetic the
+          customer can follow — including the freight Zoey folds into its grand total
+          with no shipping_cost of its own. */}
       <div className="mt-4 border-t border-zinc-200 pt-4">
         {!hidePrices && total !== null ? (
           <dl className="ml-auto w-full max-w-xs space-y-1 text-sm">
             <div className="flex items-center justify-between">
               <dt className="text-zinc-600">Subtotal (ex GST)</dt>
-              <dd><Price amount={gst.exTax} className="text-zinc-900" /></dd>
+              <dd><Price amount={gst.subtotalEx} className="text-zinc-900" /></dd>
             </div>
+            {(
+              [
+                ["Discount", gst.discountEx],
+                ["Coupon", gst.couponEx],
+                ["Gift certificate", gst.giftEx],
+                ["Store credit", gst.creditEx],
+              ] as const
+            )
+              .filter(([, amount]) => isMoneyRow(amount))
+              .map(([label, amount]) => (
+                <div key={label} className="flex items-center justify-between">
+                  <dt className="text-zinc-600">{label}</dt>
+                  <dd className="text-zinc-900">
+                    −<Price amount={amount} className="text-zinc-900" />
+                  </dd>
+                </div>
+              ))}
+            {isMoneyRow(gst.freightEx) && (
+              <div className="flex items-center justify-between">
+                <dt className="text-zinc-600">Freight (ex GST)</dt>
+                <dd><Price amount={gst.freightEx} className="text-zinc-900" /></dd>
+              </div>
+            )}
+            {isMoneyRow(gst.adjustmentEx) && (
+              <div className="flex items-center justify-between">
+                <dt className="text-zinc-600">Adjustment</dt>
+                <dd><Price amount={gst.adjustmentEx} className="text-zinc-900" /></dd>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <dt className="text-zinc-600">GST</dt>
               <dd><Price amount={gst.tax} className="text-zinc-900" /></dd>
