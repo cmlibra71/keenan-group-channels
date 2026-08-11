@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Package } from "lucide-react";
 import { getSession } from "@/lib/auth";
+import { signInRedirect } from "@/lib/account-redirect";
 import { customerOrderStage } from "@/lib/orders/order-status-label";
 import { orderService, CHANNEL_ID, getGuestOrdersForEmail } from "@/lib/store";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
@@ -24,7 +25,9 @@ export const metadata = {
 
 export default async function OrdersPage() {
   const session = await getSession();
-  if (!session) redirect("/account");
+  // An emailed "View your orders" link always arrives session-less: carry the
+  // destination so signing in lands the customer back HERE, on their orders.
+  if (!session) redirect(signInRedirect("/account/orders"));
 
   // Scope to THIS contact (and channel, defence-in-depth). Both are registered
   // filters on OrderService; without the contact_id filter the list would return

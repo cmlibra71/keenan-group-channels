@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
+import { signInRedirect } from "@/lib/account-redirect";
 import { CHANNEL_ID, subscriptionService, getCheckoutSettings } from "@/lib/store";
 import { getMembershipProfile } from "@/lib/membership";
 import { CompleteProfileForm } from "./CompleteProfileForm";
@@ -10,7 +11,7 @@ export const metadata = {
 
 export default async function CompleteProfilePage() {
   const session = await getSession();
-  if (!session) redirect("/account");
+  if (!session) redirect(signInRedirect("/account/membership/complete-profile"));
 
   // Must have a subscription (active or pending) to be here.
   const subs = await subscriptionService.listForContact(session.contactId, CHANNEL_ID);

@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import Image from "next/image";
 import { Package } from "lucide-react";
 import { getSession } from "@/lib/auth";
+import { signInRedirect } from "@/lib/account-redirect";
 import { quoteService, productImageService, CHANNEL_ID } from "@/lib/store";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import { Price } from "@/components/ui/Price";
@@ -81,12 +82,16 @@ export default async function QuoteDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await getSession();
-  if (!session) redirect("/account");
-
+  // Read the id first — purely syntactic, so it discloses nothing ahead of the
+  // session guard, and the guard needs it to send the customer back here.
   const { id } = await params;
   const quoteId = parseInt(id, 10);
   if (Number.isNaN(quoteId)) notFound();
+
+  // A quote notification link always arrives session-less: carry the destination
+  // so signing in lands the customer back on THIS quote.
+  const session = await getSession();
+  if (!session) redirect(signInRedirect(`/account/quotes/${quoteId}`));
 
   const raw = (await quoteService.getWithItems(quoteId)) as QuoteDetail | null;
   // Only the owning contact, on this channel, may view a quote — UNLESS their B2B

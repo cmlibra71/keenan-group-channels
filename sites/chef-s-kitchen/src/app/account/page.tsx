@@ -3,6 +3,7 @@ import { Package, FileText, MapPin, LogOut, Crown, Trophy, Gift, ArrowRight, Cal
 import { getSession } from "@/lib/auth";
 import { contactService, getActiveSubscriptionForContact, getUpcomingDraws, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { safeNextPath, signInPrompt } from "@/lib/account-redirect";
 import { logout } from "@/lib/actions/auth";
 import { AccountShell, readAccountNavFlags } from "@/components/account/AccountShell";
 
@@ -10,15 +11,24 @@ export const metadata = {
   title: "Account",
 };
 
-export default async function AccountPage() {
+export default async function AccountPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
   const session = await getSession();
 
   if (!session) {
+    // Set by the `/account/**` guards — e.g. the "View your orders" button on an
+    // order confirmation, opened in a browser with no session. Signing in returns
+    // the customer to it instead of dropping them on this panel.
+    const next = safeNextPath((await searchParams).next);
     return (
       <div className="mx-auto max-w-lg px-6 lg:px-8 section-padding">
         <p className="eyebrow mb-3">SIGN IN</p>
         <h1 className="text-3xl heading-serif text-text-primary mb-8">My Account</h1>
-        <LoginForm />
+        {next && <p className="body-text mb-4">{signInPrompt(next)}</p>}
+        <LoginForm next={next} />
       </div>
     );
   }

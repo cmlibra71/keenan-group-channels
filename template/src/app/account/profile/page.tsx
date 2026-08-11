@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getSession } from "@/lib/auth";
+import { signInRedirect } from "@/lib/account-redirect";
 import { contactService, customerAddressService, getCheckoutSettings } from "@/lib/store";
 import { ProfileEditForm } from "@/components/account/ProfileEditForm";
 import { AddressBook, type Address } from "@/components/account/AddressBook";
@@ -13,7 +14,7 @@ export const metadata = { title: "Account details" };
 
 export default async function ProfilePage() {
   const session = await getSession();
-  if (!session) redirect("/account");
+  if (!session) redirect(signInRedirect("/account/profile"));
 
   const [contact, addressRows, checkoutSettings] = await Promise.all([
     contactService.getById(session.contactId).catch(() => null),

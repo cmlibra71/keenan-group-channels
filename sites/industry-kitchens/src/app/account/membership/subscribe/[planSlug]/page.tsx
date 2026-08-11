@@ -1,5 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
+import { signInRedirect } from "@/lib/account-redirect";
 import { getFeatureFlag, getActiveSubscriptionForContact, subscriptionPlanService, CHANNEL_ID } from "@/lib/store";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
 import { SubscribeForm } from "./SubscribeForm";
@@ -16,14 +17,15 @@ export default async function SubscribePage({
   const enabled = await getFeatureFlag("subscriptions_enabled");
   if (!enabled) redirect("/account");
 
+  const { planSlug } = await params;
+
   const session = await getSession();
-  if (!session) redirect("/account");
+  if (!session) redirect(signInRedirect(`/account/membership/subscribe/${planSlug}`));
 
   // Redirect active subscribers back to membership page
   const activeSub = await getActiveSubscriptionForContact(session.contactId);
   if (activeSub) redirect("/account/membership");
 
-  const { planSlug } = await params;
   const plan = await subscriptionPlanService.getBySlugForChannel(CHANNEL_ID, planSlug);
 
   if (!plan) notFound();

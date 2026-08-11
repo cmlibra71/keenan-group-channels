@@ -4,7 +4,10 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { register } from "@/lib/actions/auth";
 
-export function RegisterForm() {
+// `next` carries the page the customer was originally sent to (an emailed order
+// link, typically) through registration, so a guest who has to create an account
+// before they can see their order still lands on it.
+export function RegisterForm({ next }: { next?: string | null }) {
   const [state, formAction, isPending] = useActionState(register, null);
 
   return (
@@ -17,6 +20,7 @@ export function RegisterForm() {
       )}
 
       <form action={formAction} className="space-y-4">
+        {next && <input type="hidden" name="next" value={next} />}
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label htmlFor="firstName" className="field-label">
@@ -83,7 +87,7 @@ export function RegisterForm() {
 
       <p className="mt-4 text-center body-text">
         Already have an account?{" "}
-        <Link href="/account" className="text-text-primary font-medium hover:underline">
+        <Link href={next ? `/account?next=${encodeURIComponent(next)}` : "/account"} className="text-text-primary font-medium hover:underline">
           Sign in
         </Link>
       </p>
