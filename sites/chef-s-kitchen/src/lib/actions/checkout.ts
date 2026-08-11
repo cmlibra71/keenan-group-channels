@@ -556,13 +556,23 @@ export async function placeOrder(
   // early-return) so every payment method saves exactly once; the idempotency
   // reuse branch returns earlier, so a double-submit can't double-save.
   //
+  // AUSTRALIAN ADDRESSES ONLY — `isAu` is part of the gate. The address book is
+  // AU-only by contract: the account pages hard-code Australia/AU on write and
+  // refuse an edit without a canonical state code and a 4-digit postcode. A
+  // channel whose supported countries include New Zealand (Industry Kitchens
+  // does) would otherwise file an "NZ" row the shopper can see but can never
+  // edit. CheckoutForm hides the tick box once a non-AU country is picked; this
+  // is the server half of that gate. `isAu` also guarantees `state` already
+  // normalised to one of the 8 codes and the postcode passed isValidAuPostcode,
+  // so the saved row satisfies exactly the rules the address book enforces.
+  //
   // The role gate is re-checked server-side against the SAME `perms` the new-
   // address check above used — the checkbox is simply not rendered for a
   // restricted contact, and a hand-posted `saveAddress` must not bypass that.
   //
   // Wrapped whole in try/catch: the order already exists and is paid-for-real in
   // a moment. Failing to file an address in a book must never fail an order.
-  if (session?.contactId && formData.get("saveAddress") === "on") {
+  if (session?.contactId && isAu && formData.get("saveAddress") === "on") {
     try {
       const mayAddAddress =
         !perms.isB2B ||
@@ -572,15 +582,18 @@ export async function placeOrder(
         await saveCheckoutAddressForContact(session.contactId, {
           firstName,
           lastName,
-          company: "",
+          // Same read as the order_shipping_addresses insert above, so the two
+          // records of one address never disagree.
+          company: (formData.get("company") as string)?.trim() || "",
           phone: phone || "",
           address1,
           address2: billingAddress.address2 || "",
           city,
-          stateOrProvince: state || "",
+          stateOrProvince: state,
           postalCode,
-          country: country === "AU" ? "Australia" : country,
-          countryCode: country,
+          // The canonical pair the address book itself writes (actions/account.ts).
+          country: "Australia",
+          countryCode: "AU",
         });
       }
     } catch (e) {

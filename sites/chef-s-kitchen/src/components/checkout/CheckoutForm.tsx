@@ -681,8 +681,13 @@ export function CheckoutForm({
 
               {/* Offer to keep a NEW address on the account. Not shown while
                   correcting a saved address (that's an edit of a row that
-                  already exists), nor to guests / role-restricted contacts. */}
-              {canSaveNewAddress && !needsCorrection && (
+                  already exists), nor to guests / role-restricted contacts, nor
+                  for a non-AU address — the address book is AU-only (the account
+                  pages hard-code Australia and refuse an edit without a real
+                  state code + 4-digit postcode), so an NZ address saved here
+                  would be a row the shopper could never edit. placeOrder
+                  re-checks the same `isAu` server-side. */}
+              {canSaveNewAddress && isAu && !needsCorrection && (
                 <label className="mt-4 flex items-center gap-2 text-sm text-ink-700">
                   <input
                     type="checkbox"
