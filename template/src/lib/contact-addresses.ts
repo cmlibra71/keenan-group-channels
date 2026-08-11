@@ -13,6 +13,12 @@
 // ============================================================================
 
 import { getCommerceClient } from "@keenan/services";
+import {
+  addressKey,
+  isDuplicateAddress,
+  defaultsForNewAddress,
+  type ExistingAddressRow,
+} from "@/lib/checkout/save-address";
 
 export type ContactAddressData = {
   firstName: string;
@@ -72,6 +78,30 @@ export async function createAddressForContact(
       ${d.address1}, ${d.address2}, ${d.city}, ${d.stateOrProvince}, ${d.postalCode},
       ${d.country}, ${d.countryCode}, ${d.isDefaultBilling}, ${d.isDefaultShipping}
     )`;
+}
+
+/**
+ * Add an address the shopper typed at CHECKOUT to their address book, when they
+ * asked us to keep it ("Save this address for next time").
+ *
+ * Two rules, both from the pure `save-address` module so they are unit-tested:
+ *   - an address they already have saved is not stored twice ("duplicate");
+ *   - the new row is only made the default when it is their FIRST address, so a
+ *     default they already chose is never displaced.
+ *
+ * Caller treats every outcome as advisory: an order must never fail because the
+ * address book could not be updated.
+ */
+export async function saveCheckoutAddressForContact(
+  contactId: number,
+  d: Omit<ContactAddressData, "isDefaultBilling" | "isDefaultShipping">
+): Promise<"saved" | "duplicate"> {
+  const sql = client();
+  const rows = await sql<ExistingAddressRow[]>`
+    SELECT address1, postal_code FROM customer_addresses WHERE contact_id = ${contactId}`;
+  if (isDuplicateAddress(addressKey(d.address1, d.postalCode), rows)) return "duplicate";
+  await createAddressForContact(contactId, { ...d, ...defaultsForNewAddress(rows.length) });
+  return "saved";
 }
 
 /** Full-field update. The WHERE clause is the ownership guard. */

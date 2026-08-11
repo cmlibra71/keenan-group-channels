@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { Crown, ArrowRight } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, customerAddressService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
+import { getContactPermissions } from "@/lib/role-permissions";
 import { gstSplit } from "@keenan/services/calc";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
@@ -71,7 +72,7 @@ export default async function CheckoutPage() {
   // Load saved addresses for the logged-in contact (identity unification —
   // listForContact also covers legacy customer-keyed rows via the migration's
   // contact_id backfill).
-  let savedAddresses: { id: number; firstName: string; lastName: string; address1: string; address2?: string; city: string; stateOrProvince: string; postalCode: string; countryCode: string; isDefaultBilling: boolean }[] = [];
+  let savedAddresses: { id: number; firstName: string; lastName: string; address1: string; address2?: string; city: string; stateOrProvince: string; postalCode: string; countryCode: string; phone?: string | null; isDefaultBilling: boolean }[] = [];
   if (session) {
     try {
       const rows = await customerAddressService.listForContact(session.contactId);
@@ -85,11 +86,47 @@ export default async function CheckoutPage() {
         stateOrProvince: (a.state_or_province || a.stateOrProvince || "") as string,
         postalCode: (a.postal_code || a.postalCode || "") as string,
         countryCode: (a.country_code || a.countryCode || "AU") as string,
+        // Was never mapped, so selecting a saved address posted an EMPTY phone
+        // even though CheckoutForm submits it as a hidden field.
+        phone: (a.phone ?? null) as string | null,
         isDefaultBilling: !!(a.is_default_billing ?? a.isDefaultBilling),
       }));
     } catch {
       // No saved addresses
     }
+  }
+
+  // Prefill the contact panel for a signed-in shopper who has NO saved address —
+  // their name and phone live on the contact record, not in the address book, so
+  // without this they retype details we already hold. Best-effort: a failed
+  // lookup just leaves the fields blank. Nothing here is written back — editing
+  // these fields affects this order only.
+  let contactPrefill: { firstName: string; lastName: string; phone: string } | undefined;
+  if (session) {
+    const contact = (await contactService
+      .getById(session.contactId)
+      .catch(() => null)) as { first_name?: string | null; last_name?: string | null; phone?: string | null } | null;
+    if (contact) {
+      contactPrefill = {
+        firstName: contact.first_name ?? "",
+        lastName: contact.last_name ?? "",
+        phone: contact.phone ?? "",
+      };
+    }
+  }
+
+  // May this shopper add the address they type to their address book? Guests have
+  // no account to save into. A contact on a B2B account is bound by the SAME role
+  // codes placeOrder enforces for a new checkout address — if their role forbids
+  // adding one, we must not offer to keep it. placeOrder re-checks this server-side;
+  // this is only what we SHOW.
+  let canSaveNewAddress = false;
+  if (session) {
+    const perms = await getContactPermissions(session.contactId);
+    canSaveNewAddress =
+      !perms.isB2B ||
+      perms.accountId === null ||
+      (perms.can("add_billing_address_in_checkout") && perms.can("add_shipping_address_in_checkout"));
   }
 
   // Resolve the channel's Stripe gateway (test-vs-live aware, prod-safe fallback)
@@ -176,6 +213,8 @@ export default async function CheckoutPage() {
         isMember={isMember}
         pricesIncludeTax={pricesIncludeTax}
         customerEmail={session?.email}
+        contactPrefill={contactPrefill}
+        canSaveNewAddress={canSaveNewAddress}
         countries={checkoutSettings.supportedCountries}
         paymentMethods={paymentMethods}
         savedAddresses={savedAddresses}

@@ -88,6 +88,8 @@ export function CheckoutForm({
   isMember,
   pricesIncludeTax,
   customerEmail,
+  contactPrefill,
+  canSaveNewAddress = false,
   countries = [],
   paymentMethods = [],
   savedAddresses = [],
@@ -104,6 +106,12 @@ export function CheckoutForm({
   isMember?: boolean;
   pricesIncludeTax?: boolean;
   customerEmail?: string;
+  /** Name + phone off the signed-in shopper's contact record, so a first-time
+   *  buyer with no saved address doesn't retype what we already hold. */
+  contactPrefill?: { firstName: string; lastName: string; phone: string };
+  /** Whether to offer "Save this address for next time" — false for guests and
+   *  for a B2B contact whose role forbids adding an address at checkout. */
+  canSaveNewAddress?: boolean;
   countries?: Country[];
   paymentMethods?: PaymentMethod[];
   savedAddresses?: SavedAddress[];
@@ -332,6 +340,16 @@ export function CheckoutForm({
     savedAddresses.length === 0 || selectedAddressId === "new" || needsCorrection;
   const prefill = needsCorrection ? selectedAddress : undefined;
 
+  // On the EMPTY new-address form (not the correction path, which is seeded from
+  // the saved address instead) fall back to the contact's own name and phone.
+  const seed = needsCorrection
+    ? { firstName: prefill?.firstName ?? "", lastName: prefill?.lastName ?? "", phone: prefill?.phone ?? "" }
+    : {
+        firstName: contactPrefill?.firstName ?? "",
+        lastName: contactPrefill?.lastName ?? "",
+        phone: contactPrefill?.phone ?? "",
+      };
+
   // Seed the correction form from the saved address — once per address, so a
   // re-render never wipes what the shopper has typed.
   const prefilledFor = useRef<number | null>(null);
@@ -513,6 +531,7 @@ export function CheckoutForm({
 
             {/* Address form — hidden when using a saved address we can use as-is */}
             {showAddressForm && (
+              <>
               <div className="grid grid-cols-2 gap-4" key={prefill ? `saved-${prefill.id}` : "new"}>
                 <div>
                   <label className="block text-sm font-medium text-ink-700">First Name</label>
@@ -520,7 +539,8 @@ export function CheckoutForm({
                     type="text"
                     name="firstName"
                     required
-                    defaultValue={prefill?.firstName ?? ""}
+                    autoComplete="given-name"
+                    defaultValue={seed.firstName}
                     className="mt-1 block w-full rounded-lg border border-steel-300 px-3 py-2 text-sm focus:border-steel-500 focus:outline-none"
                   />
                 </div>
@@ -530,7 +550,8 @@ export function CheckoutForm({
                     type="text"
                     name="lastName"
                     required
-                    defaultValue={prefill?.lastName ?? ""}
+                    autoComplete="family-name"
+                    defaultValue={seed.lastName}
                     className="mt-1 block w-full rounded-lg border border-steel-300 px-3 py-2 text-sm focus:border-steel-500 focus:outline-none"
                   />
                 </div>
@@ -571,7 +592,7 @@ export function CheckoutForm({
                     type="tel"
                     name="phone"
                     autoComplete="tel"
-                    defaultValue={prefill?.phone ?? ""}
+                    defaultValue={seed.phone}
                     className="mt-1 block w-full rounded-lg border border-steel-300 px-3 py-2 text-sm focus:border-steel-500 focus:outline-none"
                   />
                 </div>
@@ -657,6 +678,27 @@ export function CheckoutForm({
                   </div>
                 )}
               </div>
+
+              {/* Offer to keep a NEW address on the account. Not shown while
+                  correcting a saved address (that's an edit of a row that
+                  already exists), nor to guests / role-restricted contacts, nor
+                  for a non-AU address — the address book is AU-only (the account
+                  pages hard-code Australia and refuse an edit without a real
+                  state code + 4-digit postcode), so an NZ address saved here
+                  would be a row the shopper could never edit. placeOrder
+                  re-checks the same `isAu` server-side. */}
+              {canSaveNewAddress && isAu && !needsCorrection && (
+                <label className="mt-4 flex items-center gap-2 text-sm text-ink-700">
+                  <input
+                    type="checkbox"
+                    name="saveAddress"
+                    defaultChecked
+                    className="accent-[#00786F]"
+                  />
+                  Save this address for next time
+                </label>
+              )}
+              </>
             )}
 
             {/* Hidden fields for saved address (not while it's being corrected —
