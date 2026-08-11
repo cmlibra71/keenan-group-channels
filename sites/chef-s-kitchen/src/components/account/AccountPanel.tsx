@@ -132,6 +132,7 @@ function PanelLoginForm({
             type="email"
             id="panel-email"
             name="email"
+            autoComplete="username"
             required
             className="mt-1 block w-full input"
             placeholder="your@email.com"
@@ -145,6 +146,7 @@ function PanelLoginForm({
             type="password"
             id="panel-password"
             name="password"
+            autoComplete="current-password"
             required
             className="mt-1 block w-full input"
           />
@@ -227,6 +229,7 @@ function PanelRegisterForm({
               type="text"
               id="panel-firstName"
               name="firstName"
+              autoComplete="given-name"
               required
               className="mt-1 block w-full input"
             />
@@ -239,6 +242,7 @@ function PanelRegisterForm({
               type="text"
               id="panel-lastName"
               name="lastName"
+              autoComplete="family-name"
               required
               className="mt-1 block w-full input"
             />
@@ -252,6 +256,7 @@ function PanelRegisterForm({
             type="email"
             id="panel-reg-email"
             name="email"
+            autoComplete="username"
             required
             className="mt-1 block w-full input"
             placeholder="your@email.com"
@@ -265,6 +270,7 @@ function PanelRegisterForm({
             type="password"
             id="panel-reg-password"
             name="password"
+            autoComplete="new-password"
             required
             minLength={8}
             className="mt-1 block w-full input"

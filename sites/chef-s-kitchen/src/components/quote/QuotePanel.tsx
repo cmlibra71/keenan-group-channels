@@ -273,6 +273,7 @@ function QuotePanelLogin({
             type="email"
             id="quote-login-email"
             name="email"
+            autoComplete="username"
             required
             className="mt-1 block w-full input"
             placeholder="your@email.com"
@@ -286,6 +287,7 @@ function QuotePanelLogin({
             type="password"
             id="quote-login-password"
             name="password"
+            autoComplete="current-password"
             required
             className="mt-1 block w-full input"
           />
@@ -368,6 +370,7 @@ function QuotePanelRegister({
               type="text"
               id="quote-reg-firstName"
               name="firstName"
+              autoComplete="given-name"
               required
               className="mt-1 block w-full input"
             />
@@ -380,6 +383,7 @@ function QuotePanelRegister({
               type="text"
               id="quote-reg-lastName"
               name="lastName"
+              autoComplete="family-name"
               required
               className="mt-1 block w-full input"
             />
@@ -393,6 +397,7 @@ function QuotePanelRegister({
             type="email"
             id="quote-reg-email"
             name="email"
+            autoComplete="username"
             required
             className="mt-1 block w-full input"
             placeholder="your@email.com"
@@ -406,6 +411,7 @@ function QuotePanelRegister({
             type="password"
             id="quote-reg-password"
             name="password"
+            autoComplete="new-password"
             required
             minLength={8}
             className="mt-1 block w-full input"

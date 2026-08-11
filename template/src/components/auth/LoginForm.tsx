@@ -30,6 +30,7 @@ export function LoginForm() {
             type="email"
             id="email"
             name="email"
+            autoComplete="username"
             required
             className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
             placeholder="your@email.com"
@@ -43,6 +44,7 @@ export function LoginForm() {
             type="password"
             id="password"
             name="password"
+            autoComplete="current-password"
             required
             className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
           />

@@ -26,6 +26,7 @@ export function RegisterForm() {
               type="text"
               id="firstName"
               name="firstName"
+              autoComplete="given-name"
               required
               className="mt-1 block w-full input"
             />
@@ -38,6 +39,7 @@ export function RegisterForm() {
               type="text"
               id="lastName"
               name="lastName"
+              autoComplete="family-name"
               required
               className="mt-1 block w-full input"
             />
@@ -51,6 +53,7 @@ export function RegisterForm() {
             type="email"
             id="email"
             name="email"
+            autoComplete="username"
             required
             className="mt-1 block w-full input"
             placeholder="your@email.com"
@@ -64,6 +67,7 @@ export function RegisterForm() {
             type="password"
             id="password"
             name="password"
+            autoComplete="new-password"
             required
             minLength={8}
             pattern="(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}"
