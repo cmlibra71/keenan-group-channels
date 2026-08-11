@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
+import { signInRedirect } from "@/lib/account-redirect";
 import { contactService } from "@/lib/store";
 import { ChangePasswordForm } from "@/components/account/ChangePasswordForm";
 import { AccountShell } from "@/components/account/AccountShell";
@@ -11,7 +12,7 @@ export const metadata = {
 
 export default async function SecurityPage() {
   const session = await getSession();
-  if (!session) redirect("/account");
+  if (!session) redirect(signInRedirect("/account/security"));
 
   const customer = (await contactService.getById(session.contactId)) as {
     email: string;

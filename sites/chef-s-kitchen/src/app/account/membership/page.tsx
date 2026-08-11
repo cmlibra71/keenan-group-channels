@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Check, AlertTriangle, Clock } from "lucide-react";
 import { getSession } from "@/lib/auth";
+import { signInRedirect } from "@/lib/account-redirect";
 import {
   getSubscriptionPlans,
   getActiveSubscriptionForContact,
@@ -24,7 +25,7 @@ export default async function MembershipPage() {
   if (!enabled) redirect("/account");
 
   const session = await getSession();
-  if (!session) redirect("/account");
+  if (!session) redirect(signInRedirect("/account/membership"));
 
   const [plans, activeSub] = await Promise.all([
     getSubscriptionPlans(),

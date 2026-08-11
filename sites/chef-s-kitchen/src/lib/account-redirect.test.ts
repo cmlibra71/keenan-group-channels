@@ -19,6 +19,22 @@ test("nothing that could leave the site is honoured", () => {
   assert.equal(safeNextPath("https://evil.example"), null);
   assert.equal(safeNextPath("javascript:alert(1)"), null);
   assert.equal(safeNextPath("account/orders"), null);
+
+  // A browser strips TAB/CR/LF from a URL before parsing it, so these reach the
+  // parser as "//evil.example" and resolve off-site despite starting with "/".
+  const tab = String.fromCharCode(9);
+  const cr = String.fromCharCode(13);
+  const lf = String.fromCharCode(10);
+  assert.equal(new URL(`/${tab}/evil.example`, "https://example.com/account").host, "evil.example");
+  assert.equal(safeNextPath(`/${tab}/evil.example`), null);
+  assert.equal(safeNextPath(`/${cr}/evil.example`), null);
+  assert.equal(safeNextPath(`/${lf}/evil.example`), null);
+  assert.equal(safeNextPath(`/${cr}${lf}/evil.example`), null);
+  // CR/LF anywhere would also poison the redirect header (Node: ERR_INVALID_CHAR).
+  assert.equal(safeNextPath(`/account/orders${cr}${lf}Set-Cookie: a=b`), null);
+  // The rest of the C0 range and DEL are rejected on the same principle.
+  assert.equal(safeNextPath(`/account/${String.fromCharCode(0)}orders`), null);
+  assert.equal(safeNextPath(`/account/${String.fromCharCode(127)}orders`), null);
 });
 
 test("a missing or non-string next is simply absent", () => {
@@ -29,8 +45,11 @@ test("a missing or non-string next is simply absent", () => {
 });
 
 test("the prompt names what the customer came for", () => {
-  assert.equal(signInPrompt("/account/orders"), "Sign in to see your order history.");
-  assert.equal(signInPrompt("/account/orders/142870"), "Sign in to see your order history.");
+  // Guest checkouts get order confirmations too, so the order prompt has to say
+  // how someone with no password reaches the same history.
+  assert.match(signInPrompt("/account/orders"), /order history/);
+  assert.match(signInPrompt("/account/orders"), /guest/);
+  assert.match(signInPrompt("/account/orders/142870"), /order history/);
   assert.equal(signInPrompt("/account/quotes"), "Sign in to see your quotes.");
   assert.equal(signInPrompt("/account/profile"), "Sign in to continue.");
 });

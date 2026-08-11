@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Trophy } from "lucide-react";
 import { getSession } from "@/lib/auth";
+import { signInRedirect } from "@/lib/account-redirect";
 import {
   getFeatureFlag,
   getUpcomingDraws,
@@ -23,7 +24,7 @@ export default async function DrawsPage() {
   if (!enabled) redirect("/account");
 
   const session = await getSession();
-  if (!session) redirect("/account");
+  if (!session) redirect(signInRedirect("/account/draws"));
 
   type DrawEntry = {
     entry: { id: number; drawId: number; status: string; entryCount: number | null };
