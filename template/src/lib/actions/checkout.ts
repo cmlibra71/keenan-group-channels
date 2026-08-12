@@ -355,7 +355,14 @@ export async function placeOrder(
   // "What we show is exactly what we accept" — every filter added to the checkout page MUST be
   // duplicated here or the storefront leaks a bypass.
   const accountOptions = await resolveAccountOptions(session);
-  if (paymentMethod && !isPaymentMethodAllowed(paymentMethod, accountOptions?.allowedPaymentMethods ?? null)) {
+  if (
+    paymentMethod &&
+    !isPaymentMethodAllowed(
+      paymentMethod,
+      accountOptions?.allowedPaymentMethods ?? null,
+      accountOptions?.staffOnlyPaymentMethods ?? null
+    )
+  ) {
     return { error: disallowedPaymentMethodError() };
   }
   const minError = minimumOrderError(
