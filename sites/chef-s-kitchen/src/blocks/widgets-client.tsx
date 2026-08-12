@@ -13,7 +13,7 @@
 
 import type { FC } from "react";
 import type { RenderContext } from "@keenan/services";
-import { Minus, Plus, Truck, ShieldCheck, PackageCheck } from "lucide-react";
+import { Minus, Plus, Truck, ShieldCheck } from "lucide-react";
 import { ProductImageGallery } from "@/components/product/ProductImageGallery";
 import { AddToCartButton } from "@/components/product/AddToCartButton";
 import { AddToQuoteButton } from "@/components/product/AddToQuoteButton";
@@ -234,10 +234,13 @@ export const AddToQuoteWidget: WidgetComponent = ({ attrs }) => {
   );
 };
 
+// Registered under the `stock_status` widget key (kept — the key is the builder
+// seam and renaming it would orphan every page that references it). It renders
+// the product trust row, which per card CXnP1lrL states NO stock status: the
+// storefront never says "In stock" / "Check availability".
 export const StockStatusWidget: WidgetComponent = () => {
   const purchase = useProductPurchaseOptional();
   if (!purchase) return null;
-  const { inStock } = purchase;
   return (
     <>
       <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-4 text-[13px] text-text-secondary">
@@ -248,13 +251,6 @@ export const StockStatusWidget: WidgetComponent = () => {
         <span className="flex items-center gap-1.5">
           <ShieldCheck className="h-4 w-4 text-accent" strokeWidth={1.7} />
           Manufacturer warranty
-        </span>
-        <span className="flex items-center gap-1.5">
-          <PackageCheck
-            className={`h-4 w-4 ${inStock ? "text-brand" : "text-steel-400"}`}
-            strokeWidth={1.7}
-          />
-          {inStock ? "In stock" : "Check availability"}
         </span>
       </div>
     </>

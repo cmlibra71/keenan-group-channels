@@ -446,12 +446,9 @@ body {
          bg-brand-tint text-brand-deep;
 }
 
-.badge-stock-low {
-  @apply inline-flex items-center gap-1 font-bold uppercase
-         px-[9px] py-1 rounded-sm leading-none
-         text-[11px] tracking-[0.03em]
-         bg-warning-bg text-warning;
-}
+/* .badge-stock-low removed with the "Low Stock" tile tag (card CXnP1lrL) —
+   the storefront states no stock status. .badge-stock-in survives only because
+   the account address book reuses it as a neutral "Default shipping" chip. */
 
 .badge-new {
   @apply inline-flex items-center gap-1 font-bold uppercase

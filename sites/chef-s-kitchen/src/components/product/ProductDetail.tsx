@@ -16,7 +16,7 @@ import { AddToQuoteButton } from "./AddToQuoteButton";
 import { OptionSelector } from "./OptionSelector";
 import { Price } from "@/components/ui/Price";
 import { PriceBlock } from "@/components/ui/PriceBlock";
-import { Minus, Plus, Truck, ShieldCheck, PackageCheck } from "lucide-react";
+import { Minus, Plus, Truck, ShieldCheck } from "lucide-react";
 import { useProductPurchase } from "./ProductPurchaseProvider";
 import { useGst } from "@/lib/gst";
 
@@ -175,7 +175,9 @@ export function ProductDetail() {
         </div>
       </div>
 
-      {/* ═══ Delivery / warranty / stock trust row ═══ */}
+      {/* ═══ Delivery / warranty trust row ═══
+          HARD RULE (card CXnP1lrL): the storefront NEVER states stock status —
+          no "In stock", no "Check availability". Delivery + warranty only. */}
       <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-4 text-[13px] text-text-secondary">
         <span className="flex items-center gap-1.5">
           <Truck className="h-4 w-4 text-accent" strokeWidth={1.7} />
@@ -184,10 +186,6 @@ export function ProductDetail() {
         <span className="flex items-center gap-1.5">
           <ShieldCheck className="h-4 w-4 text-accent" strokeWidth={1.7} />
           Manufacturer warranty
-        </span>
-        <span className="flex items-center gap-1.5">
-          <PackageCheck className={`h-4 w-4 ${inStock ? "text-brand" : "text-steel-400"}`} strokeWidth={1.7} />
-          {inStock ? "In stock" : "Check availability"}
         </span>
       </div>
 

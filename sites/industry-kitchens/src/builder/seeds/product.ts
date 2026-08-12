@@ -57,16 +57,9 @@ function ic(id: string, cx: string, cy: string, r: string): BuilderNode {
     attrs: { cx: { kind: "static", value: cx }, cy: { kind: "static", value: cy }, r: { kind: "static", value: r } },
   };
 }
-// Exact lucide package-check icon (colour-conditional: text-brand in stock).
-function packageCheck(idp: string, colorClass: string): BuilderNode {
-  return trustIcon(`${idp}`, colorClass, [
-    ip(`${idp}-a`, "m16 16 2 2 4-4"),
-    ip(`${idp}-b`, "M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l2-1.14"),
-    ip(`${idp}-c`, "m7.5 4.27 9 5.15"),
-    { id: `${idp}-pl`, kind: "element", tag: "polyline", attrs: { points: { kind: "static", value: "3.29 7 12 12 20.71 7" } } },
-    { id: `${idp}-ln`, kind: "element", tag: "line", attrs: { x1: { kind: "static", value: "12" }, x2: { kind: "static", value: "12" }, y1: { kind: "static", value: "22" }, y2: { kind: "static", value: "12" } } },
-  ]);
-}
+// NOTE: the package-check icon helper was removed with the stock wording
+// (card CXnP1lrL) — the storefronts never state stock status, so the seeded
+// trust row is delivery + warranty only.
 
 // Tab strip: every tab = an active + inactive button pair gated on the shared
 // index state. Conditional tabs (Specifications/Downloads) wrap their pair in a
@@ -860,17 +853,9 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                       },
                     ],
                   },
-                  // Ships-to-order note. HARD RULE: the site NEVER says "out of
-                  // stock" and never blocks an order — everything drop-ships.
-                  {
-                    id: "ships-note",
-                    kind: "element",
-                    tag: "p",
-                    condition: { kind: "data", path: "purchase.shipsToOrder" },
-                    classes: ["mt-2", "text-[13px]", "font-semibold", "text-text-secondary"],
-                    text: [{ kind: "static", value: "Ships to order — Add to Cart or Add to Quote and we'll confirm delivery timing." }],
-                  },
-                  // Trust row
+                  // Trust row. HARD RULE (card CXnP1lrL): the storefronts NEVER
+                  // state stock status — no "In stock", no "Check availability",
+                  // no ships-to-order note. Delivery + warranty only.
                   {
                     id: "trust",
                     kind: "element",
@@ -904,30 +889,6 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                             ip("trust-war-p2", "m9 12 2 2 4-4"),
                           ]),
                           { id: "trust-war-t", kind: "element", tag: "span", text: [{ kind: "static", value: "Manufacturer warranty" }] },
-                        ],
-                      },
-                      {
-                        id: "trust-stock",
-                        kind: "element",
-                        tag: "span",
-                        classes: ["flex", "items-center", "gap-1.5"],
-                        children: [
-                          {
-                            id: "trust-stock-in-wrap", kind: "element", tag: "span", classes: ["contents"],
-                            condition: { kind: "data", path: "purchase.inStock" },
-                            children: [
-                              packageCheck("trust-stock-i-in", "text-brand"),
-                              { id: "trust-stock-t", kind: "element", tag: "span", text: [{ kind: "static", value: "In stock" }] },
-                            ],
-                          },
-                          {
-                            id: "trust-stock-out-wrap", kind: "element", tag: "span", classes: ["contents"],
-                            condition: { kind: "data", path: "purchase.inStock", not: true },
-                            children: [
-                              packageCheck("trust-stock-i-out", "text-steel-400"),
-                              { id: "trust-stock-out", kind: "element", tag: "span", text: [{ kind: "static", value: "Check availability" }] },
-                            ],
-                          },
                         ],
                       },
                     ],
