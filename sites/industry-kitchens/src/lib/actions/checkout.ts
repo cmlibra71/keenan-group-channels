@@ -717,6 +717,10 @@ export async function placeOrder(
       logoAlt: branding?.logoAlt ?? site?.logoAlt ?? null,
       fromEmail: branding?.fromEmail ?? site?.fromEmail ?? null,
       brandColor: branding?.brandColor ?? null,
+      // The banner colour reached the staff alert and the admin preview but not
+      // the customer's own confirmation — carried now like every other field the
+      // Email Templates page sets.
+      bannerBgColor: branding?.bannerBgColor ?? null,
       footerText: branding?.footerText ?? null,
       testMode: isTestMode,
     };
