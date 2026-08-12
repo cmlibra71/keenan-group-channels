@@ -53,7 +53,12 @@ export type OrderStage = (typeof ORDER_STAGES)[number];
  */
 const ORDER_STAGE_BY_STATUS: Record<string, OrderStage> = {
   // --- placed, nothing has happened to it yet ---
+  // `pending` is the legacy/Zoey spelling; `pending_payment` is where every new
+  // unpaid order lands since the portal's status lifecycle (Trello XJo20XmX).
+  // Both mean the same thing to a customer: we have the order, nothing has
+  // started, and nothing has been paid — so neither may read "Being prepared".
   pending: "Placed",
+  pending_payment: "Placed",
 
   // --- we have it and we are working on it ---
   awaiting_fulfillment: "Being prepared",
@@ -65,7 +70,6 @@ const ORDER_STAGE_BY_STATUS: Record<string, OrderStage> = {
   ship_ex_ws: "Being prepared",
   awaiting_shipment: "Being prepared",
   "3pl_pending": "Being prepared",
-  pending_payment: "Being prepared",
   awaiting_payment: "Being prepared",
   eway_authorised: "Being prepared",
   net_terms_account: "Being prepared",
