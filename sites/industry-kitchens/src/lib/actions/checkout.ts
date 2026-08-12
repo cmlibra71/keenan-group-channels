@@ -418,7 +418,18 @@ export async function placeOrder(
   if (!isPaymentMethodOnChannel(paymentMethod, checkoutSettings.customerPaymentMethods)) {
     return { error: unavailablePaymentMethodError() };
   }
-  if (paymentMethod && !isPaymentMethodAllowed(paymentMethod, accountOptions?.allowedPaymentMethods ?? null)) {
+  // (1) THEN the account's own two controls, and BOTH of them: the allow-list
+  // (which methods this account may use at all) and the per-account staff-only
+  // list (methods staff may key on the account's behalf but the customer may
+  // never pick). One without the other is a bypass.
+  if (
+    paymentMethod &&
+    !isPaymentMethodAllowed(
+      paymentMethod,
+      accountOptions?.allowedPaymentMethods ?? null,
+      accountOptions?.staffOnlyPaymentMethods ?? null
+    )
+  ) {
     return { error: disallowedPaymentMethodError() };
   }
   const minError = minimumOrderError(

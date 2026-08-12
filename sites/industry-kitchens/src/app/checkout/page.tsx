@@ -85,9 +85,13 @@ export default async function CheckoutPage() {
   // IK has it switched on today. A customer surface reads the customer list
   // (services `customerFacingPaymentMethods`, card NmAfwrdE); placeOrder
   // authorises against the same list.
+  //
+  // Then BOTH account controls, never one: the allow-list and the per-account
+  // staff-only list (card N8kE8arY). placeOrder re-applies the same pair.
   const entitledPaymentMethods = filterPaymentMethodsForAccount(
     checkoutSettings.customerPaymentMethods,
-    accountOptions?.allowedPaymentMethods ?? null
+    accountOptions?.allowedPaymentMethods ?? null,
+    accountOptions?.staffOnlyPaymentMethods ?? null
   )
     .filter((m) => m.id !== "net_terms" || !!netTerms)
     .map((m) => (m.id === "net_terms" && netTerms ? { ...m, netTermsDays: netTerms.netTermsDays } : m));
