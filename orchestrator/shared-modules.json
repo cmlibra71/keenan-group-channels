@@ -32,6 +32,8 @@
     "builder/master-leaves.tsx",
     "builder/product-node-branch.tsx",
     "builder/seeds/product.ts",
+    "builder/strip-stock-nodes.test.ts",
+    "builder/strip-stock-nodes.ts",
     "builder/use-form-handlers.ts",
     "lib/actions/account-panel.ts",
     "lib/actions/account-security.ts",

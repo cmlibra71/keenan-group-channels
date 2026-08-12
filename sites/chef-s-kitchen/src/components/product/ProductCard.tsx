@@ -71,7 +71,8 @@ export function ProductCard({
   const savePct = sale && rrp > 0 ? Math.round(((rrp - sale) / rrp) * 100) : 0;
 
   const tracked = (inventoryTracking ?? "none") !== "none";
-  const lowStock = tracked && (inventoryLevel ?? 0) > 0 && (inventoryLevel ?? 0) <= 3;
+  // No stock-level badge: per card CXnP1lrL the storefront never states stock
+  // status on a tile (the old "Low Stock" tag is gone).
   const outOfStock = availability === "disabled" || (tracked && (inventoryLevel ?? 0) <= 0);
 
   // Non-blocking: gtag queues the event; navigation proceeds immediately.
@@ -112,7 +113,6 @@ export function ProductCard({
         <div className="absolute left-2.5 top-2.5 z-[2] flex flex-col items-start gap-1.5">
           {savePct >= 5 && <span className="badge-save">Save {savePct}%</span>}
           {clearance && <span className="badge-clearance">Clearance</span>}
-          {!savePct && !clearance && lowStock && <span className="badge-stock-low">Low Stock</span>}
         </div>
 
         {/* Brand mark — top-right */}
