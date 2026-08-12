@@ -23,7 +23,6 @@ test("everything mid-pipeline reads as Being prepared", () => {
     "ship_ex_ws",
     "awaiting_shipment",
     "3pl_pending",
-    "pending_payment",
     "awaiting_payment",
     "eway_authorised",
     "net_terms_account",
@@ -32,6 +31,14 @@ test("everything mid-pipeline reads as Being prepared", () => {
   ]) {
     assert.equal(customerOrderStage(status), "Being prepared", status);
   }
+});
+
+test("an unpaid new order reads Placed, not Being prepared", () => {
+  // `pending_payment` is what the portal's status lifecycle now puts on every new
+  // unpaid order (Trello XJo20XmX). Telling a bank-transfer customer who has paid
+  // nothing that we are "preparing" their order would be a lie.
+  assert.equal(customerOrderStage("pending_payment"), "Placed");
+  assert.equal(customerOrderStage("pending"), "Placed");
 });
 
 test("finance-company statuses read as Being prepared and never name the financier", () => {
