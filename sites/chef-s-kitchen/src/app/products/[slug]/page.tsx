@@ -32,7 +32,7 @@ export async function generateMetadata({
   const descRaw =
     (product.metaDescription as string) ||
     (product.descriptionShort as string) ||
-    `${name} — professional kitchen equipment at Chef's Depot.`;
+    `${name} — professional kitchen equipment at Chefs Depot.`;
   const description = descRaw.replace(/<[^>]*>/g, "").trim().slice(0, 160);
   const imgs = product.images as Array<{ url?: string | null }> | undefined;
   const image = Array.isArray(imgs) && imgs[0]?.url ? imgs[0].url : undefined;
