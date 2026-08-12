@@ -24,6 +24,11 @@
  * and never a substitute for the table when it can be read.
  */
 export const FALLBACK_HIDE_PRICE_STATUSES: ReadonlySet<string> = new Set([
+  // A staff-only draft should never render to a customer at all (see
+  // draft-visibility.ts) — it is listed here as the last line of defence, so a
+  // legacy row with a null hide_prices can't show its negotiated prices even if a
+  // future surface forgets the draft filter.
+  "draft",
   "created",
   "quote_pending",
   "open_change_request",

@@ -43,9 +43,11 @@ describe("quoteHidesPrices", () => {
   });
 
   test("the fallback set matches the price-hiding system statuses", () => {
+    // Every status seeded hidePrices=true in @keenan/services SYSTEM_QUOTE_STATUSES
+    // — including `draft`, the staff-only one, which had been missing here.
     assert.deepEqual(
       [...FALLBACK_HIDE_PRICE_STATUSES].sort(),
-      ["created", "open_change_request", "quote_pending"]
+      ["created", "draft", "open_change_request", "quote_pending"]
     );
   });
 
