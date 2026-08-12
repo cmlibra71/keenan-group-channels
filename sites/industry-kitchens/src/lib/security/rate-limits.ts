@@ -85,6 +85,28 @@ export async function enforceLimit(
   return decision;
 }
 
+/**
+ * The 429 a ROUTE HANDLER returns — a real status code with `Retry-After`,
+ * which is the one thing a server action cannot produce.
+ */
+export function rateLimitResponse(decision: RateLimitDecision): Response {
+  return new Response(
+    JSON.stringify({
+      error: decision.message,
+      code: "RATE_LIMITED",
+      retry_after: decision.retryAfter,
+    }),
+    {
+      status: 429,
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Retry-After": String(decision.retryAfter),
+        "Cache-Control": "no-store",
+      },
+    }
+  );
+}
+
 /** Charge a wrong password / unknown account to the policy's failure buckets. */
 export async function noteLimitFailure(
   policy: RateLimitPolicyName,

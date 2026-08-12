@@ -275,6 +275,27 @@ test("neverBan keeps a repeat offender on throttles instead of a ban", () => {
   assert.ok(!actions.has("ban"), "credential traffic must never be banned");
 });
 
+test("neverBan traffic ignores a ban the scraping guard already recorded", () => {
+  const h = harness({ limits: { credential: { burstMs: 10_000, burstMax: 3, windowMs: 5 * MINUTE, max: 10 } } });
+  const ip = "14.201.194.198";
+
+  // The scraping guard banned this IP (it records bans even in GUARD_MODE=log).
+  h.store.setBan(ip, { until: h.at() + 24 * 60 * MINUTE, strikes: 4, lastBanAt: h.at() });
+
+  // Ordinary browsing still sees the ban…
+  assert.equal(h.limiter.check({ ipKey: ip, surface: "page", tier: "none", weight: 1 }).action, "ban");
+
+  // …but the shopper can still sign in, register, reset a password, check out.
+  const credential = h.limiter.check({
+    ipKey: ip,
+    surface: "credential",
+    tier: "none",
+    weight: 1,
+    neverBan: true,
+  });
+  assert.equal(credential.action, "allow");
+});
+
 test("the same traffic WITHOUT neverBan does escalate to a ban", () => {
   const h = harness({ limits: { credential: { burstMs: 10_000, burstMax: 3, windowMs: 5 * MINUTE, max: 10 } } });
   const hitCredential = () =>

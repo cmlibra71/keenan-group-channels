@@ -1,8 +1,17 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { searchAddresses, getAddressDetails } from "@/lib/actions/address";
-import type { PlacePrediction } from "@/lib/actions/address";
+import type { PlacePrediction } from "@keenan/services/integrations";
+
+/**
+ * The typeahead talks to ROUTES (/api/address/*), not to server actions.
+ *
+ * A server action POSTs to whatever page fired it, so on /checkout every
+ * debounce-settle would land in the middleware guard's credential budget and a
+ * shopper typing a shipping and a billing address could be handed a 429 in the
+ * middle of paying. A GET on /api is ordinary traffic, and carries its own
+ * budget (see lib/security/rate-limit-core.ts `address_lookup`).
+ */
 
 type Props = {
   onSelect: (address: {
@@ -31,7 +40,9 @@ export function AddressAutocomplete({ onSelect, inputRef }: Props) {
 
     setIsLoading(true);
     try {
-      const results = await searchAddresses(query);
+      const res = await fetch(`/api/address/suggest?q=${encodeURIComponent(query)}`);
+      const body = res.ok ? await res.json() : null;
+      const results: PlacePrediction[] = body?.predictions ?? [];
       setPredictions(results);
       setIsOpen(results.length > 0);
     } catch {
@@ -56,7 +67,12 @@ export function AddressAutocomplete({ onSelect, inputRef }: Props) {
       setIsOpen(false);
       setPredictions([]);
 
-      const details = await getAddressDetails(prediction.placeId);
+      // Suggestions are a convenience: if the lookup is unavailable (or rate
+      // limited) the shopper simply keeps typing the address themselves.
+      const res = await fetch(
+        `/api/address/details?placeId=${encodeURIComponent(prediction.placeId)}`
+      );
+      const details = res.ok ? (await res.json()).address : null;
       if (details) {
         onSelect({
           address1: details.address1,

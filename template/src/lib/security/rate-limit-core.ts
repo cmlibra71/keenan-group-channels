@@ -45,17 +45,24 @@ export interface RateLimitPolicy {
 const MINUTE = 60_000;
 
 const POLICIES = {
-  /** Customer sign-in — the form action AND the account-drawer login. */
+  /**
+   * Customer sign-in — the form action AND the account-drawer login.
+   *
+   * BOTH buckets count FAILURES ONLY. A trade customer's whole office shares
+   * one egress address, so charging successful logins to the IP bucket would
+   * ration a real customer's staff; charging only wrong passwords still caps
+   * credential stuffing, which is wrong passwords by definition.
+   */
   sign_in: {
-    message: "Too many attempts. Please wait a few minutes and try again.",
+    message: "Too many attempts.",
     buckets: [
-      { scope: "ip", windowMs: 15 * MINUTE, max: 30 },
+      { scope: "ip", windowMs: 15 * MINUTE, max: 30, failuresOnly: true },
       { scope: "account", windowMs: 15 * MINUTE, max: 10, failuresOnly: true },
     ],
   },
   /** Self-service account creation. */
   registration: {
-    message: "Too many attempts. Please wait a few minutes and try again.",
+    message: "Too many attempts.",
     buckets: [
       { scope: "ip", windowMs: 15 * MINUTE, max: 10 },
       { scope: "account", windowMs: 60 * MINUTE, max: 5 },
@@ -63,7 +70,7 @@ const POLICIES = {
   },
   /** "Forgot password" — asking for the emailed link. */
   password_reset_request: {
-    message: "Too many attempts. Please wait a few minutes and try again.",
+    message: "Too many attempts.",
     buckets: [
       { scope: "ip", windowMs: 15 * MINUTE, max: 10 },
       { scope: "account", windowMs: 15 * MINUTE, max: 5 },
@@ -71,12 +78,12 @@ const POLICIES = {
   },
   /** Spending a reset/activation token (guessing tokens is the attack). */
   password_reset_submit: {
-    message: "Too many attempts. Please wait a few minutes and try again.",
+    message: "Too many attempts.",
     buckets: [{ scope: "ip", windowMs: 15 * MINUTE, max: 10 }],
   },
   /** A signed-in customer changing their own password. */
   password_change: {
-    message: "Too many attempts. Please wait a few minutes and try again.",
+    message: "Too many attempts.",
     buckets: [
       { scope: "ip", windowMs: 15 * MINUTE, max: 10 },
       { scope: "account", windowMs: 15 * MINUTE, max: 10, failuresOnly: true },
@@ -88,7 +95,7 @@ const POLICIES = {
    * through checkout one number at a time.
    */
   checkout: {
-    message: "Too many attempts. Please wait a few minutes and try again.",
+    message: "Too many attempts.",
     buckets: [
       { scope: "ip", windowMs: 10 * MINUTE, max: 60 },
       { scope: "account", windowMs: 10 * MINUTE, max: 30 },
@@ -96,15 +103,29 @@ const POLICIES = {
   },
   /** Confirming a Stripe payment intent against an order number. */
   payment_confirm: {
-    message: "Too many attempts. Please wait a few minutes and try again.",
+    message: "Too many attempts.",
     buckets: [
       { scope: "ip", windowMs: 10 * MINUTE, max: 60 },
       { scope: "account", windowMs: 10 * MINUTE, max: 20 },
     ],
   },
+  /**
+   * The address typeahead (GET /api/address/*).
+   *
+   * NOT credential traffic, and deliberately not on a credential path: every
+   * keystroke-settle is a request, so counting it against the sign-in/checkout
+   * envelope would let a shopper typing two addresses throttle their own
+   * checkout. It has a budget of its own because each call costs a Google
+   * Places lookup — sized for typing (a 300 ms debounce settles a few times per
+   * address), not for scraping the Places API through us.
+   */
+  address_lookup: {
+    message: "Too many address lookups.",
+    buckets: [{ scope: "ip", windowMs: 5 * MINUTE, max: 150 }],
+  },
   /** The checkout "do you already have an account?" probe (bulk enumeration). */
   email_lookup: {
-    message: "Too many attempts. Please wait a few minutes and try again.",
+    message: "Too many attempts.",
     buckets: [{ scope: "ip", windowMs: 5 * MINUTE, max: 20 }],
   },
 } satisfies Record<string, RateLimitPolicy>;
@@ -174,6 +195,20 @@ function retryAfterSeconds(recent: number[], windowMs: number, now: number): num
   return Math.max(1, Math.ceil((oldest + windowMs - now) / 1000));
 }
 
+/**
+ * The wait, in words.
+ *
+ * A storefront sign-in or checkout is a Next SERVER ACTION, which cannot set a
+ * status code — the shopper gets a sentence on the page, not a `Retry-After`
+ * header. Composing the wait INTO the message means both halves tell them the
+ * same thing: how long, concretely, rather than "a few minutes".
+ */
+export function rejectionMessage(stem: string, retryAfterSec: number): string {
+  if (retryAfterSec <= 90) return `${stem} Please try again in about a minute.`;
+  const minutes = Math.ceil(retryAfterSec / 60);
+  return `${stem} Please try again in about ${minutes} minutes.`;
+}
+
 /** One audit row per bucket per window, however hard the flood pushes. */
 function shouldAudit(key: string, windowMs: number, now: number): boolean {
   const last = auditedAt.get(key);
@@ -203,11 +238,12 @@ export function consumeRateLimit(
 
     const recent = windowHits(key, bucket.windowMs, now);
     if (recent.length >= bucket.max) {
+      const retryAfter = retryAfterSeconds(recent, bucket.windowMs, now);
       return {
         allowed: false,
-        retryAfter: retryAfterSeconds(recent, bucket.windowMs, now),
+        retryAfter,
         scope: bucket.scope,
-        message: policy.message,
+        message: rejectionMessage(policy.message, retryAfter),
         audit: shouldAudit(key, bucket.windowMs, now),
         limit: bucket.max,
         windowMs: bucket.windowMs,

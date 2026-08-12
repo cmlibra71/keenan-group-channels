@@ -13,6 +13,7 @@ import { classifySurface, isCredentialPath } from "./surfaces";
 import { classifyBot, isAllowlistedIp } from "./bots";
 import { createLimiter, type Verdict } from "./limiter";
 import { getSharedStore } from "./store";
+import { pushGuardEvent } from "./events";
 
 export type GuardMode = "off" | "log" | "enforce";
 
@@ -103,12 +104,34 @@ function blockedResponse(req: NextRequest, verdict: Verdict): NextResponse {
   const minutes = Math.max(1, Math.round(verdict.retryAfterSec / 60));
   headers.set("Content-Type", "text/plain; charset=utf-8");
   const contact = CONTACT ? `\nIf this is a mistake, contact ${CONTACT}.` : "";
+
+  // A shopper who lands here is signing in or paying, not scraping — the copy
+  // must not accuse them of being a robot.
+  const reason =
+    verdict.surface === "credential"
+      ? "Too many attempts from this connection."
+      : "Automated traffic detected.";
+
   return new NextResponse(
-    `429 Too Many Requests\n\nAutomated traffic detected. Please try again in ${minutes} minute${
+    `429 Too Many Requests\n\n${reason} Please try again in ${minutes} minute${
       minutes === 1 ? "" : "s"
     }.${contact}\n`,
     { status: 429, headers }
   );
+}
+
+/**
+ * One audit event per IP per credential window, however hard the flood pushes —
+ * the same rule the per-account limiter follows in lib/security.
+ */
+const AUDITED_MS = 5 * 60_000;
+const auditedAt = new Map<string, number>();
+function shouldAuditCredential(ipKey: string, at: number): boolean {
+  const last = auditedAt.get(ipKey);
+  if (last !== undefined && at - last < AUDITED_MS) return false;
+  if (auditedAt.size > 10_000) auditedAt.clear(); // bookkeeping only, safe to drop
+  auditedAt.set(ipKey, at);
+  return true;
 }
 
 /**
@@ -160,6 +183,20 @@ export function guardRequest(req: NextRequest): NextResponse | null {
             `[guard] ${CREDENTIAL_MODE === "log" ? "WOULD " : ""}throttle credential ` +
               `ip=${ipKey} path=${pathname} retryAfter=${credentialVerdict.retryAfterSec}s`
           );
+        }
+        // The audit line the card asks for. The middleware cannot write it
+        // itself (no @keenan/services in this bundle), so it is queued for
+        // lib/security/guard-audit.ts to record — see ./events.ts.
+        const at = Date.now();
+        if (shouldAuditCredential(ipKey, at)) {
+          pushGuardEvent({
+            at,
+            policy: "credential",
+            ipKey,
+            path: pathname,
+            retryAfterSec: credentialVerdict.retryAfterSec,
+            enforced: CREDENTIAL_MODE === "enforce",
+          });
         }
         if (CREDENTIAL_MODE === "enforce") return blockedResponse(req, credentialVerdict);
       }

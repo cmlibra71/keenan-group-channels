@@ -142,6 +142,33 @@ describe("storefront rate-limit rulebook", () => {
     assert.equal(other.scope, "account");
   });
 
+  test("a customer's whole office can sign in from one address", () => {
+    const t0 = 20_000_000;
+    for (let i = 0; i < 40; i++) {
+      const decision = consumeRateLimit("sign_in", { ip: "203.0.113.7", identifier: `buyer${i}@trade.com.au` }, t0 + i);
+      assert.equal(decision.allowed, true, `sign-in ${i} was refused`);
+    }
+  });
+
+  test("wrong passwords from that address are still capped", () => {
+    const t0 = 21_000_000;
+    const max = RATE_LIMIT_POLICIES.sign_in.buckets[0].max;
+    for (let i = 0; i < max; i++) {
+      noteRateLimitFailure("sign_in", { ip: "203.0.113.8", identifier: `victim${i}@x.com` }, t0 + i);
+    }
+    const blocked = consumeRateLimit("sign_in", { ip: "203.0.113.8", identifier: "victim999@x.com" }, t0 + max);
+    assert.equal(blocked.allowed, false);
+    assert.equal(blocked.scope, "ip");
+  });
+
+  test("the address typeahead has a budget of its own", () => {
+    const t0 = 22_000_000;
+    // Typing two full addresses is a handful of settles; 100 is far past that.
+    for (let i = 0; i < 100; i++) {
+      assert.equal(consumeRateLimit("address_lookup", { ip: "203.0.113.9" }, t0 + i).allowed, true);
+    }
+  });
+
   test("every policy is well formed", () => {
     for (const [name, policy] of Object.entries(RATE_LIMIT_POLICIES)) {
       assert.ok(policy.buckets.length > 0, `${name} has no buckets`);
