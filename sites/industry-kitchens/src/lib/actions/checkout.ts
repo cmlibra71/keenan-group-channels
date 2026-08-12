@@ -32,6 +32,7 @@ import {
   minimumOrderError,
   disallowedPaymentMethodError,
 } from "@/lib/checkout/account-options-policy";
+import { enforceLimit } from "@/lib/security/rate-limits";
 
 // Pricing/tax/payment-status computation lives in the pure order-draft module
 // (lib/checkout/order-draft.ts), which delegates GST math to @keenan/services
@@ -48,6 +49,17 @@ export async function placeOrder(
   formData: FormData
 ): Promise<PlaceOrderResult> {
   const session = await getSession();
+
+  // Rate limit before any work: this is the endpoint card-testing hits, running
+  // a stolen card list through checkout one number at a time. Budgets are
+  // deliberately generous (lib/security/rate-limit-core.ts) — a false positive
+  // here costs a sale — and are keyed per caller AND per shopper.
+  const checkoutLimit = await enforceLimit("checkout", {
+    identifier: session ? String(session.contactId) : null,
+    identifierIsEmail: false,
+    surface: "checkout",
+  });
+  if (!checkoutLimit.allowed) return { error: checkoutLimit.message };
 
   // Get cart
   const uuid = await getCartUuid();
@@ -820,6 +832,14 @@ export async function confirmStripePayment(
   // mutation means an unauthorized caller can't wipe a victim's cart.
   const session = await getSession();
   if (!session) return { success: false, error: "Not authenticated" };
+
+  // Order numbers are semi-guessable, so cap how fast one caller can probe them.
+  const limit = await enforceLimit("payment_confirm", {
+    identifier: String(session.contactId),
+    identifierIsEmail: false,
+    surface: "stripe confirm",
+  });
+  if (!limit.allowed) return { success: false, error: limit.message };
 
   try {
     const orders = await orderService.list({

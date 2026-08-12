@@ -12,6 +12,7 @@ export type SurfaceClass =
   | "image"
   | "api"
   | "checkout"
+  | "credential"
   | "sitemap";
 
 export type Limit = {
@@ -39,6 +40,11 @@ const HOUR = 60 * MINUTE;
  * - `checkout` is deliberately generous: a false positive there costs a sale,
  *   and those routes are already protected by login-throttle and form limits.
  * - `sitemap` is tight because each hit is a ~40k-row catalogue enumeration.
+ * - `credential` counts POSTs to the sign-in / register / password / checkout
+ *   paths ONLY (see isCredentialPath). Server actions POST to the page they
+ *   were fired from, so this is the coarse per-IP envelope in front of the
+ *   per-account limits in lib/security — set well above any human, and low
+ *   enough that credential stuffing or card testing hits it in seconds.
  */
 export const SURFACE_LIMITS: Record<Exclude<SurfaceClass, "exempt">, Limit> = {
   page: { burstMs: 10 * SECOND, burstMax: 30, windowMs: 5 * MINUTE, max: 300 },
@@ -47,6 +53,7 @@ export const SURFACE_LIMITS: Record<Exclude<SurfaceClass, "exempt">, Limit> = {
   image: { burstMs: 10 * SECOND, burstMax: 120, windowMs: 5 * MINUTE, max: 1200 },
   api: { burstMs: 10 * SECOND, burstMax: 60, windowMs: 5 * MINUTE, max: 400 },
   checkout: { burstMs: 10 * SECOND, burstMax: 60, windowMs: 5 * MINUTE, max: 600 },
+  credential: { burstMs: MINUTE, burstMax: 20, windowMs: 5 * MINUTE, max: 40 },
   sitemap: { burstMs: MINUTE, burstMax: 2, windowMs: HOUR, max: 10 },
 };
 
@@ -84,6 +91,25 @@ function canonical(pathname: string): string {
 
 function startsWithSegment(path: string, prefix: string): boolean {
   return path === prefix || path.startsWith(`${prefix}/`);
+}
+
+/**
+ * Paths whose POSTs are credential or payment traffic: signing in, registering,
+ * password reset/change and placing an order. GETs are untouched — browsing the
+ * account area is ordinary page traffic.
+ *
+ * Coarse on purpose: a server action POSTs to the URL the shopper is standing
+ * on, so the account DRAWER can fire a sign-in from any page. Those are caught
+ * by the per-account limits in lib/security/rate-limits.ts instead; this is only
+ * the outer per-IP envelope, and it must never mistake browsing for an attack.
+ */
+export function isCredentialPath(pathname: string): boolean {
+  const path = canonical(pathname);
+  return (
+    startsWithSegment(path, "/account") ||
+    startsWithSegment(path, "/checkout") ||
+    startsWithSegment(path, "/membership")
+  );
 }
 
 export function classifySurface(pathname: string): SurfaceClass {

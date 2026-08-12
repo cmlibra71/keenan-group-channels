@@ -9,7 +9,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { clientIpFromHeaders, ipBucketKey } from "../client-ip";
-import { classifySurface } from "./surfaces";
+import { classifySurface, isCredentialPath } from "./surfaces";
 import { classifyBot, isAllowlistedIp } from "./bots";
 import { createLimiter, type Verdict } from "./limiter";
 import { getSharedStore } from "./store";
@@ -26,6 +26,24 @@ function readMode(): GuardMode {
 }
 
 const MODE = readMode();
+
+/**
+ * The credential/payment POST limiter is its OWN switch, and defaults to
+ * `enforce` rather than following GUARD_MODE.
+ *
+ * GUARD_MODE governs the SCRAPING guard, which is deliberately shipped in `log`
+ * so it can be observed against real traffic before it turns a shopper away.
+ * Credential stuffing and card testing are a different problem: the budget is
+ * far above any human, so there is nothing to observe first, and leaving it
+ * unenforced would mean the storefront has no 429 at all.
+ */
+function readCredentialMode(): GuardMode {
+  const raw = (process.env.CREDENTIAL_GUARD_MODE || "").toLowerCase();
+  if (raw === "off" || raw === "log") return raw;
+  return "enforce";
+}
+
+const CREDENTIAL_MODE = readCredentialMode();
 const CONTACT = process.env.GUARD_CONTACT || "";
 
 /**
@@ -102,7 +120,7 @@ function blockedResponse(req: NextRequest, verdict: Verdict): NextResponse {
  * radius of a bug in here is the entire shop — this catch is not optional.
  */
 export function guardRequest(req: NextRequest): NextResponse | null {
-  if (MODE === "off") return null;
+  if (MODE === "off" && CREDENTIAL_MODE === "off") return null;
 
   try {
     const { pathname } = req.nextUrl;
@@ -115,12 +133,44 @@ export function guardRequest(req: NextRequest): NextResponse | null {
 
     const ip = clientIpFromHeaders(req.headers);
     const ipKey = ipBucketKey(ip);
+    const tier = classifyBot(req.headers);
+
+    // ── Credential / payment POSTs ─────────────────────────────────────────
+    // Sign-in, register, password reset/change and placing an order are Next
+    // server actions, so from here they are just POSTs to /account or
+    // /checkout. This is the coarse per-IP envelope that can answer a real HTTP
+    // 429 with Retry-After; the per-ACCOUNT half (and the audit line) lives in
+    // lib/security/rate-limits.ts, which is the only layer that can see WHICH
+    // account an action is for. Never bans — see limiter.ts `neverBan`.
+    if (
+      CREDENTIAL_MODE !== "off" &&
+      req.method === "POST" &&
+      isCredentialPath(pathname)
+    ) {
+      const credentialVerdict = getLimiter().check({
+        ipKey,
+        surface: "credential",
+        tier,
+        weight: 1,
+        neverBan: true,
+      });
+      if (credentialVerdict.action !== "allow" && !isAllowlistedIp(ip)) {
+        if (shouldLog(ipKey)) {
+          console.warn(
+            `[guard] ${CREDENTIAL_MODE === "log" ? "WOULD " : ""}throttle credential ` +
+              `ip=${ipKey} path=${pathname} retryAfter=${credentialVerdict.retryAfterSec}s`
+          );
+        }
+        if (CREDENTIAL_MODE === "enforce") return blockedResponse(req, credentialVerdict);
+      }
+    }
+
+    if (MODE === "off") return null;
 
     let weight = 1;
     if (req.headers.get("next-router-prefetch")) weight *= PREFETCH_WEIGHT;
     if (req.cookies.get("session")) weight *= SESSION_WEIGHT;
 
-    const tier = classifyBot(req.headers);
     const verdict = getLimiter().check({ ipKey, surface, tier, weight });
     if (verdict.action === "allow") return null;
 

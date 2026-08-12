@@ -22,6 +22,13 @@ export type CheckInput = {
    * navigation (see index.ts).
    */
   weight?: number;
+  /**
+   * Throttle but never escalate to a ban. Used for the `credential` surface: a
+   * ban locks the WHOLE storefront for that IP, and behind a NAT that is a
+   * customer's entire office — too much to spend on someone mistyping a
+   * password. A 429 with Retry-After is the right answer there.
+   */
+  neverBan?: boolean;
 };
 
 export interface Limiter {
@@ -109,7 +116,7 @@ export function createLimiter(store: GuardStore, opts?: LimiterOptions): Limiter
   }
 
   return {
-    check({ ipKey, surface, tier, weight = 1 }): Verdict {
+    check({ ipKey, surface, tier, weight = 1, neverBan = false }): Verdict {
       const limit = limitFor(surface);
       if (!limit) return { action: "allow" };
 
@@ -163,8 +170,9 @@ export function createLimiter(store: GuardStore, opts?: LimiterOptions): Limiter
 
       // Crawlers are throttled but NEVER banned: a 429 with Retry-After is
       // exactly what a crawler is built to obey, whereas a ban costs indexing
-      // and the Merchant feed.
-      if (tier !== "none") {
+      // and the Merchant feed. Credential traffic (neverBan) is treated the
+      // same way, for the reason on the flag.
+      if (tier !== "none" || neverBan) {
         store.setCounters(ipKey, counters);
         return { action: "throttle", retryAfterSec, surface };
       }

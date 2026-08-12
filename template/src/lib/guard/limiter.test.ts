@@ -256,3 +256,34 @@ test("a verified bot gets the largest budget of all", () => {
     );
   }
 });
+
+// ── Credential surface: throttle, never ban ─────────────────────────────────
+
+test("neverBan keeps a repeat offender on throttles instead of a ban", () => {
+  const h = harness({ limits: { credential: { burstMs: 10_000, burstMax: 3, windowMs: 5 * MINUTE, max: 10 } } });
+  const hitCredential = () =>
+    h.limiter.check({ ipKey: "9.9.9.9", surface: "credential", tier: "none", weight: 1, neverBan: true });
+
+  // Far more violations than violationsBeforeBan (3): every one stays a throttle.
+  const actions = new Set<string>();
+  for (let round = 0; round < 6; round++) {
+    for (let i = 0; i < 6; i++) actions.add(hitCredential().action);
+    h.advance(11_000);
+  }
+
+  assert.ok(actions.has("throttle"), "expected throttles");
+  assert.ok(!actions.has("ban"), "credential traffic must never be banned");
+});
+
+test("the same traffic WITHOUT neverBan does escalate to a ban", () => {
+  const h = harness({ limits: { credential: { burstMs: 10_000, burstMax: 3, windowMs: 5 * MINUTE, max: 10 } } });
+  const hitCredential = () =>
+    h.limiter.check({ ipKey: "9.9.9.8", surface: "credential", tier: "none", weight: 1 });
+
+  let sawBan = false;
+  for (let round = 0; round < 6 && !sawBan; round++) {
+    for (let i = 0; i < 6; i++) if (hitCredential().action === "ban") sawBan = true;
+    h.advance(11_000);
+  }
+  assert.equal(sawBan, true);
+});

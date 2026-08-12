@@ -6,8 +6,11 @@ import { setSession, endShopperSession } from "@/lib/auth";
 import { safeNextPath } from "@/lib/account-redirect";
 import { verifyPassword, validatePasswordStrength } from "@/lib/password";
 import { createAccountlessContact, EmailTakenError, type LoginCandidate } from "@/lib/contact-auth";
-// Shared login throttle so the form login and the account-panel login share ONE keyspace.
-import { tooManyAttempts, recordFailure } from "@/lib/login-throttle";
+// THE shared rate-limit rulebook (lib/security/rate-limit-core.ts): per-IP and
+// per-account budgets, one audit line when a bucket trips. The form login and
+// the account-panel login share ONE keyspace, so an attacker cannot dodge the
+// limit by alternating between the two paths.
+import { enforceLimit, noteLimitFailure } from "@/lib/security/rate-limits";
 import { repriceCartForSession } from "@/lib/actions/cart";
 
 // Identity unification: the login subject is a CONTACT. findLoginCandidate
@@ -25,8 +28,9 @@ export async function login(
     return { error: "Email and password are required." };
   }
 
-  if (tooManyAttempts(email)) {
-    return { error: "Too many attempts. Please wait a few minutes and try again." };
+  const limit = await enforceLimit("sign_in", { identifier: email, surface: "sign-in form" });
+  if (!limit.allowed) {
+    return { error: limit.message };
   }
 
   const candidate = (await contactService.findLoginCandidate(email, CHANNEL_ID)) as LoginCandidate | null;
@@ -36,7 +40,9 @@ export async function login(
   const { valid, needsRehash } = await verifyPassword(password, candidate?.password_hash);
 
   if (!candidate || !valid) {
-    recordFailure(email);
+    // Only FAILED sign-ins are charged to the per-account bucket, so a customer
+    // who signs in successfully can never lock themselves (or be locked) out.
+    await noteLimitFailure("sign_in", email);
     return { error: "Invalid email or password." };
   }
 
@@ -76,6 +82,11 @@ export async function register(
   const weak = validatePasswordStrength(password);
   if (weak) {
     return { error: weak };
+  }
+
+  const limit = await enforceLimit("registration", { identifier: email, surface: "register form" });
+  if (!limit.allowed) {
+    return { error: limit.message };
   }
 
   // Neutral response — do NOT confirm that an account with this email exists
