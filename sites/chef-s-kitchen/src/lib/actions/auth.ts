@@ -8,6 +8,7 @@ import { verifyPassword, validatePasswordStrength } from "@/lib/password";
 import { createAccountlessContact, EmailTakenError, type LoginCandidate } from "@/lib/contact-auth";
 // Shared login throttle so the form login and the account-panel login share ONE keyspace.
 import { tooManyAttempts, recordFailure } from "@/lib/login-throttle";
+import { repriceCartForSession } from "@/lib/actions/cart";
 
 // Identity unification: the login subject is a CONTACT. findLoginCandidate
 // resolves THE row for (email, channel) — accountless storefront person first,
@@ -50,6 +51,9 @@ export async function login(
   }
 
   await setSession(candidate.id, candidate.email);
+  // Whatever is already in the basket is re-priced for this customer, so the
+  // sign-in page and the account drawer leave the cart in the same state.
+  await repriceCartForSession();
   // Finish the journey the customer started — an emailed order link bounced here
   // by the account guard carries its destination in `next`. Only same-site paths
   // survive safeNextPath, so this can't be pushed off-site.
@@ -105,6 +109,7 @@ export async function register(
   }
 
   await setSession(contact.id, contact.email);
+  await repriceCartForSession(); // same reason as login
   redirect(safeNextPath(formData.get("next")) ?? "/account");
 }
 

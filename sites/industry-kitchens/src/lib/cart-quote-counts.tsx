@@ -46,8 +46,29 @@ export type HeaderPanelKind = "cart" | "quote" | "account";
 type HeaderPanelsValue = {
   panel: HeaderPanelKind | null;
   nonce: number;
-  open: (panel: HeaderPanelKind) => void;
+  intent: HeaderPanelIntent | null;
+  open: (panel: HeaderPanelKind, intent?: HeaderPanelIntent) => void;
   close: () => void;
+};
+
+/**
+ * What the opener wants the panel to do — carried alongside the open signal so a
+ * caller elsewhere in the tree (the cart drawer, the checkout form) can send the
+ * shopper into the account panel on the right tab, with the email they already
+ * typed, and say where they should land afterwards.
+ *
+ * `returnTo` is the "revert to the order" behaviour: "close" drops the overlay so
+ * the page behind it (checkout) is right there, freshly re-rendered with the new
+ * session; a panel kind re-opens that panel (the cart drawer re-reads itself, so
+ * the shopper sees their now account-priced basket).
+ */
+export type HeaderPanelIntent = {
+  /** Which face of the account panel to show: sign in, or create an account. */
+  view?: "login" | "register";
+  /** Pre-fill the email the shopper already typed, so they don't retype it. */
+  email?: string;
+  /** Where to send them once they are signed in. Omitted = stay in the panel. */
+  returnTo?: HeaderPanelKind | "close";
 };
 
 // Same non-throwing no-op default, for the same reason as the counts above:
@@ -56,6 +77,7 @@ type HeaderPanelsValue = {
 const HeaderPanelsContext = createContext<HeaderPanelsValue>({
   panel: null,
   nonce: 0,
+  intent: null,
   open: () => {},
   close: () => {},
 });
@@ -93,12 +115,18 @@ export function CartQuoteCountsProvider({ children }: { children: React.ReactNod
 }
 
 function HeaderPanelsProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<{ panel: HeaderPanelKind | null; nonce: number }>({
+  const [state, setState] = useState<{
+    panel: HeaderPanelKind | null;
+    nonce: number;
+    intent: HeaderPanelIntent | null;
+  }>({
     panel: null,
     nonce: 0,
+    intent: null,
   });
   const open = useCallback(
-    (panel: HeaderPanelKind) => setState((s) => ({ panel, nonce: s.nonce + 1 })),
+    (panel: HeaderPanelKind, intent?: HeaderPanelIntent) =>
+      setState((s) => ({ panel, nonce: s.nonce + 1, intent: intent ?? null })),
     []
   );
   const close = useCallback(() => setState((s) => ({ ...s, panel: null })), []);

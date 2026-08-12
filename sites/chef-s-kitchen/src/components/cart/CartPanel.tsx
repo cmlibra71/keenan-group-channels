@@ -4,22 +4,29 @@ import { useCallback, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
+import { getSessionInfo } from "@/lib/actions/account-panel";
 import { Price } from "@/components/ui/Price";
 import { CartItemsList } from "./CartItemsList";
 import { usePanelContext } from "@/components/ui/PanelContext";
+import { useHeaderPanels } from "@/lib/cart-quote-counts";
 
 type CartData = Awaited<ReturnType<typeof getCart>>;
 
 export function CartPanel() {
   const { isOpen, close } = usePanelContext();
+  const { open } = useHeaderPanels();
   const [cart, setCart] = useState<CartData>(null);
+  // null while unknown: the sign-in offer must not flash at a customer who IS
+  // signed in on the way to finding that out.
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     if (isOpen) {
       startTransition(async () => {
-        const data = await getCart();
+        const [data, info] = await Promise.all([getCart(), getSessionInfo()]);
         setCart(data);
+        setSignedIn(!!info);
       });
     }
   }, [isOpen]);
@@ -69,6 +76,27 @@ export function CartPanel() {
 
       {/* Footer */}
       <div className="border-t border-border px-6 py-4 space-y-3">
+        {signedIn === false && (
+          <p className="text-xs text-text-secondary">
+            Have an account?{" "}
+            <button
+              type="button"
+              onClick={() => open("account", { view: "login", returnTo: "cart" })}
+              className="font-medium text-text-primary underline hover:no-underline"
+            >
+              Sign in
+            </button>{" "}
+            or{" "}
+            <button
+              type="button"
+              onClick={() => open("account", { view: "register", returnTo: "cart" })}
+              className="font-medium text-text-primary underline hover:no-underline"
+            >
+              create one
+            </button>{" "}
+            to check out with your saved details and your account pricing.
+          </p>
+        )}
         <div className="flex items-center justify-between text-sm">
           <span className="font-medium text-text-secondary">Subtotal</span>
           <Price amount={subtotal} className="font-semibold text-text-primary" />

@@ -12,6 +12,9 @@ import {
 } from "@/lib/checkout/au-address";
 import { Price } from "@/components/ui/Price";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
+import { emailHasAccount } from "@/lib/actions/account-panel";
+import { decideEmailProbe, normaliseEmail } from "@/lib/checkout/account-prompt";
+import { useHeaderPanels } from "@/lib/cart-quote-counts";
 import { ga4AddShippingInfo, ga4AddPaymentInfo, rowToGa4Item } from "@/components/analytics/ga4";
 
 declare global {
@@ -88,6 +91,7 @@ export function CheckoutForm({
   isMember,
   pricesIncludeTax,
   customerEmail,
+  isSignedIn = false,
   contactPrefill,
   canSaveNewAddress = false,
   countries = [],
@@ -106,6 +110,9 @@ export function CheckoutForm({
   isMember?: boolean;
   pricesIncludeTax?: boolean;
   customerEmail?: string;
+  /** Is there a session? Guests are offered the sign-in / create-account drawer,
+   *  and only their typed email is checked against existing accounts. */
+  isSignedIn?: boolean;
   /** Name + phone off the signed-in shopper's contact record, so a first-time
    *  buyer with no saved address doesn't retype what we already hold. */
   contactPrefill?: { firstName: string; lastName: string; phone: string };
@@ -123,10 +130,20 @@ export function CheckoutForm({
   testMode?: boolean;
 }) {
   const router = useRouter();
+  const { open: openPanel } = useHeaderPanels();
   const [state, formAction, isPending] = useActionState(placeOrder, null);
   const [selectedAddressId, setSelectedAddressId] = useState<number | "new">(
     () => savedAddresses.find((a) => a.isDefaultBilling)?.id ?? "new"
   );
+  // The order email. Controlled so that signing in mid-checkout can put the
+  // account's address in the field — it stays editable, this order can still be
+  // sent to a different address.
+  const [email, setEmail] = useState(customerEmail ?? "");
+  // "You already have an account" — shown when the address they typed as a guest
+  // matches one, offering the same drawer rather than a silent guest order.
+  const [existingAccount, setExistingAccount] = useState(false);
+  // Answers we already have, per address — see decideEmailProbe.
+  const probed = useRef<Map<string, boolean>>(new Map());
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>(
     () => paymentMethods[0]?.id ?? ""
   );
@@ -379,6 +396,59 @@ export function CheckoutForm({
     calculateShippingCost,
   ]);
 
+  // ── Signing in from here ───────────────────────────────────────────────────
+  // The drawer's sign-in re-renders this page with a session, so these two
+  // effects are what "revert to the order and populate the information" means in
+  // practice: the account's email becomes the order email, and the addresses we
+  // hold are offered instead of the blank form they were looking at.
+  useEffect(() => {
+    if (!customerEmail) return;
+    setEmail(customerEmail);
+  }, [customerEmail]);
+
+  // Keyed on WHICH addresses arrived, not on the array identity: a plain
+  // re-render must never drag the shopper back off "Enter a new address".
+  const savedAddressKey = savedAddresses.map((a) => a.id).join(",");
+  useEffect(() => {
+    const preferred = savedAddresses.find((a) => a.isDefaultBilling)?.id;
+    if (preferred !== undefined) setSelectedAddressId(preferred);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedAddressKey]);
+
+  // Does the typed address already have an account? Debounced, asked once per
+  // address, never for a shopper who is already signed in (see decideEmailProbe).
+  useEffect(() => {
+    const decision = decideEmailProbe({ email, isSignedIn, known: probed.current });
+    if (decision.action === "skip") {
+      setExistingAccount(false);
+      return;
+    }
+    if (decision.action === "known") {
+      setExistingAccount(decision.hasAccount);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const found = await emailHasAccount(decision.email);
+        probed.current.set(decision.email, found);
+        if (!cancelled) setExistingAccount(found);
+      } catch {
+        // A hint is never worth an error at checkout.
+      }
+    }, 600);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [email, isSignedIn]);
+
+  function openAccountPanel(view: "login" | "register") {
+    // returnTo "close" drops the drawer once they're in, leaving them on this
+    // page — which has re-rendered with their session, prices and addresses.
+    openPanel("account", { view, email: normaliseEmail(email) || undefined, returnTo: "close" });
+  }
+
   // ── GA4 funnel (single-page checkout) ──────────────────────────────────────
   // add_shipping_info fires once when the shipping cost resolves;
   // add_payment_info when a payment method is chosen (once per method).
@@ -436,16 +506,51 @@ export function CheckoutForm({
           {/* Contact */}
           <div className="border border-steel-200 rounded-lg p-6">
             <h2 className="text-lg font-semibold text-ink-900 mb-4">Contact</h2>
+            {!isSignedIn && (
+              <p className="mb-4 text-sm text-steel-500">
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => openAccountPanel("login")}
+                  className="font-medium text-ink-900 underline hover:no-underline"
+                >
+                  Sign in
+                </button>{" "}
+                to use your saved details and your account pricing, or{" "}
+                <button
+                  type="button"
+                  onClick={() => openAccountPanel("register")}
+                  className="font-medium text-ink-900 underline hover:no-underline"
+                >
+                  create an account
+                </button>
+                .
+              </p>
+            )}
             <div>
               <label className="block text-sm font-medium text-ink-700">Email</label>
               <input
                 type="email"
                 name="email"
                 required
-                defaultValue={customerEmail}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="mt-1 block w-full rounded-lg border border-steel-300 px-3 py-2 text-sm focus:border-steel-500 focus:outline-none"
                 placeholder="your@email.com"
               />
+              {existingAccount && !isSignedIn && (
+                <p className="mt-2 rounded-lg bg-steel-50 border border-steel-200 px-3 py-2 text-sm text-ink-700">
+                  You already have an account with this email.{" "}
+                  <button
+                    type="button"
+                    onClick={() => openAccountPanel("login")}
+                    className="font-medium text-ink-900 underline hover:no-underline"
+                  >
+                    Sign in
+                  </button>{" "}
+                  to use your saved details and your account pricing.
+                </p>
+              )}
             </div>
           </div>
 

@@ -213,6 +213,7 @@ export default async function CheckoutPage() {
         isMember={isMember}
         pricesIncludeTax={pricesIncludeTax}
         customerEmail={session?.email}
+        isSignedIn={!!session}
         contactPrefill={contactPrefill}
         canSaveNewAddress={canSaveNewAddress}
         countries={checkoutSettings.supportedCountries}

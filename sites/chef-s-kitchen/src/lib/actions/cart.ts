@@ -238,6 +238,61 @@ export async function removeCartItem(itemId: number) {
   return updateCartItem(itemId, 0);
 }
 
+/**
+ * Re-price every line of the current cart for the CURRENT viewer, and persist.
+ *
+ * Line prices are resolved and STORED when the line is added, so a cart built as
+ * a guest keeps guest prices after the shopper signs in — while placeOrder
+ * reconciles account contract prices at the moment of charging. The shopper
+ * therefore used to sign in at checkout and see no change, then be charged
+ * something else. Called from every sign-in path (panel login/register, Google,
+ * the sign-in page) so what they SEE after signing in is what they'll pay:
+ * account contract prices, member/cost-plus prices, bulk tiers.
+ *
+ * Never throws and never blocks the sign-in it hangs off: a line that can't be
+ * re-priced (product gone) is left exactly as it was.
+ */
+export async function repriceCartForSession(): Promise<{ repriced: number }> {
+  try {
+    const uuid = await getCartUuid();
+    if (!uuid) return { repriced: 0 };
+
+    const cart = await cartService.getByUuid(uuid);
+    if (!cart) return { repriced: 0 };
+
+    const full = await cartService.getWithItems(cart.id);
+    const items = (full?.items ?? []) as {
+      id: number;
+      product_id: number;
+      variant_id: number | null;
+      quantity: number;
+      list_price: string | null;
+      sale_price: string | null;
+    }[];
+
+    let repriced = 0;
+    for (const item of items) {
+      try {
+        const pricing = await resolveItemPricing(item.product_id, item.variant_id, item.quantity);
+        const sameList = pricing.listPrice === item.list_price;
+        const sameSale = (pricing.salePrice ?? null) === (item.sale_price ?? null);
+        if (sameList && sameSale) continue;
+        await cartItemService.updateForParent(cart.id, item.id, {
+          listPrice: pricing.listPrice,
+          salePrice: pricing.salePrice,
+        });
+        repriced++;
+      } catch (e) {
+        console.error("[repriceCartForSession] line skipped (non-fatal):", e);
+      }
+    }
+    return { repriced };
+  } catch (e) {
+    console.error("[repriceCartForSession] failed (non-fatal):", e);
+    return { repriced: 0 };
+  }
+}
+
 // Request-scoped memoisation: the cart is read once per render but consumed by
 // both the layout Header (badge) and the page (cart / checkout), which are two
 // separate component renders in the SAME request. React's cache() dedupes those

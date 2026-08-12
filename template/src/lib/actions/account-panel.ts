@@ -1,11 +1,15 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { headers } from "next/headers";
 import { contactService, CHANNEL_ID } from "@/lib/store";
 import { getSession, setSession, endShopperSession } from "@/lib/auth";
 import { verifyPassword } from "@/lib/password";
 import { createAccountlessContact, EmailTakenError, type LoginCandidate } from "@/lib/contact-auth";
 import { tooManyAttempts, recordFailure } from "@/lib/login-throttle";
+import { clientIpFromHeaders, ipBucketKey } from "@/lib/client-ip";
+import { normaliseEmail, looksLikeEmail } from "@/lib/checkout/account-prompt";
+import { repriceCartForSession } from "@/lib/actions/cart";
 
 type PanelSession = { contactId: number; email: string; firstName: string; lastName: string };
 
@@ -64,6 +68,9 @@ export async function loginFromPanel(formData: FormData): Promise<{
   }
 
   await setSession(candidate.id, candidate.email);
+  // Signing in from the cart/checkout drawer must put this customer's own prices
+  // on the basket they are looking at — the panel is opened mid-checkout.
+  await repriceCartForSession();
   refresh(); // acting user's view refreshes; shared data cache stays intact
 
   return {
@@ -116,6 +123,7 @@ export async function registerFromPanel(formData: FormData): Promise<{
   }
 
   await setSession(contact.id, contact.email);
+  await repriceCartForSession(); // same reason as loginFromPanel
   refresh(); // acting user's view refreshes; shared data cache stays intact
 
   return {
@@ -126,6 +134,46 @@ export async function registerFromPanel(formData: FormData): Promise<{
       lastName: contact.last_name ?? "",
     },
   };
+}
+
+/**
+ * Does this email already have an account on this storefront?
+ *
+ * Powers the checkout hint: a returning customer who types their address into
+ * the guest checkout is told they have an account and offered the sign-in
+ * drawer, instead of silently placing a guest order at guest prices. True means
+ * "there is a sign-in you can complete" — the answer comes from the SAME
+ * findLoginCandidate lookup the login action uses (active contact on this
+ * channel, or an active B2B contact anywhere), and a contact that has no
+ * password yet can still get in via Forgot password, which issues them an
+ * activation link.
+ *
+ * Exposure: the register form already replies "An account with this email
+ * already exists", so this reveals nothing new about a single address. What it
+ * would otherwise add is BULK enumeration, so probes are rate-limited per IP
+ * (the shared login-throttle keyspace, its own prefix) and answer a flat false
+ * once the budget is spent.
+ */
+export async function emailHasAccount(email: string): Promise<boolean> {
+  try {
+    const normalised = normaliseEmail(email);
+    if (!looksLikeEmail(normalised)) return false;
+
+    // A signed-in shopper editing the order email has nothing to be prompted about.
+    if (await getSession()) return false;
+
+    const ip = ipBucketKey(clientIpFromHeaders(await headers()));
+    const key = `email-probe:${ip}`;
+    if (tooManyAttempts(key)) return false;
+    recordFailure(key); // every probe counts against the budget, hit or miss
+
+    const candidate = await contactService.findLoginCandidate(normalised, CHANNEL_ID);
+    return !!candidate;
+  } catch (e) {
+    // A hint is never worth breaking checkout for.
+    console.error("[emailHasAccount] failed (non-fatal):", e);
+    return false;
+  }
 }
 
 export async function logoutFromPanel() {

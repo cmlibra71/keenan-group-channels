@@ -21,10 +21,29 @@ type SessionInfo = {
 
 type View = "login" | "register" | "profile";
 
-export function AccountPanel() {
+/**
+ * The one account drawer: sign in, create an account, or the signed-in menu.
+ *
+ * Opened from the header, and also from the cart drawer and the checkout page
+ * for a shopper who isn't signed in — those callers pass their intent (which
+ * face to open on, the email already typed, where to land afterwards), which
+ * HeaderPanels turns into these props.
+ */
+export function AccountPanel({
+  initialView,
+  initialEmail,
+  onAuthenticated,
+}: {
+  /** Open straight onto "Create an account" when that's the button they pressed. */
+  initialView?: "login" | "register";
+  /** Email already typed at checkout — carried in so they don't type it twice. */
+  initialEmail?: string;
+  /** Fired once a sign-in / registration succeeds, so the opener can take them back. */
+  onAuthenticated?: () => void;
+} = {}) {
   const { isOpen } = usePanelContext();
   const [session, setSession] = useState<SessionInfo>(null);
-  const [view, setView] = useState<View>("login");
+  const [view, setView] = useState<View>(initialView ?? "login");
   const [loaded, setLoaded] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -33,11 +52,22 @@ export function AccountPanel() {
       startTransition(async () => {
         const info = await getSessionInfo();
         setSession(info);
-        setView(info ? "profile" : "login");
+        setView(info ? "profile" : initialView ?? "login");
         setLoaded(true);
       });
     }
+    // initialView is fixed for the life of this mount (HeaderPanels remounts on
+    // every open), so it is deliberately not a dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
+
+  // A successful sign-in / registration: show the profile, then let the opener
+  // return the shopper to their order.
+  function handleAuthSuccess(info: SessionInfo) {
+    setSession(info);
+    setView("profile");
+    onAuthenticated?.();
+  }
 
   if (!loaded || isPending) {
     return (
@@ -50,10 +80,8 @@ export function AccountPanel() {
   if (view === "register") {
     return (
       <PanelRegisterForm
-        onSuccess={(info) => {
-          setSession(info);
-          setView("profile");
-        }}
+        defaultEmail={initialEmail}
+        onSuccess={handleAuthSuccess}
         onSwitchToLogin={() => setView("login")}
       />
     );
@@ -62,10 +90,8 @@ export function AccountPanel() {
   if (view === "login" && !session) {
     return (
       <PanelLoginForm
-        onSuccess={(info) => {
-          setSession(info);
-          setView("profile");
-        }}
+        defaultEmail={initialEmail}
+        onSuccess={handleAuthSuccess}
         onSwitchToRegister={() => setView("register")}
       />
     );
@@ -83,9 +109,11 @@ export function AccountPanel() {
 }
 
 function PanelLoginForm({
+  defaultEmail,
   onSuccess,
   onSwitchToRegister,
 }: {
+  defaultEmail?: string;
   onSuccess: (info: SessionInfo) => void;
   onSwitchToRegister: () => void;
 }) {
@@ -134,6 +162,7 @@ function PanelLoginForm({
             name="email"
             autoComplete="username"
             required
+            defaultValue={defaultEmail}
             className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
             placeholder="your@email.com"
           />
@@ -179,9 +208,11 @@ function PanelLoginForm({
 }
 
 function PanelRegisterForm({
+  defaultEmail,
   onSuccess,
   onSwitchToLogin,
 }: {
+  defaultEmail?: string;
   onSuccess: (info: SessionInfo) => void;
   onSwitchToLogin: () => void;
 }) {
@@ -258,6 +289,7 @@ function PanelRegisterForm({
             name="email"
             autoComplete="username"
             required
+            defaultValue={defaultEmail}
             className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
             placeholder="your@email.com"
           />

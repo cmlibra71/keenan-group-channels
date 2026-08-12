@@ -5,6 +5,7 @@ import { contactService, CHANNEL_ID } from "@/lib/store";
 import { setSession } from "@/lib/auth";
 import { verifyGoogleClaims, type GoogleTokenInfo } from "@/lib/google-claims";
 import { createAccountlessContact, mergeContactMetafields, EmailTakenError, type LoginCandidate } from "@/lib/contact-auth";
+import { repriceCartForSession } from "@/lib/actions/cart";
 
 type GoogleSignInResult = {
   error?: string;
@@ -62,6 +63,9 @@ export async function googleSignIn(credential: string): Promise<GoogleSignInResu
     }
 
     await setSession(existing.id, existing.email);
+    // Google is offered inside the same account drawer the cart/checkout opens,
+    // so this path must put the customer's prices on their basket too.
+    await repriceCartForSession();
     refresh(); // acting user's view refreshes; shared data cache stays intact
 
     return {
@@ -99,6 +103,7 @@ export async function googleSignIn(credential: string): Promise<GoogleSignInResu
   }
 
   await setSession(contact.id, contact.email);
+  await repriceCartForSession(); // same reason as the existing-contact branch
   refresh(); // acting user's view refreshes; shared data cache stays intact
 
   return {
