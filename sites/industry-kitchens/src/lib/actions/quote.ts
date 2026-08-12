@@ -12,6 +12,7 @@ import {
   isQuoteExpired,
 } from "@/lib/quotes/price-visibility";
 import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
+import { isStaffOnlyDraft, withoutStaffOnlyDrafts } from "@/lib/quotes/draft-visibility";
 import { getContactPermissions } from "@/lib/role-permissions";
 import { isProductVisibleToViewer, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
@@ -212,8 +213,10 @@ export async function getQuotesForCustomer() {
       channel_id: { type: "eq", value: CHANNEL_ID },
     },
   });
-  const contactQuotes = (result.data as Array<{ status?: string | null }>).filter(
-    (q) => q.status !== "quote_pending"
+  // …and a staff-only Draft is not the customer's quote at all, whoever's contact
+  // the portal's "Duplicate to Draft" hung it off.
+  const contactQuotes = withoutStaffOnlyDrafts(
+    (result.data as Array<{ status?: string | null }>).filter((q) => q.status !== "quote_pending")
   );
   return { quotes: contactQuotes };
 }
@@ -323,9 +326,16 @@ export async function duplicateQuote(quoteId: number) {
     return { error: "You've duplicated several quotes just now. Please wait a minute before duplicating again." };
   }
   const q = (await quoteService.getWithItems(quoteId)) as
-    | (QuoteRow & { email?: string | null; items?: Array<Record<string, unknown>> })
+    | (QuoteRow & { status?: string | null; email?: string | null; items?: Array<Record<string, unknown>> })
     | null;
   if (!q || q.contact_id !== session.contactId || q.channel_id !== CHANNEL_ID) return { error: "Quote not found." };
+  // A staff-only Draft is neither the customer's to SEE nor to COPY. The portal's
+  // "Duplicate to Draft" carries contact_id onto the copy, so without this a
+  // signed-in contact could duplicate an internal draft into a live quote of their
+  // own — which then renders every negotiated line price straight back to them.
+  // Deliberately the same "not found" a foreign quote gets: it must not confirm
+  // the draft exists.
+  if (isStaffOnlyDraft(q)) return { error: "Quote not found." };
   const copy = (await quoteService.create({
     channelId: CHANNEL_ID,
     contactId: session.contactId,

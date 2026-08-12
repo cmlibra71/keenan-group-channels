@@ -13,6 +13,7 @@ import {
   resolveQuoteTotal,
 } from "@/lib/quotes/price-visibility";
 import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
+import { isStaffOnlyDraft } from "@/lib/quotes/draft-visibility";
 import { quoteGstTotals } from "@/lib/quotes/quote-gst";
 import { resolveQuoteGstRate } from "@/lib/quotes/quote-gst-rate";
 import { GST_RATE } from "@keenan/services/calc";
@@ -106,9 +107,15 @@ export default async function QuotesPage() {
   });
   const customerQuotes = (result.data as unknown as QuoteRecord[]).filter(
     (q) =>
-      q.status !== "quote_pending" ||
-      Boolean(q.attributes?.submitted_at) ||
-      q.uuid !== currentDraftUuid
+      // A staff-only Draft (the portal's "Duplicate to Draft") is never the
+      // customer's business, whoever's contact it hangs off — excluded outright,
+      // ahead of the in-progress-cart rule below. `quoteService.list` only drops
+      // archived rows, so this is the only thing standing between an internal
+      // working copy and the customer's own quote list.
+      !isStaffOnlyDraft(q) &&
+      (q.status !== "quote_pending" ||
+        Boolean(q.attributes?.submitted_at) ||
+        q.uuid !== currentDraftUuid)
   );
 
   if (customerQuotes.length === 0) {

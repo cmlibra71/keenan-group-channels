@@ -16,6 +16,7 @@ import {
   resolveQuoteTotal,
 } from "@/lib/quotes/price-visibility";
 import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
+import { isStaffOnlyDraft } from "@/lib/quotes/draft-visibility";
 import { quoteGstTotals, isMoneyRow } from "@/lib/quotes/quote-gst";
 import { resolveQuoteGstRate } from "@/lib/quotes/quote-gst-rate";
 import { quoteStatusLabel } from "@/lib/quotes/quote-status-label";
@@ -98,6 +99,10 @@ export default async function QuoteDetailPage({
   // account role grants `view_company_quotes`, in which case any quote belonging to
   // an active member of their account is visible (docs/crm-parity/10-role-enforcement.md).
   if (!raw || raw.channel_id !== CHANNEL_ID) notFound();
+  // A staff-only Draft is "not found" for everyone on the storefront — including
+  // an account-wide viewer, so this sits ABOVE the view_company_quotes branch. Same
+  // answer a stranger's quote gets: confirming the draft exists is itself a leak.
+  if (isStaffOnlyDraft(raw)) notFound();
   if (raw.contact_id !== session.contactId) {
     const perms = await getContactPermissions(session.contactId);
     const canSeeAccountQuotes =
