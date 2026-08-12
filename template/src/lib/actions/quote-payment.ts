@@ -36,7 +36,12 @@ import { quoteHidesPrices, resolveQuoteTotal } from "@/lib/quotes/price-visibili
 import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
 import { quoteGstTotals } from "@/lib/quotes/quote-gst";
 import { resolveQuoteGstRate } from "@/lib/quotes/quote-gst-rate";
-import { readQuoteDeposit, resolveQuoteDeposit } from "@/lib/quotes/quote-deposit";
+import {
+  readQuoteDeposit,
+  resolveQuoteDeposit,
+  depositLabel,
+  type ResolvedDeposit,
+} from "@/lib/quotes/quote-deposit";
 import { resolveQuotePayState, PLUS_FREIGHT_NOTICE } from "@/lib/quotes/quote-payable";
 import {
   planOrderFromPaidQuote,
@@ -406,7 +411,7 @@ export async function payQuote(
     quote,
     paymentMethod,
     totalInc: view.incTax,
-    amountDue,
+    deposit,
     freightPending: plan.freightPending,
     netTermsDays: paymentMethod === "net_terms" && netTerms ? netTerms.netTermsDays : null,
     isTestMode,
@@ -453,13 +458,14 @@ async function sendQuoteOrderEmails(args: {
   quote: QuoteRow;
   paymentMethod: string;
   totalInc: number;
-  amountDue: number;
+  /** Set when only the deposit is being taken now — the order is still booked at totalInc. */
+  deposit: ResolvedDeposit | null;
   freightPending: boolean;
   netTermsDays: number | null;
   isTestMode: boolean;
   email: string | null;
 }): Promise<void> {
-  const { order, quote, paymentMethod, amountDue, freightPending, isTestMode } = args;
+  const { order, quote, paymentMethod, totalInc, deposit, freightPending, isTestMode } = args;
   const to = args.email;
   if (!to) return;
 
@@ -480,9 +486,19 @@ async function sendQuoteOrderEmails(args: {
     orderNumber: order.order_number,
     storeName: branding?.storeName || site?.siteName || channel?.name || undefined,
     paymentMethod,
-    // The customer is charged the DEPOSIT when there is one, so that is the
-    // figure the confirmation must lead with.
-    total: amountDue.toFixed(2),
+    // The ORDER is booked at the full GST-inclusive amount, so that is what
+    // "Total" means here. When only a deposit is being taken, the deposit and
+    // the balance are their OWN rows underneath — printing the deposit as the
+    // Total told a customer their $14,721.63 order cost $7,360.82 and stated the
+    // balance nowhere (card 0Wy0xHuq).
+    total: totalInc.toFixed(2),
+    deposit: deposit
+      ? {
+          label: depositLabel(deposit),
+          dueNow: deposit.due_now.toFixed(2),
+          balance: deposit.balance.toFixed(2),
+        }
+      : null,
     items: items.map((i) => ({
       name: (i.product_name as string) || "Item",
       quantity: (i.quantity as number) ?? 1,
@@ -514,7 +530,17 @@ async function sendQuoteOrderEmails(args: {
       orderUrl: `${(process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/$/, "")}/dashboard/orders/${order.id}`,
       customerEmail: to,
       customerName: null,
-      total: amountDue.toFixed(2),
+      total: totalInc.toFixed(2),
+      deposit: deposit
+        ? {
+            label: depositLabel(deposit).replace("due now", "paid now"),
+            dueNow: deposit.due_now.toFixed(2),
+            balance: deposit.balance.toFixed(2),
+          }
+        : null,
+      // The orders team sees the missing-freight warning on the alert itself,
+      // not only on the separate no-freight email.
+      notice: freightPending ? PLUS_FREIGHT_NOTICE : null,
       paymentMethod,
       storeName: site?.siteName || channel?.name || null,
       logoUrl: branding?.logoUrl ?? site?.logoUrl ?? null,
