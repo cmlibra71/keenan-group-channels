@@ -1,6 +1,11 @@
 import Link from "next/link";
-import { CheckCircle, Building2, FileText, CreditCard } from "lucide-react";
+import { CheckCircle, Building2, FileText, CreditCard, Truck } from "lucide-react";
 import { getCheckoutSettings, orderService, orderItemService } from "@/lib/store";
+import {
+  SPECIALISED_HOLD_HEADING,
+  SPECIALISED_HOLD_NOTICE,
+  SPECIALISED_HOLD_PM,
+} from "@/lib/checkout/bulky-delivery";
 import { Ga4Purchase, type Ga4PurchaseProps } from "@/components/analytics/Ga4Purchase";
 import { ConfirmationRedirect } from "@/components/checkout/ConfirmationRedirect";
 import { canViewOrderConfirmation } from "@/lib/checkout/confirmation-access";
@@ -188,6 +193,18 @@ export default async function ConfirmationPage({
               Please contact us for our bank account details to complete your payment.
             </p>
           )}
+        </div>
+      )}
+
+      {/* Held for a specialised delivery we haven't quoted yet: the ONE case where an order is
+          confirmed but nothing has been charged and the total is not yet the final figure. */}
+      {pm === SPECIALISED_HOLD_PM && (
+        <div className="mt-6 text-left bg-accent-subtle border border-accent/30 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Truck className="h-4 w-4 text-accent" />
+            <h3 className="text-sm font-semibold text-accent-dark">{SPECIALISED_HOLD_HEADING}</h3>
+          </div>
+          <p className="text-sm text-accent-dark">{SPECIALISED_HOLD_NOTICE}</p>
         </div>
       )}
 

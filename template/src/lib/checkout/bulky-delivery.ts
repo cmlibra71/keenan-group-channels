@@ -101,3 +101,22 @@ export const DELIVERY_SERVICE_COPY: Record<
     note: "We quote this delivery and contact you to arrange it — your card is not charged now.",
   },
 };
+
+/**
+ * A held specialised-delivery order is the one case where "Order Confirmed" is only half the
+ * story: nothing has been charged and the total the customer can see EXCLUDES a delivery we
+ * haven't quoted yet. The checkout form says so before they submit; these say it on the two
+ * things they keep — the confirmation page and the confirmation email — in the same words.
+ */
+export const SPECIALISED_HOLD_HEADING = "Nothing has been charged yet";
+export const SPECIALISED_HOLD_NOTICE =
+  "Nothing has been charged for this order. It includes an item that needs specialised delivery, " +
+  "so the total shown does not include delivery yet — we'll quote the delivery, confirm it with " +
+  "you, and take payment then.";
+
+/**
+ * Stand-in "payment method" carried on the confirmation URL + breadcrumb cookie for a held
+ * order. The ORDER itself deliberately stores no payment method (it is unpaid and un-quoted);
+ * this only tells the confirmation page which block to render.
+ */
+export const SPECIALISED_HOLD_PM = "specialised_hold";

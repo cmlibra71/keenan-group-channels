@@ -81,8 +81,8 @@ export function BulkyDeliveryChoice({
       </div>
 
       {value === "specialised" && (
-        <div className="mt-4 space-y-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
-          <p className="text-sm text-amber-900">
+        <div className="mt-4 space-y-4 rounded-lg border border-accent/30 bg-accent-subtle p-4">
+          <p className="text-sm text-accent-dark">
             We&apos;ll quote the delivery and come back to you to arrange a time and take payment.
             Nothing is charged now.
           </p>

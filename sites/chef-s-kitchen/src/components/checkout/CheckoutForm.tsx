@@ -1069,8 +1069,11 @@ export function CheckoutForm({
 
             {shippingUnresolved && !shippingLoading && (
               <p className="mt-2 text-center text-xs text-steel-500">
+                {/* The order summary already shows WHY (bad postcode, or a zone that rates by
+                    weight when some items have no weight) — repeating a postcode-only guess here
+                    contradicted it. Point at the real reason instead of inventing one. */}
                 {shippingError
-                  ? "We can't deliver to that postcode. Please check it, or contact us for a freight quote."
+                  ? "We can't price delivery for this order — see the reason above, or contact us for a freight quote."
                   : "Enter a delivery postcode to calculate shipping."}
               </p>
             )}

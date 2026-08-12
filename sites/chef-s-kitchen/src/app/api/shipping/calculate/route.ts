@@ -26,7 +26,9 @@ export async function POST(request: NextRequest) {
     // A zone can be rated by weight or item count as well as by dollars (BigCommerce table
     // rates, card Wxjp8wpg). The measures come from the shopper's OWN cart on the server —
     // never from the request body — so a quoted price can't be talked down by a crafted post.
-    let measures: { weightKg: number | null; itemCount: number | null } | undefined;
+    let measures:
+      | { weightKg: number | null; itemCount: number | null; weightIncomplete: boolean }
+      | undefined;
     try {
       const uuid = await getCartUuid();
       const cart = uuid ? await cartService.getByUuid(uuid) : null;
@@ -38,7 +40,13 @@ export async function POST(request: NextRequest) {
             quantity: Number(i.quantity) || 0,
           }))
         );
-        measures = { weightKg: summary.weight_kg, itemCount: summary.item_count };
+        // `has_unweighed_lines` travels WITH the weight: 85% of the catalogue carries no
+        // weight, so a part-weighed cart must not be rated on its weighed lines alone.
+        measures = {
+          weightKg: summary.weight_kg,
+          itemCount: summary.item_count,
+          weightIncomplete: summary.has_unweighed_lines,
+        };
       }
     } catch {
       // No cart / lookup failure — an order-value zone (all of them today) doesn't need it.

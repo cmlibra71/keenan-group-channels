@@ -10,7 +10,13 @@ import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLine
 import { getLineCosts } from "@/lib/store";
 import { sendStaffNotification } from "@/lib/staff-email";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
-import { holdsPayment, validateBulkyDelivery, type SiteAccessAnswers } from "@/lib/checkout/bulky-delivery";
+import {
+  holdsPayment,
+  validateBulkyDelivery,
+  SPECIALISED_HOLD_NOTICE,
+  SPECIALISED_HOLD_PM,
+  type SiteAccessAnswers,
+} from "@/lib/checkout/bulky-delivery";
 import { normaliseAuState, isValidAuPostcode } from "@/lib/checkout/au-address";
 import { setLastOrder } from "@/lib/checkout/last-order";
 import { siteBaseUrl } from "@/lib/seo";
@@ -356,6 +362,9 @@ export async function placeOrder(
       const shippingResult = await calculateShipping(postalCode, subtotalExTax, {
         weightKg: cartFreight?.weight_kg ?? null,
         itemCount: cartFreight?.item_count ?? null,
+        // A weight-rated zone must not price a cart where some lines have no catalogue
+        // weight — the weighed lines alone would land it in a cheap tier.
+        weightIncomplete: cartFreight ? cartFreight.has_unweighed_lines : true,
       });
       if (shippingResult.success) {
         shippingIncTax = shippingResult.cost;
@@ -364,8 +373,15 @@ export async function placeOrder(
         // price against it (unknown postcode, or somewhere we don't deliver).
         // REFUSE the order — silently writing it at $0 freight is a real money
         // leak, and the shopper saw an error in the summary either way.
+        //
+        // Say WHICH thing failed. A zone that matched and then couldn't be measured
+        // (it rates by weight, and the catalogue has no weight for these items) is not
+        // a postcode problem, and blaming the postcode contradicts the reason the order
+        // summary on the same page has been showing all along.
         return {
-          error: `We can't calculate delivery for postcode "${postalCode}". Please check it, or contact us for a freight quote.`,
+          error: shippingResult.zone_id
+            ? `${shippingResult.error ?? "We can't calculate delivery for this order."} Please contact us for a freight quote.`
+            : `We can't calculate delivery for postcode "${postalCode}". Please check it, or contact us for a freight quote.`,
         };
       }
       // No rate card configured for this channel at all → $0 shipping is intended.
@@ -815,6 +831,10 @@ export async function placeOrder(
       paymentMethod: effectivePaymentMethod,
       total: String(totalIncTax),
       items: emailItems,
+      // A held specialised-delivery order has no payment block at all, so without this the
+      // customer's only email would read "Order Confirmed" over a total that excludes the
+      // delivery we haven't quoted, and say nothing about the card not being charged.
+      notice: heldForSpecialised ? SPECIALISED_HOLD_NOTICE : null,
       bankDetails: method?.bankDetails ?? null,
       // Use the customer's actual account terms for a net-terms invoice email.
       netTermsDays: effectivePaymentMethod === "net_terms" && netTerms ? netTerms.netTermsDays : (method?.netTermsDays ?? null),
@@ -906,9 +926,13 @@ export async function placeOrder(
 
   // Breadcrumb so a shopper who comes BACK to /checkout after ordering lands on
   // their confirmation instead of the now-empty cart.
-  await setLastOrder(order.order_number, effectivePaymentMethod);
+  // A held order has no payment method, so it needs its own marker: with an empty `pm` the
+  // confirmation page rendered nothing but "Order Confirmed" — no mention that nothing was
+  // charged and that delivery is still to be quoted.
+  const confirmationPm = heldForSpecialised ? SPECIALISED_HOLD_PM : effectivePaymentMethod;
+  await setLastOrder(order.order_number, confirmationPm);
 
-  const pmParam = effectivePaymentMethod ? `&pm=${encodeURIComponent(effectivePaymentMethod)}` : "";
+  const pmParam = confirmationPm ? `&pm=${encodeURIComponent(confirmationPm)}` : "";
   redirect(`/checkout/confirmation?order=${order.order_number}${pmParam}`);
 }
 

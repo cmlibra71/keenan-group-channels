@@ -5,6 +5,9 @@ import {
   deliveryWindowError,
   holdsPayment,
   isDeliveryService,
+  SPECIALISED_HOLD_HEADING,
+  SPECIALISED_HOLD_NOTICE,
+  SPECIALISED_HOLD_PM,
 } from "./bulky-delivery.ts";
 
 test("a cart with no bulky items never has to answer", () => {
@@ -90,4 +93,19 @@ test("only specialised holds the payment", () => {
   assert.equal(holdsPayment(null), false);
   assert.equal(isDeliveryService("curbside"), true);
   assert.equal(isDeliveryService("kerbside"), false);
+});
+
+// A held order is the one case where "Order Confirmed" is only half the story. The words the
+// confirmation page and the confirmation email use come from HERE so they cannot drift apart —
+// and so nobody can quietly delete the "nothing has been charged" half of the message.
+test("the held-order copy says both things the customer needs: not charged, and delivery not in the total", () => {
+  assert.match(SPECIALISED_HOLD_NOTICE, /nothing has been charged/i);
+  assert.match(SPECIALISED_HOLD_NOTICE, /does not include delivery/i);
+  assert.match(SPECIALISED_HOLD_NOTICE, /quote the delivery/i);
+  assert.match(SPECIALISED_HOLD_HEADING, /nothing has been charged/i);
+});
+
+test("the held-order marker is not a real payment method", () => {
+  assert.equal(SPECIALISED_HOLD_PM, "specialised_hold");
+  assert.equal(["stripe", "bank_transfer", "net_terms"].includes(SPECIALISED_HOLD_PM), false);
 });
