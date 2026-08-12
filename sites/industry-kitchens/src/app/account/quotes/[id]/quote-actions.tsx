@@ -46,7 +46,14 @@ export function QuoteActions({
         <button
           type="button"
           disabled={pending}
-          onClick={() => run(() => acceptQuote(quoteId), "Quote accepted")}
+          onClick={() =>
+            run(
+              () => acceptQuote(quoteId),
+              // Accepting without paying sends the pro-forma (card 0Wy0xHuq) —
+              // say so, or the customer waits for something they think is coming.
+              "Quote accepted — we've emailed your pro-forma. You can pay it below."
+            )
+          }
           className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
         >
           {pending ? "Working…" : "Accept quote"}

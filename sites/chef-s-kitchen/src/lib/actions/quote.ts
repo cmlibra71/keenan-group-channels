@@ -292,6 +292,21 @@ export async function acceptQuote(quoteId: number) {
       console.error("[acceptQuote] approval flag not stamped (non-fatal):", e);
     }
   }
+  // Accepting WITHOUT paying sends the customer their pro-forma (Steve, card
+  // 0Wy0xHuq: "when they accept without paying, they get sent a Quote to
+  // Pro-Forma"). Paying instead goes through payQuote, which raises the real
+  // order — so no pro-forma is sent on that path. Best-effort: a mail failure
+  // must never undo an acceptance the customer has already made.
+  try {
+    const { sendQuoteProForma } = await import("@/lib/quotes/pro-forma-email");
+    await sendQuoteProForma(
+      { ...q, id: quoteId } as Record<string, unknown> & { id: number },
+      (q.email as string | null) ?? session.email ?? null
+    );
+  } catch (e) {
+    console.error("[acceptQuote] pro-forma email failed (non-fatal):", e);
+  }
+
   revalidatePath(`/account/quotes/${quoteId}`);
   revalidatePath("/account/quotes");
   return {
