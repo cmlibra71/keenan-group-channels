@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { summariseLinesFreight, cartService } from "@keenan/services";
 import { calculateShipping } from "@/lib/store";
+import { getCartUuid } from "@/lib/cart";
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,7 +23,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await calculateShipping(postcode, subtotal);
+    // A zone can be rated by weight or item count as well as by dollars (BigCommerce table
+    // rates, card Wxjp8wpg). The measures come from the shopper's OWN cart on the server —
+    // never from the request body — so a quoted price can't be talked down by a crafted post.
+    let measures: { weightKg: number | null; itemCount: number | null } | undefined;
+    try {
+      const uuid = await getCartUuid();
+      const cart = uuid ? await cartService.getByUuid(uuid) : null;
+      const full = cart ? await cartService.getWithItems(cart.id) : null;
+      if (full) {
+        const summary = await summariseLinesFreight(
+          (full.items as Array<{ product_id: number; quantity: number }>).map((i) => ({
+            product_id: i.product_id,
+            quantity: Number(i.quantity) || 0,
+          }))
+        );
+        measures = { weightKg: summary.weight_kg, itemCount: summary.item_count };
+      }
+    } catch {
+      // No cart / lookup failure — an order-value zone (all of them today) doesn't need it.
+    }
+
+    const result = await calculateShipping(postcode, subtotal, measures);
     return NextResponse.json(result);
   } catch (error) {
     console.error("Shipping calculation error:", error);

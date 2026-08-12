@@ -16,6 +16,8 @@ import { emailHasAccount } from "@/lib/actions/account-panel";
 import { decideEmailProbe, normaliseEmail } from "@/lib/checkout/account-prompt";
 import { useHeaderPanels } from "@/lib/cart-quote-counts";
 import { ga4AddShippingInfo, ga4AddPaymentInfo, rowToGa4Item } from "@/components/analytics/ga4";
+import { BulkyDeliveryChoice } from "@/components/checkout/BulkyDeliveryChoice";
+import { holdsPayment, type DeliveryService } from "@/lib/checkout/bulky-delivery";
 
 declare global {
   interface Window {
@@ -101,6 +103,7 @@ export function CheckoutForm({
   freeShippingEnabled = false,
   freeShippingThreshold = 500,
   shippingEnabled = false,
+  bulkyProductNames = [],
   stripePublishableKey,
   testMode = false,
 }: {
@@ -126,6 +129,9 @@ export function CheckoutForm({
   freeShippingEnabled?: boolean;
   freeShippingThreshold?: number;
   shippingEnabled?: boolean;
+  /** Names of the cart's bulky products (card Wxjp8wpg). Non-empty ⇒ the shopper must choose
+   *  curbside vs specialised delivery before this order can be placed. */
+  bulkyProductNames?: string[];
   stripePublishableKey?: string;
   testMode?: boolean;
 }) {
@@ -147,6 +153,14 @@ export function CheckoutForm({
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>(
     () => paymentMethods[0]?.id ?? ""
   );
+  // Bulky-item delivery choice (card Wxjp8wpg). Deliberately starts UNSET even though there are
+  // only two options: the 27-Jul decision is that the shopper is made to choose, and defaulting
+  // to curbside would quietly sell a tail-lift job as a kerbside drop.
+  const [deliveryService, setDeliveryService] = useState<DeliveryService | "">("");
+  const hasBulkyItems = bulkyProductNames.length > 0;
+  // Specialised delivery is quoted by a human afterwards, so the order is HELD: no card is
+  // charged, no rate-card freight is added, and the payment step is replaced by an explanation.
+  const heldForSpecialised = hasBulkyItems && holdsPayment(deliveryService);
   const [stripeError, setStripeError] = useState<string | null>(null);
   const [stripeProcessing, setStripeProcessing] = useState(false);
   const [cardReady, setCardReady] = useState(false);
@@ -491,7 +505,10 @@ export function CheckoutForm({
   // can't match to a zone used to show an error in the summary while the button
   // stayed live, and the order was written with $0 freight. Block instead.
   const shippingUnresolved =
-    shippingEnabled && !freeDelivery && (shippingLoading || shippingCost === null);
+    !heldForSpecialised &&
+    shippingEnabled &&
+    !freeDelivery &&
+    (shippingLoading || shippingCost === null);
 
   return (
     <form
@@ -830,7 +847,23 @@ export function CheckoutForm({
             )}
           </div>
 
-          {/* Payment Method */}
+          <BulkyDeliveryChoice
+            productNames={bulkyProductNames}
+            value={deliveryService}
+            onChange={setDeliveryService}
+          />
+
+          {/* Payment Method — replaced by an explanation when the order is held for a
+              specialised delivery quote (nothing is charged, so there is nothing to choose). */}
+          {heldForSpecialised ? (
+            <div className="border border-steel-200 rounded-lg p-6">
+              <h2 className="text-lg font-semibold text-ink-900 mb-2">Payment</h2>
+              <p className="text-sm text-steel-600">
+                We&apos;ll price the specialised delivery, send you the total and take payment
+                then. Placing this order does not charge your card.
+              </p>
+            </div>
+          ) : (
           <div className="border border-steel-200 rounded-lg p-6">
             <h2 className="text-lg font-semibold text-ink-900 mb-4">Payment Method</h2>
             {testMode && (
@@ -929,6 +962,7 @@ export function CheckoutForm({
               </p>
             )}
           </div>
+          )}
         </div>
 
         {/* Order Summary */}
@@ -967,7 +1001,9 @@ export function CheckoutForm({
               </div>
               <div className="flex justify-between text-sm mt-2">
                 <span className="text-steel-500">Shipping</span>
-                {freeDelivery ? (
+                {heldForSpecialised ? (
+                  <span className="font-medium text-steel-500 text-xs">Quoted after site check</span>
+                ) : freeDelivery ? (
                   <span className="font-medium text-brand">FREE</span>
                 ) : shippingLoading ? (
                   <span className="font-medium text-steel-400 animate-pulse">Calculating...</span>
@@ -985,7 +1021,17 @@ export function CheckoutForm({
               </div>
               <div className="flex justify-between text-base font-semibold mt-4 pt-4 border-t border-steel-200">
                 <span>Total</span>
-                <span><Price amount={(pricesIncludeTax ? subtotal : subtotal + gstAmount) + (shippingCost ?? 0)} /></span>
+                <span>
+                  <Price
+                    amount={
+                      (pricesIncludeTax ? subtotal : subtotal + gstAmount) +
+                      (heldForSpecialised ? 0 : shippingCost ?? 0)
+                    }
+                  />
+                  {heldForSpecialised && (
+                    <span className="ml-1 text-xs font-normal text-steel-500">+ delivery</span>
+                  )}
+                </span>
               </div>
             </div>
 
@@ -1000,13 +1046,26 @@ export function CheckoutForm({
               disabled={
                 isPending ||
                 stripeProcessing ||
-                (selectedPaymentMethod === "stripe" && !cardReady) ||
+                (!heldForSpecialised && selectedPaymentMethod === "stripe" && !cardReady) ||
+                (hasBulkyItems && deliveryService === "") ||
                 shippingUnresolved
               }
               className="btn-primary mt-6 w-full"
             >
-              {isPending || stripeProcessing ? "Processing..." : selectedPaymentMethod === "stripe" ? "Pay Now" : "Place Order"}
+              {isPending || stripeProcessing
+                ? "Processing..."
+                : heldForSpecialised
+                  ? "Request this delivery"
+                  : selectedPaymentMethod === "stripe"
+                    ? "Pay Now"
+                    : "Place Order"}
             </button>
+
+            {hasBulkyItems && deliveryService === "" && (
+              <p className="mt-2 text-center text-xs text-steel-500">
+                Choose a delivery method above to continue.
+              </p>
+            )}
 
             {shippingUnresolved && !shippingLoading && (
               <p className="mt-2 text-center text-xs text-steel-500">

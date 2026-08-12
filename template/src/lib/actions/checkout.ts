@@ -5,11 +5,12 @@ import { cartService, cartItemService, orderService, orderItemService, orderShip
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
-import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveEmailBranding, wantsStripeTestMode, productImageService, type EmailLineItem } from "@keenan/services";
+import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, siteAccessProfileService, type EmailLineItem } from "@keenan/services";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, type BelowCostLine } from "@/lib/checkout/order-draft";
 import { getLineCosts } from "@/lib/store";
 import { sendStaffNotification } from "@/lib/staff-email";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
+import { holdsPayment, validateBulkyDelivery, type SiteAccessAnswers } from "@/lib/checkout/bulky-delivery";
 import { normaliseAuState, isValidAuPostcode } from "@/lib/checkout/au-address";
 import { setLastOrder } from "@/lib/checkout/last-order";
 import { siteBaseUrl } from "@/lib/seo";
@@ -287,6 +288,44 @@ export async function placeOrder(
     }
   }
 
+  // ── BULKY ITEMS (card Wxjp8wpg; 27-Jul group decision) ────────────────────────────────────
+  // What is bulky is read from the PRODUCTS here, never from the submitted form: the choice the
+  // shopper is forced to make must be the choice we enforce. The same read gives us the shipment
+  // weight and unit count for weight-/item-rated shipping zones, and the dangerous-goods lines.
+  const cartFreight = await summariseLinesFreight(
+    (fullCart.items as Array<{ product_id: number; quantity: number }>).map((i) => ({
+      product_id: i.product_id,
+      quantity: Number(i.quantity) || 0,
+    }))
+  ).catch(() => null);
+  const bulkyProducts = cartFreight?.bulky ?? [];
+  const deliveryServiceRaw = (formData.get("deliveryService") as string)?.trim() || null;
+  const siteAccess: SiteAccessAnswers = {
+    deliveryType: (formData.get("siteDeliveryType") as string)?.trim() || null,
+    truckAccessOk:
+      formData.get("siteTruckAccess") === "yes"
+        ? true
+        : formData.get("siteTruckAccess") === "no"
+          ? false
+          : null,
+    loadingDockAvailable: formData.get("siteLoadingDock") === "1",
+    forkliftAtDelivery: formData.get("siteForklift") === "1",
+    twoPersonDeliveryRequired: formData.get("siteTwoPerson") === "1",
+    deliveryWindowStart: (formData.get("siteWindowStart") as string)?.trim() || null,
+    deliveryWindowEnd: (formData.get("siteWindowEnd") as string)?.trim() || null,
+    comments: (formData.get("siteAccessComments") as string)?.trim() || null,
+  };
+  const bulkyError = validateBulkyDelivery({
+    hasBulkyItems: bulkyProducts.length > 0,
+    deliveryService: deliveryServiceRaw,
+    siteAccess,
+  });
+  if (bulkyError) return { error: bulkyError };
+  const deliveryServiceType = bulkyProducts.length > 0 ? deliveryServiceRaw : null;
+  // A specialised delivery cannot be priced from a rate table, so the order is HELD: no freight
+  // is charged, no card is taken, and our team quotes it and collects payment afterwards.
+  const heldForSpecialised = holdsPayment(deliveryServiceType);
+
   // Shipping calculation
   let shippingIncTax = 0;
   const checkoutSettings = await getCheckoutSettings();
@@ -295,7 +334,11 @@ export async function placeOrder(
   // Shipping is quoted to the customer on the EX-tax subtotal (checkout page +
   // CheckoutForm pass cart.cartAmount), so the order must use the same basis or
   // the charged shipping diverges from the quote at tier/cap boundaries.
-  if (
+  if (heldForSpecialised) {
+    // Held for a human quote — charging a table rate for a job we've just been told the table
+    // can't price would be a made-up number on a real invoice.
+    shippingIncTax = 0;
+  } else if (
     qualifiesForFreeDelivery({
       enabled: checkoutSettings.freeShippingEnabled,
       isMember,
@@ -306,10 +349,14 @@ export async function placeOrder(
     // Free delivery for members over threshold
     shippingIncTax = 0;
   } else {
-    // Calculate from shipping rate cards (zone-based flat-rate)
+    // Calculate from shipping rate cards (zone-based table rates: by order value, weight or
+    // item count depending on the matched zone — card Wxjp8wpg).
     try {
       const { calculateShipping } = await import("@/lib/store");
-      const shippingResult = await calculateShipping(postalCode, subtotalExTax);
+      const shippingResult = await calculateShipping(postalCode, subtotalExTax, {
+        weightKg: cartFreight?.weight_kg ?? null,
+        itemCount: cartFreight?.item_count ?? null,
+      });
       if (shippingResult.success) {
         shippingIncTax = shippingResult.cost;
       } else if (shippingResult.rate_card_name) {
@@ -366,8 +413,11 @@ export async function placeOrder(
     return { error: minError };
   }
 
-  // Determine payment status based on payment method
-  const paymentStatus = determinePaymentStatus(paymentMethod);
+  // Determine payment status based on payment method. A held specialised-delivery order takes
+  // no payment method at all: the customer is not paying today, so the order sits unpaid
+  // ("pending") until logistics quote the delivery and take payment on the order screen.
+  const effectivePaymentMethod = heldForSpecialised ? "" : paymentMethod;
+  const paymentStatus = determinePaymentStatus(effectivePaymentMethod);
 
   // Tag orders created while this channel is in payments test mode so they can be
   // cleared later from the portal. Only storefront orders are tagged — Zoey/backfill
@@ -378,10 +428,14 @@ export async function placeOrder(
   // so the confirmation page / invoice email show the customer's real terms.
   const orderMetafields: Record<string, unknown> = {};
   if (isTestMode) orderMetafields.test_mode = true;
-  if (paymentMethod === "net_terms" && netTerms) orderMetafields.net_terms_days = netTerms.netTermsDays;
+  if (effectivePaymentMethod === "net_terms" && netTerms) orderMetafields.net_terms_days = netTerms.netTermsDays;
   // Stamp the cart uuid on card orders so a retry/double-submit can find and reuse
   // the existing awaiting_payment order instead of creating a duplicate (see below).
-  if (paymentMethod === "stripe") orderMetafields.cart_uuid = uuid;
+  if (effectivePaymentMethod === "stripe") orderMetafields.cart_uuid = uuid;
+  if (deliveryServiceType) {
+    orderMetafields.delivery_service_type = deliveryServiceType;
+    orderMetafields.bulky_products = bulkyProducts.map((p: { sku: string | null; name: string }) => p.sku ?? p.name);
+  }
   if (belowCostLines.length > 0) {
     orderMetafields.below_cost_lines = belowCostLines.map((l) => ({
       product_id: l.productId,
@@ -399,7 +453,7 @@ export async function placeOrder(
   // on the cart uuid stamped in order metafields. createStripePaymentIntent is
   // itself idempotent on (orderId, amount), so re-confirming returns a usable
   // client secret for the same order.
-  if (paymentMethod === "stripe") {
+  if (effectivePaymentMethod === "stripe") {
     try {
       const open = await orderService.list({
         page: 1,
@@ -440,8 +494,11 @@ export async function placeOrder(
     // backoffice can reconcile it (esp. net-terms invoices).
     ...(netTerms ? { accountId: netTerms.accountId } : {}),
     status: "pending",
-    paymentMethod: paymentMethod || undefined,
+    paymentMethod: effectivePaymentMethod || undefined,
     paymentStatus,
+    // The bulky-item choice rides on the ORDER so the portal, the freight engine and the
+    // packing floor all read the same answer (card Wxjp8wpg).
+    ...(deliveryServiceType ? { deliveryServiceType } : {}),
     currencyCode: cartWithItems.currency_code,
     subtotalExTax: String(subtotalExTax),
     subtotalIncTax: String(subtotalIncTax),
@@ -540,7 +597,13 @@ export async function placeOrder(
       postal_code: postalCode,
       country,
       country_code: country,
-      shipping_method: shippingIncTax > 0 ? "Storefront delivery" : "Free delivery",
+      shipping_method: heldForSpecialised
+        ? "Specialised delivery — to be quoted"
+        : deliveryServiceType === "curbside"
+          ? "Curbside delivery"
+          : shippingIncTax > 0
+            ? "Storefront delivery"
+            : "Free delivery",
       base_cost: String(shippingExTax),
       cost_ex_tax: String(shippingExTax),
       cost_inc_tax: String(shippingIncTax),
@@ -549,6 +612,49 @@ export async function placeOrder(
     });
   } catch (e) {
     console.error("[placeOrder] shipping address insert failed (non-fatal):", e);
+  }
+
+  // ── Bulky / dangerous-goods handling (card Wxjp8wpg) ──────────────────────────────────────
+  // Raise the freight flags from the order's LINES so logistics see "dangerous goods" or "held
+  // for specialised delivery" on the order the moment it lands, without anyone having to run a
+  // freight quote first. Non-fatal by contract — an alert must never fail a customer's order.
+  await syncOrderHandlingFlags(order.id, deliveryServiceType);
+
+  // A specialised delivery needs the site's access details before it can be quoted, so the
+  // answers are stored as a real site_access_profile (the same record the freight planner and
+  // the carrier request read) and linked to the order — not buried in a note.
+  if (heldForSpecialised) {
+    try {
+      const profile = await siteAccessProfileService.upsert({
+        account_id: netTerms?.accountId ?? null,
+        address1,
+        address2: billingAddress.address2 || null,
+        city,
+        state: state || null,
+        postal_code: postalCode,
+        country_code: country,
+        delivery_type: siteAccess.deliveryType,
+        truck_access_ok: siteAccess.truckAccessOk,
+        loading_dock_available: siteAccess.loadingDockAvailable,
+        forklift_at_delivery: siteAccess.forkliftAtDelivery,
+        two_person_delivery_required: siteAccess.twoPersonDeliveryRequired,
+        delivery_window_start: siteAccess.deliveryWindowStart,
+        delivery_window_end: siteAccess.deliveryWindowEnd,
+        comments: siteAccess.comments,
+        source: "checkout",
+      });
+      await orderService.update(order.id, {
+        siteAccessProfileId: profile.id as number,
+        internalMemo:
+          "SPECIALISED DELIVERY REQUESTED — order held unpaid. Quote the delivery from the site " +
+          "access profile, then take payment. Bulky lines: " +
+          (bulkyProducts.map((p: { sku: string | null; name: string }) => p.sku ?? p.name).join(", ") || "n/a"),
+      });
+    } catch (e) {
+      // The order and its flags already exist and the answers are on the form submission we
+      // logged — losing the profile row must not cost the customer their order.
+      console.error("[placeOrder] site access profile for specialised delivery failed:", e);
+    }
   }
 
   // "Save this address for next time" — keep a NEWLY typed address on the
@@ -625,7 +731,7 @@ export async function placeOrder(
   // Uses the global paymentService — credentials live in store_settings.payment_gateways
   // (configured at /dashboard/settings/payments in the portal). Channel segmentation
   // happens via metadata stamped by paymentService.
-  if (paymentMethod === "stripe") {
+  if (effectivePaymentMethod === "stripe") {
     try {
       const { clientSecret } = await paymentService.createStripePaymentIntent(order.id, {
         amount: String(totalIncTax),
@@ -692,7 +798,7 @@ export async function placeOrder(
   // orders never email a real person. Branded with THIS channel's name/logo/from
   // address (not Keenan Group) from the site config.
   try {
-    const method = checkoutSettings.paymentMethods.find((m) => m.id === paymentMethod);
+    const method = checkoutSettings.paymentMethods.find((m) => m.id === effectivePaymentMethod);
     const { site, channel } = await getSiteConfig();
     // Central template: sites row + Email Templates overrides (channel_settings
     // `email_template`), resolved by @keenan/services so every sender matches.
@@ -706,12 +812,12 @@ export async function placeOrder(
       orderNumber: order.order_number,
       customerName: `${firstName} ${lastName}`.trim() || undefined,
       storeName,
-      paymentMethod,
+      paymentMethod: effectivePaymentMethod,
       total: String(totalIncTax),
       items: emailItems,
       bankDetails: method?.bankDetails ?? null,
       // Use the customer's actual account terms for a net-terms invoice email.
-      netTermsDays: paymentMethod === "net_terms" && netTerms ? netTerms.netTermsDays : (method?.netTermsDays ?? null),
+      netTermsDays: effectivePaymentMethod === "net_terms" && netTerms ? netTerms.netTermsDays : (method?.netTermsDays ?? null),
       siteUrl,
       logoUrl: branding?.logoUrl ?? site?.logoUrl ?? null,
       logoAlt: branding?.logoAlt ?? site?.logoAlt ?? null,
@@ -781,7 +887,7 @@ export async function placeOrder(
         customerEmail: email,
         customerName: `${firstName} ${lastName}`.trim() || null,
         total: String(totalIncTax),
-        paymentMethod,
+        paymentMethod: effectivePaymentMethod,
         storeName,
         logoUrl: branding?.logoUrl ?? site?.logoUrl ?? null,
         logoAlt: branding?.logoAlt ?? site?.logoAlt ?? null,
@@ -800,9 +906,9 @@ export async function placeOrder(
 
   // Breadcrumb so a shopper who comes BACK to /checkout after ordering lands on
   // their confirmation instead of the now-empty cart.
-  await setLastOrder(order.order_number, paymentMethod);
+  await setLastOrder(order.order_number, effectivePaymentMethod);
 
-  const pmParam = paymentMethod ? `&pm=${encodeURIComponent(paymentMethod)}` : "";
+  const pmParam = effectivePaymentMethod ? `&pm=${encodeURIComponent(effectivePaymentMethod)}` : "";
   redirect(`/checkout/confirmation?order=${order.order_number}${pmParam}`);
 }
 
