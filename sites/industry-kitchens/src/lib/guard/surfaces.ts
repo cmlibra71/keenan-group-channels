@@ -38,7 +38,8 @@ const HOUR = 60 * MINUTE;
  * - `search` is tight because /search fans out into six Meilisearch queries per
  *   request, and falls back to uncached Postgres full-text when Meili is down.
  * - `checkout` is deliberately generous: a false positive there costs a sale,
- *   and those routes are already protected by login-throttle and form limits.
+ *   and those routes are already protected by the `credential` budget below,
+ *   the per-account limits in lib/security and the form limits.
  * - `sitemap` is tight because each hit is a ~40k-row catalogue enumeration.
  * - `credential` counts POSTs to the sign-in / register / password / checkout
  *   paths ONLY (see isCredentialPath). Server actions POST to the page they
