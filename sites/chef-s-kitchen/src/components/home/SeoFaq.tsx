@@ -19,13 +19,13 @@ export function SeoFaq({
   const h = heading || "Australia's trade supplier for commercial kitchens";
   const b =
     body ||
-    "Chef's Depot supplies professional-grade commercial kitchen equipment and consumables to the hospitality trade — from refrigeration, cooking and food prep to warewashing, smallwares and furniture. Members access wholesale pricing across the full range, with Australia-wide delivery and priority fulfilment.";
+    "Chefs Depot supplies professional-grade commercial kitchen equipment and consumables to the hospitality trade — from refrigeration, cooking and food prep to warewashing, smallwares and furniture. Members access wholesale pricing across the full range, with Australia-wide delivery and priority fulfilment.";
   const items: Faq[] =
     faqs && faqs.length > 0
       ? faqs
       : [
           {
-            q: "How does Chef's Depot membership pricing work?",
+            q: "How does Chefs Depot membership pricing work?",
             a: "Members pay wholesale, cost-plus pricing across the catalogue — typically 10–25% below retail. Join from $14.95/month and your member price is applied automatically at cart and checkout.",
           },
           {
@@ -47,7 +47,7 @@ export function SeoFaq({
       <div className="container-page section-padding">
         <div className="grid gap-12 lg:grid-cols-2">
           <div>
-            <p className="eyebrow mb-3">Why Chef&apos;s Depot</p>
+            <p className="eyebrow mb-3">Why Chefs Depot</p>
             <h2 className="section-title">{h}</h2>
             <p className="mt-5 max-w-prose text-[15px] leading-relaxed text-text-secondary">{b}</p>
             <Link href="/membership" className="btn-primary mt-7">

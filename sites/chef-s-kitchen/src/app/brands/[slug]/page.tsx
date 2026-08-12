@@ -145,7 +145,7 @@ async function BrandHeroV2({
         : null,
       productCountLabel: `${total} ${total === 1 ? "product" : "products"}`,
     },
-    settings: { channelName: "Chef's Depot", membershipFromPrice: null },
+    settings: { channelName: "Chefs Depot", membershipFromPrice: null },
   };
   return (
     <>

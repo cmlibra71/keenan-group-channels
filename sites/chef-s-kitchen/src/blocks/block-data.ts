@@ -49,12 +49,12 @@ const PROVIDERS: Record<string, Provider> = {
         heading: setting.heading || "Australia's trade supplier for commercial kitchens",
         body:
           setting.body ||
-          "Chef's Depot supplies professional-grade commercial kitchen equipment and consumables to the hospitality trade — from refrigeration, cooking and food prep to warewashing, smallwares and furniture. Members access wholesale pricing across the full range, with Australia-wide delivery and priority fulfilment.",
+          "Chefs Depot supplies professional-grade commercial kitchen equipment and consumables to the hospitality trade — from refrigeration, cooking and food prep to warewashing, smallwares and furniture. Members access wholesale pricing across the full range, with Australia-wide delivery and priority fulfilment.",
         faqs:
           setting.faqs && setting.faqs.length > 0
             ? setting.faqs
             : [
-                { q: "How does Chef's Depot membership pricing work?", a: "Members pay wholesale, cost-plus pricing across the catalogue — typically 10–25% below retail. Join from $14.95/month and your member price is applied automatically at cart and checkout." },
+                { q: "How does Chefs Depot membership pricing work?", a: "Members pay wholesale, cost-plus pricing across the catalogue — typically 10–25% below retail. Join from $14.95/month and your member price is applied automatically at cart and checkout." },
                 { q: "Do you deliver Australia-wide?", a: "Yes — we deliver commercial kitchen equipment and supplies right across Australia. Freight is calculated at checkout based on your delivery address and the items in your order." },
                 { q: "Can I get a quote for a large or fit-out order?", a: "Absolutely. Add items to a quote and our team will prepare pricing you can take to approval or finance. Items without a listed price (made-to-order or freight-only) go to quote for confirmation." },
                 { q: "Are prices shown with or without GST?", a: "Prices default to ex-GST for trade. Use the GST switch on any product page to flip every price between excluding and including GST — your choice is remembered." },

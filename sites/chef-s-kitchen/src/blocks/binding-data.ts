@@ -116,7 +116,7 @@ export function buildBindingData(ctx?: RenderContext): AnyRecord {
       breadcrumbs: (extras.breadcrumbs as AnyRecord[]) ?? [],
       related: ((extras.relatedProducts as AnyRecord[]) ?? []).map(productCardData),
       settings: {
-        channelName: "Chef's Depot",
+        channelName: "Chefs Depot",
         membershipFromPrice: num(teaser?.fromPrice),
       },
     };
@@ -148,9 +148,9 @@ export function buildBindingData(ctx?: RenderContext): AnyRecord {
         totalLabel: `${total} product${total === 1 ? "" : "s"}`,
         showingRange: `1–${shown}`,
       },
-      settings: { channelName: "Chef's Depot", membershipFromPrice: null },
+      settings: { channelName: "Chefs Depot", membershipFromPrice: null },
     };
   }
 
-  return { settings: { channelName: "Chef's Depot", membershipFromPrice: null } };
+  return { settings: { channelName: "Chefs Depot", membershipFromPrice: null } };
 }
