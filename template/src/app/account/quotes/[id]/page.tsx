@@ -193,8 +193,10 @@ export default async function QuoteDetailPage({
 
   // Payment methods are read EXACTLY as checkout reads them — the channel's
   // customer-facing list (enabled, minus channel staff-only), narrowed by the
-  // account's allow-list, with net terms only for an entitled account. Switch
-  // card payments on later and they appear here with no further work.
+  // account's allow-list AND minus the methods the ACCOUNT marks staff-only,
+  // with net terms only for an entitled account. This is a customer surface like
+  // the checkout, so both staff-only controls apply here too. Switch card
+  // payments on later and they appear here with no further work.
   //
   // EXCEPT the equipment-finance methods (card VAjaPj0t). SilverChef and Finance
   // are not a way of paying: they place an order UNPAID against an application
@@ -210,7 +212,8 @@ export default async function QuoteDetailPage({
   ]);
   const payMethods: PayMethod[] = filterPaymentMethodsForAccount(
     checkoutSettings.customerPaymentMethods.filter((m) => !isFinancePaymentMethod(m.id)),
-    accountOptions?.allowedPaymentMethods ?? null
+    accountOptions?.allowedPaymentMethods ?? null,
+    accountOptions?.staffOnlyPaymentMethods ?? null
   )
     .filter((m) => m.id !== "net_terms" || !!netTerms)
     .map((m) => ({
