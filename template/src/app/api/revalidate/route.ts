@@ -50,6 +50,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ revalidated: true });
   }
 
+  // kind "brand_seo" is the portal publishing a brand page's per-storefront SEO wording
+  // (xvz6pXB4), which a reviewer works through in bulk. Only the brand ROW changed, and
+  // brand reads carry their own "brands" tag — so purge that and leave the broad channel
+  // tag alone, for the same reason "product" does: the broad bust forces a multi-second
+  // mega-menu / category-tree recompute on the next view, and IK's tree is ~4.5k
+  // categories. (Deliberately NOT folded into kind "brand", which is the Site Builder
+  // brand TEMPLATE publish and does need the cms-pages bust below.)
+  if (kind === "brand_seo") {
+    purge("brands");
+    return NextResponse.json({ revalidated: true });
+  }
+
   // Broad bust (covers nav/settings reads), then the page-specific tag.
   // kind "catalog" (the Zoey ingestor's storefront_revalidate node) is just
   // the broad bust: nav / category tree / product pages pick up ingest writes
