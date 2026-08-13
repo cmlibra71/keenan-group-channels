@@ -11,6 +11,7 @@ import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 import { lastOrderConfirmationPath } from "@/lib/checkout/last-order";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
 import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-policy";
+import { resolvePaymentAvailability } from "@/lib/checkout/payment-availability";
 import { CheckoutForm } from "@/components/checkout/CheckoutForm";
 import { StartedCheckoutTracker } from "@/components/analytics/StartedCheckoutTracker";
 
@@ -58,6 +59,16 @@ export default async function CheckoutPage() {
   )
     .filter((m) => m.id !== "net_terms" || !!netTerms)
     .map((m) => (m.id === "net_terms" && netTerms ? { ...m, netTermsDays: netTerms.netTermsDays } : m));
+
+  // Nothing left to offer means one of two very different things, and the customer
+  // must be told the right one: the STORE has no methods switched on (order still
+  // placed, invoiced later — unchanged), or this ACCOUNT may use none of the store's
+  // methods, in which case we refuse rather than book an unpaid order. placeOrder
+  // resolves the same two counts and refuses the same case (card N8kE8arY).
+  const paymentAvailability = resolvePaymentAvailability(
+    checkoutSettings.enabledPaymentMethods.length,
+    paymentMethods.length
+  );
 
   const subtotal = parseFloat(cart.cart_amount ?? "0");
 
@@ -219,6 +230,7 @@ export default async function CheckoutPage() {
         canSaveNewAddress={canSaveNewAddress}
         countries={checkoutSettings.supportedCountries}
         paymentMethods={paymentMethods}
+        paymentAvailability={paymentAvailability}
         savedAddresses={savedAddresses}
         googlePlacesEnabled={checkoutSettings.googlePlacesEnabled}
         freeShippingEnabled={checkoutSettings.freeShippingEnabled}

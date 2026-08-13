@@ -242,6 +242,9 @@ export default async function QuoteDetailPage({
     items: raw.items,
     amountDue,
     paymentMethodCount: payMethods.length,
+    // …and how many the STORE has, so a customer whose ACCOUNT allows none of them
+    // is told that, not "this store doesn't take online payments" (card N8kE8arY).
+    channelPaymentMethodCount: checkoutSettings.enabledPaymentMethods.length,
     hasDeliveryAddress: quoteHasShipTo || addressOptions.length > 0,
   });
   const { gateway: stripeGateway } = await resolveStripeGateway();

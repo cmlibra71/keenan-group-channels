@@ -193,6 +193,9 @@ export async function payQuote(
     items: (quote.items ?? []) as { list_price?: string | null; sale_price?: string | null }[],
     amountDue,
     paymentMethodCount: methods.length,
+    // …and how many the STORE has, so a customer whose ACCOUNT allows none of them
+    // is told that, not "this store doesn't take online payments" (card N8kE8arY).
+    channelPaymentMethodCount: checkoutSettings.enabledPaymentMethods.length,
     hasDeliveryAddress: quoteHasShipTo || fallbackShipTo !== null,
   });
   if (payState.kind !== "enabled") {
