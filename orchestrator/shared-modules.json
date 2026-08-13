@@ -61,6 +61,8 @@
     "lib/checkout/account-required.ts",
     "lib/checkout/au-address.test.ts",
     "lib/checkout/au-address.ts",
+    "lib/checkout/customer-reference.test.ts",
+    "lib/checkout/customer-reference.ts",
     "lib/checkout/free-shipping-brands-policy.test.ts",
     "lib/checkout/free-shipping-brands-policy.ts",
     "lib/checkout/free-shipping-brands.ts",
