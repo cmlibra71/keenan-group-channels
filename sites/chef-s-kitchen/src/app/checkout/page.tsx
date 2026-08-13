@@ -28,6 +28,8 @@ import {
 } from "@/lib/checkout/finance";
 import { financeApplicationForm } from "@/lib/checkout/finance-form";
 import { resolvePaymentAvailability } from "@/lib/checkout/payment-availability";
+import { CheckoutForm } from "@/components/checkout/CheckoutForm";
+import { StartedCheckoutTracker } from "@/components/analytics/StartedCheckoutTracker";
 
 export const metadata = {
   title: "Checkout",
@@ -79,16 +81,15 @@ export default async function CheckoutPage() {
     resolveNetTermsEntitlement(session),
     resolveAccountOptions(session),
   ]);
-  // customerPaymentMethods, never paymentMethods and never enabledPaymentMethods:
-  // the shared read returns EVERY configured method (the admin editor and
-  // past-order lookups need the disabled ones), and the "enabled" list still
-  // contains channel STAFF-ONLY methods — Zoey keeps Send Invoice to staff, and
-  // IK has it switched on today. A customer surface reads the customer list
-  // (services `customerFacingPaymentMethods`, card NmAfwrdE); placeOrder
-  // authorises against the same list.
+  // customerPaymentMethods, never paymentMethods and never enabledPaymentMethods.
+  // The shared read returns EVERY configured method (admin editor + past-order
+  // lookups need the disabled ones); "enabled" still contains the methods the
+  // CHANNEL marks staff-only — Industry Kitchens' Send Invoice is enabled so staff
+  // can raise an order on it, and must never be shown to a shopper (card NmAfwrdE).
   //
-  // Then BOTH account controls, never one: the allow-list and the per-account
-  // staff-only list (card N8kE8arY). placeOrder re-applies the same pair.
+  // Two independent staff-only controls, both applied here: the CHANNEL's (already
+  // subtracted inside customerPaymentMethods) and the ACCOUNT's (the third argument,
+  // card N8kE8arY). placeOrder authorises against the same two.
   const entitledPaymentMethods = filterPaymentMethodsForAccount(
     checkoutSettings.customerPaymentMethods,
     accountOptions?.allowedPaymentMethods ?? null,
@@ -102,6 +103,10 @@ export default async function CheckoutPage() {
   // placed, invoiced later — unchanged), or this ACCOUNT may use none of the store's
   // methods, in which case we refuse rather than book an unpaid order. placeOrder
   // resolves the same two counts and refuses the same case (card N8kE8arY).
+  //
+  // "What the STORE offers" is the CUSTOMER-facing count, not the enabled count: a
+  // store whose only enabled method is staff-only offers a shopper nothing at all,
+  // and must say so rather than blame the shopper's account (card NmAfwrdE).
   const paymentAvailability = resolvePaymentAvailability(
     checkoutSettings.customerPaymentMethods.length,
     entitledPaymentMethods.length
@@ -269,26 +274,26 @@ export default async function CheckoutPage() {
         itemNames={(cart.items as Array<Record<string, unknown>>).map((i) => String(i.product_name ?? i.name ?? ""))}
         items={cart.items as Array<Record<string, unknown>>}
       />
-      <h1 className="page-title mb-8">Checkout</h1>
+      <h1 className="text-3xl font-bold text-zinc-900 mb-8">Checkout</h1>
 
       {isMember && memberSavings > 0 && (
-        <div className="mb-6 flex items-center gap-2 bg-brand-tint border border-brand-light/40 rounded-lg px-4 py-3">
-          <Crown className="h-4 w-4 text-brand shrink-0" />
-          <span className="text-sm text-brand-deep">
+        <div className="mb-6 flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+          <Crown className="h-4 w-4 text-green-600 shrink-0" />
+          <span className="text-sm text-green-800">
             You&apos;re saving ${memberSavings.toFixed(2)} with your membership on this order
           </span>
         </div>
       )}
 
       {showMemberBanner && estimatedSavings > 0 && (
-        <div className="mb-6 flex items-center justify-between bg-member-bg border border-member/40 rounded-lg px-4 py-3">
-          <div className="flex items-center gap-2 text-sm text-member-text">
-            <Crown className="h-4 w-4 text-member-text shrink-0" />
+        <div className="mb-6 flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+          <div className="flex items-center gap-2 text-sm text-amber-800">
+            <Crown className="h-4 w-4 text-amber-600 shrink-0" />
             Members save up to ${estimatedSavings.toFixed(2)} on this order.
           </div>
           <Link
             href="/membership"
-            className="inline-flex items-center gap-1 text-sm font-semibold text-member-text hover:text-member-text shrink-0"
+            className="inline-flex items-center gap-1 text-sm font-semibold text-amber-700 hover:text-amber-800 shrink-0"
           >
             Join now
             <ArrowRight className="h-3.5 w-3.5" />

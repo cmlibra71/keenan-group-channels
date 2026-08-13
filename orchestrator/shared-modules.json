@@ -61,6 +61,7 @@
     "lib/checkout/account-required.ts",
     "lib/checkout/au-address.test.ts",
     "lib/checkout/au-address.ts",
+    "lib/checkout/customer-payment-list.test.ts",
     "lib/checkout/customer-payment-surfaces.test.ts",
     "lib/checkout/finance-application.ts",
     "lib/checkout/finance-form.ts",

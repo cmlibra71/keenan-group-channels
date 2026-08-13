@@ -5,7 +5,6 @@ import Image from "next/image";
 import { Package } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { signInRedirect } from "@/lib/account-redirect";
-import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import {
   quoteService,
   productImageService,
@@ -13,6 +12,7 @@ import {
   getCheckoutSettings,
   CHANNEL_ID,
 } from "@/lib/store";
+import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import { Price } from "@/components/ui/Price";
 import { QuoteActions } from "./quote-actions";
 import {
@@ -39,7 +39,6 @@ import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-p
 import { isFinancePaymentMethod } from "@/lib/checkout/finance";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
-import { AccountShell } from "@/components/account/AccountShell";
 
 /** en-AU money, matching the <Price> component's formatting. */
 function formatMoney(amount: number, currency: string | null): string {
@@ -63,12 +62,12 @@ interface QuoteDetail {
   tax_inclusive: boolean | null;
   external_source: string | null;
   tax_class_id: number | null;
+  base_amount: string | null;
   discount_amount: string | null;
   coupon_discount: string | null;
   gift_certificate_amount: string | null;
   store_credit_amount: string | null;
   shipping_cost: string | null;
-  base_amount: string | null;
   customer_notes: string | null;
   currency_code: string | null;
   attributes: Record<string, unknown> | null;
@@ -127,7 +126,6 @@ export default async function QuoteDetailPage({
   if (!session) redirect(signInRedirect(`/account/quotes/${quoteId}`));
 
   const raw = (await quoteService.getWithItems(quoteId)) as QuoteDetail | null;
-  // Only the owning contact, on this channel, may view a quote.
   // Only the owning contact, on this channel, may view a quote — UNLESS their B2B
   // account role grants `view_company_quotes`, in which case any quote belonging to
   // an active member of their account is visible (docs/crm-parity/10-role-enforcement.md).
@@ -182,6 +180,7 @@ export default async function QuoteDetailPage({
   // implicit — the same split the cart summary and the emailed quote show, at the
   // same per-quote rate the portal resolves.
   const gst = quoteGstTotals(total ?? 0, quote, await resolveQuoteGstRate(raw.tax_class_id));
+
   // ── Paying this quote (card 0Wy0xHuq) ────────────────────────────────────
   // The rep may have set a deposit on the quote; that is what the customer is
   // charged now, with the balance following. Both figures are GST-INCLUSIVE,
@@ -278,7 +277,6 @@ export default async function QuoteDetailPage({
   });
   const { gateway: stripeGateway } = await resolveStripeGateway();
   const freightPending = !isMoneyRow(gst.freightEx);
-
 
   return (
     <AccountShell>
@@ -481,6 +479,7 @@ export default async function QuoteDetailPage({
 
       {/* Customer self-service actions */}
       <QuoteActions quoteId={quote.id} status={status} acceptState={acceptState} />
+
       {/* Pay this quote — inside the logged-in account area, per Steve. The
           panel renders even while pricing is being prepared: the Pay button
           stays visible and greyed with the reason rather than vanishing. */}

@@ -17,6 +17,7 @@ import {
 import { matchBrandSpecial } from "@/lib/checkout/free-shipping-brands-policy";
 import { normaliseAuState, isValidAuPostcode } from "@/lib/checkout/au-address";
 import { setLastOrder } from "@/lib/checkout/last-order";
+import { canViewOrderConfirmation } from "@/lib/checkout/confirmation-access";
 import { siteBaseUrl } from "@/lib/seo";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 import {
@@ -507,8 +508,17 @@ export async function placeOrder(
     if (!result.ok) return { error: result.error };
   }
 
-  // Determine payment status based on payment method
-  const paymentStatus = determinePaymentStatus(paymentMethod);
+  // Determine payment status based on payment method.
+  //
+  // A ZERO-VALUE cart is a special shape: there is nothing to charge. Stripe refuses a $0
+  // PaymentIntent outright, and this action writes the order row BEFORE it calls Stripe — so a $0
+  // card checkout used to leave a real order behind and then fail in front of the shopper. Zero-
+  // value orders are a live Zoey flow (316 of them, last used 3 August — card NmAfwrdE), so the
+  // order is simply placed with no payment method, exactly like a store with none configured, and
+  // staff close it off from the order screen.
+  const nothingToPay = totalIncTax <= 0;
+  const effectivePaymentMethod = nothingToPay ? "" : paymentMethod;
+  const paymentStatus = determinePaymentStatus(effectivePaymentMethod);
 
   // Tag orders created while this channel is in payments test mode so they can be
   // cleared later from the portal. Only storefront orders are tagged — Zoey/backfill
@@ -1001,23 +1011,19 @@ export async function placeOrder(
 export async function confirmStripePayment(
   orderNumber: string
 ): Promise<{ success: boolean; error?: string }> {
-  // Auth + ownership FIRST — order numbers are semi-guessable, and this call has
-  // a side effect (finalising/clearing the cart). Verifying ownership before any
-  // mutation means an unauthorized caller can't wipe a victim's cart.
-  const session = await getSession();
-  if (!session) return { success: false, error: "Not authenticated" };
-
-  try {
-    const orders = await orderService.list({
-      page: 1, limit: 1, sort: "id", direction: "desc",
-      filters: { order_number: { type: "eq", value: orderNumber } },
-    });
-    const order = orders.data[0] as { id: number; contact_id: number | null } | undefined;
-    if (!order) return { success: false, error: "Order not found" };
-    if (order.contact_id !== session.contactId) return { success: false, error: "Forbidden" };
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : "Failed to confirm payment" };
-  }
+  // Ownership FIRST — order numbers are semi-guessable and this call has a side effect
+  // (finalising/clearing the cart), so an unauthorized caller must not be able to wipe a victim's
+  // cart. Exactly the two viewers the confirmation page itself accepts, resolved by the same
+  // helper: the signed-in contact who owns the order, or the GUEST who just placed it, proven by
+  // the short-lived httpOnly `last_order` cookie placeOrder writes for this purpose.
+  //
+  // It used to demand a SESSION, so a guest paying by card was refused here: their cart was never
+  // marked completed and the cart cookie never cleared, leaving the items sitting in the basket
+  // after they had paid — and a second checkout would have charged them again. Latent while no
+  // storefront took card payments; live the moment Industry Kitchens switched card on. Card
+  // NmAfwrdE.
+  const ownsOrder = await canViewOrderConfirmation(orderNumber).catch(() => false);
+  if (!ownsOrder) return { success: false, error: "Forbidden" };
 
   // Ownership verified — finalise the cart now that the card has been confirmed
   // (placeOrder's Stripe branch deliberately left it intact — see the comment
