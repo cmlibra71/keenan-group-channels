@@ -12,6 +12,7 @@ import { loadJsSandbox, computeCallResults } from "@keenan/services/builder";
 import { cmsFunctionService } from "@keenan/services/services";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
+import { withProductKitNode } from "@/builder/product-kit-node";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 
 // ============================================================================
@@ -108,7 +109,11 @@ export async function renderProductNodeBranch({
     nodesDoc?.builder_kind === "nodes" && nodesDoc.node_tree
       ? (nodesDoc.node_tree as typeof SEED_PRODUCT_TREE)
       : null;
-  const nodeTree = storedTree ?? SEED_PRODUCT_TREE;
+  // The kit leaf goes in above the buy box unless the author has already placed it. Done here,
+  // per render, rather than by a pass over the stored trees: no database write, nothing to undo on
+  // a rollback, and it cannot be half-applied. It renders nothing on a product that is not a
+  // grouped/bundle kit — which is nearly all of them. See builder/product-kit-node.ts.
+  const nodeTree = withProductKitNode(storedTree ?? SEED_PRODUCT_TREE).tree as typeof SEED_PRODUCT_TREE;
 
   const namedStyles = await getNamedStyles().catch(() => ({}));
   const components = (await (draft ? getDraftComponents() : getComponents()).catch(

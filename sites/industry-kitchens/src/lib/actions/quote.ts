@@ -18,11 +18,11 @@ import { isProductVisibleToViewer, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalo
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
 import {
   describeKitChoices,
-  describeKitContents,
   readProductKit,
   resolveKitChoices,
   type KitChoice,
 } from "@/lib/product-kit";
+import { kitNoteWrite, mergeKitAttributes, readOwnKitNote } from "@/lib/quotes/kit-line";
 
 // QuoteService returns snake_case rows (transformRow convention).
 type QuoteRow = { id: number; uuid: string; contact_id?: number | null; [key: string]: unknown };
@@ -78,17 +78,21 @@ export async function addToQuote(
   // A GROUPED kit has no choices — its contents ride along so the rep can see what the one price
   // covers without opening the product.
   const kit = readProductKit(product.metafields);
-  let lineAttributes: Record<string, unknown> | null = null;
-  let lineNotes: string | null = null;
+  // What this add contributes to the line's attributes bag — MERGED into whatever is already
+  // there, never written over it: the same column carries the indent tick (card Iy3jZrMl), the
+  // custom-line approval (card p888Rl1q) and the Zoey ingest's own keys, and a storefront add must
+  // not silently drop any of them.
+  let kitAttributes: Record<string, unknown> | null = null;
+  let kitNote: string | null = null;
   if (kit?.kind === "bundle") {
     const resolved = resolveKitChoices(kit, kitChoices);
     if (!resolved) {
       return { error: "Choose an option in every group before adding this to a quote." };
     }
-    lineAttributes = { kit_kind: "bundle", kit_selection: resolved };
-    lineNotes = describeKitChoices(resolved);
+    kitNote = describeKitChoices(resolved);
+    kitAttributes = { kit_kind: "bundle", kit_selection: resolved, kit_note: kitNote };
   } else if (kit?.kind === "grouped") {
-    lineAttributes = {
+    kitAttributes = {
       kit_kind: "grouped",
       kit_contents: kit.items.map((i) => ({
         product_id: i.productId,
@@ -97,7 +101,10 @@ export async function addToQuote(
         quantity: i.quantity,
       })),
     };
-    lineNotes = describeKitContents(kit);
+    // A grouped kit's contents are the PRODUCT's own definition and are on its page, so they ride
+    // along structurally for the rep and are deliberately NOT written into the customer-visible
+    // line comment. Only a bundle — a configuration the customer built, recorded nowhere else —
+    // gets that.
   }
 
   let listPrice = product.price;
@@ -145,16 +152,19 @@ export async function addToQuote(
     id: number;
     quantity: number;
     customer_notes?: string | null;
+    attributes?: unknown;
   } | null;
 
   if (existing) {
+    const merged = mergeKitAttributes(existing.attributes, kitAttributes);
     // A quote may hold only ONE line per product+variant, so re-configuring a bundle REPLACES the
     // captured configuration on the line the customer already has (and does not stack a second
     // quantity onto a different build). Everything else keeps counting up as before.
-    const reconfigured = kit?.kind === "bundle" && lineNotes !== existing.customer_notes;
+    const reconfigured = kit?.kind === "bundle" && kitNote !== readOwnKitNote(existing.attributes);
     await quoteItemService.updateForParent(quote.id, existing.id, {
       quantity: reconfigured ? existing.quantity : existing.quantity + 1,
-      ...(lineAttributes ? { attributes: lineAttributes, customerNotes: lineNotes } : {}),
+      ...(merged ? { attributes: merged } : {}),
+      ...(kitNoteWrite(existing.customer_notes, existing.attributes, kitNote) ?? {}),
     });
   } else {
     await quoteItemService.createForParent(quote.id, {
@@ -163,7 +173,8 @@ export async function addToQuote(
       quantity: 1,
       listPrice,
       salePrice,
-      ...(lineAttributes ? { attributes: lineAttributes, customerNotes: lineNotes } : {}),
+      ...(kitAttributes ? { attributes: kitAttributes } : {}),
+      ...(kitNote ? { customerNotes: kitNote } : {}),
     });
   }
 

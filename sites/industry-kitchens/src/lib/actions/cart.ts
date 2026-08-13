@@ -9,6 +9,7 @@ import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogS
 import { getCartUuid, setCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { pickBestBulkUnit, layerCartPrice } from "@/lib/pricing/cart-pricing";
+import { readProductKit } from "@/lib/product-kit";
 
 async function getOrCreateCart() {
   const uuid = await getCartUuid();
@@ -139,6 +140,15 @@ export async function addToCart(productId: number, variantId?: number | null, qu
   // "What we show is what we accept" — a product restricted away from this shopper is not addable,
   // even by poking the action directly (the listing/PDP guards are UX; THIS is the enforcement).
   if (!(await isProductVisibleToViewer(productId))) return { error: RESTRICTED_PRODUCT_ERROR };
+
+  // A BUNDLE is a modular configuration, not a buyable line (Steve, card 7bmpuqei): it is priced
+  // by a rep and goes through as a quote request. The page offers no Add to Cart for one, and the
+  // action refuses it too — an author who leaves a price on a bundle must not turn it into a
+  // checkout at a price nobody quoted.
+  const kitProduct = (await productService.getById(productId)) as { metafields?: unknown } | null;
+  if (readProductKit(kitProduct?.metafields)?.kind === "bundle") {
+    return { error: "This configuration is priced by our team — please add it to a quote instead." };
+  }
 
   const cart = await getOrCreateCart();
 

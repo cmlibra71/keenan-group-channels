@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  asProductKit,
   defaultKitSelection,
   describeKitChoices,
   describeKitContents,
@@ -109,5 +110,61 @@ test("refuses a product that isn't offered in the group it was submitted under",
 
 test("a grouped kit has no configuration to resolve", () => {
   const kit = readProductKit(groupedMeta)!;
+  assert.equal(resolveKitChoices(kit, []), null);
+});
+
+// ── The nativeData seam: the route parses the kit, the sealed leaf receives the PARSED object ──
+// This is the shape that actually reaches customers, and reading it with readProductKit (which
+// looks for metafields.kit.items) returned null on every product page in the world.
+
+test("the raw reader rejects an already-parsed kit — that is why asProductKit exists", () => {
+  const parsed = readProductKit(bundleMeta)!;
+  assert.equal(readProductKit(parsed), null);
+});
+
+test("asProductKit accepts the parsed kit handed to the sealed leaf", () => {
+  for (const meta of [bundleMeta, groupedMeta]) {
+    const parsed = readProductKit(meta)!;
+    // Round-tripped through JSON: it crosses the server/client boundary as plain data.
+    const viaNativeData = asProductKit(JSON.parse(JSON.stringify(parsed)))!;
+    assert.deepEqual(viaNativeData, parsed);
+  }
+});
+
+test("asProductKit refuses anything that is not a parsed kit", () => {
+  for (const input of [
+    null,
+    undefined,
+    "grouped",
+    {},
+    { kind: "simple", items: [{ productId: 1, name: "x" }] },
+    { kind: "grouped", items: [] },
+    { kind: "grouped", items: "nope" },
+    bundleMeta, // the RAW metafields bag is the other reader's job
+  ]) {
+    assert.equal(asProductKit(input), null);
+  }
+});
+
+test("asProductKit re-derives the groups from the rows it was given", () => {
+  // A hand-made object claiming groups its rows do not support gets the rows' truth.
+  const kit = asProductKit({
+    kind: "bundle",
+    items: [
+      { productId: 11, name: "Glass door", quantity: 1, group: "Left bay" },
+      { productId: 12, name: "Solid door", quantity: 1, group: "Left bay", isDefault: true },
+    ],
+    groups: [{ name: "Invented", items: [{ productId: 99, name: "Not offered", quantity: 1 }] }],
+  })!;
+  assert.deepEqual(kit.groups.map((g) => g.name), ["Left bay"]);
+  assert.deepEqual(kit.groups[0].items.map((i) => i.productId), [11, 12]);
+  assert.equal(defaultKitSelection(kit.groups)["Left bay"], 12);
+});
+
+test("a bundle with no choice groups is a grouped kit, not an empty picker", () => {
+  const kit = readProductKit({ product_kind: "bundle", kit: { items: [{ product_id: 5, name: "Bench" }] } })!;
+  assert.equal(kit.kind, "grouped");
+  assert.deepEqual(kit.groups, []);
+  // …so it can never accept an empty configuration as a valid build.
   assert.equal(resolveKitChoices(kit, []), null);
 });

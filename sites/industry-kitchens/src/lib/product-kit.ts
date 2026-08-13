@@ -85,9 +85,43 @@ export function readProductKit(metafields: unknown): ProductKit | null {
     }
   }
   const root = asRecord(source);
-  const rawItems = asRecord(root.kit).items;
-  if (!Array.isArray(rawItems)) return null;
+  const items = readKitItems(asRecord(root.kit).items);
+  if (items === null) return null;
 
+  const declared = typeof root.product_kind === "string" ? root.product_kind.trim().toLowerCase() : "";
+  const kind: KitKind =
+    declared === "bundle" || declared === "grouped"
+      ? (declared as KitKind)
+      : items.some((i) => i.group)
+        ? "bundle"
+        : "grouped";
+
+  return buildKit(kind, items);
+}
+
+/**
+ * The same kit when it arrives ALREADY PARSED.
+ *
+ * The product routes read the kit server-side and hand the parsed `ProductKit` to the sealed
+ * Site-Builder leaf through `nativeData` — that object has no `kit` wrapper and no snake_case
+ * rows, so `readProductKit` correctly rejects it and the leaf used to render nothing at all on the
+ * only path that reaches customers. Validated rather than trusted (it crosses the server/client
+ * boundary as plain JSON) and re-grouped from its own items, so a hand-assembled object cannot
+ * arrive carrying choice groups its rows do not support.
+ */
+export function asProductKit(value: unknown): ProductKit | null {
+  const root = asRecord(value);
+  const declared = typeof root.kind === "string" ? root.kind.trim().toLowerCase() : "";
+  if (declared !== "bundle" && declared !== "grouped") return null;
+  const items = readKitItems(root.items);
+  if (items === null) return null;
+  return buildKit(declared as KitKind, items);
+}
+
+/** Kit rows read out of either shape (`product_id` from jsonb, `productId` from a parsed kit).
+ *  Null — not an empty array — when there is nothing usable, so "not a kit" stays one test. */
+function readKitItems(rawItems: unknown): KitItem[] | null {
+  if (!Array.isArray(rawItems)) return null;
   const items: KitItem[] = [];
   for (const raw of rawItems) {
     const row = asRecord(raw);
@@ -98,21 +132,23 @@ export function readProductKit(metafields: unknown): ProductKit | null {
       sku: cleanLabel(row.sku, 100),
       name: cleanLabel(row.name, 255) ?? `Product #${productId}`,
       quantity: toPositiveInt(row.quantity, 1) ?? 1,
-      group: cleanLabel(row.group),
-      isDefault: row.is_default === true,
+      group: cleanLabel(row.group ?? row.groupName),
+      isDefault: row.is_default === true || row.isDefault === true,
     });
   }
-  if (items.length === 0) return null;
+  return items.length > 0 ? items : null;
+}
 
-  const declared = typeof root.product_kind === "string" ? root.product_kind.trim().toLowerCase() : "";
-  const kind: KitKind =
-    declared === "bundle" || declared === "grouped"
-      ? (declared as KitKind)
-      : items.some((i) => i.group)
-        ? "bundle"
-        : "grouped";
-
-  return { kind, items, groups: kind === "bundle" ? groupKitItems(items) : [] };
+/**
+ * A kit from its rows. A "bundle" whose rows carry no choice group at all has nothing for the
+ * customer to choose, so it reads as GROUPED rather than as a bundle with zero groups — otherwise
+ * it would offer an empty picker and accept an empty configuration as a valid build.
+ */
+function buildKit(kind: KitKind, items: KitItem[]): ProductKit {
+  const groups = kind === "bundle" ? groupKitItems(items) : [];
+  return groups.length === 0
+    ? { kind: "grouped", items, groups: [] }
+    : { kind, items, groups };
 }
 
 /** Bundle rows arranged into their choice groups, in first-seen order. Ungrouped rows are dropped

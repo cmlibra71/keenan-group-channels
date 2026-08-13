@@ -21,7 +21,7 @@ export interface ProductNativesArgs {
 
 import { ProductImageGallery, type ProductImage as GalleryImage } from "@/components/product/ProductImageGallery";
 import { ProductKitNative } from "@/components/product/ProductKitNative";
-import { readProductKit } from "@/lib/product-kit";
+import { asProductKit, readProductKit } from "@/lib/product-kit";
 import { GstToggle } from "@/components/layout/GstToggle";
 
 export function productNatives({ payload, variantImageUrl, data }: ProductNativesArgs): NativeComponents {
@@ -43,7 +43,11 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // picks and sends them through with Add to Quote. Renders nothing for a product that is not a
     // kit, so the node is safe to leave in the template for every product.
     "product-kit": () => {
-      const kit = readProductKit((product as { metafields?: unknown }).metafields ?? data.kit);
+      // `data.kit` is the route's ALREADY-PARSED kit and is the path that actually feeds this on
+      // both sites — the bindable product payload carries no `metafields` at all, so reading only
+      // the raw bag (or passing a parsed kit to the raw reader) rendered nothing, ever.
+      const kit =
+        asProductKit(data.kit) ?? readProductKit((product as { metafields?: unknown }).metafields);
       if (!kit) return null;
       return <ProductKitNative kit={kit} productId={Number(product.id)} />;
     },

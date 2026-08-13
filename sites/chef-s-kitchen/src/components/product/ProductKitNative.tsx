@@ -5,46 +5,22 @@
 //
 // Both live storefronts render their product page from an authored node tree
 // (`node_product_template_enabled`), so the kit block cannot reach them by being added to the
-// legacy buy box alone. Natives are keyed: a tree node with the key `product-kit` renders this.
-// Registering the key here is the whole code side of it — placing the node in the authored buy box
-// is then a pure authoring step in the Site Builder, with no deploy.
+// legacy buy box alone. Natives are keyed: a tree node with the key `product-kit` renders this,
+// and `builder/product-kit-node.ts` puts that node above the buy box at render time so a kit is
+// complete on the live page without waiting on an authoring step. An author who places the node
+// themselves in the Site Builder gets their own placement instead.
 //
-// It carries state (the customer's picks) and an action (Add to Quote with those picks), which is
-// exactly the kind of thing this repo seals rather than explodes — same reason the gallery and the
-// GST toggle are sealed.
+// It carries state (the customer's picks), which is exactly the kind of thing this repo seals
+// rather than explodes — same reason the gallery and the GST toggle are sealed. The picks live one
+// level up, in KitSelectionContext, so THE PAGE'S OWN Add to Quote sends them: the block
+// deliberately adds no button of its own, or a bundle would show two identical CTAs.
 // ============================================================================
 
-import { useState } from "react";
 import { ProductKitBlock } from "./ProductKitBlock";
-import { AddToQuoteButton } from "./AddToQuoteButton";
-import { defaultKitSelection, toKitChoices, type ProductKit } from "@/lib/product-kit";
+import { useKitSelection } from "./KitSelectionContext";
+import type { ProductKit } from "@/lib/product-kit";
 
-export function ProductKitNative({ kit, productId }: { kit: ProductKit; productId: number }) {
-  const [selection, setSelection] = useState<Record<string, number>>(() =>
-    kit.kind === "bundle" ? defaultKitSelection(kit.groups) : {}
-  );
-  const isBundle = kit.kind === "bundle";
-  const ready = !isBundle || kit.groups.every((g) => selection[g.name] != null);
-
-  return (
-    <div>
-      <ProductKitBlock
-        kit={kit}
-        selection={selection}
-        onSelect={(group, id) => setSelection((prev) => ({ ...prev, [group]: id }))}
-      />
-      {/* A bundle's own CTA travels with its picks. A grouped kit is bought with the page's
-          ordinary buttons — it is one product at one price — so it gets none here. */}
-      {isBundle && (
-        <div className="mt-4">
-          <AddToQuoteButton
-            productId={productId}
-            disabled={!ready}
-            kitChoices={toKitChoices(selection)}
-            label="Add to Quote — request pricing"
-          />
-        </div>
-      )}
-    </div>
-  );
+export function ProductKitNative({ kit }: { kit: ProductKit; productId?: number }) {
+  const { selection, select } = useKitSelection();
+  return <ProductKitBlock kit={kit} selection={selection} onSelect={select} />;
 }

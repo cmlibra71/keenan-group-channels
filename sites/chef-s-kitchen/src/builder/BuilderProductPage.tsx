@@ -23,6 +23,8 @@ import { BuilderTree, type NativeComponents } from "@keenan/services/builder-rea
 import { BuilderActionsProvider } from "@keenan/services/builder-react";
 import { useFormHandlers } from "./use-form-handlers";
 import { productNatives } from "./product-natives";
+import { KitSelectionProvider, useKitChoicesRef } from "@/components/product/KitSelectionContext";
+import { asProductKit } from "@/lib/product-kit";
 
 // ============================================================================
 // The product page rendered from a node tree. Thin wrapper over the SHARED
@@ -72,16 +74,21 @@ function ActionsBridge({
     },
     [setCartCount, open]
   );
+  // A BUNDLE's picks travel with the authored CTA too (card 7bmpuqei). The shared handler in
+  // @keenan/services calls addToQuote(productId, variantId) and knows nothing about kits, so the
+  // live configuration is read here from the page's kit context — otherwise the server refuses
+  // every bundle for having no choices and the button does nothing at all.
+  const kitChoicesRef = useKitChoicesRef();
   const countingAddToQuote = React.useCallback(
     async (pid: number, variantId: number | null) => {
-      const res = await addToQuote(pid, variantId);
+      const res = await addToQuote(pid, variantId, kitChoicesRef.current);
       if (res && "quoteCount" in res && typeof res.quoteCount === "number") {
         setQuoteCount(res.quoteCount);
         open("quote");
       }
       return res;
     },
-    [setQuoteCount, open]
+    [setQuoteCount, open, kitChoicesRef]
   );
   // Configurable product with nothing chosen yet: the quote CTA stays live and
   // this prompt names the option still to pick, instead of the click doing
@@ -221,7 +228,12 @@ export function BuilderProductPage({
 }) {
   const product = payload.product as unknown as PurchaseProduct;
   const enriched = React.useMemo(() => enrichProductPayload(payload, { sanitizeHtml }), [payload]);
+  // `nativeData.kit` is the ONE slot both sites agree on (each route reads it off
+  // products.metafields): the sealed `product-kit` leaf renders from it and the quote CTA sends
+  // the picks made in it, so it is held here, above the tree, rather than inside the leaf.
+  const kit = asProductKit((nativeData ?? {}).kit) ?? null;
   return (
+    <KitSelectionProvider kit={kit}>
     <ProductPurchaseProvider
       product={product}
       memberPrice={payload.pricing.memberPrice}
@@ -235,5 +247,6 @@ export function BuilderProductPage({
     >
       <ActionsBridge productId={payload.product.id} tree={tree} payload={enriched} namedStyles={namedStyles} components={components} jsFunctions={jsFunctions} callResults={callResults} nativeData={nativeData} />
     </ProductPurchaseProvider>
+    </KitSelectionProvider>
   );
 }
