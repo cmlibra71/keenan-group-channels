@@ -53,7 +53,8 @@ export default async function CheckoutPage() {
   // configured method (admin editor + past-order lookups need the disabled ones).
   const paymentMethods = filterPaymentMethodsForAccount(
     checkoutSettings.enabledPaymentMethods,
-    accountOptions?.allowedPaymentMethods ?? null
+    accountOptions?.allowedPaymentMethods ?? null,
+    accountOptions?.staffOnlyPaymentMethods ?? null
   )
     .filter((m) => m.id !== "net_terms" || !!netTerms)
     .map((m) => (m.id === "net_terms" && netTerms ? { ...m, netTermsDays: netTerms.netTermsDays } : m));

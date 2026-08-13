@@ -34,6 +34,7 @@ export async function resolveAccountOptions(
     return {
       accountId: options.accountId,
       allowedPaymentMethods: options.allowedPaymentMethods,
+      staffOnlyPaymentMethods: options.staffOnlyPaymentMethods,
       minOrderAmount: options.minOrderAmount,
       minOrderQty: options.minOrderQty,
     };
