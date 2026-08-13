@@ -10,6 +10,11 @@ import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLine
 import { getLineCosts } from "@/lib/store";
 import { sendStaffNotification } from "@/lib/staff-email";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
+import {
+  activeBrandFreeShippingSpecials,
+  brandIdsForProducts,
+} from "@/lib/checkout/free-shipping-brands";
+import { matchBrandSpecial } from "@/lib/checkout/free-shipping-brands-policy";
 import { normaliseAuState, isValidAuPostcode } from "@/lib/checkout/au-address";
 import { setLastOrder } from "@/lib/checkout/last-order";
 import { siteBaseUrl } from "@/lib/seo";
@@ -306,6 +311,22 @@ export async function placeOrder(
   const checkoutSettings = await getCheckoutSettings();
   const isMember = !!(session && await getActiveSubscriptionForContact(session.contactId));
 
+  // Brand free-shipping special (card 88Ay7UGA). Resolved here from the CART WE
+  // ARE CHARGING, against the same rows and the same Melbourne date the checkout
+  // page used to draw its summary — show equals accept, including on the last
+  // minute of the last day of a special.
+  const brandSpecials = await activeBrandFreeShippingSpecials();
+  const cartBrandIds = brandSpecials.length
+    ? [
+        ...(
+          await brandIdsForProducts(
+            (fullCart.items as { product_id: number }[]).map((i) => i.product_id)
+          )
+        ).values(),
+      ]
+    : [];
+  const brandFreeShipping = !!matchBrandSpecial(brandSpecials, cartBrandIds);
+
   // Shipping is quoted to the customer on the EX-tax subtotal (checkout page +
   // CheckoutForm pass cart.cartAmount), so the order must use the same basis or
   // the charged shipping diverges from the quote at tier/cap boundaries.
@@ -315,9 +336,10 @@ export async function placeOrder(
       isMember,
       amount: subtotalExTax,
       threshold: checkoutSettings.freeShippingThreshold,
+      brandFreeShipping,
     })
   ) {
-    // Free delivery for members over threshold
+    // Free delivery: a member over the threshold, or a brand special on this cart
     shippingIncTax = 0;
   } else {
     // Calculate from shipping rate cards (zone-based flat-rate)

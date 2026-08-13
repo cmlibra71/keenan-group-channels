@@ -12,6 +12,11 @@ import { ACCOUNT_REQUIRED_SETTING, checkoutNeedsSignIn } from "@/lib/checkout/ac
 import { CheckoutSignInGate } from "@/components/checkout/CheckoutSignInGate";
 import { lastOrderConfirmationPath } from "@/lib/checkout/last-order";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
+import {
+  activeBrandFreeShippingSpecials,
+  brandIdsForProducts,
+} from "@/lib/checkout/free-shipping-brands";
+import { matchBrandSpecial } from "@/lib/checkout/free-shipping-brands-policy";
 import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-policy";
 import { CheckoutForm } from "@/components/checkout/CheckoutForm";
 import { StartedCheckoutTracker } from "@/components/analytics/StartedCheckoutTracker";
@@ -76,6 +81,23 @@ export default async function CheckoutPage() {
     .map((m) => (m.id === "net_terms" && netTerms ? { ...m, netTermsDays: netTerms.netTermsDays } : m));
 
   const subtotal = parseFloat(cart.cart_amount ?? "0");
+
+  // Brand free-shipping special (card 88Ay7UGA): any line from a promoted brand
+  // makes the whole order's delivery free, for everyone, with no minimum spend.
+  // `placeOrder` resolves this again from the same rows before charging.
+  const brandSpecials = await activeBrandFreeShippingSpecials();
+  const brandSpecial = brandSpecials.length
+    ? matchBrandSpecial(
+        brandSpecials,
+        [
+          ...(
+            await brandIdsForProducts(
+              (cart.items as { product_id: number }[]).map((i) => i.product_id)
+            )
+          ).values(),
+        ]
+      )
+    : null;
 
   // Check tax mode
   let pricesIncludeTax = false;
@@ -239,6 +261,7 @@ export default async function CheckoutPage() {
         googlePlacesEnabled={checkoutSettings.googlePlacesEnabled}
         freeShippingEnabled={checkoutSettings.freeShippingEnabled}
         freeShippingThreshold={checkoutSettings.freeShippingThreshold}
+        brandSpecial={brandSpecial}
         shippingEnabled={shippingEnabled}
         stripePublishableKey={stripePublishableKey}
         testMode={wantTestMode}
