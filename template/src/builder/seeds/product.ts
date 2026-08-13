@@ -1,4 +1,5 @@
 import type { NodeTree, BuilderNode } from "@keenan/services/builder";
+import { brandLogoLinkNode, EYEBROW_FALLBACK_CONDITION } from "../brand-logo-link";
 
 // ============================================================================
 // Phase-5: the CD Product Page as a FULL-PARITY node tree, transcribed from the
@@ -208,11 +209,18 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                 tag: "div",
                 classes: ["lg:sticky", "lg:top-[150px]", "lg:self-start"],
                 children: [
+                  // The brand links back to its own page as an IMAGE — no text,
+                  // rel="nofollow", ALT tag (card uzeXShZu; Tim, 2026-08-11).
+                  // Shared with the database pass in builder/brand-logo-link.ts,
+                  // which puts the same node into the trees already authored.
+                  brandLogoLinkNode(),
                   {
                     id: "brand-eyebrow",
                     kind: "element",
                     tag: "p",
-                    condition: { kind: "data", path: "brand.name" },
+                    // Only the fallback now: a brand WITH a logo shows the logo
+                    // instead, never both.
+                    condition: { kind: "expr", source: EYEBROW_FALLBACK_CONDITION },
                     classes: ["mb-1", "text-[12px]", "font-bold", "uppercase", "tracking-[0.1em]", "text-accent-dark"],
                     text: [{ kind: "binding", path: "brand.name" }],
                   },
