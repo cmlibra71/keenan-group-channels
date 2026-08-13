@@ -202,6 +202,79 @@ export function withLineCosts(
   });
 }
 
+/** One line's member saving: what a non-member would have paid for the same line. */
+export type MemberSavingLine = {
+  productId: number;
+  variantId: number | null;
+  sku: string | null;
+  quantity: number;
+  /** Non-member unit price (the line's list price — RRP is what a non-member pays here). */
+  nonMemberUnit: number;
+  /** What the member was actually charged per unit. */
+  chargedUnit: number;
+};
+
+export type MemberSavings = {
+  savedExTax: number;
+  savedIncTax: number;
+  lines: MemberSavingLine[];
+};
+
+/**
+ * What this order saved the shopper by being a MEMBER, computed at the moment of
+ * sale (card pgRmsaTX).
+ *
+ * Nothing before this recorded it — only the price paid was ever stored — so staff
+ * could answer "what have I saved?" only with an estimate against today's prices.
+ * From here on the comparison is frozen onto the order.
+ *
+ * The non-member price is the line's LIST price, because that is exactly what a
+ * Chefs Depot non-member is charged: the channel suppresses the shared catalogue
+ * sale price and the bulk tiers, so RRP is the non-member price (see
+ * `resolveItemPricing` / `shouldSuppressCatalogSalePrice`). A line charged at or
+ * above list saved nothing and is left out rather than counted as zero, so the
+ * stamped lines are only the ones the saving is made of.
+ *
+ * Pure — the caller decides whether this shopper is a member at all.
+ */
+export function memberSavings(
+  items: CartLineInput[],
+  pricesIncludeTax: boolean
+): MemberSavings {
+  const lines: MemberSavingLine[] = [];
+  let savedRaw = 0;
+
+  for (const item of items) {
+    const list = parseFloat(item.list_price);
+    const charged = lineUnitPrice(item);
+    if (!Number.isFinite(list) || !Number.isFinite(charged)) continue;
+    const perUnit = list - charged;
+    // Half a cent of tolerance, matching the below-cost sentry: GST-split rounding
+    // noise is not a saving.
+    if (perUnit <= 0.005) continue;
+    savedRaw += perUnit * item.quantity;
+    lines.push({
+      productId: item.product_id,
+      variantId: item.variant_id,
+      sku: item.product_sku,
+      quantity: item.quantity,
+      nonMemberUnit: list,
+      chargedUnit: charged,
+    });
+  }
+
+  const split = gstSplit(savedRaw, pricesIncludeTax);
+  return {
+    savedExTax: round2(split.exTax),
+    savedIncTax: round2(split.incTax),
+    lines,
+  };
+}
+
+function round2(n: number): number {
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
+
 /**
  * Splits a shipping amount (always specified inc-tax) and rolls it into the order
  * total. Returns the shipping split and the combined subtotal + shipping total.

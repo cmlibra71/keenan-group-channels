@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Package, FileText, MapPin, LogOut, Crown, Trophy, Gift, ArrowRight, Calendar, Ticket, KeyRound } from "lucide-react";
 import { getSession } from "@/lib/auth";
-import { contactService, getFeatureFlag, getActiveSubscriptionForContact, getUpcomingDraws, drawEntryService, CHANNEL_ID } from "@/lib/store";
+import { contactService, getFeatureFlag, getActiveSubscriptionForContact,
+  getMemberSince, getUpcomingDraws, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { safeNextPath, signInPrompt } from "@/lib/account-redirect";
 import { normaliseEmail, looksLikeEmail } from "@/lib/checkout/account-prompt";
@@ -53,6 +54,10 @@ export default async function AccountPage({
   const activeSub = subscriptionsEnabled
     ? await getActiveSubscriptionForContact(session.contactId)
     : null;
+
+  // The date they joined, shown on the member card (card pgRmsaTX). Only asked for
+  // when there IS a membership, so a non-member's page costs nothing extra.
+  const memberSince = activeSub ? await getMemberSince(session.contactId) : null;
 
   // Fetch draw info for members
   let totalEntries = 0;
@@ -106,6 +111,16 @@ export default async function AccountPage({
                 {customer?.first_name} {customer?.last_name}
               </p>
               <p className="text-sm text-zinc-400">{customer?.email}</p>
+              {memberSince && (
+                <p className="text-sm text-zinc-400">
+                  Member since{" "}
+                  {new Date(memberSince).toLocaleDateString("en-AU", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-4 text-sm">
               {activeSub.consecutive_months != null && (

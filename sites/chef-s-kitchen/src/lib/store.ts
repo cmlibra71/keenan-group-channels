@@ -122,6 +122,34 @@ export type { MegaMenuNode, MegaMenuFeatured, ContentPage } from "@keenan/servic
 export const getActiveSubscriptionForContact = (contactId: number) =>
   subscriptionService.getActiveForContact(contactId, CHANNEL_ID);
 
+/**
+ * The date this PERSON became a member — the earliest subscription we hold for
+ * them on this channel, not the start of the row they are on today (card
+ * pgRmsaTX: "they will need to see that they are a member also with the date of
+ * subscription").
+ *
+ * Earliest, because a member who re-subscribed (or whose sign-up wrote a
+ * superseded row — three Chefs Depot members carry one) is not a new member, and
+ * because staff answer "when did I join" from the same date the customer reads.
+ * Null when nothing is held; the caller then shows no date rather than a wrong one.
+ */
+export const getMemberSince = async (contactId: number): Promise<string | null> => {
+  try {
+    const rows = (await subscriptionService.listForContact(contactId, CHANNEL_ID)) as Array<{
+      created_at: string | null;
+    }>;
+    let earliest: string | null = null;
+    for (const row of rows) {
+      if (!row.created_at) continue;
+      if (!earliest || new Date(row.created_at) < new Date(earliest)) earliest = row.created_at;
+    }
+    return earliest;
+  } catch {
+    // A membership date is decoration on an account page — never cost the page.
+    return null;
+  }
+};
+
 // ============================================================================
 // Channel settings (raw + typed accessors)
 // ============================================================================

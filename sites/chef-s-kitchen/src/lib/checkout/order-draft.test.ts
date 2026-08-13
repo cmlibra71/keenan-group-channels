@@ -7,6 +7,7 @@ import {
   withShipping,
   findBelowCostLines,
   withLineCosts,
+  memberSavings,
   type CartLineInput,
 } from "./order-draft.ts";
 
@@ -162,3 +163,50 @@ test("withLineCosts: costs and the below-cost sentry read the SAME map", () => {
 function round(n: number): number {
   return Math.round(n * 100) / 100;
 }
+
+// ── Member savings recorded at the moment of sale (card pgRmsaTX) ──────────────
+
+test("memberSavings: counts list minus charged, per line, and adds GST", () => {
+  const s = memberSavings(
+    [
+      line({ product_id: 1, product_sku: "A", quantity: 2, list_price: "100", sale_price: "80" }),
+      line({ product_id: 2, product_sku: "B", quantity: 1, list_price: "50", sale_price: "45" }),
+    ],
+    false
+  );
+  assert.equal(s.savedExTax, 45); // (100-80)*2 + (50-45)
+  assert.equal(s.savedIncTax, 49.5);
+  assert.equal(s.lines.length, 2);
+  assert.equal(s.lines[0].nonMemberUnit, 100);
+  assert.equal(s.lines[0].chargedUnit, 80);
+});
+
+test("memberSavings: a line charged at list saved nothing and is not listed", () => {
+  const s = memberSavings([line({ list_price: "100", sale_price: null })], false);
+  assert.equal(s.savedExTax, 0);
+  assert.equal(s.lines.length, 0);
+});
+
+test("memberSavings: a line charged ABOVE list never counts as a negative saving", () => {
+  const s = memberSavings(
+    [
+      line({ product_id: 1, list_price: "100", sale_price: "120" }),
+      line({ product_id: 2, list_price: "100", sale_price: "90" }),
+    ],
+    false
+  );
+  assert.equal(s.savedExTax, 10);
+  assert.equal(s.lines.length, 1);
+});
+
+test("memberSavings: GST-split rounding noise is not a saving", () => {
+  const s = memberSavings([line({ list_price: "100.004", sale_price: "100" })], false);
+  assert.equal(s.savedExTax, 0);
+  assert.equal(s.lines.length, 0);
+});
+
+test("memberSavings: on a GST-inclusive channel the stored price IS the inc-GST figure", () => {
+  const s = memberSavings([line({ list_price: "110", sale_price: "88" })], true);
+  assert.equal(s.savedIncTax, 22);
+  assert.equal(s.savedExTax, 20);
+});

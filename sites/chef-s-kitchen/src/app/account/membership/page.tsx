@@ -6,6 +6,7 @@ import { signInRedirect } from "@/lib/account-redirect";
 import {
   getSubscriptionPlans,
   getActiveSubscriptionForContact,
+  getMemberSince,
   getFeatureFlag,
   subscriptionService,
   drawEntryService,
@@ -27,9 +28,10 @@ export default async function MembershipPage() {
   const session = await getSession();
   if (!session) redirect(signInRedirect("/account/membership"));
 
-  const [plans, activeSub] = await Promise.all([
+  const [plans, activeSub, memberSince] = await Promise.all([
     getSubscriptionPlans(),
     getActiveSubscriptionForContact(session.contactId),
+    getMemberSince(session.contactId),
   ]);
 
   // If user has active subscription, show status
@@ -100,6 +102,18 @@ export default async function MembershipPage() {
                 {isPastDue ? "Past Due" : isCancelling ? "Cancelling" : "Active"}
               </dd>
             </div>
+            {memberSince && (
+              <div>
+                <dt className="text-steel-500">Member since</dt>
+                <dd className="font-medium text-ink-900">
+                  {new Date(memberSince).toLocaleDateString("en-AU", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </dd>
+              </div>
+            )}
             <div>
               <dt className="text-steel-500">Consecutive Months</dt>
               <dd className="font-medium text-ink-900">{activeSub.consecutive_months ?? 0}</dd>
