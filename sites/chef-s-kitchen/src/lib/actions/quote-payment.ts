@@ -151,7 +151,9 @@ export async function payQuote(
 
   // ── Which methods this store, and this account, actually allow ──────────
   // Read EXACTLY as checkout reads them, and authorise against the same
-  // resolvers placeOrder uses — what we show is what we accept.
+  // resolvers placeOrder uses — what we show is what we accept. Staff-only
+  // methods are subtracted here as well as on the page, so the customer can
+  // neither see one nor post one back at this quote.
   const [checkoutSettings, accountOptions, netTerms] = await Promise.all([
     getCheckoutSettings(),
     resolveAccountOptions(session),
@@ -159,7 +161,8 @@ export async function payQuote(
   ]);
   const methods = filterPaymentMethodsForAccount(
     checkoutSettings.enabledPaymentMethods,
-    accountOptions?.allowedPaymentMethods ?? null
+    accountOptions?.allowedPaymentMethods ?? null,
+    accountOptions?.staffOnlyPaymentMethods ?? null
   ).filter((m) => m.id !== "net_terms" || !!netTerms);
 
   // ── Where it ships ──────────────────────────────────────────────────────
