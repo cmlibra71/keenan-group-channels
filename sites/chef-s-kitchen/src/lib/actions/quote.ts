@@ -15,6 +15,10 @@ import {
 } from "@/lib/quotes/price-visibility";
 import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
 import { isStaffOnlyDraft, withoutStaffOnlyDrafts } from "@/lib/quotes/draft-visibility";
+import {
+  isCustomerEditableStatus,
+  quoteAllowsItemEdits,
+} from "@/lib/quotes/customer-editable";
 
 // QuoteService returns snake_case rows (transformRow convention).
 type QuoteRow = { id: number; uuid: string; contact_id?: number | null; [key: string]: unknown };
@@ -318,6 +322,120 @@ export async function acceptQuote(quoteId: number) {
         }
       : {}),
   };
+}
+
+// ── Customer edits their own quote (card FPfvaYLp) ───────────────────────────
+//
+// The emailed quote link has let a customer change a quantity or drop a line for
+// a while; the logged-in account page had no way to touch a quote at all, which
+// is what Tim reported on 11 Aug. Same edit, same rules, same single service
+// entry point (`markChangeRequested`) as the emailed link, so the two surfaces
+// cannot answer differently: a priced quote flips to "change request", re-hides
+// its prices and emails the rep; an unpriced request or an already-open change
+// request is simply recorded, so a customer can carry on editing — and put a
+// quantity BACK.
+//
+// Adding NEW products stays with the rep (Zoey's customer edit is quantity and
+// removal only) — the customer's route to more lines is Duplicate, or a call.
+
+/** Every customer quote-edit action answers in exactly these two shapes. */
+export type QuoteEditResult = { error: string } | { success: true };
+
+type EditableQuote = QuoteRow & {
+  status?: string | null;
+  channel_id?: number;
+  permissions?: Record<string, unknown> | null;
+  items?: Array<{ id: number }>;
+};
+
+/**
+ * Load the quote and refuse every reason a customer may not edit it. Editing is
+ * limited to the quote's OWN contact — an account colleague with
+ * `view_company_quotes` can read it, exactly as they can today, but changing
+ * someone else's quote is not something Zoey offers either (and Accept is
+ * already owner-only for the same reason).
+ */
+async function loadEditableQuote(
+  quoteId: number
+): Promise<{ error: string } | { quote: EditableQuote; contactId: number }> {
+  const session = await getSession();
+  if (!session?.contactId) return { error: "Please sign in." };
+
+  // Per-customer budget: the stepper debounces, but a held-down button (or a
+  // direct action call) must not be able to hammer the quote.
+  if (!slidingWindowAllow(`quote-item-edit:${session.contactId}`, { windowMs: 60_000, max: 60 })) {
+    return { error: "Too many changes just now — please wait a moment and try again." };
+  }
+
+  const quote = (await quoteService.getWithItems(quoteId)) as EditableQuote | null;
+  // A staff-only draft answers "not found", the same as a stranger's quote —
+  // saying "that's a draft" would confirm it exists.
+  if (
+    !quote ||
+    isStaffOnlyDraft(quote) ||
+    quote.channel_id !== CHANNEL_ID ||
+    quote.contact_id !== session.contactId
+  ) {
+    return { error: "Quote not found." };
+  }
+  if (!isCustomerEditableStatus(quote.status)) {
+    return { error: "This quote can no longer be changed. Please contact your sales rep." };
+  }
+  if (!quoteAllowsItemEdits(quote.permissions)) {
+    return { error: "Changes to this quote need to go through your sales rep." };
+  }
+  return { quote, contactId: session.contactId };
+}
+
+/** Change the quantity on one line of the customer's own quote. */
+export async function updateAccountQuoteItem(
+  quoteId: number,
+  itemId: number,
+  quantity: number
+): Promise<QuoteEditResult> {
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 9999) {
+    return { error: "Enter a quantity between 1 and 9999." };
+  }
+  const loaded = await loadEditableQuote(quoteId);
+  if ("error" in loaded) return loaded;
+  const { quote } = loaded;
+  if (!(quote.items ?? []).some((i) => i.id === itemId)) return { error: "Item not on this quote." };
+
+  try {
+    await quoteItemService.updateForParent(quoteId, itemId, { quantity });
+    // ONE entry point for the status flip, the audit line and the rep email.
+    await quoteService.markChangeRequested(quoteId, { changeSummary: "Quantity changed" });
+  } catch (e) {
+    console.error("[updateAccountQuoteItem] failed:", e);
+    return { error: "Could not update this quote." };
+  }
+
+  revalidatePath(`/account/quotes/${quoteId}`);
+  revalidatePath("/account/quotes");
+  return { success: true };
+}
+
+/** Remove one line from the customer's own quote. */
+export async function removeAccountQuoteItem(
+  quoteId: number,
+  itemId: number
+): Promise<QuoteEditResult> {
+  const loaded = await loadEditableQuote(quoteId);
+  if ("error" in loaded) return loaded;
+  const { quote } = loaded;
+  if (!(quote.items ?? []).some((i) => i.id === itemId)) return { error: "Item not on this quote." };
+
+  try {
+    await quoteItemService.deleteForParent(quoteId, itemId);
+    await quoteService.markChangeRequested(quoteId, { changeSummary: "Item removed" });
+  } catch (e) {
+    console.error("[removeAccountQuoteItem] failed:", e);
+    return { error: "Could not remove that item." };
+  }
+
+  revalidatePath(`/account/quotes/${quoteId}`);
+  revalidatePath("/account/quotes");
+  return { success: true };
 }
 
 // Customer self-service: duplicate a quote into a fresh editable quote (same items).
