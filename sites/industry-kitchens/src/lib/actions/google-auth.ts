@@ -6,6 +6,7 @@ import { setSession } from "@/lib/auth";
 import { verifyGoogleClaims, type GoogleTokenInfo } from "@/lib/google-claims";
 import { createAccountlessContact, mergeContactMetafields, EmailTakenError, type LoginCandidate } from "@/lib/contact-auth";
 import { repriceCartForSession } from "@/lib/actions/cart";
+import { enforceLimit } from "@/lib/security/rate-limits";
 
 type GoogleSignInResult = {
   error?: string;
@@ -21,6 +22,15 @@ export async function googleSignIn(credential: string): Promise<GoogleSignInResu
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
   if (!clientId) {
     return { error: "Google sign-in is not configured." };
+  }
+
+  // Same sign-in budget as the password paths: this one calls out to Google's
+  // tokeninfo endpoint, so an unlimited caller could also use us to hammer it.
+  // The subject email is not known until the token verifies, so this is the
+  // per-IP half of the policy.
+  const limit = await enforceLimit("sign_in", { surface: "google sign-in" });
+  if (!limit.allowed) {
+    return { error: limit.message };
   }
 
   // Verify the ID token with Google (network I/O stays here; the trust decision

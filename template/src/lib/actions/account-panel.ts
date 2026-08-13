@@ -1,13 +1,11 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { headers } from "next/headers";
 import { contactService, CHANNEL_ID } from "@/lib/store";
 import { getSession, setSession, endShopperSession } from "@/lib/auth";
 import { verifyPassword } from "@/lib/password";
 import { createAccountlessContact, EmailTakenError, type LoginCandidate } from "@/lib/contact-auth";
-import { tooManyAttempts, recordFailure } from "@/lib/login-throttle";
-import { clientIpFromHeaders, ipBucketKey } from "@/lib/client-ip";
+import { enforceLimit, noteLimitFailure } from "@/lib/security/rate-limits";
 import { normaliseEmail, looksLikeEmail } from "@/lib/checkout/account-prompt";
 import { repriceCartForSession } from "@/lib/actions/cart";
 
@@ -45,17 +43,18 @@ export async function loginFromPanel(formData: FormData): Promise<{
     return { error: "Email and password are required." };
   }
 
-  // Same throttle + keyspace as the sign-in form action, so this alternate login path
-  // can't be used to bypass the brute-force limit.
-  if (tooManyAttempts(email)) {
-    return { error: "Too many attempts. Please wait a few minutes and try again." };
+  // Same policy + keyspace as the sign-in form action, so this alternate login
+  // path can't be used to bypass the brute-force limit.
+  const limit = await enforceLimit("sign_in", { identifier: email, surface: "account drawer" });
+  if (!limit.allowed) {
+    return { error: limit.message };
   }
 
   const candidate = (await contactService.findLoginCandidate(email, CHANNEL_ID)) as LoginCandidate | null;
 
   const { valid, needsRehash } = await verifyPassword(password, candidate?.password_hash);
   if (!candidate || !valid) {
-    recordFailure(email);
+    await noteLimitFailure("sign_in", email);
     return { error: "Invalid email or password." };
   }
   if (needsRehash) {
@@ -98,6 +97,14 @@ export async function registerFromPanel(formData: FormData): Promise<{
 
   if (password.length < 8) {
     return { error: "Password must be at least 8 characters." };
+  }
+
+  const limit = await enforceLimit("registration", {
+    identifier: email,
+    surface: "account drawer register",
+  });
+  if (!limit.allowed) {
+    return { error: limit.message };
   }
 
   // Same copy for B2B-owned and accountless-taken emails (enumeration safety).
@@ -151,8 +158,8 @@ export async function registerFromPanel(formData: FormData): Promise<{
  * Exposure: the register form already replies "An account with this email
  * already exists", so this reveals nothing new about a single address. What it
  * would otherwise add is BULK enumeration, so probes are rate-limited per IP
- * (the shared login-throttle keyspace, its own prefix) and answer a flat false
- * once the budget is spent.
+ * (the shared rulebook's `email_lookup` policy) and answer a flat false once the
+ * budget is spent.
  */
 export async function emailHasAccount(email: string): Promise<boolean> {
   try {
@@ -162,10 +169,9 @@ export async function emailHasAccount(email: string): Promise<boolean> {
     // A signed-in shopper editing the order email has nothing to be prompted about.
     if (await getSession()) return false;
 
-    const ip = ipBucketKey(clientIpFromHeaders(await headers()));
-    const key = `email-probe:${ip}`;
-    if (tooManyAttempts(key)) return false;
-    recordFailure(key); // every probe counts against the budget, hit or miss
+    // Every probe counts against the budget, hit or miss.
+    const limit = await enforceLimit("email_lookup", { surface: "checkout email probe" });
+    if (!limit.allowed) return false;
 
     const candidate = await contactService.findLoginCandidate(normalised, CHANNEL_ID);
     return !!candidate;

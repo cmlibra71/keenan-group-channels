@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifySurface, SURFACE_LIMITS, type SurfaceClass } from "./surfaces.ts";
+import { classifySurface, isCredentialPath, SURFACE_LIMITS, type SurfaceClass } from "./surfaces.ts";
 
 const CASES: [string, SurfaceClass][] = [
   // Operational routes that must never be guarded.
@@ -88,4 +88,42 @@ test("search is the tightest page-facing budget, image the loosest", () => {
   // goes through /api/image.
   assert.ok(SURFACE_LIMITS.search.burstMax < SURFACE_LIMITS.listing.burstMax);
   assert.ok(SURFACE_LIMITS.image.burstMax > SURFACE_LIMITS.page.burstMax);
+});
+
+// ── Credential paths (POST-only, checked by lib/guard/index.ts) ─────────────
+
+test("isCredentialPath covers the sign-in, account, checkout and membership paths", () => {
+  for (const path of [
+    "/account",
+    "/account/",
+    "/account/register",
+    "/account/forgot-password",
+    "/account/reset-password/abc123",
+    "/account/security",
+    "/checkout",
+    "/checkout/confirmation",
+    "/membership",
+  ]) {
+    assert.equal(isCredentialPath(path), true, path);
+  }
+});
+
+test("isCredentialPath leaves ordinary shopping paths alone", () => {
+  for (const path of [
+    "/",
+    "/cart",
+    "/products/combi-oven",
+    "/categories/refrigeration",
+    "/search",
+    "/api/search",
+    "/accounts-payable",
+  ]) {
+    assert.equal(isCredentialPath(path), false, path);
+  }
+});
+
+test("the credential budget is far above a human and below a stuffing run", () => {
+  const limit = SURFACE_LIMITS.credential;
+  assert.ok(limit.burstMax >= 10, "a shopper retrying a form must not trip it");
+  assert.ok(limit.max <= 100, "must still be reachable by an attacker in minutes");
 });

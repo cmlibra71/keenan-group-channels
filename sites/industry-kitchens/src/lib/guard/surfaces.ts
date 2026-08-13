@@ -12,6 +12,7 @@ export type SurfaceClass =
   | "image"
   | "api"
   | "checkout"
+  | "credential"
   | "sitemap";
 
 export type Limit = {
@@ -37,8 +38,25 @@ const HOUR = 60 * MINUTE;
  * - `search` is tight because /search fans out into six Meilisearch queries per
  *   request, and falls back to uncached Postgres full-text when Meili is down.
  * - `checkout` is deliberately generous: a false positive there costs a sale,
- *   and those routes are already protected by login-throttle and form limits.
+ *   and those routes are already protected by the `credential` budget below,
+ *   the per-account limits in lib/security and the form limits.
  * - `sitemap` is tight because each hit is a ~40k-row catalogue enumeration.
+ * - `credential` counts POSTs to the sign-in / register / password / checkout
+ *   paths ONLY (see isCredentialPath). Server actions POST to the page they
+ *   were fired from, so this is the coarse per-IP envelope in front of the
+ *   per-account limits in lib/security — set well above any human, and low
+ *   enough that credential stuffing or card testing hits it in seconds.
+ *
+ *   SIZED AGAINST A REAL CHECKOUT, and the sizing is the safety property. Every
+ *   server action fired from /checkout or /account lands in this bucket, so it
+ *   must clear the busiest honest minute a shopper can have: cart edits from
+ *   the drawer, the "do you already have an account?" probe (debounced 600 ms,
+ *   asked once per address), then place-order and confirm-payment. That is a
+ *   handful of POSTs, not dozens. The address typeahead — which fires per
+ *   keystroke and WOULD have blown this budget mid-checkout — is deliberately
+ *   not a server action: it is GET /api/address/* (see app/api/address), on the
+ *   `api` surface, precisely so keystrokes can never spend a shopper's
+ *   credential allowance.
  */
 export const SURFACE_LIMITS: Record<Exclude<SurfaceClass, "exempt">, Limit> = {
   page: { burstMs: 10 * SECOND, burstMax: 30, windowMs: 5 * MINUTE, max: 300 },
@@ -47,6 +65,7 @@ export const SURFACE_LIMITS: Record<Exclude<SurfaceClass, "exempt">, Limit> = {
   image: { burstMs: 10 * SECOND, burstMax: 120, windowMs: 5 * MINUTE, max: 1200 },
   api: { burstMs: 10 * SECOND, burstMax: 60, windowMs: 5 * MINUTE, max: 400 },
   checkout: { burstMs: 10 * SECOND, burstMax: 60, windowMs: 5 * MINUTE, max: 600 },
+  credential: { burstMs: MINUTE, burstMax: 30, windowMs: 5 * MINUTE, max: 90 },
   sitemap: { burstMs: MINUTE, burstMax: 2, windowMs: HOUR, max: 10 },
 };
 
@@ -84,6 +103,25 @@ function canonical(pathname: string): string {
 
 function startsWithSegment(path: string, prefix: string): boolean {
   return path === prefix || path.startsWith(`${prefix}/`);
+}
+
+/**
+ * Paths whose POSTs are credential or payment traffic: signing in, registering,
+ * password reset/change and placing an order. GETs are untouched — browsing the
+ * account area is ordinary page traffic.
+ *
+ * Coarse on purpose: a server action POSTs to the URL the shopper is standing
+ * on, so the account DRAWER can fire a sign-in from any page. Those are caught
+ * by the per-account limits in lib/security/rate-limits.ts instead; this is only
+ * the outer per-IP envelope, and it must never mistake browsing for an attack.
+ */
+export function isCredentialPath(pathname: string): boolean {
+  const path = canonical(pathname);
+  return (
+    startsWithSegment(path, "/account") ||
+    startsWithSegment(path, "/checkout") ||
+    startsWithSegment(path, "/membership")
+  );
 }
 
 export function classifySurface(pathname: string): SurfaceClass {
