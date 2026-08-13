@@ -55,6 +55,8 @@
     "lib/checkout/account-options.ts",
     "lib/checkout/account-prompt.test.ts",
     "lib/checkout/account-prompt.ts",
+    "lib/checkout/account-required.test.ts",
+    "lib/checkout/account-required.ts",
     "lib/checkout/au-address.test.ts",
     "lib/checkout/au-address.ts",
     "lib/checkout/last-order.ts",

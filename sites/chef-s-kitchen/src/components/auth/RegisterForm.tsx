@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 import { register } from "@/lib/actions/auth";
 
@@ -9,6 +9,17 @@ import { register } from "@/lib/actions/auth";
 // before they can see their order still lands on it.
 export function RegisterForm({ next }: { next?: string | null }) {
   const [state, formAction, isPending] = useActionState(register, null);
+  // Kept so the "Sign in" offer below can carry the address they typed straight
+  // into the sign-in form, instead of making them type it a second time.
+  const [email, setEmail] = useState("");
+
+  const signInHref = (() => {
+    const params = new URLSearchParams();
+    if (next) params.set("next", next);
+    if (email.trim()) params.set("email", email.trim());
+    const query = params.toString();
+    return query ? `/account?${query}` : "/account";
+  })();
 
   return (
     <div className="rounded-2xl bg-white/90 backdrop-blur-sm p-8">
@@ -16,6 +27,16 @@ export function RegisterForm({ next }: { next?: string | null }) {
       {state?.error && (
         <div className="mb-4 alert-error">
           {state.error}
+          {/* Don't leave them on a dead end: one click to the sign-in they were
+              just told to use, with the address they typed carried across. */}
+          {state.emailTaken && (
+            <>
+              {" "}
+              <Link href={signInHref} className="font-semibold underline hover:no-underline">
+                Sign in
+              </Link>
+            </>
+          )}
         </div>
       )}
 
@@ -59,6 +80,8 @@ export function RegisterForm({ next }: { next?: string | null }) {
             name="email"
             autoComplete="username"
             required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className="mt-1 block w-full input"
             placeholder="your@email.com"
           />

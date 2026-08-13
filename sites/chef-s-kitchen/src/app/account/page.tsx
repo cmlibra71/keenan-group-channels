@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { contactService, getActiveSubscriptionForContact, getUpcomingDraws, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { safeNextPath, signInPrompt } from "@/lib/account-redirect";
+import { normaliseEmail, looksLikeEmail } from "@/lib/checkout/account-prompt";
 import { logout } from "@/lib/actions/auth";
 import { AccountShell, readAccountNavFlags } from "@/components/account/AccountShell";
 
@@ -14,7 +15,7 @@ export const metadata = {
 export default async function AccountPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; email?: string }>;
 }) {
   const session = await getSession();
 
@@ -22,13 +23,18 @@ export default async function AccountPage({
     // Set by the `/account/**` guards — e.g. the "View your orders" button on an
     // order confirmation, opened in a browser with no session. Signing in returns
     // the customer to it instead of dropping them on this panel.
-    const next = safeNextPath((await searchParams).next);
+    const params = await searchParams;
+    const next = safeNextPath(params.next);
+    // Carried by the register form's "Sign in" offer when the address already has
+    // an account — echoed back only if it still looks like one.
+    const typedEmail = normaliseEmail(params.email);
+    const prefillEmail = looksLikeEmail(typedEmail) ? typedEmail : null;
     return (
       <div className="mx-auto max-w-lg px-6 lg:px-8 section-padding">
         <p className="eyebrow mb-3">SIGN IN</p>
         <h1 className="text-3xl heading-serif text-text-primary mb-8">My Account</h1>
         {next && <p className="body-text mb-4">{signInPrompt(next)}</p>}
-        <LoginForm next={next} />
+        <LoginForm next={next} defaultEmail={prefillEmail} />
       </div>
     );
   }

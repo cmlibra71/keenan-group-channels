@@ -8,6 +8,8 @@ import { getContactPermissions } from "@/lib/role-permissions";
 import { gstSplit } from "@keenan/services/calc";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
+import { ACCOUNT_REQUIRED_SETTING, checkoutNeedsSignIn } from "@/lib/checkout/account-required";
+import { CheckoutSignInGate } from "@/components/checkout/CheckoutSignInGate";
 import { lastOrderConfirmationPath } from "@/lib/checkout/last-order";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
 import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-policy";
@@ -29,10 +31,25 @@ export default async function CheckoutPage() {
     redirect(justOrdered ?? "/cart");
   }
 
-  const [session, checkoutSettings] = await Promise.all([
+  const [session, checkoutSettings, requireAccount] = await Promise.all([
     getSession(),
     getCheckoutSettings(),
+    getFeatureFlag(ACCOUNT_REQUIRED_SETTING),
   ]);
+
+  // No guest checkout on this channel (Industry Kitchens, as on Zoey — card
+  // LQM9FQYe): stop the shopper with the sign-in step instead of the form. The
+  // cart is untouched, so signing in from here drops them straight back onto a
+  // priced basket. placeOrder enforces the SAME rule server-side — this is only
+  // what we show.
+  if (checkoutNeedsSignIn(requireAccount, !!session)) {
+    return (
+      <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
+        <h1 className="text-3xl font-bold text-zinc-900 mb-8">Checkout</h1>
+        <CheckoutSignInGate />
+      </div>
+    );
+  }
 
   // Net Terms is account-gated: only a logged-in customer whose email maps to an
   // active B2B account with net_terms_days > 0 may defer payment. Everyone else

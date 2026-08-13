@@ -9,7 +9,14 @@ import { login } from "@/lib/actions/auth";
 // bounced them here (an emailed order link, typically). It rides the form so the
 // login action can finish the journey, and the register link so someone who has
 // to create an account first still ends up where they were headed.
-export function LoginForm({ next }: { next?: string | null }) {
+export function LoginForm({
+  next,
+  defaultEmail,
+}: {
+  next?: string | null;
+  /** Carried from the register form when that address already has an account. */
+  defaultEmail?: string | null;
+}) {
   const [state, formAction, isPending] = useActionState(login, null);
 
   return (
@@ -37,6 +44,7 @@ export function LoginForm({ next }: { next?: string | null }) {
             name="email"
             autoComplete="username"
             required
+            defaultValue={defaultEmail ?? undefined}
             className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
             placeholder="your@email.com"
           />
