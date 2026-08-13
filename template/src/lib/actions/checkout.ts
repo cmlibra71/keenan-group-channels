@@ -758,6 +758,11 @@ export async function placeOrder(
       // Email Templates page sets.
       bannerBgColor: branding?.bannerBgColor ?? null,
       footerText: branding?.footerText ?? null,
+      // This channel's per-email wording (Storefront → Email Templates → Order
+      // confirmation, card AnQgJh32). Branding is flattened here, so the wording
+      // has to travel explicitly or the customer's confirmation ignores the
+      // words staff wrote while the admin preview shows them.
+      wording: branding?.wording ?? null,
       testMode: isTestMode,
     };
 
