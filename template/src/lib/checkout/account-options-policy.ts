@@ -69,11 +69,17 @@ export function effectiveMinimums(
  * method is) and not marked staff-only. A staff-only method fails here exactly as an un-allowed one
  * does — the storefront is the customer, and the customer must neither see it nor be able to force
  * it through placeOrder.
+ *
+ * `staffOnly` is REQUIRED, and that is the point: it used to default to null, so a new customer
+ * surface could call this with two arguments, look perfectly correct, and quietly offer a staff-only
+ * method (which is exactly how the pay-a-quote screen, card 0Wy0xHuq, shipped the bug). Pass
+ * `accountOptions?.staffOnlyPaymentMethods ?? null` on a customer surface; a STAFF caller passes
+ * `null` explicitly, so the decision is visible in the diff.
  */
 export function isPaymentMethodAllowed(
   id: string,
   allowed: string[] | null,
-  staffOnly: string[] | null = null
+  staffOnly: string[] | null
 ): boolean {
   if (staffOnly?.includes(id)) return false;
   if (!allowed) return true;
@@ -89,7 +95,7 @@ export function isPaymentMethodAllowed(
 export function filterPaymentMethodsForAccount<T extends { id: string }>(
   methods: T[],
   allowed: string[] | null,
-  staffOnly: string[] | null = null
+  staffOnly: string[] | null
 ): T[] {
   if (!allowed && !staffOnly) return methods;
   return methods.filter((m) => isPaymentMethodAllowed(m.id, allowed, staffOnly));

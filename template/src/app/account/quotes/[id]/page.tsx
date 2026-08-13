@@ -177,8 +177,10 @@ export default async function QuoteDetailPage({
   const amountDue = deposit ? deposit.due_now : Math.round(gst.incTax * 100) / 100;
 
   // Payment methods are read EXACTLY as checkout reads them — the channel's
-  // enabled list, narrowed by the account's allow-list, with net terms only for
-  // an entitled account. Switch card payments on later and they appear here with
+  // enabled list, narrowed by the account's allow-list, MINUS the methods the
+  // account marks staff-only, with net terms only for an entitled account. This
+  // is a customer surface like the checkout, so a staff-only method must not
+  // appear here either. Switch card payments on later and they appear here with
   // no further work.
   const [checkoutSettings, accountOptions, netTerms] = await Promise.all([
     getCheckoutSettings(),
@@ -187,7 +189,8 @@ export default async function QuoteDetailPage({
   ]);
   const payMethods: PayMethod[] = filterPaymentMethodsForAccount(
     checkoutSettings.enabledPaymentMethods,
-    accountOptions?.allowedPaymentMethods ?? null
+    accountOptions?.allowedPaymentMethods ?? null,
+    accountOptions?.staffOnlyPaymentMethods ?? null
   )
     .filter((m) => m.id !== "net_terms" || !!netTerms)
     .map((m) => ({
@@ -239,6 +242,9 @@ export default async function QuoteDetailPage({
     items: raw.items,
     amountDue,
     paymentMethodCount: payMethods.length,
+    // …and how many the STORE has, so a customer whose ACCOUNT allows none of them
+    // is told that, not "this store doesn't take online payments" (card N8kE8arY).
+    channelPaymentMethodCount: checkoutSettings.enabledPaymentMethods.length,
     hasDeliveryAddress: quoteHasShipTo || addressOptions.length > 0,
   });
   const { gateway: stripeGateway } = await resolveStripeGateway();

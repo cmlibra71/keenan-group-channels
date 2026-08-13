@@ -36,10 +36,15 @@ import { resolveAccountOptions } from "@/lib/checkout/account-options";
 import {
   effectiveMinimums,
   isPaymentMethodAllowed,
+  filterPaymentMethodsForAccount,
   minimumOrderError,
   disallowedPaymentMethodError,
 } from "@/lib/checkout/account-options-policy";
 import { enforceLimit } from "@/lib/security/rate-limits";
+import {
+  resolvePaymentAvailability,
+  PAY_UNAVAILABLE_ACCOUNT_ORDER,
+} from "@/lib/checkout/payment-availability";
 
 // Pricing/tax/payment-status computation lives in the pure order-draft module
 // (lib/checkout/order-draft.ts), which delegates GST math to @keenan/services
@@ -439,6 +444,26 @@ export async function placeOrder(
     )
   ) {
     return { error: disallowedPaymentMethodError() };
+  }
+
+  // …and (c) an account that may use NONE of the store's methods. The page shows
+  // that shopper a contact-us line and blocks Place Order; this is the authorization
+  // half, resolved from the same two counts, so a posted form can't slip an unpaid
+  // order past it. The store-has-nothing case is deliberately untouched: that one
+  // still books the order with payment status "pending" (card N8kE8arY, and the
+  // payment-methods register rule that predates it).
+  const offerableMethods = filterPaymentMethodsForAccount(
+    checkoutSettings.enabledPaymentMethods,
+    accountOptions?.allowedPaymentMethods ?? null,
+    accountOptions?.staffOnlyPaymentMethods ?? null
+  ).filter((m) => m.id !== "net_terms" || !!netTerms);
+  if (
+    resolvePaymentAvailability(
+      checkoutSettings.enabledPaymentMethods.length,
+      offerableMethods.length
+    ) === "account-restricted"
+  ) {
+    return { error: PAY_UNAVAILABLE_ACCOUNT_ORDER };
   }
   const minError = minimumOrderError(
     { subtotalIncTax, itemCount: totalItems },

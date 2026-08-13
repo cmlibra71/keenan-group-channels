@@ -14,6 +14,10 @@ import { Price } from "@/components/ui/Price";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
 import { emailHasAccount } from "@/lib/actions/account-panel";
 import { decideEmailProbe, normaliseEmail } from "@/lib/checkout/account-prompt";
+import {
+  PAY_UNAVAILABLE_ACCOUNT_ORDER,
+  type PaymentAvailability,
+} from "@/lib/checkout/payment-availability";
 import { useHeaderPanels } from "@/lib/cart-quote-counts";
 import { ga4AddShippingInfo, ga4AddPaymentInfo, rowToGa4Item } from "@/components/analytics/ga4";
 import { BulkyDeliveryChoice } from "@/components/checkout/BulkyDeliveryChoice";
@@ -98,6 +102,7 @@ export function CheckoutForm({
   canSaveNewAddress = false,
   countries = [],
   paymentMethods = [],
+  paymentAvailability = "available",
   savedAddresses = [],
   googlePlacesEnabled = false,
   freeShippingEnabled = false,
@@ -124,6 +129,10 @@ export function CheckoutForm({
   canSaveNewAddress?: boolean;
   countries?: Country[];
   paymentMethods?: PaymentMethod[];
+  /** Why the list above may be empty — the store has none switched on, or this
+   *  account may use none of them. Resolved on the server; placeOrder refuses the
+   *  account-restricted case exactly as this form blocks it (card N8kE8arY). */
+  paymentAvailability?: PaymentAvailability;
   savedAddresses?: SavedAddress[];
   googlePlacesEnabled?: boolean;
   freeShippingEnabled?: boolean;
@@ -509,6 +518,15 @@ export function CheckoutForm({
     shippingEnabled &&
     !freeDelivery &&
     (shippingLoading || shippingCost === null);
+
+  // Every payment method this store offers is off-limits to this account (per-method
+  // "Staff only", or the account's allow-list). That is a sales-desk instruction, not
+  // a misconfiguration: refuse the order and tell the customer who to call, rather
+  // than book an unpaid order they believe is paid. Zoey blocks here too, and the
+  // pay-a-quote screen already greys its Pay button for the same account state.
+  // Note this is NOT the "store has nothing switched on" case, which still places the
+  // order with payment status "pending" (payment-methods register entry).
+  const paymentUnavailable = paymentAvailability === "account-restricted";
 
   return (
     <form
@@ -956,6 +974,10 @@ export function CheckoutForm({
                   </div>
                 ))}
               </div>
+            ) : paymentUnavailable ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                {PAY_UNAVAILABLE_ACCOUNT_ORDER}
+              </div>
             ) : (
               <p className="text-sm text-steel-500">
                 No payment methods configured. Orders will be created with payment status &ldquo;pending&rdquo;.
@@ -1048,7 +1070,8 @@ export function CheckoutForm({
                 stripeProcessing ||
                 (!heldForSpecialised && selectedPaymentMethod === "stripe" && !cardReady) ||
                 (hasBulkyItems && deliveryService === "") ||
-                shippingUnresolved
+                shippingUnresolved ||
+                paymentUnavailable
               }
               className="btn-primary mt-6 w-full"
             >
@@ -1060,6 +1083,12 @@ export function CheckoutForm({
                     ? "Pay Now"
                     : "Place Order"}
             </button>
+
+            {paymentUnavailable && (
+              <p className="mt-2 text-center text-xs text-steel-500">
+                {PAY_UNAVAILABLE_ACCOUNT_ORDER}
+              </p>
+            )}
 
             {hasBulkyItems && deliveryService === "" && (
               <p className="mt-2 text-center text-xs text-steel-500">

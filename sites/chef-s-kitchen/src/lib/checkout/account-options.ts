@@ -39,9 +39,13 @@ export async function resolveAccountOptions(
       minOrderQty: options.minOrderQty,
     };
   } catch {
-    // A resolver failure must not restrict a shopper who may have no restrictions at all, and must
-    // not silently WIDEN one either — both surfaces (page + placeOrder) fail the same way (null),
-    // so show and accept still agree.
+    // FAIL OPEN, deliberately, and it is worth being honest about what that now costs: this
+    // resolver stopped being purely restrictive when staff-only access joined it. A DB blip means
+    // no allow-list AND no staff-only list, so the shopper is offered every channel method —
+    // including one the account marked Staff only. The house rule stands (a hiccup must never stop
+    // a customer paying us, same as getContactPermissions), and both surfaces fail the SAME way
+    // (null), so show and accept still agree. The exposure is one order on a method the sales desk
+    // preferred staff to take, not a wrong price or an unauthorised account.
     return null;
   }
 }
