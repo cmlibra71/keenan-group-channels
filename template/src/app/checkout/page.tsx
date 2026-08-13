@@ -5,6 +5,7 @@ import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
 import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
 import { getContactPermissions } from "@/lib/role-permissions";
+import { summariseLinesFreight } from "@keenan/services";
 import { gstSplit } from "@keenan/services/calc";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
@@ -137,6 +138,18 @@ export default async function CheckoutPage() {
   const { gateway: stripeGateway, wantTestMode } = await resolveStripeGateway();
   const stripePublishableKey: string | undefined = stripeGateway?.credentials?.publishable_key;
 
+  // Bulky items in this cart (card Wxjp8wpg). Non-empty ⇒ CheckoutForm makes the shopper choose
+  // curbside vs specialised delivery. Read from the products, and re-read by placeOrder, so what
+  // we ask is exactly what we enforce.
+  const bulkyProductNames = await summariseLinesFreight(
+    (cart.items as Array<{ product_id: number; quantity: number }>).map((i) => ({
+      product_id: i.product_id,
+      quantity: Number(i.quantity) || 0,
+    }))
+  )
+    .then((f) => f.bulky.map((p) => p.name))
+    .catch(() => [] as string[]);
+
   // Check if shipping rate calculation is available
   let shippingEnabled = false;
   try {
@@ -224,6 +237,7 @@ export default async function CheckoutPage() {
         freeShippingEnabled={checkoutSettings.freeShippingEnabled}
         freeShippingThreshold={checkoutSettings.freeShippingThreshold}
         shippingEnabled={shippingEnabled}
+        bulkyProductNames={bulkyProductNames}
         stripePublishableKey={stripePublishableKey}
         testMode={wantTestMode}
       />
