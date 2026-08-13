@@ -27,6 +27,8 @@
     "builder/BuilderContentPage.tsx",
     "builder/BuilderHomePage.tsx",
     "builder/BuilderProductPage.tsx",
+    "builder/brand-logo-link.test.ts",
+    "builder/brand-logo-link.ts",
     "builder/brand-node-branch.tsx",
     "builder/builder-image-srcset.test.ts",
     "builder/builder-image-srcset.ts",
