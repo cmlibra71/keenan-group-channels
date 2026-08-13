@@ -40,3 +40,10 @@ test("a cap that lands on a space does not leave a trailing space", () => {
   const out = normaliseCustomerReference(long);
   assert.equal(out, "A".repeat(CUSTOMER_REFERENCE_MAX_LENGTH - 1));
 });
+
+test("the cap never cuts a code point in half", () => {
+  const long = `${"A".repeat(CUSTOMER_REFERENCE_MAX_LENGTH - 1)}\u{1F600}tail`;
+  const out = normaliseCustomerReference(long);
+  assert.equal(Array.from(out ?? "").length, CUSTOMER_REFERENCE_MAX_LENGTH);
+  assert.ok(out?.endsWith("\u{1F600}"));
+});

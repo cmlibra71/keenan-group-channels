@@ -457,10 +457,12 @@ export async function placeOrder(
         (o) => (o.metafields ?? {})?.cart_uuid === uuid
       );
       if (existing) {
-        // The shopper may have added or corrected their reference on the retry.
-        // Safe to write on its own: OrderService.beforeUpdate only moves status
-        // when paymentStatus is part of the same update.
-        if (customerReference && customerReference !== (existing.customer_po ?? null)) {
+        // The shopper may have added, corrected OR CLEARED their reference on the
+        // retry — the box on the form is the truth, so an emptied box clears the
+        // order too rather than leaving the first attempt's value on it. Safe to
+        // write on its own: OrderService.beforeUpdate only moves status when
+        // paymentStatus is part of the same update.
+        if (customerReference !== (existing.customer_po ?? null)) {
           await orderService.update(existing.id, { customerPo: customerReference });
         }
         const { clientSecret } = await paymentService.createStripePaymentIntent(existing.id, {

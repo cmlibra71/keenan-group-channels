@@ -40,5 +40,7 @@ export function normaliseCustomerReference(raw: unknown): string | null {
     .replace(/\s+/g, " ")
     .trim();
   if (!cleaned) return null;
-  return cleaned.slice(0, CUSTOMER_REFERENCE_MAX_LENGTH).trim();
+  // Cap by CODE POINT, like the pass above: slicing UTF-16 units could cut an
+  // emoji or an accented pair in half and store a lone surrogate.
+  return Array.from(cleaned).slice(0, CUSTOMER_REFERENCE_MAX_LENGTH).join("").trim() || null;
 }
