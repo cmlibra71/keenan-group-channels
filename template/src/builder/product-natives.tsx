@@ -20,9 +20,11 @@ export interface ProductNativesArgs {
 }
 
 import { ProductImageGallery, type ProductImage as GalleryImage } from "@/components/product/ProductImageGallery";
+import { ProductKitNative } from "@/components/product/ProductKitNative";
+import { readProductKit } from "@/lib/product-kit";
 import { GstToggle } from "@/components/layout/GstToggle";
 
-export function productNatives({ payload, variantImageUrl }: ProductNativesArgs): NativeComponents {
+export function productNatives({ payload, variantImageUrl, data }: ProductNativesArgs): NativeComponents {
   const product = (payload.product ?? {}) as Record<string, unknown>;
   return {
     "product-gallery": () => (
@@ -37,5 +39,13 @@ export function productNatives({ payload, variantImageUrl }: ProductNativesArgs)
     // header. Sealed because it writes the GST cookie and flips a site-wide
     // React context. Normal flow, no breakpoint gating: phones get it too.
     "gst-toggle": () => <GstToggle className="mt-3" />,
+    // Grouped / bundle contents (card 7bmpuqei). Sealed, not exploded: it holds the customer's
+    // picks and sends them through with Add to Quote. Renders nothing for a product that is not a
+    // kit, so the node is safe to leave in the template for every product.
+    "product-kit": () => {
+      const kit = readProductKit((product as { metafields?: unknown }).metafields ?? data.kit);
+      if (!kit) return null;
+      return <ProductKitNative kit={kit} productId={Number(product.id)} />;
+    },
   };
 }
