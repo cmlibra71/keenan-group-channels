@@ -7,6 +7,7 @@
 // the pre-provider version — pixel parity is the contract.
 // ============================================================================
 
+import { useState } from "react";
 import Link from "next/link";
 import { AddToCartButton } from "./AddToCartButton";
 import { AddToQuoteButton } from "./AddToQuoteButton";
@@ -14,8 +15,14 @@ import { OptionSelector } from "./OptionSelector";
 import { Price } from "@/components/ui/Price";
 import { GstToggle } from "@/components/layout/GstToggle";
 import { useProductPurchase } from "./ProductPurchaseProvider";
+import { ProductKitBlock } from "./ProductKitBlock";
+import { defaultKitSelection, toKitChoices, type ProductKit } from "@/lib/product-kit";
 
-export function ProductDetail() {
+/**
+ * `kit` is present only for the two Zoey kit types (grouped / bundle). Every other caller — the
+ * CMS v2 widgets, the builder natives — renders this exactly as before by simply not passing one.
+ */
+export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
   const {
     product,
     isMember,
@@ -34,6 +41,15 @@ export function ProductDetail() {
   } = useProductPurchase();
 
   const { id: productId, options, optionValues, bulkPricing } = product;
+
+  // A bundle's configuration lives here rather than in the purchase provider: it never becomes a
+  // cart price (it is quoted), so it has no business in the pricing state the two storefronts and
+  // the portal editor share.
+  const [kitSelection, setKitSelection] = useState<Record<string, number>>(() =>
+    kit?.kind === "bundle" ? defaultKitSelection(kit.groups) : {}
+  );
+  const isBundle = kit?.kind === "bundle";
+  const kitReady = !isBundle || kit.groups.every((g) => kitSelection[g.name] != null);
 
   return (
     <div>
@@ -150,20 +166,34 @@ export function ProductDetail() {
         </div>
       )}
 
+      {/* Kit contents (grouped) / choice groups (bundle) */}
+      {kit && (
+        <ProductKitBlock
+          kit={kit}
+          selection={kitSelection}
+          onSelect={(group, id) => setKitSelection((prev) => ({ ...prev, [group]: id }))}
+        />
+      )}
+
       {/* Add to Cart / Quote */}
       <div className="mt-8 space-y-3">
-        <AddToCartButton
-          productId={productId}
-          variantId={cartVariantId}
-          productName={product.name}
-          sku={product.sku}
-          price={displaySalePrice ?? displayPrice}
-          disabled={!inStock || purchasingDisabled || !allOptionsSelected || displayPrice === 0}
-        />
+        {/* A bundle is never bought straight off the page — the configuration goes to a rep. */}
+        {!isBundle && (
+          <AddToCartButton
+            productId={productId}
+            variantId={cartVariantId}
+            productName={product.name}
+            sku={product.sku}
+            price={displaySalePrice ?? displayPrice}
+            disabled={!inStock || purchasingDisabled || !allOptionsSelected || displayPrice === 0}
+          />
+        )}
         <AddToQuoteButton
           productId={productId}
           variantId={cartVariantId}
-          disabled={useGroupedMode && !allOptionsSelected}
+          disabled={(useGroupedMode && !allOptionsSelected) || !kitReady}
+          kitChoices={isBundle ? toKitChoices(kitSelection) : null}
+          label={isBundle ? "Add to Quote — request pricing" : undefined}
         />
       </div>
     </div>
