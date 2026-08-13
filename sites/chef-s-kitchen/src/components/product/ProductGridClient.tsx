@@ -34,6 +34,9 @@ export function ProductGridClient({
   narrow,
   listId,
   listName,
+  wrapperClassName,
+  renderEmpty = true,
+  indexOffset = 0,
 }: {
   products: GridProduct[];
   memberPricingAvailable?: boolean;
@@ -47,8 +50,19 @@ export function ProductGridClient({
   narrow?: boolean;
   listId?: string;
   listName?: string;
+  /**
+   * The grid wrapper's classes. `"contents"` makes this render a CONTINUATION
+   * of a grid the caller already owns (the search feed appends chunk after
+   * chunk into one grid); omitted, it starts its own.
+   */
+  wrapperClassName?: string;
+  /** False for an appended chunk: "No products found." belongs to the page, once. */
+  renderEmpty?: boolean;
+  /** Position of the first tile in the whole list, for GA4 list indexes. */
+  indexOffset?: number;
 }) {
   if (products.length === 0) {
+    if (!renderEmpty) return null;
     return (
       <div className="py-16 text-center">
         <p className="text-text-muted">No products found.</p>
@@ -57,9 +71,12 @@ export function ProductGridClient({
   }
   return (
     <div
-      className={`grid grid-cols-2 gap-3 sm:gap-4 ${
-        narrow ? "md:grid-cols-2 lg:grid-cols-3" : "md:grid-cols-3 lg:grid-cols-4"
-      }`}
+      className={
+        wrapperClassName ??
+        `grid grid-cols-2 gap-3 sm:gap-4 ${
+          narrow ? "md:grid-cols-2 lg:grid-cols-3" : "md:grid-cols-3 lg:grid-cols-4"
+        }`
+      }
     >
       <Ga4ViewItemList
         listId={listId}
@@ -70,7 +87,7 @@ export function ProductGridClient({
           item_brand: p.brandName ?? undefined,
           price: parseFloat(p.salePrice ?? p.price) || undefined,
           quantity: 1,
-          index,
+          index: indexOffset + index,
         }))}
       />
       {products.map((product, index) => (
@@ -96,7 +113,7 @@ export function ProductGridClient({
           inventoryTracking={product.inventoryTracking}
           listId={listId}
           listName={listName}
-          listIndex={index}
+          listIndex={indexOffset + index}
         />
       ))}
     </div>

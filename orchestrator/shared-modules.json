@@ -114,6 +114,8 @@
     "lib/sanitize-html.ts",
     "lib/search-params.test.ts",
     "lib/search-params.ts",
+    "lib/search-results.test.ts",
+    "lib/search-results.ts",
     "lib/seo.ts",
     "lib/staff-email.ts",
     "lib/token.test.ts",
