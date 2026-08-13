@@ -5,7 +5,13 @@ import Image from "next/image";
 import { Package } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { signInRedirect } from "@/lib/account-redirect";
-import { quoteService, productImageService, CHANNEL_ID } from "@/lib/store";
+import {
+  quoteService,
+  productImageService,
+  customerAddressService,
+  getCheckoutSettings,
+  CHANNEL_ID,
+} from "@/lib/store";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import { Price } from "@/components/ui/Price";
 import { QuoteActions } from "./quote-actions";
@@ -21,6 +27,21 @@ import { quoteGstTotals, isMoneyRow } from "@/lib/quotes/quote-gst";
 import { resolveQuoteGstRate } from "@/lib/quotes/quote-gst-rate";
 import { quoteStatusLabel } from "@/lib/quotes/quote-status-label";
 import { AccountShell } from "@/components/account/AccountShell";
+import { readQuoteDeposit, resolveQuoteDeposit, depositLabel } from "@/lib/quotes/quote-deposit";
+import { resolveQuotePayState } from "@/lib/quotes/quote-payable";
+import { QuotePayPanel, type PayMethod } from "./quote-pay-panel";
+import { resolveAccountOptions } from "@/lib/checkout/account-options";
+import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-policy";
+import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
+import { resolveStripeGateway } from "@/lib/payments/gateway";
+
+/** en-AU money, matching the <Price> component's formatting. */
+function formatMoney(amount: number, currency: string | null): string {
+  return new Intl.NumberFormat("en-AU", {
+    style: "currency",
+    currency: currency || "AUD",
+  }).format(amount);
+}
 
 // QuoteService returns snake_case rows (transformRow convention).
 interface QuoteDetail {
@@ -43,6 +64,9 @@ interface QuoteDetail {
   store_credit_amount: string | null;
   shipping_cost: string | null;
   customer_notes: string | null;
+  currency_code: string | null;
+  attributes: Record<string, unknown> | null;
+  shipping_address: Record<string, string | null> | null;
   hide_prices: boolean | null;
   expires_at: Date | string | null;
   created_at: Date | string | null;
@@ -142,6 +166,83 @@ export default async function QuoteDetailPage({
   // implicit — the same split the cart summary and the emailed quote show, at the
   // same per-quote rate the portal resolves.
   const gst = quoteGstTotals(total ?? 0, quote, await resolveQuoteGstRate(raw.tax_class_id));
+
+  // ── Paying this quote (card 0Wy0xHuq) ────────────────────────────────────
+  // The rep may have set a deposit on the quote; that is what the customer is
+  // charged now, with the balance following. Both figures are GST-INCLUSIVE,
+  // because that is the money the customer actually pays.
+  const deposit = hidePrices
+    ? null
+    : resolveQuoteDeposit(readQuoteDeposit(raw.attributes), gst.incTax);
+  const amountDue = deposit ? deposit.due_now : Math.round(gst.incTax * 100) / 100;
+
+  // Payment methods are read EXACTLY as checkout reads them — the channel's
+  // enabled list, narrowed by the account's allow-list, with net terms only for
+  // an entitled account. Switch card payments on later and they appear here with
+  // no further work.
+  const [checkoutSettings, accountOptions, netTerms] = await Promise.all([
+    getCheckoutSettings(),
+    resolveAccountOptions(session),
+    resolveNetTermsEntitlement(session),
+  ]);
+  const payMethods: PayMethod[] = filterPaymentMethodsForAccount(
+    checkoutSettings.enabledPaymentMethods,
+    accountOptions?.allowedPaymentMethods ?? null
+  )
+    .filter((m) => m.id !== "net_terms" || !!netTerms)
+    .map((m) => ({
+      id: m.id,
+      name: m.name,
+      description: m.description,
+      bankDetails: m.bankDetails,
+      netTermsDays: m.id === "net_terms" && netTerms ? netTerms.netTermsDays : m.netTermsDays,
+    }));
+
+  // Delivery address. The quote's own agreed address is shown read-only — staff
+  // can change it, customers can't (Steve, 2026-08-07). Only a quote that never
+  // carried one falls back to the customer's saved addresses.
+  const quoteShip = (raw.shipping_address ?? null) as Record<string, string | null> | null;
+  const quoteHasShipTo = !!quoteShip && Object.values(quoteShip).some((v) => v);
+  const addressSummary = quoteHasShipTo
+    ? [
+        quoteShip!.street1 ?? quoteShip!.address1,
+        quoteShip!.street2 ?? quoteShip!.address2,
+        quoteShip!.city,
+        quoteShip!.region ?? quoteShip!.state_or_province,
+        quoteShip!.postcode ?? quoteShip!.postal_code,
+      ]
+        .filter(Boolean)
+        .join(", ")
+    : null;
+  let addressOptions: { id: number; label: string }[] = [];
+  if (!quoteHasShipTo) {
+    try {
+      const rows = (await customerAddressService.listForContact(session.contactId)) as Record<
+        string,
+        unknown
+      >[];
+      addressOptions = rows.slice(0, 20).map((a) => ({
+        id: a.id as number,
+        label: [a.address1, a.city, a.state_or_province, a.postal_code]
+          .filter(Boolean)
+          .join(", "),
+      }));
+    } catch {
+      /* no saved addresses — the pay gate greys the button with the reason */
+    }
+  }
+
+  const payState = resolveQuotePayState({
+    status,
+    hidesPrices: hidePrices,
+    expiresAt: raw.expires_at,
+    items: raw.items,
+    amountDue,
+    paymentMethodCount: payMethods.length,
+    hasDeliveryAddress: quoteHasShipTo || addressOptions.length > 0,
+  });
+  const { gateway: stripeGateway } = await resolveStripeGateway();
+  const freightPending = !isMoneyRow(gst.freightEx);
 
   return (
     <AccountShell>
@@ -295,6 +396,20 @@ export default async function QuoteDetailPage({
               <dt className="font-medium text-zinc-600">Quote Total (inc GST)</dt>
               <dd><Price amount={gst.incTax} className="text-lg font-semibold text-zinc-900" /></dd>
             </div>
+            {/* Deposit set by the sales rep on the quote — shown to the customer
+                here, and it is the amount the Pay button charges. */}
+            {deposit && (
+              <>
+                <div className="flex items-center justify-between border-t border-zinc-200 pt-1">
+                  <dt className="font-medium text-zinc-600">{depositLabel(deposit)}</dt>
+                  <dd><Price amount={deposit.due_now} className="font-semibold text-zinc-900" /></dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-zinc-600">Balance</dt>
+                  <dd><Price amount={deposit.balance} className="text-zinc-900" /></dd>
+                </div>
+              </>
+            )}
           </dl>
         ) : (
           <div className="flex items-center justify-between">
@@ -314,6 +429,33 @@ export default async function QuoteDetailPage({
 
       {/* Customer self-service actions */}
       <QuoteActions quoteId={quote.id} status={status} acceptState={acceptState} />
+
+      {/* Pay this quote — inside the logged-in account area, per Steve. The
+          panel renders even while pricing is being prepared: the Pay button
+          stays visible and greyed with the reason rather than vanishing. */}
+      {
+        <QuotePayPanel
+          quoteId={quote.id}
+          payState={payState}
+          amountDue={formatMoney(amountDue, quote.currency_code)}
+          amountKnown={!hidePrices && total !== null}
+          totalDue={formatMoney(gst.incTax, quote.currency_code)}
+          depositNote={
+            deposit
+              ? `${depositLabel(deposit)} of ${formatMoney(
+                  deposit.total_inc,
+                  quote.currency_code
+                )} — ${formatMoney(deposit.balance, quote.currency_code)} to follow.`
+              : null
+          }
+          methods={payMethods}
+          stripePublishableKey={stripeGateway?.credentials?.publishable_key}
+          addressSummary={addressSummary}
+          addressOptions={addressOptions}
+          freightPending={freightPending}
+          currency={quote.currency_code || "AUD"}
+        />
+      }
     </AccountShell>
   );
 }
