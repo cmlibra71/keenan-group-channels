@@ -165,6 +165,7 @@ jobs:
           CMS_PREVIEW_SECRET=${{ secrets.CMS_PREVIEW_SECRET }}
           SESSION_SECRET=${{ secrets.SESSION_SECRET }}
           E2E_LOGIN_SECRET=${{ secrets.E2E_LOGIN_SECRET }}
+          TEST_CHECKOUT_SECRET=${{ secrets.TEST_CHECKOUT_SECRET }}
           TEST_EMAIL_RECIPIENT=chrisbmosely@gmail.com
           STAFF_NOTIFICATIONS_EMAIL=${{ secrets.STAFF_NOTIFICATIONS_EMAIL || 'chrisbmosely@gmail.com' }}
           GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
