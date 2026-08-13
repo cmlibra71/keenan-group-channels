@@ -15,9 +15,13 @@ import path from "node:path";
  * built, and "pay a quote online" (card 0Wy0xHuq) added a second one that
  * offered staff-only methods to the customer until this test existed.
  *
- * `staffOnly` is an optional parameter so that non-customer callers stay
- * readable; that optionality is exactly what makes a silent omission possible,
- * so it is checked here instead.
+ * `staffOnly` is now a REQUIRED parameter of both entry points, so a two-argument
+ * call no longer compiles. That closes the arity trap but not the whole hole: a
+ * caller can still pass a literal `null` and look deliberate while offering a
+ * staff-only method. So this guard reads the ARGUMENT, not the arity — every call
+ * to either entry point outside the policy module must either name
+ * `staffOnlyPaymentMethods` (customer surfaces) or pass null with the word
+ * "staff" in a comment beside it, so a staff caller opts out in writing.
  */
 
 const SRC = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../..");
@@ -41,19 +45,30 @@ function sourceFiles(dir: string): string[] {
   return out;
 }
 
+// Both halves of the seam: the list a surface RENDERS from, and the predicate it
+// AUTHORIZES with. Guarding only the first let an authorization-only call site
+// (which is all a "pay this invoice" screen needs) walk straight past.
+const ENTRY_POINTS = ["filterPaymentMethodsForAccount(", "isPaymentMethodAllowed("];
+
+// A staff caller opts out in writing: null followed by a comment containing
+// "staff" — see the header. Written as a regex so the comment style is the seam.
+const STAFF_OPT_OUT = /null\s*\/\*\s*staff/i;
+
 test("every customer-facing payment-method list subtracts the account's staff-only methods", () => {
   const offenders: string[] = [];
   for (const file of sourceFiles(SRC)) {
     const src = readFileSync(file, "utf8");
-    let from = 0;
-    for (;;) {
-      const at = src.indexOf("filterPaymentMethodsForAccount(", from);
-      if (at === -1) break;
-      from = at + 1;
-      const end = src.indexOf(")", at);
-      const call = src.slice(at, end === -1 ? src.length : end);
-      if (!call.includes("staffOnlyPaymentMethods")) {
-        offenders.push(path.relative(SRC, file));
+    for (const entry of ENTRY_POINTS) {
+      let from = 0;
+      for (;;) {
+        const at = src.indexOf(entry, from);
+        if (at === -1) break;
+        from = at + 1;
+        const end = src.indexOf(")", at);
+        const call = src.slice(at, end === -1 ? src.length : end);
+        if (!call.includes("staffOnlyPaymentMethods") && !STAFF_OPT_OUT.test(call)) {
+          offenders.push(`${path.relative(SRC, file)} (${entry.slice(0, -1)})`);
+        }
       }
     }
   }

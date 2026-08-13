@@ -21,8 +21,8 @@ const METHODS = [{ id: "stripe" }, { id: "bank_transfer" }, { id: "net_terms" }]
 // --- payment-method allow-list (visibility == authorization) -----------------
 
 test("no allow-list ⇒ every channel method is shown and accepted", () => {
-  assert.deepEqual(filterPaymentMethodsForAccount(METHODS, null), METHODS);
-  for (const m of METHODS) assert.equal(isPaymentMethodAllowed(m.id, null), true);
+  assert.deepEqual(filterPaymentMethodsForAccount(METHODS, null, null), METHODS);
+  for (const m of METHODS) assert.equal(isPaymentMethodAllowed(m.id, null, null), true);
 });
 
 // --- per-method access: staff-only methods are a CUSTOMER-side subtraction ---
@@ -42,11 +42,11 @@ test("staff-only applies even when the account restricts nothing (no allow-list)
   assert.equal(isPaymentMethodAllowed("stripe", null, ["stripe"]), false);
 });
 
-test("no staff-only list leaves the allow-list behaviour exactly as it was", () => {
+test("an empty staff-only list leaves the allow-list behaviour exactly as it was", () => {
   const allowed = ["bank_transfer"];
   assert.deepEqual(
     filterPaymentMethodsForAccount(METHODS, allowed, null).map((m) => m.id),
-    filterPaymentMethodsForAccount(METHODS, allowed).map((m) => m.id)
+    filterPaymentMethodsForAccount(METHODS, allowed, []).map((m) => m.id)
   );
   assert.equal(isPaymentMethodAllowed("bank_transfer", allowed, null), true);
 });
@@ -63,17 +63,17 @@ test("shown ⟺ accepted still holds once staff-only methods are in play", () =>
 
 test("an allow-list narrows the shown methods to exactly the accepted ones", () => {
   const allowed = ["bank_transfer"];
-  const shown = filterPaymentMethodsForAccount(METHODS, allowed);
+  const shown = filterPaymentMethodsForAccount(METHODS, allowed, null);
   assert.deepEqual(shown.map((m) => m.id), ["bank_transfer"]);
   // The invariant: shown ⟺ accepted.
   for (const m of METHODS) {
     const isShown = shown.some((s) => s.id === m.id);
-    assert.equal(isPaymentMethodAllowed(m.id, allowed), isShown);
+    assert.equal(isPaymentMethodAllowed(m.id, allowed, null), isShown);
   }
 });
 
 test("a method outside the allow-list is rejected even if forced", () => {
-  assert.equal(isPaymentMethodAllowed("stripe", ["bank_transfer", "net_terms"]), false);
+  assert.equal(isPaymentMethodAllowed("stripe", ["bank_transfer", "net_terms"], null), false);
 });
 
 // --- minimum-order collapse -------------------------------------------------

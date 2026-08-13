@@ -39,6 +39,7 @@ import { resolveAccountOptions } from "@/lib/checkout/account-options";
 import {
   effectiveMinimums,
   isPaymentMethodAllowed,
+  filterPaymentMethodsForAccount,
   isPaymentMethodOnChannel,
   unavailablePaymentMethodError,
   minimumOrderError,
@@ -60,6 +61,10 @@ import {
   parseFieldDefs,
   validateSubmissionPayload,
 } from "@keenan/services/services";
+import {
+  resolvePaymentAvailability,
+  PAY_UNAVAILABLE_ACCOUNT_ORDER,
+} from "@/lib/checkout/payment-availability";
 
 // Pricing/tax/payment-status computation lives in the pure order-draft module
 // (lib/checkout/order-draft.ts), which delegates GST math to @keenan/services
@@ -431,6 +436,31 @@ export async function placeOrder(
     )
   ) {
     return { error: disallowedPaymentMethodError() };
+  }
+
+  // …and (c) an account that may use NONE of the store's methods. The page shows
+  // that shopper a contact-us line and blocks Place Order; this is the authorization
+  // half, resolved from the same two counts, so a posted form can't slip an unpaid
+  // order past it. The store-has-nothing case is deliberately untouched: that one
+  // still books the order with payment status "pending" (card N8kE8arY, and the
+  // payment-methods register rule that predates it).
+  // Both counts are taken from the CUSTOMER list (enabled minus channel
+  // staff-only, card NmAfwrdE): a store whose only enabled method is staff-only
+  // offers this shopper nothing, and that is the store's configuration, not a
+  // restriction on their account — telling them otherwise sends them to ring a
+  // sales desk that can't help.
+  const offerableMethods = filterPaymentMethodsForAccount(
+    checkoutSettings.customerPaymentMethods,
+    accountOptions?.allowedPaymentMethods ?? null,
+    accountOptions?.staffOnlyPaymentMethods ?? null
+  ).filter((m) => m.id !== "net_terms" || !!netTerms);
+  if (
+    resolvePaymentAvailability(
+      checkoutSettings.customerPaymentMethods.length,
+      offerableMethods.length
+    ) === "account-restricted"
+  ) {
+    return { error: PAY_UNAVAILABLE_ACCOUNT_ORDER };
   }
   const minError = minimumOrderError(
     { subtotalIncTax, itemCount: totalItems },
