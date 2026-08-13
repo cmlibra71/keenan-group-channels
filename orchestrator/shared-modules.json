@@ -116,6 +116,8 @@
     "lib/search-params.ts",
     "lib/seo.ts",
     "lib/staff-email.ts",
+    "lib/storefront-filters.test.ts",
+    "lib/storefront-filters.ts",
     "lib/token.test.ts",
     "lib/token.ts",
     "proxy.ts"
