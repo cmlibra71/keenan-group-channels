@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Check, AlertTriangle, Clock } from "lucide-react";
 import { getSession } from "@/lib/auth";
+import { formatMemberSince } from "@/lib/member-date";
 import { signInRedirect } from "@/lib/account-redirect";
 import {
   getSubscriptionPlans,
@@ -32,6 +33,8 @@ export default async function MembershipPage() {
     getActiveSubscriptionForContact(session.contactId),
     getMemberSince(session.contactId),
   ]);
+  // Melbourne, always — see member-date.ts.
+  const memberSinceLabel = formatMemberSince(memberSince);
 
   // If user has active subscription, show status
   if (activeSub) {
@@ -69,7 +72,7 @@ export default async function MembershipPage() {
               <p className="text-amber-800 text-sm font-medium">
                 Your membership is set to cancel. Benefits remain active until{" "}
                 {activeSub.current_period_end
-                  ? new Date(activeSub.current_period_end).toLocaleDateString()
+                  ? formatMemberSince(activeSub.current_period_end)
                   : "the end of your billing period"}.
               </p>
             </div>
@@ -97,15 +100,11 @@ export default async function MembershipPage() {
                 {isPastDue ? "Past Due" : isCancelling ? "Cancelling" : "Active"}
               </dd>
             </div>
-            {memberSince && (
+            {memberSinceLabel && (
               <div>
                 <dt className="text-zinc-500">Member since</dt>
                 <dd className="font-medium text-zinc-900">
-                  {new Date(memberSince).toLocaleDateString("en-AU", {
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                  })}
+                  {memberSinceLabel}
                 </dd>
               </div>
             )}
@@ -119,7 +118,7 @@ export default async function MembershipPage() {
                   {isCancelling ? "Benefits End" : "Next Billing Date"}
                 </dt>
                 <dd className="font-medium text-zinc-900">
-                  {new Date(activeSub.current_period_end).toLocaleDateString()}
+                  {formatMemberSince(activeSub.current_period_end)}
                 </dd>
               </div>
             )}

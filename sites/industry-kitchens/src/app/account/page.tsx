@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Package, FileText, MapPin, LogOut, Crown, Trophy, Gift, ArrowRight, Calendar, Ticket, KeyRound } from "lucide-react";
 import { getSession } from "@/lib/auth";
+import { formatMemberSince } from "@/lib/member-date";
 import { contactService, getFeatureFlag, getActiveSubscriptionForContact,
   getMemberSince, getUpcomingDraws, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { LoginForm } from "@/components/auth/LoginForm";
@@ -58,6 +59,9 @@ export default async function AccountPage({
   // The date they joined, shown on the member card (card pgRmsaTX). Only asked for
   // when there IS a membership, so a non-member's page costs nothing extra.
   const memberSince = activeSub ? await getMemberSince(session.contactId) : null;
+  // Melbourne, always — the container runs UTC and a UTC-evening sign-up
+  // would otherwise tell the member they joined the day before (member-date.ts).
+  const memberSinceLabel = formatMemberSince(memberSince);
 
   // Fetch draw info for members
   let totalEntries = 0;
@@ -111,14 +115,10 @@ export default async function AccountPage({
                 {customer?.first_name} {customer?.last_name}
               </p>
               <p className="text-sm text-zinc-400">{customer?.email}</p>
-              {memberSince && (
+              {memberSinceLabel && (
                 <p className="text-sm text-zinc-400">
                   Member since{" "}
-                  {new Date(memberSince).toLocaleDateString("en-AU", {
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                  })}
+                  {memberSinceLabel}
                 </p>
               )}
             </div>
