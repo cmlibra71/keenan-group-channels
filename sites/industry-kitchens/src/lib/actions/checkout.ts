@@ -15,6 +15,11 @@ import { setLastOrder } from "@/lib/checkout/last-order";
 import { siteBaseUrl } from "@/lib/seo";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 import {
+  ACCOUNT_REQUIRED_SETTING,
+  SIGN_IN_REQUIRED_MESSAGE,
+  checkoutNeedsSignIn,
+} from "@/lib/checkout/account-required";
+import {
   getContactPermissions,
   accountHasSavedAddress,
   sumContactOrderTotalSince,
@@ -48,6 +53,15 @@ export async function placeOrder(
   formData: FormData
 ): Promise<PlaceOrderResult> {
   const session = await getSession();
+
+  // ── NO GUEST CHECKOUT (per channel). Industry Kitchens sells the way it does on
+  // Zoey: sign in or create an account first (card LQM9FQYe). The checkout PAGE
+  // draws the sign-in step instead of this form for the same shopper — show equals
+  // accept, so the rule is enforced here too and a posted form cannot walk past it.
+  // Unset setting = guest checkout, which is what Chefs Depot keeps (yUNl5TPq).
+  if (checkoutNeedsSignIn(await getFeatureFlag(ACCOUNT_REQUIRED_SETTING), !!session)) {
+    return { error: SIGN_IN_REQUIRED_MESSAGE };
+  }
 
   // Get cart
   const uuid = await getCartUuid();

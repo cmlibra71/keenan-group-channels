@@ -46,6 +46,10 @@ export function AccountPanel({
   const [view, setView] = useState<View>(initialView ?? "login");
   const [loaded, setLoaded] = useState(false);
   const [isPending, startTransition] = useTransition();
+  // Set when someone tries to create a second account on an email that already
+  // has one: they are moved to the sign-in face with that address filled in,
+  // rather than being left on a refusal (cards yUNl5TPq, LQM9FQYe).
+  const [takenEmail, setTakenEmail] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -80,9 +84,16 @@ export function AccountPanel({
   if (view === "register") {
     return (
       <PanelRegisterForm
-        defaultEmail={initialEmail}
+        defaultEmail={takenEmail ?? initialEmail}
         onSuccess={handleAuthSuccess}
-        onSwitchToLogin={() => setView("login")}
+        onSwitchToLogin={() => {
+          setTakenEmail(null);
+          setView("login");
+        }}
+        onEmailTaken={(email) => {
+          setTakenEmail(email);
+          setView("login");
+        }}
       />
     );
   }
@@ -90,9 +101,17 @@ export function AccountPanel({
   if (view === "login" && !session) {
     return (
       <PanelLoginForm
-        defaultEmail={initialEmail}
+        defaultEmail={takenEmail ?? initialEmail}
+        notice={
+          takenEmail
+            ? "You already have an account with this email. Sign in to continue."
+            : undefined
+        }
         onSuccess={handleAuthSuccess}
-        onSwitchToRegister={() => setView("register")}
+        onSwitchToRegister={() => {
+          setTakenEmail(null);
+          setView("register");
+        }}
       />
     );
   }
@@ -110,10 +129,13 @@ export function AccountPanel({
 
 function PanelLoginForm({
   defaultEmail,
+  notice,
   onSuccess,
   onSwitchToRegister,
 }: {
   defaultEmail?: string;
+  /** Why they are looking at this face — e.g. their email already has an account. */
+  notice?: string;
   onSuccess: (info: SessionInfo) => void;
   onSwitchToRegister: () => void;
 }) {
@@ -133,6 +155,12 @@ function PanelLoginForm({
         <User className="h-12 w-12 text-zinc-300 mx-auto" />
         <p className="mt-2 text-zinc-500">Sign in to your account</p>
       </div>
+
+      {notice && (
+        <div className="mb-4 p-3 bg-zinc-50 border border-zinc-200 text-zinc-700 text-sm rounded-lg">
+          {notice}
+        </div>
+      )}
 
       <GoogleSignInButton onSuccess={(session) => onSuccess(session)} />
 
@@ -211,14 +239,22 @@ function PanelRegisterForm({
   defaultEmail,
   onSuccess,
   onSwitchToLogin,
+  onEmailTaken,
 }: {
   defaultEmail?: string;
   onSuccess: (info: SessionInfo) => void;
   onSwitchToLogin: () => void;
+  /** This email already has an account — take them to sign in, don't just refuse. */
+  onEmailTaken: (email: string) => void;
 }) {
   const [state, formAction, isPending] = useActionState(
     async (_prev: { error?: string } | null, formData: FormData) => {
+      const typedEmail = ((formData.get("email") as string) ?? "").trim().toLowerCase();
       const result = await registerFromPanel(formData);
+      if (result.emailTaken) {
+        onEmailTaken(typedEmail);
+        return null;
+      }
       if (result.error) return { error: result.error };
       onSuccess(result.session!);
       return null;
