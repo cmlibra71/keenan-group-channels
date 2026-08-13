@@ -16,6 +16,8 @@ import {
 } from "@/lib/checkout/au-address";
 import { Price } from "@/components/ui/Price";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
+import { FinanceApplicationPanel } from "@/components/checkout/FinanceApplicationPanel";
+import { isFinancePaymentMethod, weeklyAmountForMethod, type FinanceOffer } from "@/lib/checkout/finance";
 import { emailHasAccount } from "@/lib/actions/account-panel";
 import { decideEmailProbe, normaliseEmail } from "@/lib/checkout/account-prompt";
 import { useHeaderPanels } from "@/lib/cart-quote-counts";
@@ -108,6 +110,7 @@ export function CheckoutForm({
   shippingEnabled = false,
   stripePublishableKey,
   testMode = false,
+  finance = null,
 }: {
   items: CartItem[];
   subtotal: number;
@@ -136,6 +139,10 @@ export function CheckoutForm({
   shippingEnabled?: boolean;
   stripePublishableKey?: string;
   testMode?: boolean;
+  /** SilverChef / Finance: the weekly figure and the application form for this
+   *  cart, or null when the cart is under the $1,000 inc GST floor (card
+   *  VAjaPj0t). placeOrder re-resolves it before accepting the order. */
+  finance?: FinanceOffer | null;
 }) {
   const router = useRouter();
   const { open: openPanel } = useHeaderPanels();
@@ -158,6 +165,15 @@ export function CheckoutForm({
   const [stripeError, setStripeError] = useState<string | null>(null);
   const [stripeProcessing, setStripeProcessing] = useState(false);
   const [cardReady, setCardReady] = useState(false);
+  // One upload session per checkout: the licence/Medicare photos are uploaded
+  // as they are picked and claimed by this token when the order is placed.
+  const financeUploadTokenRef = useRef<string | null>(null);
+  if (financeUploadTokenRef.current === null) {
+    financeUploadTokenRef.current =
+      typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}`;
+  }
+  const [financeUploading, setFinanceUploading] = useState(false);
+  const handleFinanceUploading = useCallback((uploading: boolean) => setFinanceUploading(uploading), []);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const stripeRef = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -877,6 +893,14 @@ export function CheckoutForm({
                       />
                       <div>
                         <span className="text-sm font-medium text-ink-900">{method.name}</span>
+                        {/* The weekly rent for the WHOLE order, on the SilverChef
+                            button — Tim, 2026-08-11. Same wording the live IK
+                            site uses on a product ("Rent per Week: $X"). */}
+                        {weeklyAmountForMethod(method.id, finance) !== null && (
+                          <span className="ml-2 inline-block rounded-full bg-ink-900 px-2 py-0.5 text-xs font-semibold text-white">
+                            Rent per Week: ${weeklyAmountForMethod(method.id, finance)!.toFixed(2)}
+                          </span>
+                        )}
                         <p className="text-xs text-steel-500 mt-0.5">{method.description}</p>
                       </div>
                     </label>
@@ -913,6 +937,18 @@ export function CheckoutForm({
                         </p>
                       </div>
                     )}
+
+                    {/* SilverChef / Finance application (card VAjaPj0t) */}
+                    {isFinancePaymentMethod(method.id) &&
+                      selectedPaymentMethod === method.id &&
+                      finance?.eligible && (
+                        <FinanceApplicationPanel
+                          methodId={method.id}
+                          offer={finance}
+                          uploadToken={financeUploadTokenRef.current!}
+                          onUploadingChange={handleFinanceUploading}
+                        />
+                      )}
 
                     {/* Stripe card element */}
                     {method.id === "stripe" && selectedPaymentMethod === "stripe" && stripePublishableKey && (
@@ -1015,12 +1051,22 @@ export function CheckoutForm({
                 isPending ||
                 stripeProcessing ||
                 (selectedPaymentMethod === "stripe" && !cardReady) ||
+                // A photo still going up would arrive AFTER the application had
+                // claimed its attachments, so it would never reach the file.
+                financeUploading ||
                 shippingUnresolved
               }
               className="btn-primary mt-6 w-full"
             >
               {isPending || stripeProcessing ? "Processing..." : selectedPaymentMethod === "stripe" ? "Pay Now" : "Place Order"}
             </button>
+
+            {/* A disabled button must always say why (sf-checkout register). */}
+            {financeUploading && (
+              <p className="mt-2 text-center text-xs text-steel-500">
+                Waiting for your photos to finish uploading…
+              </p>
+            )}
 
             {shippingUnresolved && !shippingLoading && (
               <p className="mt-2 text-center text-xs text-steel-500">
