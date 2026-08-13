@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { placeOrder, confirmStripePayment } from "@/lib/actions/checkout";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
 import {
+  brandFreeShippingMessage,
+  type MatchedBrandSpecial,
+} from "@/lib/checkout/free-shipping-brands-policy";
+import {
   AU_STATES,
   normaliseAuState,
   isValidAuPostcode,
@@ -100,6 +104,7 @@ export function CheckoutForm({
   googlePlacesEnabled = false,
   freeShippingEnabled = false,
   freeShippingThreshold = 500,
+  brandSpecial = null,
   shippingEnabled = false,
   stripePublishableKey,
   testMode = false,
@@ -125,6 +130,9 @@ export function CheckoutForm({
   googlePlacesEnabled?: boolean;
   freeShippingEnabled?: boolean;
   freeShippingThreshold?: number;
+  /** The brand free-shipping special this cart earns, if any (card 88Ay7UGA).
+   *  Resolved on the server and re-resolved by placeOrder before charging. */
+  brandSpecial?: MatchedBrandSpecial | null;
   shippingEnabled?: boolean;
   stripePublishableKey?: string;
   testMode?: boolean;
@@ -275,6 +283,7 @@ export function CheckoutForm({
     isMember: !!isMember,
     amount: subtotal,
     threshold: freeShippingThreshold,
+    brandFreeShipping: !!brandSpecial,
   });
 
   const calculateShippingCost = useCallback(
@@ -983,6 +992,11 @@ export function CheckoutForm({
                   <span className="font-medium text-steel-400">--</span>
                 )}
               </div>
+              {brandSpecial && (
+                <p className="mt-1 text-xs text-brand">
+                  {brandFreeShippingMessage(brandSpecial)}
+                </p>
+              )}
               <div className="flex justify-between text-base font-semibold mt-4 pt-4 border-t border-steel-200">
                 <span>Total</span>
                 <span><Price amount={(pricesIncludeTax ? subtotal : subtotal + gstAmount) + (shippingCost ?? 0)} /></span>

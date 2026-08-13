@@ -2,6 +2,7 @@ import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
 import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, channelSettingsService, CHANNEL_ID } from "@/lib/store";
 import { CartPageClient } from "@/components/cart/CartPageClient";
+import { activeBrandFreeShippingSpecials } from "@/lib/checkout/free-shipping-brands";
 import { Ga4ViewCart } from "@/components/analytics/Ga4ViewCart";
 
 export const metadata = {
@@ -30,9 +31,13 @@ export default async function CartPage() {
   let billingInterval = "month";
   let isMember = false;
 
-  const [subscriptionsEnabled, checkoutSettings] = await Promise.all([
+  const [subscriptionsEnabled, checkoutSettings, brandSpecials] = await Promise.all([
     getFeatureFlag("subscriptions_enabled"),
     getCheckoutSettings(),
+    // Brand free-shipping specials running today (card 88Ay7UGA). Handed to the
+    // island rather than resolved here, because the island re-decides after every
+    // quantity change and removal.
+    activeBrandFreeShippingSpecials(),
   ]);
   if (subscriptionsEnabled && items.length > 0) {
     const session = await getSession();
@@ -70,6 +75,7 @@ export default async function CartPage() {
         isMember={isMember}
         freeShippingEnabled={checkoutSettings.freeShippingEnabled}
         freeShippingThreshold={checkoutSettings.freeShippingThreshold}
+        brandSpecials={brandSpecials}
         upsell={
           showUpsell
             ? {

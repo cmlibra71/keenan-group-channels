@@ -25,3 +25,19 @@ test("does not qualify below threshold", () => {
 test("default threshold constant is 500", () => {
   assert.equal(DEFAULT_FREE_DELIVERY_THRESHOLD, 500);
 });
+
+// ── brand free-shipping special (card 88Ay7UGA) ─────────────────────────────
+
+test("a brand special gives free delivery to a non-member with no minimum", () => {
+  assert.equal(
+    q({ enabled: false, isMember: false, amount: 0, brandFreeShipping: true }),
+    true
+  );
+});
+
+test("no brand special leaves the member threshold exactly as it was", () => {
+  assert.equal(q({ brandFreeShipping: false }), true);
+  assert.equal(q({ isMember: false, brandFreeShipping: false }), false);
+  assert.equal(q({ amount: 10, brandFreeShipping: false }), false);
+  assert.equal(q({ enabled: false, brandFreeShipping: undefined }), false);
+});
