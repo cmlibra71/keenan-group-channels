@@ -113,7 +113,7 @@ export function AccountPeople({ view }: { view: AccountPeopleView }) {
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span className="font-semibold text-text-primary">{m.name}</span>
                   {m.isYou && <span className={PILL}>You</span>}
-                  <span className="text-sm text-text-secondary">{m.email}</span>
+                  {m.email && <span className="text-sm text-text-secondary">{m.email}</span>}
                 </div>
                 <p className="mt-1 text-sm text-text-secondary">
                   {m.roleName || "No role set"}
@@ -123,7 +123,7 @@ export function AccountPeople({ view }: { view: AccountPeopleView }) {
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {m.role.canPayByCard && (
                       <span className={PILL}>
-                        <CreditCard className="h-3 w-3" /> Can pay by card
+                        <CreditCard className="h-3 w-3" /> Can pay invoices by card
                       </span>
                     )}
                     {m.role.canOrderForBusiness && (
@@ -143,6 +143,26 @@ export function AccountPeople({ view }: { view: AccountPeopleView }) {
               </li>
             ))}
           </ul>
+
+          {/* Say what the count can and cannot see. Older orders on this account
+              carry no link to a person, so a 0 against a real buyer must never
+              be read as "they have never ordered". */}
+          {view.members.some((m) => m.activity) && (
+            <p className="text-xs text-text-secondary">
+              Order counts cover this site and are matched to a person by their sign-in or
+              email address.
+              {view.unattributedOrders > 0
+                ? ` A further ${view.unattributedOrders} ${view.unattributedOrders === 1 ? "order" : "orders"} on this account — mostly older ones placed with our team — can't be matched to one person, so they aren't counted above.`
+                : ""}
+            </p>
+          )}
+
+          {!view.showsContactDetails && (
+            <p className="text-xs text-text-secondary">
+              Your role shows you who is on the account and what they can do. Email addresses
+              and phone numbers are only shown to the account manager.
+            </p>
+          )}
         </section>
       )}
 
@@ -182,7 +202,7 @@ export function AccountPeople({ view }: { view: AccountPeopleView }) {
                       <div className="mt-1.5 flex flex-wrap gap-1.5">
                         {role.canPayByCard && (
                           <span className={PILL}>
-                            <CreditCard className="h-3 w-3" /> Can pay by card
+                            <CreditCard className="h-3 w-3" /> Can pay invoices by card
                           </span>
                         )}
                         {role.canOrderForBusiness && (
@@ -195,8 +215,8 @@ export function AccountPeople({ view }: { view: AccountPeopleView }) {
                     )}
                     <p className="mt-1 text-xs text-text-secondary">
                       {row.receivesEmails
-                        ? "Included on the account's emails"
-                        : "Not included on the account's emails"}
+                        ? "You've asked for them to be kept in the loop on orders and deliveries"
+                        : "Not asked to be kept in the loop on orders and deliveries"}
                     </p>
                   </div>
                   {view.canEdit && (
@@ -295,6 +315,12 @@ export function AccountPeople({ view }: { view: AccountPeopleView }) {
                       </p>
                     )}
                   </div>
+                  {/* HONEST LABEL. This tick is a PREFERENCE recorded for our
+                      team — nothing on the site reads it to send mail. Account
+                      emails go out on the ROLE's own subscription
+                      (`receive_email_for_*`), which only a real member can hold.
+                      Word it as a promise ("they will get the emails") only once
+                      a sender actually honours it. */}
                   <div className="sm:pt-6">
                     <label className="flex items-start gap-2 text-sm text-text-secondary">
                       <input
@@ -303,7 +329,13 @@ export function AccountPeople({ view }: { view: AccountPeopleView }) {
                         onChange={(e) => update(i, { receivesEmails: e.target.checked })}
                         className="mt-0.5"
                       />
-                      Include them on the account&rsquo;s emails (orders, invoices, deliveries)
+                      <span>
+                        Keep them in the loop on orders and deliveries
+                        <span className="mt-0.5 block text-xs text-text-secondary">
+                          We&rsquo;ll set this up for you — ticking it doesn&rsquo;t start the
+                          emails on its own.
+                        </span>
+                      </span>
                     </label>
                   </div>
                 </div>

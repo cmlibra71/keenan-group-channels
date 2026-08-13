@@ -279,6 +279,17 @@ export async function saveAccountPeople(people: AccountPerson[]): Promise<{
     // the main-contact roles). A refusal is enforced here, not only in the UI:
     // a stale page must not be able to write the list.
     const previousView = await loadAccountPeople(session.contactId);
+    // The role resolver FAILS OPEN by design (a DB hiccup must never brick
+    // checkout). That is the wrong trade here: without it we cannot tell whether
+    // this person's list belongs to an account or to their own contact row, and
+    // guessing "contact" would drop a manager's edit somewhere no colleague can
+    // ever see, silently. Refuse and say so instead.
+    if (previousView.permissionsUnavailable) {
+      return {
+        success: false,
+        error: "We couldn't check your account just now, so nothing was saved. Please try again in a moment.",
+      };
+    }
     if (!previousView.canEdit) {
       return {
         success: false,
@@ -296,12 +307,24 @@ export async function saveAccountPeople(people: AccountPerson[]): Promise<{
       if (!sql) throw new Error("Commerce database is not initialised.");
       // ::text::jsonb — a bare ::jsonb cast on a bound string stores a JSON
       // *scalar* under prepare:false (postgres_jsonb_text_cast).
+      //
+      // `updated_at` is deliberately NOT stamped: a customer tidying their own
+      // contact list would otherwise jump their company to the top of every
+      // staff list sorted by last-updated (same call as the 1kT6phnK backfill).
       await sql`
         UPDATE accounts
         SET metafields = COALESCE(metafields, '{}'::jsonb)
-                       || jsonb_build_object('account_contacts', ${payload}::text::jsonb),
-            updated_at = NOW()
+                       || jsonb_build_object('account_contacts', ${payload}::text::jsonb)
         WHERE id = ${accountId}`;
+      // Retire this contact's own legacy copy in the same breath. The read path
+      // falls back to the contact's list only while the account has none, so
+      // leaving it behind means a customer who deletes everyone and saves gets
+      // the old rows back on reload — the list would be un-emptyable.
+      await sql`
+        UPDATE contacts
+        SET metafields = COALESCE(metafields, '{}'::jsonb) - 'account_contacts'
+        WHERE id = ${session.contactId}
+          AND metafields ? 'account_contacts'`;
     } else {
       const contact = await contactService.getById(session.contactId);
       const metafields = {
