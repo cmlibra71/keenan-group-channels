@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Package, FileText, MapPin, LogOut, Crown, Trophy, Gift, ArrowRight, Calendar, Ticket, KeyRound } from "lucide-react";
+import { Package, FileText, MapPin, LogOut, Crown, Trophy, Gift, ArrowRight, Calendar, Ticket, KeyRound, Wallet } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { formatMemberSince } from "@/lib/member-date";
 import { contactService, getFeatureFlag, getActiveSubscriptionForContact,
@@ -9,6 +9,7 @@ import { safeNextPath, signInPrompt } from "@/lib/account-redirect";
 import { normaliseEmail, looksLikeEmail } from "@/lib/checkout/account-prompt";
 import { logout } from "@/lib/actions/auth";
 import { AccountShell } from "@/components/account/AccountShell";
+import { readStatementAccess } from "@/lib/account/statement-visibility";
 
 export const metadata = {
   title: "Account",
@@ -40,7 +41,7 @@ export default async function AccountPage({
     );
   }
 
-  const [customer, subscriptionsEnabled, drawsEnabled, partnerOffersEnabled] =
+  const [customer, subscriptionsEnabled, drawsEnabled, partnerOffersEnabled, statementAccess] =
     await Promise.all([
       contactService.getById(session.contactId) as Promise<{
         first_name: string;
@@ -50,6 +51,9 @@ export default async function AccountPage({
       getFeatureFlag("subscriptions_enabled"),
       getFeatureFlag("draws_enabled"),
       getFeatureFlag("partner_offers_enabled"),
+      // Card k6pHXQBf — the statement card is shown only to the account's Manager / Billing
+      // contacts. Request-cached, so the menu beside this grid asked the same question once.
+      readStatementAccess(),
     ]);
 
   const activeSub = subscriptionsEnabled
@@ -261,6 +265,18 @@ export default async function AccountPage({
             <p className="text-sm text-zinc-500">View and track your quotes</p>
           </div>
         </Link>
+        {statementAccess.visible && (
+          <Link
+            href="/account/statement"
+            className="flex items-center gap-4 border border-zinc-200 rounded-lg p-6 hover:border-zinc-400 transition-colors"
+          >
+            <Wallet className="h-8 w-8 text-zinc-400" />
+            <div>
+              <h3 className="font-semibold text-zinc-900">Statement</h3>
+              <p className="text-sm text-zinc-500">What your account owes, and its history</p>
+            </div>
+          </Link>
+        )}
         {/* Non-member draws and partner offers */}
         {drawsEnabled && !activeSub && (
           <Link
