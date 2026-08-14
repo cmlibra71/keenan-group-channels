@@ -97,20 +97,6 @@ export default async function CheckoutPage() {
     .filter((m) => m.id !== "net_terms" || !!netTerms)
     .map((m) => (m.id === "net_terms" && netTerms ? { ...m, netTermsDays: netTerms.netTermsDays } : m));
 
-  // Nothing left to offer means one of two very different things, and the customer
-  // must be told the right one: the STORE has no methods switched on (order still
-  // placed, invoiced later — unchanged), or this ACCOUNT may use none of the store's
-  // methods, in which case we refuse rather than book an unpaid order. placeOrder
-  // resolves the same two counts and refuses the same case (card N8kE8arY).
-  //
-  // "What the STORE offers" is the CUSTOMER-facing count, not the enabled count: a
-  // store whose only enabled method is staff-only offers a shopper nothing at all,
-  // and must say so rather than blame the shopper's account (card NmAfwrdE).
-  const paymentAvailability = resolvePaymentAvailability(
-    checkoutSettings.customerPaymentMethods.length,
-    entitledPaymentMethods.length
-  );
-
   const subtotal = parseFloat(cart.cart_amount ?? "0");
 
   // Brand free-shipping special (card 88Ay7UGA): any line from a promoted brand
@@ -153,6 +139,27 @@ export default async function CheckoutPage() {
       })
     : null;
   const paymentMethods = filterFinanceMethods(entitledPaymentMethods, !!financeOffer?.eligible);
+
+  // Nothing left to offer means one of two very different things, and the customer
+  // must be told the right one: the STORE has no methods switched on (order still
+  // placed, invoiced later — unchanged), or this ACCOUNT may use none of the store's
+  // methods, in which case we refuse rather than book an unpaid order. placeOrder
+  // resolves the same two counts and refuses the same case (card N8kE8arY).
+  //
+  // "What the STORE offers" is the CUSTOMER-facing count, not the enabled count: a
+  // store whose only enabled method is staff-only offers a shopper nothing at all,
+  // and must say so rather than blame the shopper's account (card NmAfwrdE).
+  //
+  // Both counts are taken AFTER the finance floor, and the offered one is the list
+  // actually rendered below: resolving it off `entitledPaymentMethods` counted
+  // methods the shopper cannot see, so a cart under $1,000 whose only surviving
+  // methods were SilverChef/Finance read "available" with an empty list and Place
+  // Order still enabled. The count and the rendered list must be the same list.
+  const paymentAvailability = resolvePaymentAvailability(
+    filterFinanceMethods(checkoutSettings.customerPaymentMethods, !!financeOffer?.eligible).length,
+    paymentMethods.length,
+    !!session
+  );
   // The application form has to exist before its attachment uploads can be
   // accepted, and it is a shared definition rather than hand-made data — so it
   // is provisioned on first use. Never fatal: a checkout must not fail because
