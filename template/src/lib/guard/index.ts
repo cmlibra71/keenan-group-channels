@@ -9,7 +9,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { clientIpFromHeaders, ipBucketKey } from "../client-ip";
-import { classifySurface } from "./surfaces";
+import { classifyActionSurface, classifySurface } from "./surfaces";
 import { classifyBot, isAllowlistedIp } from "./bots";
 import { createLimiter, type Verdict } from "./limiter";
 import { getSharedStore } from "./store";
@@ -43,6 +43,16 @@ const PREFETCH_WEIGHT = 0.25;
  * cheapest mitigation available for a NAT'd office sharing one egress IP.
  */
 const SESSION_WEIGHT = 1 / 3;
+
+/**
+ * A /search load-more action runs ONE Meilisearch query; a /search PAGE render
+ * runs six (results plus brand, category and three price-band counts). Charging
+ * the action a third of a page view keeps it honestly on the `search` budget
+ * while leaving a real shopper room to reach the bottom: one full continuous
+ * scroll to the 320-result cap is one page render plus seven actions, about 3.3
+ * of the 8-request burst allowance, so scrolling can never rate-limit itself.
+ */
+const SEARCH_ACTION_WEIGHT = 1 / 3;
 
 let limiter: ReturnType<typeof createLimiter> | null = null;
 function getLimiter() {
@@ -106,18 +116,19 @@ export function guardRequest(req: NextRequest): NextResponse | null {
 
   try {
     const { pathname } = req.nextUrl;
-    let surface = classifySurface(pathname);
+    // Server actions POST to ordinary page paths, so they get their own
+    // classification (see classifyActionSurface) — generally `api`, but never
+    // for /search, whose tight budget exists because of the work its action does.
+    const isAction = Boolean(req.headers.get("next-action"));
+    const surface = isAction ? classifyActionSurface(pathname) : classifySurface(pathname);
     if (surface === "exempt") return null;
-
-    // Server actions POST to ordinary page paths (checkout fires several), so
-    // they must not be charged against the page budget.
-    if (req.headers.get("next-action")) surface = "api";
 
     const ip = clientIpFromHeaders(req.headers);
     const ipKey = ipBucketKey(ip);
 
     let weight = 1;
     if (req.headers.get("next-router-prefetch")) weight *= PREFETCH_WEIGHT;
+    if (isAction && surface === "search") weight *= SEARCH_ACTION_WEIGHT;
     if (req.cookies.get("session")) weight *= SESSION_WEIGHT;
 
     const tier = classifyBot(req.headers);

@@ -62,6 +62,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ revalidated: true });
   }
 
+  // kind "site_config" is the portal saving Storefront > Logo (or another field on
+  // the site row): logo, alt text, favicon, store name. Every one of those reads
+  // comes out of getSiteConfig, which is cached for an hour under the "site-config"
+  // tag — without this purge a saved logo takes up to an hour to appear on the
+  // storefront (card oz50xMf0). Targeted like "product"/"brand_seo" above: the site
+  // row is all that changed, so the broad channel bust (and its multi-second
+  // mega-menu / category-tree recompute) is not warranted.
+  if (kind === "site_config") {
+    purge("site-config");
+    return NextResponse.json({ revalidated: true });
+  }
+
   // Broad bust (covers nav/settings reads), then the page-specific tag.
   // kind "catalog" (the Zoey ingestor's storefront_revalidate node) is just
   // the broad bust: nav / category tree / product pages pick up ingest writes
