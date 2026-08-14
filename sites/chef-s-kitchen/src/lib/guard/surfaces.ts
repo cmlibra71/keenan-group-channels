@@ -162,3 +162,24 @@ export function classifySurface(pathname: string): SurfaceClass {
 
   return "page";
 }
+
+/**
+ * The budget a SERVER ACTION posted to `pathname` is charged against.
+ *
+ * Actions POST to ordinary page paths (checkout fires several), so charging them
+ * to the PAGE budget would have a single checkout look like several page views —
+ * hence the generic `api` class.
+ *
+ * `/search` is the one exception, and it is a security bound rather than a
+ * nicety: the `search` budget is deliberately the tightest on the site because a
+ * /search render fans out into six Meilisearch queries and falls back to
+ * uncached Postgres, and the search feed's load-more action does that same work.
+ * Letting it inherit `api` (60/burst, 400 per 5 min against search's 8 and 50)
+ * would open a second, eight-times-cheaper door onto exactly the catalogue
+ * enumeration the tight budget exists to stop.
+ */
+export function classifyActionSurface(pathname: string): SurfaceClass {
+  const surface = classifySurface(pathname);
+  if (surface === "exempt" || surface === "search") return surface;
+  return "api";
+}

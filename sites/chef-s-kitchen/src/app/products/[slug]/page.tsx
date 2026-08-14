@@ -9,6 +9,7 @@ import { ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { renderProductNodeBranch } from "@/builder/product-node-branch";
+import { readProductKit } from "@/lib/product-kit";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 import {
   ProductBuyBox,
@@ -267,6 +268,9 @@ export default async function ProductPage({
       membershipTeaser,
       brandName: brandRow?.name ?? null,
       reviewSummary,
+      // Grouped / bundle contents (Zoey product types, authored in the portal — they ride
+      // products.metafields, which is portal-owned). Null for every other product.
+      kit: readProductKit(product.metafields),
     },
     links: {
       brandRow:
@@ -321,6 +325,8 @@ export default async function ProductPage({
         brand: brandRow?.name ?? null,
       },
       draft,
+      // Grouped / bundle contents, for the sealed `product-kit` leaf.
+      nativeData: { kit: readProductKit(product.metafields) },
     });
     if (nodeRendered) return nodeRendered;
   }

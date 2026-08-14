@@ -22,6 +22,8 @@ export type CartItemRow = {
   product_sku: string | null;
   variant_sku: string | null;
   variant_option_name: string | null;
+  /** The product's brand, carried so the island can decide brand free shipping (card 88Ay7UGA). */
+  brand_id?: number | null;
 };
 
 export function CartItemsList({

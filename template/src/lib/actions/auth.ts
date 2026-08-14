@@ -67,9 +67,9 @@ export async function login(
 }
 
 export async function register(
-  _prev: { error?: string } | null,
+  _prev: { error?: string; emailTaken?: boolean } | null,
   formData: FormData
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; emailTaken?: boolean }> {
   const firstName = (formData.get("firstName") as string)?.trim();
   const lastName = (formData.get("lastName") as string)?.trim();
   const email = (formData.get("email") as string)?.trim().toLowerCase();
@@ -93,8 +93,15 @@ export async function register(
   // (account enumeration). String-identical whether the email is held by a B2B
   // contact or an accountless shopper; the account-activation email flow is the
   // only path in for a B2B-owned address.
+  // `emailTaken` only marks WHICH refusal this is, so the form can offer the sign-in
+  // the copy already tells them to use. The wording is unchanged and still says the
+  // same thing whether the address belongs to a B2B contact or an accountless
+  // shopper, so nothing new is revealed.
   if (!(await contactService.isEmailAvailableForChannel(email, CHANNEL_ID))) {
-    return { error: "We couldn't complete your registration. If you already have an account, please sign in." };
+    return {
+      error: "We couldn't complete your registration. If you already have an account, please sign in.",
+      emailTaken: true,
+    };
   }
 
   let contact;
@@ -114,7 +121,10 @@ export async function register(
   } catch (e) {
     if (e instanceof EmailTakenError) {
       // Register race — same neutral copy as the availability pre-check.
-      return { error: "We couldn't complete your registration. If you already have an account, please sign in." };
+      return {
+        error: "We couldn't complete your registration. If you already have an account, please sign in.",
+        emailTaken: true,
+      };
     }
     throw e;
   }

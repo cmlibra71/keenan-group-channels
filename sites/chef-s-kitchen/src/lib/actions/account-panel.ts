@@ -82,8 +82,17 @@ export async function loginFromPanel(formData: FormData): Promise<{
   };
 }
 
+/**
+ * Create an account from the drawer.
+ *
+ * `emailTaken` is the caller's cue to SEND THEM TO SIGN IN rather than leave them
+ * staring at a refusal — the complaint behind cards yUNl5TPq / LQM9FQYe. It says
+ * nothing the error copy on this path did not already say, so it leaks nothing
+ * new; the neutral wording on the full-page register action is unchanged.
+ */
 export async function registerFromPanel(formData: FormData): Promise<{
   error?: string;
+  emailTaken?: boolean;
   session?: PanelSession;
 }> {
   const firstName = (formData.get("firstName") as string)?.trim();
@@ -109,7 +118,7 @@ export async function registerFromPanel(formData: FormData): Promise<{
 
   // Same copy for B2B-owned and accountless-taken emails (enumeration safety).
   if (!(await contactService.isEmailAvailableForChannel(email, CHANNEL_ID))) {
-    return { error: "An account with this email already exists." };
+    return { error: "An account with this email already exists.", emailTaken: true };
   }
 
   let contact;
@@ -124,7 +133,7 @@ export async function registerFromPanel(formData: FormData): Promise<{
     });
   } catch (e) {
     if (e instanceof EmailTakenError) {
-      return { error: "An account with this email already exists." };
+      return { error: "An account with this email already exists.", emailTaken: true };
     }
     throw e;
   }

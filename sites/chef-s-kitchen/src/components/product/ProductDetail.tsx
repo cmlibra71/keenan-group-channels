@@ -10,6 +10,7 @@
 // the contract; do not restyle here without a parity gate.
 // ============================================================================
 
+import { useState } from "react";
 import Link from "next/link";
 import { AddToCartButton } from "./AddToCartButton";
 import { AddToQuoteButton } from "./AddToQuoteButton";
@@ -19,8 +20,14 @@ import { PriceBlock } from "@/components/ui/PriceBlock";
 import { Minus, Plus, Truck, ShieldCheck } from "lucide-react";
 import { useProductPurchase } from "./ProductPurchaseProvider";
 import { useGst } from "@/lib/gst";
+import { ProductKitBlock } from "./ProductKitBlock";
+import { defaultKitSelection, toKitChoices, type ProductKit } from "@/lib/product-kit";
 
-export function ProductDetail() {
+/**
+ * `kit` is present only for the two Zoey kit types (grouped / bundle). Every other caller — the
+ * CMS v2 widgets, the builder natives — renders this exactly as before by simply not passing one.
+ */
+export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
   const {
     product,
     isMember,
@@ -44,6 +51,19 @@ export function ProductDetail() {
   // The sticky buy bar labels its own figure. It used to hard-code "ex GST",
   // which was only ever invisible because CD phones had no way to switch.
   const { inclusive } = useGst();
+
+  // A bundle's configuration lives here rather than in the purchase provider: it never becomes a
+  // cart price (it is quoted), so it has no business in the pricing state the two storefronts and
+  // the portal editor share.
+  const [kitSelection, setKitSelection] = useState<Record<string, number>>(() =>
+    kit?.kind === "bundle" ? defaultKitSelection(kit.groups) : {}
+  );
+  const isBundle = kit?.kind === "bundle";
+  const kitReady = !isBundle || kit.groups.every((g) => kitSelection[g.name] != null);
+  const kitChoices = isBundle ? toKitChoices(kitSelection) : null;
+  // A bundle is never bought straight off the page — its configuration goes to a rep, so the
+  // quantity stepper, Add to Cart and the mobile buy bar are all out.
+  const canBuyNow = displayPrice > 0 && !isBundle;
 
   return (
     <div>
@@ -123,9 +143,18 @@ export function ProductDetail() {
         </div>
       )}
 
+      {/* Kit contents (grouped) / choice groups (bundle) */}
+      {kit && (
+        <ProductKitBlock
+          kit={kit}
+          selection={kitSelection}
+          onSelect={(group, id) => setKitSelection((prev) => ({ ...prev, [group]: id }))}
+        />
+      )}
+
       {/* ═══ Qty + dual CTAs (design buy row) ═══ */}
       <div className="mt-6 flex flex-wrap items-stretch gap-3">
-        {displayPrice > 0 && (
+        {canBuyNow && (
           <div className="flex items-center rounded-btn border border-border-strong bg-white">
             <button
               type="button"
@@ -147,7 +176,7 @@ export function ProductDetail() {
           </div>
         )}
         <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row">
-          {displayPrice > 0 ? (
+          {canBuyNow ? (
             <>
               <AddToCartButton
                 productId={productId}
@@ -168,7 +197,8 @@ export function ProductDetail() {
             <AddToQuoteButton
               productId={productId}
               variantId={cartVariantId}
-              disabled={useGroupedMode && !allOptionsSelected}
+              disabled={(useGroupedMode && !allOptionsSelected) || !kitReady}
+              kitChoices={kitChoices}
               label="Add to Quote — request pricing"
             />
           )}
@@ -190,7 +220,7 @@ export function ProductDetail() {
       </div>
 
       {/* ═══ Mobile sticky buy bar ═══ */}
-      {displayPrice > 0 && (
+      {canBuyNow && (
         <div className="fixed inset-x-0 bottom-0 z-[90] flex items-center justify-between gap-3 border-t border-border bg-white px-4 py-3 shadow-lg lg:hidden">
           <div className="min-w-0">
             <Price

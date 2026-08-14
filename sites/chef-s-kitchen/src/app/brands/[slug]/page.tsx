@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { draftMode, headers } from "next/headers";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
@@ -13,6 +14,35 @@ import { BLOCK_REGISTRY } from "@keenan/services";
 import { buildPartialResolver } from "@/blocks/partials";
 import imageLoader from "@/lib/image-loader";
 import { CardPartialGrid } from "@/blocks/widgets-server";
+
+/**
+ * Brand pages had no title or description of their own, so every one of them inherited
+ * the site default — the worst possible state for a page whose whole job is to rank for
+ * a brand name. The wording comes from THIS storefront's own approved brand-page copy
+ * (overlaid onto the shared brand row by the channel store), falling back to the shared
+ * brand fields and finally to the brand name. Brands are shared records but brand PAGES
+ * are per site: one text on both sites is what makes them compete. (Card xvz6pXB4.)
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const brand = (await getBrandBySlug(slug).catch(() => null)) as
+    | {
+        name: string;
+        seo_page_title?: string | null;
+        page_title: string | null;
+        meta_description: string | null;
+      }
+    | null;
+  if (!brand) return {};
+  return {
+    title: brand.seo_page_title || brand.page_title || brand.name,
+    description: brand.meta_description || undefined,
+  };
+}
 
 export default async function BrandPage({
   params,

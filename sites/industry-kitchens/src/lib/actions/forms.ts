@@ -9,6 +9,7 @@ import {
   renderThankYouCopy,
   parseFieldDefs,
   cmsFormService,
+  applyMarketingOptIn,
 } from "@keenan/services/services";
 import {
   resolveEmailBranding,
@@ -125,6 +126,23 @@ async function deliverNotifications(ctx: {
 }) {
   const { submission, form, files } = ctx;
   const submissionId = submission.id as number;
+
+  // ── Marketing opt-in ──
+  // Only when the visitor ticked the box the form author tagged as the
+  // marketing opt-in. It records consent on their contact record and hands the
+  // address to Klaviyo; an unticked box does nothing at all, and a failure here
+  // is recorded on the enquiry rather than raised at the customer.
+  if (submission.marketing_opt_in === true) {
+    await applyMarketingOptIn({
+      submissionId,
+      channelId: CHANNEL_ID,
+      email: (submission.submitter_email as string) || null,
+      name: (submission.submitter_name as string) || null,
+      formName: String(form.name ?? "Enquiry"),
+      contactId: (submission.contact_id as number | null) ?? null,
+    }).catch((e) => console.error("[submitForm] marketing opt-in failed:", e));
+  }
+
   const branding = await resolveEmailBranding(CHANNEL_ID).catch(() => undefined);
   const fieldDefs = parseFieldDefs(form.fields);
   const payload = (submission.payload ?? {}) as Record<string, unknown>;
