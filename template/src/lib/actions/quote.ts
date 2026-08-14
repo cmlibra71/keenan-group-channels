@@ -168,6 +168,13 @@ export async function addToQuote(
       quantity: 1,
       listPrice,
       salePrice,
+      // WHO PUT THIS PRICE HERE: the customer did, off the catalogue, through
+      // `layerCartPrice` above. `price_source` is what decides whether a line is
+      // ever repriced again, and its old default said `manual` — a price a sales
+      // manager typed, which is never re-derived — so a customer's own line was
+      // frozen at the price it was added at for life (card laFQveZT). Say it out
+      // loud here; the service will not guess it for us.
+      priceSource: "customer",
       ...(lineAttributes ? { attributes: lineAttributes, customerNotes: lineNotes } : {}),
     });
   }
@@ -523,6 +530,9 @@ export async function duplicateQuote(quoteId: number) {
         quantity: Number(it.quantity) || 1,
         listPrice: (it.list_price as string) ?? "0",
         salePrice: (it.sale_price as string) ?? null,
+        // The copy keeps the original line's provenance, and a line with none
+        // recorded is the customer's own (card laFQveZT).
+        priceSource: (it.price_source as string) || "customer",
       });
     } catch { /* skip a failing line */ }
   }
