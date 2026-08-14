@@ -224,10 +224,24 @@ export default async function CheckoutPage() {
 
   // Resolve the channel's Stripe gateway (test-vs-live aware, prod-safe fallback)
   // from the global payment_gateways setting. All channels share one Stripe
-  // account; segmentation happens via metadata. wantTestMode also drives the
-  // TEST MODE banner shown on the payment options.
-  const { gateway: stripeGateway, wantTestMode } = await resolveStripeGateway();
+  // account; segmentation happens via metadata.
+  //
+  // `testSession` is true ONLY while this browser holds an ephemeral test checkout
+  // session (a short-lived signed cookie; nothing stored anywhere, no setting a
+  // human can leave switched on). It is the sole input to the on-screen "test
+  // mode, no money will be taken" banner, so the banner cannot be rendered
+  // without one.
+  const { gateway: stripeGateway, testSession } = await resolveStripeGateway();
   const stripePublishableKey: string | undefined = stripeGateway?.credentials?.publishable_key;
+
+  // A test checkout session that cannot resolve a TEST gateway must refuse to take
+  // payment, never fall back to live: this browser was told no money would be
+  // taken. Drop the card option entirely rather than mounting Elements on a live
+  // key or leaving a Pay button that would charge a real card.
+  const cardUnavailableInTestSession = testSession && !stripePublishableKey;
+  const offeredPaymentMethods = cardUnavailableInTestSession
+    ? paymentMethods.filter((m) => m.id !== "stripe")
+    : paymentMethods;
 
   // Check if shipping rate calculation is available
   let shippingEnabled = false;
@@ -310,7 +324,7 @@ export default async function CheckoutPage() {
         contactPrefill={contactPrefill}
         canSaveNewAddress={canSaveNewAddress}
         countries={checkoutSettings.supportedCountries}
-        paymentMethods={paymentMethods}
+        paymentMethods={offeredPaymentMethods}
         paymentAvailability={paymentAvailability}
         savedAddresses={savedAddresses}
         googlePlacesEnabled={checkoutSettings.googlePlacesEnabled}
@@ -319,7 +333,8 @@ export default async function CheckoutPage() {
         brandSpecial={brandSpecial}
         shippingEnabled={shippingEnabled}
         stripePublishableKey={stripePublishableKey}
-        testMode={wantTestMode}
+        testMode={testSession}
+        testModeCardUnavailable={cardUnavailableInTestSession}
         finance={financeOffer}
       />
     </div>

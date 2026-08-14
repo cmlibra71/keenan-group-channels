@@ -120,6 +120,7 @@ export function CheckoutForm({
   shippingEnabled = false,
   stripePublishableKey,
   testMode = false,
+  testModeCardUnavailable = false,
   finance = null,
 }: {
   items: CartItem[];
@@ -152,7 +153,16 @@ export function CheckoutForm({
   brandSpecial?: MatchedBrandSpecial | null;
   shippingEnabled?: boolean;
   stripePublishableKey?: string;
+  /**
+   * True ONLY while this browser holds an ephemeral test checkout session (a
+   * short-lived signed cookie granted behind a server-side secret). It is not a
+   * setting and cannot be left switched on. The server passes it; there is no
+   * client-side way to turn it on, so the banner below cannot be rendered
+   * without a real test session behind it.
+   */
   testMode?: boolean;
+  /** Test session active but no TEST gateway configured: card is refused, not faked. */
+  testModeCardUnavailable?: boolean;
   /** SilverChef / Finance: the weekly figure and the application form for this
    *  cart, or null when the cart is under the $1,000 inc GST floor (card
    *  VAjaPj0t). placeOrder re-resolves it before accepting the order. */
@@ -884,15 +894,55 @@ export function CheckoutForm({
           {/* Payment Method */}
           <div className="border border-zinc-200 rounded-lg p-6">
             <h2 className="text-lg font-semibold text-zinc-900 mb-4">Payment Method</h2>
+            {/* TEST CHECKOUT SESSION banner. `testMode` comes from the server and is
+                true only while this browser holds the short-lived signed cookie, so
+                this cannot be shown without a real test session behind it — and a
+                real test session cannot exist without this being shown. A tester must
+                never have to wonder whether they just spent money. */}
             {testMode && (
-              <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                <span aria-hidden className="text-base leading-none">🧪</span>
-                <span>
-                  <strong>Test mode</strong> — this is a test transaction and no real payment is
-                  taken. Card payments use the <strong>test</strong> Stripe account; pay with{" "}
-                  <span className="font-mono">4242&nbsp;4242&nbsp;4242&nbsp;4242</span>, any future
-                  expiry, any CVC.
-                </span>
+              <div
+                data-testid="test-checkout-banner"
+                className="mb-4 rounded-lg border-2 border-amber-500 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+              >
+                <p className="flex items-start gap-2 font-semibold">
+                  <span aria-hidden className="text-base leading-none">🧪</span>
+                  <span>
+                    TEST MODE — no money will be taken. Do not use a real card.
+                  </span>
+                </p>
+                {testModeCardUnavailable ? (
+                  <p className="mt-2">
+                    Card payment is <strong>switched off</strong> for this test session because no
+                    test Stripe gateway is configured. Rather than risk charging a real card, card
+                    payment has been removed from the options below.
+                  </p>
+                ) : (
+                  <>
+                    <p className="mt-2">
+                      This checkout is running on the <strong>test</strong> Stripe account. Stripe
+                      still authorises the card for real against that account, so use one of its
+                      test numbers — any future expiry, any CVC, any postcode:
+                    </p>
+                    <ul className="mt-2 space-y-1">
+                      <li>
+                        <span className="font-mono">4242 4242 4242 4242</span> — succeeds
+                      </li>
+                      <li>
+                        <span className="font-mono">4000 0000 0000 0002</span> — declined
+                      </li>
+                      <li>
+                        <span className="font-mono">4000 0025 0000 3155</span> — asks for 3D Secure
+                      </li>
+                      <li>
+                        <span className="font-mono">4000 0000 0000 9995</span> — insufficient funds
+                      </li>
+                    </ul>
+                    <p className="mt-2">
+                      The session expires on its own; nothing is switched on anywhere and there is
+                      nothing to switch back.
+                    </p>
+                  </>
+                )}
               </div>
             )}
             {paymentMethods.length > 0 ? (

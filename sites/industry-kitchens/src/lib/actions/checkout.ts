@@ -5,6 +5,7 @@ import { cartService, cartItemService, orderService, orderItemService, orderShip
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
+import { hasTestCheckoutSession } from "@/lib/checkout/test-session";
 import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveEmailBranding, wantsStripeTestMode, productImageService, type EmailLineItem } from "@keenan/services";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, type BelowCostLine } from "@/lib/checkout/order-draft";
 import { getLineCosts } from "@/lib/store";
@@ -520,10 +521,17 @@ export async function placeOrder(
   const effectivePaymentMethod = nothingToPay ? "" : paymentMethod;
   const paymentStatus = determinePaymentStatus(effectivePaymentMethod);
 
-  // Tag orders created while this channel is in payments test mode so they can be
-  // cleared later from the portal. Only storefront orders are tagged — Zoey/backfill
-  // imports go through the service layer directly and are never marked test.
-  const isTestMode = await wantsStripeTestMode(CHANNEL_ID);
+  // Is this order being raised inside an EPHEMERAL test checkout session? That is a
+  // property of THIS browser session only (a short-lived signed cookie granted
+  // behind a server-side secret) — never a stored mode the shop can be left in.
+  // Outside such a session the environment default applies: production is live.
+  //
+  // Two separate consequences, deliberately kept apart below:
+  //   - testCheckoutSession forces the Stripe TEST secret key for the intent, and
+  //     is refused outright if no test gateway exists (never falls back to live).
+  //   - isTestMode tags the order/emails so test data can be cleared later.
+  const testCheckoutSession = await hasTestCheckoutSession();
+  const isTestMode = testCheckoutSession || (await wantsStripeTestMode(CHANNEL_ID));
 
   // Stamp test-mode marker + (for net-terms orders) the actual term length used,
   // so the confirmation page / invoice email show the customer's real terms.
@@ -581,6 +589,9 @@ export async function placeOrder(
           amount: String(totalIncTax),
           description: `Order ${existing.order_number}`,
           customer_email: email,
+          // Per-call only; nothing persisted. Refused rather than charged live if
+          // no test gateway is configured.
+          test_mode: testCheckoutSession,
         });
         // Breadcrumb BEFORE handing off to the card form — see the fresh-order
         // branch below for why it can't wait for confirmStripePayment.
@@ -822,6 +833,9 @@ export async function placeOrder(
         amount: String(totalIncTax),
         description: `Order ${order.order_number}`,
         customer_email: email,
+        // Per-call only; nothing persisted. Refused rather than charged live if
+        // no test gateway is configured.
+        test_mode: testCheckoutSession,
       });
 
       // IMPORTANT: do NOT clear the cart here. Returning from a server action
