@@ -36,6 +36,7 @@ import { resolveQuotePayState } from "@/lib/quotes/quote-payable";
 import { QuotePayPanel, type PayMethod } from "./quote-pay-panel";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
 import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-policy";
+import { isFinancePaymentMethod } from "@/lib/checkout/finance";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
 import { AccountShell } from "@/components/account/AccountShell";
@@ -191,16 +192,24 @@ export default async function QuoteDetailPage({
   const amountDue = deposit ? deposit.due_now : Math.round(gst.incTax * 100) / 100;
 
   // Payment methods are read EXACTLY as checkout reads them — the channel's
-  // enabled list, narrowed by the account's allow-list, with net terms only for
-  // an entitled account. Switch card payments on later and they appear here with
-  // no further work.
+  // customer-facing list (enabled, minus channel staff-only), narrowed by the
+  // account's allow-list, with net terms only for an entitled account. Switch
+  // card payments on later and they appear here with no further work.
+  //
+  // EXCEPT the equipment-finance methods (card VAjaPj0t). SilverChef and Finance
+  // are not a way of paying: they place an order UNPAID against an application
+  // form, behind a $1,000 inc-GST floor, with a weekly figure on the button and
+  // the rep notified. None of that is built on this screen, and paying a quote
+  // has its own money rules (deposit, GST-inclusive amount due — cards 0Wy0xHuq,
+  // Sh03niVC). Enabling them for the checkout must not make a bare "SilverChef"
+  // button appear here that converts the quote to an order and charges nothing.
   const [checkoutSettings, accountOptions, netTerms] = await Promise.all([
     getCheckoutSettings(),
     resolveAccountOptions(session),
     resolveNetTermsEntitlement(session),
   ]);
   const payMethods: PayMethod[] = filterPaymentMethodsForAccount(
-    checkoutSettings.enabledPaymentMethods,
+    checkoutSettings.customerPaymentMethods.filter((m) => !isFinancePaymentMethod(m.id)),
     accountOptions?.allowedPaymentMethods ?? null
   )
     .filter((m) => m.id !== "net_terms" || !!netTerms)
