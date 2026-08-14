@@ -11,6 +11,7 @@ import {
 const base: PayBalanceInput = {
   orderStatus: "pending_payment",
   orderExternalSource: null,
+  orderIsTestMode: false,
   orderAccountId: null,
   owed: 154,
   settled: false,
@@ -89,6 +90,38 @@ test("a Zoey-imported order hides the button until its payments sync", () => {
 test("the Zoey check is on the source column, not on the status", () => {
   assert.equal(decidePayBalance({ ...base, orderExternalSource: "ZOEY " }).refusal, "history_pending");
   assert.equal(decidePayBalance({ ...base, orderExternalSource: "portal" }).allowed, true);
+});
+
+// ── Test-mode orders never reach the LIVE gateway ────────────────────────────
+//
+// The E2E test checkout stamps `metafields.test_mode = true` on orders placed
+// while the channel runs Stripe in TEST mode. Their totals are fake, but their
+// ledger reads unpaid — and pay-balance always charges the LIVE gateway. Release
+// review held the wave on exactly this: a test order was being offered a real
+// charge for its full fake total.
+
+test("a test-mode order is refused before any gateway work, and told to contact us", () => {
+  const d = decidePayBalance({ ...base, orderIsTestMode: true });
+  assert.equal(d.allowed, false);
+  assert.equal(d.refusal, "test_order");
+  assert.equal(d.message, "This order cannot be paid online. Contact us and we will sort it out.");
+});
+
+test("a test-mode order is refused even when card payment is not on offer at all", () => {
+  // Refused ahead of the card-availability question: the decision must never
+  // depend on gateway state for an order whose money is not real.
+  const d = decidePayBalance({ ...base, orderIsTestMode: true, customerPaymentMethodIds: [] });
+  assert.equal(d.refusal, "test_order");
+});
+
+test("a SETTLED test-mode order still reads nothing owing — money state first", () => {
+  const d = decidePayBalance({ ...base, orderIsTestMode: true, settled: true });
+  assert.equal(d.refusal, "nothing_owing");
+  assert.equal(d.message, null);
+});
+
+test("orders without the marker are unaffected", () => {
+  assert.equal(decidePayBalance({ ...base, orderIsTestMode: false }).allowed, true);
 });
 
 // ── Tim: "Manager" or "Billing" on the account ───────────────────────────────

@@ -35,6 +35,13 @@ export interface PayBalanceOrderRow {
    * payments have not been synced yet (card 1IPO2D53).
    */
   external_source?: string | null;
+  /**
+   * `orders.metafields`. Read ONLY for the `test_mode` marker checkout stamps on
+   * orders placed while the channel runs Stripe in TEST mode — their totals are
+   * fake, and pay-balance charges the LIVE gateway, so they are refused the same
+   * way a Zoey order with unsynced history is.
+   */
+  metafields?: Record<string, unknown> | null;
   total_inc_tax: string | null;
   refunded_amount: string | null;
   transactions?: TransactionRowLike[];
@@ -101,6 +108,7 @@ export async function resolvePayBalance(
   return decidePayBalance({
     orderStatus: order.status,
     orderExternalSource: order.external_source ?? null,
+    orderIsTestMode: order.metafields?.test_mode === true,
     orderAccountId: order.account_id,
     owed,
     settled,

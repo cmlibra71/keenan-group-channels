@@ -45,6 +45,12 @@ export type PayBalanceRefusal =
   | "not_payable"
   /** Imported from Zoey; its payments have not come across yet (card 1IPO2D53). */
   | "history_pending"
+  /**
+   * Placed through the E2E test checkout (`metafields.test_mode`, stamped at
+   * checkout while the channel runs Stripe in test mode). Its total is fake, so
+   * the LIVE gateway must never be offered its balance.
+   */
+  | "test_order"
   /** A business account is involved, and this contact is not Manager or Billing. */
   | "not_authorised"
   /** The role lookup failed, so we cannot tell. Money gates refuse rather than guess. */
@@ -83,6 +89,13 @@ export interface PayBalanceInput {
   orderStatus: string | null | undefined;
   /** `orders.external_source`; "zoey" on the 33k imported orders. */
   orderExternalSource: string | null | undefined;
+  /**
+   * True when the order carries `metafields.test_mode` — placed through the E2E
+   * test checkout against Stripe TEST mode. Its "outstanding" figure is a fake
+   * total, and pay-balance always charges the LIVE gateway, so a test order is
+   * refused before any gateway question is even asked.
+   */
+  orderIsTestMode: boolean;
   /**
    * `orders.account_id`. Set only on NET-TERMS orders: checkout stamps it from the
    * net-terms entitlement and nowhere else, so a business-account contact paying by
@@ -156,6 +169,18 @@ export function decidePayBalance(input: PayBalanceInput): PayBalanceDecision {
   // is the whole order total whatever the customer already paid Zoey.
   if ((input.orderExternalSource ?? "").trim().toLowerCase() === "zoey") {
     return refuse("history_pending", amount);
+  }
+
+  // A test-mode order's debt is not real money, and this path charges the LIVE
+  // gateway. Refused before the card-availability check — no gateway work of any
+  // kind happens for it. A customer should essentially never meet this state, so
+  // the wording just points them at us.
+  if (input.orderIsTestMode === true) {
+    return refuse(
+      "test_order",
+      amount,
+      "This order cannot be paid online. Contact us and we will sort it out."
+    );
   }
 
   if (!cardPaymentAvailable(input.customerPaymentMethodIds)) {
