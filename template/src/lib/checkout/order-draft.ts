@@ -24,12 +24,22 @@ export type PaymentStatus = "pending" | "awaiting_payment" | "pending_payment" |
  * Maps a checkout payment method to the order's initial payment status.
  * Unknown / empty methods fall back to "pending" (matching the prior inline
  * default in placeOrder).
+ *
+ * SilverChef and Finance land exactly where Bank Transfer lands: the order is
+ * PLACED UNPAID and nothing is charged until the finance settles (Tim + Chris,
+ * card VAjaPj0t, 2026-08-11). `pending_payment` is what `initialOrderStatus`
+ * turns into the Zoey status "Pending Payment" — the customer reads "Placed".
+ * The ids are spelled out rather than imported so this module stays pure
+ * arithmetic with no service-layer dependency; @keenan/services
+ * `FINANCE_METHOD_IDS` is the same pair.
  */
 export function determinePaymentStatus(paymentMethod: string): PaymentStatus {
   switch (paymentMethod) {
     case "stripe":
       return "awaiting_payment";
     case "bank_transfer":
+    case "silverchef":
+    case "finance":
       return "pending_payment";
     case "net_terms":
       return "net_terms";

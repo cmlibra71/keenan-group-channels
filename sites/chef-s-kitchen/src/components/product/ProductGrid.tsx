@@ -39,6 +39,9 @@ export async function ProductGrid({
   narrow,
   listId,
   listName,
+  wrapperClassName,
+  renderEmpty = true,
+  indexOffset = 0,
 }: {
   products: ProductWithImage[];
   memberPricingAvailable?: boolean;
@@ -56,6 +59,16 @@ export async function ProductGrid({
   /** GA4 list identity for view_item_list / select_item (e.g. category slug + name). */
   listId?: string;
   listName?: string;
+  /**
+   * The grid wrapper's classes. `"contents"` makes this render a CONTINUATION
+   * of a grid the caller already owns (the search feed appends chunk after
+   * chunk into one grid); omitted, it starts its own.
+   */
+  wrapperClassName?: string;
+  /** False for an appended chunk: "No products found." belongs to the page, once. */
+  renderEmpty?: boolean;
+  /** Position of the first tile in the whole list, for GA4 list indexes. */
+  indexOffset?: number;
 }) {
   // Hide before pricing. Rows arrive from the SHARED category_listing_cache / unstable_cache /
   // Meilisearch index, which cannot encode per-account visibility or price — both are applied HERE,
@@ -64,6 +77,7 @@ export async function ProductGrid({
   products = await applyCatalogScope(products);
   products = await applyAccountPrices(products);
   if (products.length === 0) {
+    if (!renderEmpty) return null;
     return (
       <div className="py-16 text-center">
         <p className="text-text-muted">No products found.</p>
@@ -85,6 +99,9 @@ export async function ProductGrid({
       narrow={narrow}
       listId={listId}
       listName={listName}
+      wrapperClassName={wrapperClassName}
+      renderEmpty={renderEmpty}
+      indexOffset={indexOffset}
     />
   );
 }
