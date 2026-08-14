@@ -6,11 +6,18 @@ import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogS
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { hasTestCheckoutSession } from "@/lib/checkout/test-session";
-import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveEmailBranding, wantsStripeTestMode, productImageService, type EmailLineItem } from "@keenan/services";
+import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, siteAccessProfileService, type EmailLineItem } from "@keenan/services";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, type BelowCostLine } from "@/lib/checkout/order-draft";
 import { getLineCosts } from "@/lib/store";
 import { sendStaffNotification } from "@/lib/staff-email";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
+import {
+  holdsPayment,
+  validateBulkyDelivery,
+  SPECIALISED_HOLD_NOTICE,
+  SPECIALISED_HOLD_PM,
+  type SiteAccessAnswers,
+} from "@/lib/checkout/bulky-delivery";
 import {
   activeBrandFreeShippingSpecials,
   brandIdsForProducts,
@@ -331,6 +338,44 @@ export async function placeOrder(
     }
   }
 
+  // ── BULKY ITEMS (card Wxjp8wpg; 27-Jul group decision) ────────────────────────────────────
+  // What is bulky is read from the PRODUCTS here, never from the submitted form: the choice the
+  // shopper is forced to make must be the choice we enforce. The same read gives us the shipment
+  // weight and unit count for weight-/item-rated shipping zones, and the dangerous-goods lines.
+  const cartFreight = await summariseLinesFreight(
+    (fullCart.items as Array<{ product_id: number; quantity: number }>).map((i) => ({
+      product_id: i.product_id,
+      quantity: Number(i.quantity) || 0,
+    }))
+  ).catch(() => null);
+  const bulkyProducts = cartFreight?.bulky ?? [];
+  const deliveryServiceRaw = (formData.get("deliveryService") as string)?.trim() || null;
+  const siteAccess: SiteAccessAnswers = {
+    deliveryType: (formData.get("siteDeliveryType") as string)?.trim() || null,
+    truckAccessOk:
+      formData.get("siteTruckAccess") === "yes"
+        ? true
+        : formData.get("siteTruckAccess") === "no"
+          ? false
+          : null,
+    loadingDockAvailable: formData.get("siteLoadingDock") === "1",
+    forkliftAtDelivery: formData.get("siteForklift") === "1",
+    twoPersonDeliveryRequired: formData.get("siteTwoPerson") === "1",
+    deliveryWindowStart: (formData.get("siteWindowStart") as string)?.trim() || null,
+    deliveryWindowEnd: (formData.get("siteWindowEnd") as string)?.trim() || null,
+    comments: (formData.get("siteAccessComments") as string)?.trim() || null,
+  };
+  const bulkyError = validateBulkyDelivery({
+    hasBulkyItems: bulkyProducts.length > 0,
+    deliveryService: deliveryServiceRaw,
+    siteAccess,
+  });
+  if (bulkyError) return { error: bulkyError };
+  const deliveryServiceType = bulkyProducts.length > 0 ? deliveryServiceRaw : null;
+  // A specialised delivery cannot be priced from a rate table, so the order is HELD: no freight
+  // is charged, no card is taken, and our team quotes it and collects payment afterwards.
+  const heldForSpecialised = holdsPayment(deliveryServiceType);
+
   // Shipping calculation
   let shippingIncTax = 0;
   const checkoutSettings = await getCheckoutSettings();
@@ -355,7 +400,11 @@ export async function placeOrder(
   // Shipping is quoted to the customer on the EX-tax subtotal (checkout page +
   // CheckoutForm pass cart.cartAmount), so the order must use the same basis or
   // the charged shipping diverges from the quote at tier/cap boundaries.
-  if (
+  if (heldForSpecialised) {
+    // Held for a human quote — charging a table rate for a job we've just been told the table
+    // can't price would be a made-up number on a real invoice.
+    shippingIncTax = 0;
+  } else if (
     qualifiesForFreeDelivery({
       enabled: checkoutSettings.freeShippingEnabled,
       isMember,
@@ -367,10 +416,17 @@ export async function placeOrder(
     // Free delivery: a member over the threshold, or a brand special on this cart
     shippingIncTax = 0;
   } else {
-    // Calculate from shipping rate cards (zone-based flat-rate)
+    // Calculate from shipping rate cards (zone-based table rates: by order value, weight or
+    // item count depending on the matched zone — card Wxjp8wpg).
     try {
       const { calculateShipping } = await import("@/lib/store");
-      const shippingResult = await calculateShipping(postalCode, subtotalExTax);
+      const shippingResult = await calculateShipping(postalCode, subtotalExTax, {
+        weightKg: cartFreight?.weight_kg ?? null,
+        itemCount: cartFreight?.item_count ?? null,
+        // A weight-rated zone must not price a cart where some lines have no catalogue
+        // weight — the weighed lines alone would land it in a cheap tier.
+        weightIncomplete: cartFreight ? cartFreight.has_unweighed_lines : true,
+      });
       if (shippingResult.success) {
         shippingIncTax = shippingResult.cost;
       } else if (shippingResult.rate_card_name) {
@@ -378,8 +434,15 @@ export async function placeOrder(
         // price against it (unknown postcode, or somewhere we don't deliver).
         // REFUSE the order — silently writing it at $0 freight is a real money
         // leak, and the shopper saw an error in the summary either way.
+        //
+        // Say WHICH thing failed. A zone that matched and then couldn't be measured
+        // (it rates by weight, and the catalogue has no weight for these items) is not
+        // a postcode problem, and blaming the postcode contradicts the reason the order
+        // summary on the same page has been showing all along.
         return {
-          error: `We can't calculate delivery for postcode "${postalCode}". Please check it, or contact us for a freight quote.`,
+          error: shippingResult.zone_id
+            ? `${shippingResult.error ?? "We can't calculate delivery for this order."} Please contact us for a freight quote.`
+            : `We can't calculate delivery for postcode "${postalCode}". Please check it, or contact us for a freight quote.`,
         };
       }
       // No rate card configured for this channel at all → $0 shipping is intended.
@@ -472,6 +535,20 @@ export async function placeOrder(
     return { error: minError };
   }
 
+  // A held specialised-delivery order takes no payment method at all: the customer is
+  // not paying today, so the order sits unpaid ("pending") until logistics quote the
+  // delivery and take payment on the order screen. Everything payment-shaped below
+  // (finance validation, payment status, metafields) reads the EFFECTIVE method.
+  //
+  // A ZERO-VALUE cart is the other no-payment shape: there is nothing to charge. Stripe
+  // refuses a $0 PaymentIntent outright, and this action writes the order row BEFORE it
+  // calls Stripe, so a $0 card checkout used to leave a real order behind and then fail in
+  // front of the shopper. Zero-value orders are a live Zoey flow (316 of them, last used
+  // 3 August, card NmAfwrdE), so the order is simply placed with no payment method, exactly
+  // like a store with none configured, and staff close it off from the order screen.
+  const nothingToPay = totalIncTax <= 0;
+  const effectivePaymentMethod = heldForSpecialised || nothingToPay ? "" : paymentMethod;
+
   // ── SilverChef / Finance (card VAjaPj0t) ──────────────────────────────────
   // The authorization half of the checkout page's finance offer, resolved with
   // the SAME function off the SAME goods total: a cart that has dropped under
@@ -479,7 +556,7 @@ export async function placeOrder(
   // The application is validated HERE, before any order row is written — a
   // half-filled application must not leave a numbered order behind. It is
   // FILED after the order exists (it carries the order number).
-  const financeOffer = isFinancePaymentMethod(paymentMethod)
+  const financeOffer = isFinancePaymentMethod(effectivePaymentMethod)
     ? financeOfferForCart({
         lines: financeLinesFromCart(fullCart.items as never[], pricesIncludeTax),
         goodsTotalIncGst: subtotalIncTax,
@@ -493,7 +570,7 @@ export async function placeOrder(
     // The funding type has to belong to the button AND to this basket — the
     // same list the page drew, off the same offer, so "Skope Funding (Skope
     // Brands only)" cannot be posted against a basket that is not all SKOPE.
-    const typeError = fundingTypeError(paymentMethod, financeApplication.funding_type, financeOffer);
+    const typeError = fundingTypeError(effectivePaymentMethod, financeApplication.funding_type, financeOffer);
     if (typeError) return { error: typeError };
 
     // The stored field contract is the authority on what a complete application
@@ -509,16 +586,8 @@ export async function placeOrder(
     if (!result.ok) return { error: result.error };
   }
 
-  // Determine payment status based on payment method.
-  //
-  // A ZERO-VALUE cart is a special shape: there is nothing to charge. Stripe refuses a $0
-  // PaymentIntent outright, and this action writes the order row BEFORE it calls Stripe — so a $0
-  // card checkout used to leave a real order behind and then fail in front of the shopper. Zero-
-  // value orders are a live Zoey flow (316 of them, last used 3 August — card NmAfwrdE), so the
-  // order is simply placed with no payment method, exactly like a store with none configured, and
-  // staff close it off from the order screen.
-  const nothingToPay = totalIncTax <= 0;
-  const effectivePaymentMethod = nothingToPay ? "" : paymentMethod;
+  // Determine payment status based on the effective payment method (held and zero-value
+  // orders resolved to "" above).
   const paymentStatus = determinePaymentStatus(effectivePaymentMethod);
 
   // Is this order being raised inside an EPHEMERAL test checkout session? That is a
@@ -541,13 +610,17 @@ export async function placeOrder(
   // Stamp the cart uuid on card orders so a retry/double-submit can find and reuse
   // the existing awaiting_payment order instead of creating a duplicate (see below).
   if (effectivePaymentMethod === "stripe") orderMetafields.cart_uuid = uuid;
+  if (deliveryServiceType) {
+    orderMetafields.delivery_service_type = deliveryServiceType;
+    orderMetafields.bulky_products = bulkyProducts.map((p: { sku: string | null; name: string }) => p.sku ?? p.name);
+  }
   // Finance: what was offered and what was chosen, on the order itself, so the
   // back office can see the weekly figure the customer was shown even if the
   // application row is later archived.
   if (financeOffer && financeApplication) {
-    orderMetafields.finance_method = paymentMethod;
+    orderMetafields.finance_method = effectivePaymentMethod;
     orderMetafields.finance_weekly_amount = (
-      weeklyAmountForMethod(paymentMethod, financeOffer) ?? 0
+      weeklyAmountForMethod(effectivePaymentMethod, financeOffer) ?? 0
     ).toFixed(2);
     orderMetafields.finance_funding_type = financeApplication.funding_type ?? null;
   }
@@ -614,6 +687,9 @@ export async function placeOrder(
     status: "pending",
     paymentMethod: effectivePaymentMethod || undefined,
     paymentStatus,
+    // The bulky-item choice rides on the ORDER so the portal, the freight engine and the
+    // packing floor all read the same answer (card Wxjp8wpg).
+    ...(deliveryServiceType ? { deliveryServiceType } : {}),
     currencyCode: cartWithItems.currency_code,
     subtotalExTax: String(subtotalExTax),
     subtotalIncTax: String(subtotalIncTax),
@@ -671,12 +747,12 @@ export async function placeOrder(
     const filed = await fileFinanceApplication({
       orderId: order.id,
       orderNumber: order.order_number,
-      paymentMethod,
+      paymentMethod: effectivePaymentMethod,
       values: financeApplication,
       uploadToken: (formData.get("financeUploadToken") as string)?.trim() || null,
       accountId: perms.accountId ?? netTerms?.accountId ?? null,
       replyTo: email,
-      weeklyAmount: weeklyAmountForMethod(paymentMethod, financeOffer) ?? 0,
+      weeklyAmount: weeklyAmountForMethod(effectivePaymentMethod, financeOffer) ?? 0,
       testMode: isTestMode,
     });
     try {
@@ -742,7 +818,13 @@ export async function placeOrder(
       postal_code: postalCode,
       country,
       country_code: country,
-      shipping_method: shippingIncTax > 0 ? "Storefront delivery" : "Free delivery",
+      shipping_method: heldForSpecialised
+        ? "Specialised delivery — to be quoted"
+        : deliveryServiceType === "curbside"
+          ? "Curbside delivery"
+          : shippingIncTax > 0
+            ? "Storefront delivery"
+            : "Free delivery",
       base_cost: String(shippingExTax),
       cost_ex_tax: String(shippingExTax),
       cost_inc_tax: String(shippingIncTax),
@@ -751,6 +833,49 @@ export async function placeOrder(
     });
   } catch (e) {
     console.error("[placeOrder] shipping address insert failed (non-fatal):", e);
+  }
+
+  // ── Bulky / dangerous-goods handling (card Wxjp8wpg) ──────────────────────────────────────
+  // Raise the freight flags from the order's LINES so logistics see "dangerous goods" or "held
+  // for specialised delivery" on the order the moment it lands, without anyone having to run a
+  // freight quote first. Non-fatal by contract — an alert must never fail a customer's order.
+  await syncOrderHandlingFlags(order.id, deliveryServiceType);
+
+  // A specialised delivery needs the site's access details before it can be quoted, so the
+  // answers are stored as a real site_access_profile (the same record the freight planner and
+  // the carrier request read) and linked to the order — not buried in a note.
+  if (heldForSpecialised) {
+    try {
+      const profile = await siteAccessProfileService.upsert({
+        account_id: netTerms?.accountId ?? null,
+        address1,
+        address2: billingAddress.address2 || null,
+        city,
+        state: state || null,
+        postal_code: postalCode,
+        country_code: country,
+        delivery_type: siteAccess.deliveryType,
+        truck_access_ok: siteAccess.truckAccessOk,
+        loading_dock_available: siteAccess.loadingDockAvailable,
+        forklift_at_delivery: siteAccess.forkliftAtDelivery,
+        two_person_delivery_required: siteAccess.twoPersonDeliveryRequired,
+        delivery_window_start: siteAccess.deliveryWindowStart,
+        delivery_window_end: siteAccess.deliveryWindowEnd,
+        comments: siteAccess.comments,
+        source: "checkout",
+      });
+      await orderService.update(order.id, {
+        siteAccessProfileId: profile.id as number,
+        internalMemo:
+          "SPECIALISED DELIVERY REQUESTED — order held unpaid. Quote the delivery from the site " +
+          "access profile, then take payment. Bulky lines: " +
+          (bulkyProducts.map((p: { sku: string | null; name: string }) => p.sku ?? p.name).join(", ") || "n/a"),
+      });
+    } catch (e) {
+      // The order and its flags already exist and the answers are on the form submission we
+      // logged — losing the profile row must not cost the customer their order.
+      console.error("[placeOrder] site access profile for specialised delivery failed:", e);
+    }
   }
 
   // "Save this address for next time" — keep a NEWLY typed address on the
@@ -914,6 +1039,10 @@ export async function placeOrder(
       paymentMethod: effectivePaymentMethod,
       total: String(totalIncTax),
       items: emailItems,
+      // A held specialised-delivery order has no payment block at all, so without this the
+      // customer's only email would read "Order Confirmed" over a total that excludes the
+      // delivery we haven't quoted, and say nothing about the card not being charged.
+      notice: heldForSpecialised ? SPECIALISED_HOLD_NOTICE : null,
       bankDetails: method?.bankDetails ?? null,
       // Use the customer's actual account terms for a net-terms invoice email.
       netTermsDays:
@@ -1013,9 +1142,13 @@ export async function placeOrder(
 
   // Breadcrumb so a shopper who comes BACK to /checkout after ordering lands on
   // their confirmation instead of the now-empty cart.
-  await setLastOrder(order.order_number, effectivePaymentMethod);
+  // A held order has no payment method, so it needs its own marker: with an empty `pm` the
+  // confirmation page rendered nothing but "Order Confirmed" — no mention that nothing was
+  // charged and that delivery is still to be quoted.
+  const confirmationPm = heldForSpecialised ? SPECIALISED_HOLD_PM : effectivePaymentMethod;
+  await setLastOrder(order.order_number, confirmationPm);
 
-  const pmParam = effectivePaymentMethod ? `&pm=${encodeURIComponent(effectivePaymentMethod)}` : "";
+  const pmParam = confirmationPm ? `&pm=${encodeURIComponent(confirmationPm)}` : "";
   redirect(`/checkout/confirmation?order=${order.order_number}${pmParam}`);
 }
 

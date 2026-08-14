@@ -31,6 +31,8 @@ import {
 } from "@/lib/checkout/payment-availability";
 import { useHeaderPanels } from "@/lib/cart-quote-counts";
 import { ga4AddShippingInfo, ga4AddPaymentInfo, rowToGa4Item } from "@/components/analytics/ga4";
+import { BulkyDeliveryChoice } from "@/components/checkout/BulkyDeliveryChoice";
+import { holdsPayment, type DeliveryService } from "@/lib/checkout/bulky-delivery";
 
 declare global {
   interface Window {
@@ -118,6 +120,7 @@ export function CheckoutForm({
   freeShippingThreshold = 500,
   brandSpecial = null,
   shippingEnabled = false,
+  bulkyProductNames = [],
   stripePublishableKey,
   testMode = false,
   testModeCardUnavailable = false,
@@ -152,6 +155,9 @@ export function CheckoutForm({
    *  Resolved on the server and re-resolved by placeOrder before charging. */
   brandSpecial?: MatchedBrandSpecial | null;
   shippingEnabled?: boolean;
+  /** Names of the cart's bulky products (card Wxjp8wpg). Non-empty ⇒ the shopper must choose
+   *  curbside vs specialised delivery before this order can be placed. */
+  bulkyProductNames?: string[];
   stripePublishableKey?: string;
   /**
    * True ONLY while this browser holds an ephemeral test checkout session (a
@@ -186,6 +192,14 @@ export function CheckoutForm({
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>(
     () => paymentMethods[0]?.id ?? ""
   );
+  // Bulky-item delivery choice (card Wxjp8wpg). Deliberately starts UNSET even though there are
+  // only two options: the 27-Jul decision is that the shopper is made to choose, and defaulting
+  // to curbside would quietly sell a tail-lift job as a kerbside drop.
+  const [deliveryService, setDeliveryService] = useState<DeliveryService | "">("");
+  const hasBulkyItems = bulkyProductNames.length > 0;
+  // Specialised delivery is quoted by a human afterwards, so the order is HELD: no card is
+  // charged, no rate-card freight is added, and the payment step is replaced by an explanation.
+  const heldForSpecialised = hasBulkyItems && holdsPayment(deliveryService);
   const [stripeError, setStripeError] = useState<string | null>(null);
   const [stripeProcessing, setStripeProcessing] = useState(false);
   const [cardReady, setCardReady] = useState(false);
@@ -543,7 +557,10 @@ export function CheckoutForm({
   // can't match to a zone used to show an error in the summary while the button
   // stayed live, and the order was written with $0 freight. Block instead.
   const shippingUnresolved =
-    shippingEnabled && !freeDelivery && (shippingLoading || shippingCost === null);
+    !heldForSpecialised &&
+    shippingEnabled &&
+    !freeDelivery &&
+    (shippingLoading || shippingCost === null);
 
   // Every payment method this store offers is off-limits to this account (per-method
   // "Staff only", or the account's allow-list). That is a sales-desk instruction, not
@@ -891,7 +908,23 @@ export function CheckoutForm({
             )}
           </div>
 
-          {/* Payment Method */}
+          <BulkyDeliveryChoice
+            productNames={bulkyProductNames}
+            value={deliveryService}
+            onChange={setDeliveryService}
+          />
+
+          {/* Payment Method — replaced by an explanation when the order is held for a
+              specialised delivery quote (nothing is charged, so there is nothing to choose). */}
+          {heldForSpecialised ? (
+            <div className="border border-zinc-200 rounded-lg p-6">
+              <h2 className="text-lg font-semibold text-zinc-900 mb-2">Payment</h2>
+              <p className="text-sm text-zinc-600">
+                We&apos;ll price the specialised delivery, send you the total and take payment
+                then. Placing this order does not charge your card.
+              </p>
+            </div>
+          ) : (
           <div className="border border-zinc-200 rounded-lg p-6">
             <h2 className="text-lg font-semibold text-zinc-900 mb-4">Payment Method</h2>
             {/* TEST CHECKOUT SESSION banner. `testMode` comes from the server and is
@@ -1064,6 +1097,7 @@ export function CheckoutForm({
               </p>
             )}
           </div>
+          )}
         </div>
 
         {/* Order Summary */}
@@ -1102,7 +1136,9 @@ export function CheckoutForm({
               </div>
               <div className="flex justify-between text-sm mt-2">
                 <span className="text-zinc-500">Shipping</span>
-                {freeDelivery ? (
+                {heldForSpecialised ? (
+                  <span className="font-medium text-zinc-500 text-xs">Quoted after site check</span>
+                ) : freeDelivery ? (
                   <span className="font-medium text-green-600">FREE</span>
                 ) : shippingLoading ? (
                   <span className="font-medium text-zinc-400 animate-pulse">Calculating...</span>
@@ -1125,7 +1161,17 @@ export function CheckoutForm({
               )}
               <div className="flex justify-between text-base font-semibold mt-4 pt-4 border-t border-zinc-200">
                 <span>Total</span>
-                <span><Price amount={(pricesIncludeTax ? subtotal : subtotal + gstAmount) + (shippingCost ?? 0)} /></span>
+                <span>
+                  <Price
+                    amount={
+                      (pricesIncludeTax ? subtotal : subtotal + gstAmount) +
+                      (heldForSpecialised ? 0 : shippingCost ?? 0)
+                    }
+                  />
+                  {heldForSpecialised && (
+                    <span className="ml-1 text-xs font-normal text-zinc-500">+ delivery</span>
+                  )}
+                </span>
               </div>
             </div>
 
@@ -1140,7 +1186,8 @@ export function CheckoutForm({
               disabled={
                 isPending ||
                 stripeProcessing ||
-                (selectedPaymentMethod === "stripe" && !cardReady) ||
+                (!heldForSpecialised && selectedPaymentMethod === "stripe" && !cardReady) ||
+                (hasBulkyItems && deliveryService === "") ||
                 // A photo still going up would arrive AFTER the application had
                 // claimed its attachments, so it would never reach the file.
                 financeUploading ||
@@ -1149,12 +1196,18 @@ export function CheckoutForm({
               }
               className="mt-6 w-full bg-zinc-900 text-white py-3 px-6 rounded-lg font-semibold hover:bg-zinc-800 transition-colors disabled:bg-zinc-300"
             >
-              {isPending || stripeProcessing ? "Processing..." : selectedPaymentMethod === "stripe" ? "Pay Now" : "Place Order"}
+              {isPending || stripeProcessing
+                ? "Processing..."
+                : heldForSpecialised
+                  ? "Request this delivery"
+                  : selectedPaymentMethod === "stripe"
+                    ? "Pay Now"
+                    : "Place Order"}
             </button>
 
-            {paymentUnavailable && (
+            {hasBulkyItems && deliveryService === "" && (
               <p className="mt-2 text-center text-xs text-zinc-500">
-                {PAY_UNAVAILABLE_ACCOUNT_ORDER}
+                Choose a delivery method above to continue.
               </p>
             )}
 
@@ -1173,8 +1226,11 @@ export function CheckoutForm({
 
             {shippingUnresolved && !shippingLoading && (
               <p className="mt-2 text-center text-xs text-zinc-500">
+                {/* The order summary already shows WHY (bad postcode, or a zone that rates by
+                    weight when some items have no weight) — repeating a postcode-only guess here
+                    contradicted it. Point at the real reason instead of inventing one. */}
                 {shippingError
-                  ? "We can't deliver to that postcode. Please check it, or contact us for a freight quote."
+                  ? "We can't price delivery for this order — see the reason above, or contact us for a freight quote."
                   : "Enter a delivery postcode to calculate shipping."}
               </p>
             )}
