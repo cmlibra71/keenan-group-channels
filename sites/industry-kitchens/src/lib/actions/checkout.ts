@@ -529,10 +529,10 @@ export async function placeOrder(
   // so the confirmation page / invoice email show the customer's real terms.
   const orderMetafields: Record<string, unknown> = {};
   if (isTestMode) orderMetafields.test_mode = true;
-  if (paymentMethod === "net_terms" && netTerms) orderMetafields.net_terms_days = netTerms.netTermsDays;
+  if (effectivePaymentMethod === "net_terms" && netTerms) orderMetafields.net_terms_days = netTerms.netTermsDays;
   // Stamp the cart uuid on card orders so a retry/double-submit can find and reuse
   // the existing awaiting_payment order instead of creating a duplicate (see below).
-  if (paymentMethod === "stripe") orderMetafields.cart_uuid = uuid;
+  if (effectivePaymentMethod === "stripe") orderMetafields.cart_uuid = uuid;
   // Finance: what was offered and what was chosen, on the order itself, so the
   // back office can see the weekly figure the customer was shown even if the
   // application row is later archived.
@@ -560,7 +560,7 @@ export async function placeOrder(
   // on the cart uuid stamped in order metafields. createStripePaymentIntent is
   // itself idempotent on (orderId, amount), so re-confirming returns a usable
   // client secret for the same order.
-  if (paymentMethod === "stripe") {
+  if (effectivePaymentMethod === "stripe") {
     try {
       const open = await orderService.list({
         page: 1,
@@ -601,7 +601,7 @@ export async function placeOrder(
     // backoffice can reconcile it (esp. net-terms invoices).
     ...(netTerms ? { accountId: netTerms.accountId } : {}),
     status: "pending",
-    paymentMethod: paymentMethod || undefined,
+    paymentMethod: effectivePaymentMethod || undefined,
     paymentStatus,
     currencyCode: cartWithItems.currency_code,
     subtotalExTax: String(subtotalExTax),
@@ -816,7 +816,7 @@ export async function placeOrder(
   // Uses the global paymentService — credentials live in store_settings.payment_gateways
   // (configured at /dashboard/settings/payments in the portal). Channel segmentation
   // happens via metadata stamped by paymentService.
-  if (paymentMethod === "stripe") {
+  if (effectivePaymentMethod === "stripe") {
     try {
       const { clientSecret } = await paymentService.createStripePaymentIntent(order.id, {
         amount: String(totalIncTax),
@@ -883,7 +883,7 @@ export async function placeOrder(
   // orders never email a real person. Branded with THIS channel's name/logo/from
   // address (not Keenan Group) from the site config.
   try {
-    const method = checkoutSettings.paymentMethods.find((m) => m.id === paymentMethod);
+    const method = checkoutSettings.paymentMethods.find((m) => m.id === effectivePaymentMethod);
     const { site, channel } = await getSiteConfig();
     // Central template: sites row + Email Templates overrides (channel_settings
     // `email_template`), resolved by @keenan/services so every sender matches.
@@ -897,12 +897,15 @@ export async function placeOrder(
       orderNumber: order.order_number,
       customerName: `${firstName} ${lastName}`.trim() || undefined,
       storeName,
-      paymentMethod,
+      paymentMethod: effectivePaymentMethod,
       total: String(totalIncTax),
       items: emailItems,
       bankDetails: method?.bankDetails ?? null,
       // Use the customer's actual account terms for a net-terms invoice email.
-      netTermsDays: paymentMethod === "net_terms" && netTerms ? netTerms.netTermsDays : (method?.netTermsDays ?? null),
+      netTermsDays:
+        effectivePaymentMethod === "net_terms" && netTerms
+          ? netTerms.netTermsDays
+          : (method?.netTermsDays ?? null),
       siteUrl,
       logoUrl: branding?.logoUrl ?? site?.logoUrl ?? null,
       logoAlt: branding?.logoAlt ?? site?.logoAlt ?? null,
@@ -977,7 +980,7 @@ export async function placeOrder(
         customerEmail: email,
         customerName: `${firstName} ${lastName}`.trim() || null,
         total: String(totalIncTax),
-        paymentMethod,
+        paymentMethod: effectivePaymentMethod,
         storeName,
         logoUrl: branding?.logoUrl ?? site?.logoUrl ?? null,
         logoAlt: branding?.logoAlt ?? site?.logoAlt ?? null,
@@ -996,9 +999,9 @@ export async function placeOrder(
 
   // Breadcrumb so a shopper who comes BACK to /checkout after ordering lands on
   // their confirmation instead of the now-empty cart.
-  await setLastOrder(order.order_number, paymentMethod);
+  await setLastOrder(order.order_number, effectivePaymentMethod);
 
-  const pmParam = paymentMethod ? `&pm=${encodeURIComponent(paymentMethod)}` : "";
+  const pmParam = effectivePaymentMethod ? `&pm=${encodeURIComponent(effectivePaymentMethod)}` : "";
   redirect(`/checkout/confirmation?order=${order.order_number}${pmParam}`);
 }
 

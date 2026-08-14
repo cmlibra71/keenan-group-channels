@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Package } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { signInRedirect } from "@/lib/account-redirect";
+import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import {
   quoteService,
   productImageService,
@@ -12,9 +13,9 @@ import {
   getCheckoutSettings,
   CHANNEL_ID,
 } from "@/lib/store";
-import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import { Price } from "@/components/ui/Price";
 import { QuoteActions } from "./quote-actions";
+import { AccountShell } from "@/components/account/AccountShell";
 import {
   quoteHidesPrices,
   redactQuotePrices,
@@ -62,12 +63,12 @@ interface QuoteDetail {
   tax_inclusive: boolean | null;
   external_source: string | null;
   tax_class_id: number | null;
-  base_amount: string | null;
   discount_amount: string | null;
   coupon_discount: string | null;
   gift_certificate_amount: string | null;
   store_credit_amount: string | null;
   shipping_cost: string | null;
+  base_amount: string | null;
   customer_notes: string | null;
   currency_code: string | null;
   attributes: Record<string, unknown> | null;
@@ -94,14 +95,14 @@ interface QuoteDetailItem {
 }
 
 const statusStyles: Record<string, string> = {
-  quote_pending: "bg-yellow-100 text-yellow-700",
-  quote_available: "bg-blue-100 text-blue-700",
-  open_change_request: "bg-blue-100 text-blue-700",
-  quote_accepted: "bg-green-100 text-green-700",
-  quote_on_hold: "bg-zinc-100 text-zinc-600",
-  converted_to_order: "bg-green-100 text-green-700",
-  quote_expired: "bg-zinc-100 text-zinc-600",
-  quote_cancelled: "bg-red-100 text-red-700",
+  quote_pending: "bg-warning-bg text-warning",
+  quote_available: "bg-accent-subtle text-accent-dark",
+  open_change_request: "bg-accent-subtle text-accent-dark",
+  quote_accepted: "text-accent bg-accent-subtle",
+  quote_on_hold: "bg-surface-secondary text-text-secondary",
+  converted_to_order: "text-accent bg-accent-subtle",
+  quote_expired: "bg-surface-secondary text-text-secondary",
+  quote_cancelled: "bg-sale-bg text-sale-deep",
 };
 
 
@@ -126,6 +127,7 @@ export default async function QuoteDetailPage({
   if (!session) redirect(signInRedirect(`/account/quotes/${quoteId}`));
 
   const raw = (await quoteService.getWithItems(quoteId)) as QuoteDetail | null;
+  // Only the owning contact, on this channel, may view a quote.
   // Only the owning contact, on this channel, may view a quote — UNLESS their B2B
   // account role grants `view_company_quotes`, in which case any quote belonging to
   // an active member of their account is visible (docs/crm-parity/10-role-enforcement.md).
@@ -180,7 +182,6 @@ export default async function QuoteDetailPage({
   // implicit — the same split the cart summary and the emailed quote show, at the
   // same per-quote rate the portal resolves.
   const gst = quoteGstTotals(total ?? 0, quote, await resolveQuoteGstRate(raw.tax_class_id));
-
   // ── Paying this quote (card 0Wy0xHuq) ────────────────────────────────────
   // The rep may have set a deposit on the quote; that is what the customer is
   // charged now, with the balance following. Both figures are GST-INCLUSIVE,
@@ -278,29 +279,30 @@ export default async function QuoteDetailPage({
   const { gateway: stripeGateway } = await resolveStripeGateway();
   const freightPending = !isMoneyRow(gst.freightEx);
 
+
   return (
     <AccountShell>
       <Link
         href="/account/quotes"
-        className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900 mb-6"
+        className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text-primary mb-6"
       >
         <ChevronLeft className="h-4 w-4" />
         Back to My Quotes
       </Link>
 
       <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
-        <h1 className="text-3xl font-bold text-zinc-900">
+        <h1 className="page-title">
           Quote #{quote.quote_number || quote.id}
         </h1>
         <span
           className={`text-xs font-medium px-2 py-1 rounded-full ${
-            statusStyles[status] || "bg-zinc-100 text-zinc-600"
+            statusStyles[status] || "bg-surface-secondary text-text-secondary"
           }`}
         >
           {quoteStatusLabel(status)}
         </span>
       </div>
-      <p className="text-sm text-zinc-500 mb-8">
+      <p className="text-sm text-text-muted mb-8">
         {quote.created_at ? `Requested ${new Date(quote.created_at).toLocaleDateString()}` : ""}
         {quote.expires_at ? ` · Valid until ${new Date(quote.expires_at).toLocaleDateString()}` : ""}
       </p>
@@ -322,7 +324,7 @@ export default async function QuoteDetailPage({
       )}
 
       {/* Items */}
-      <div className="border border-zinc-200 rounded-lg divide-y divide-zinc-200">
+      <div className="border border-border divide-y divide-border">
         {quote.items.map((item) => {
           const unitPrice = item.sale_price
             ? parseFloat(item.sale_price)
@@ -332,7 +334,7 @@ export default async function QuoteDetailPage({
           const hasPrice = Number.isFinite(unitPrice);
           return (
             <div key={item.id} className="p-4 flex items-center gap-4">
-              <div className="relative h-16 w-16 flex-shrink-0 rounded border border-zinc-200 bg-white overflow-hidden">
+              <div className="relative h-16 w-16 flex-shrink-0 border border-border bg-white overflow-hidden">
                 {thumbByProduct.get(item.product_id) ? (
                   <Image
                     src={thumbByProduct.get(item.product_id)!}
@@ -342,7 +344,7 @@ export default async function QuoteDetailPage({
                     className="object-contain p-1"
                   />
                 ) : (
-                  <div className="h-full w-full flex items-center justify-center text-zinc-300">
+                  <div className="h-full w-full flex items-center justify-center text-text-muted">
                     <Package className="h-6 w-6" />
                   </div>
                 )}
@@ -350,17 +352,17 @@ export default async function QuoteDetailPage({
               <div className="flex-1 min-w-0">
                 <a
                   href={item.product_slug ? `/products/${item.product_slug}` : "#"}
-                  className="text-sm font-medium text-zinc-900 hover:underline block"
+                  className="text-sm font-medium text-text-primary hover:underline block"
                 >
                   {item.product_name}
                 </a>
                 {item.variant_option_name && (
-                  <p className="text-xs text-zinc-500 mt-0.5">{item.variant_option_name}</p>
+                  <p className="text-xs text-text-secondary mt-0.5">{item.variant_option_name}</p>
                 )}
-                <p className="text-xs text-zinc-400 mt-0.5">
+                <p className="text-xs text-text-muted mt-0.5">
                   SKU: {item.variant_sku || item.product_sku || "N/A"}
                 </p>
-                <p className="text-sm text-zinc-600 mt-1">
+                <p className="text-sm text-text-secondary mt-1">
                   Qty {item.quantity}
                   {!hidePrices && hasPrice && (
                     <>
@@ -380,7 +382,7 @@ export default async function QuoteDetailPage({
                     been prepared yet — never for a priced line that happens to
                     come to $0.00. */}
                 {hidePrices && (
-                  <span className="mt-1 inline-block bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded text-xs font-medium">
+                  <span className="mt-1 inline-block bg-member-bg text-member-text border border-member/40 px-2 py-0.5 rounded text-xs font-medium">
                     Requires quote
                   </span>
                 )}
@@ -389,7 +391,7 @@ export default async function QuoteDetailPage({
                 <div className="text-right">
                   <Price
                     amount={unitPrice * item.quantity}
-                    className="text-sm font-semibold text-zinc-900"
+                    className="text-sm font-semibold text-text-primary"
                   />
                 </div>
               )}
@@ -402,12 +404,12 @@ export default async function QuoteDetailPage({
           Every non-zero component is printed, so Subtotal … Total is arithmetic the
           customer can follow — including the freight Zoey folds into its grand total
           with no shipping_cost of its own. */}
-      <div className="mt-4 border-t border-zinc-200 pt-4">
+      <div className="mt-4 border-t border-border pt-4">
         {!hidePrices && total !== null ? (
           <dl className="ml-auto w-full max-w-xs space-y-1 text-sm">
             <div className="flex items-center justify-between">
-              <dt className="text-zinc-600">Subtotal (ex GST)</dt>
-              <dd><Price amount={gst.subtotalEx} className="text-zinc-900" /></dd>
+              <dt className="text-text-secondary">Subtotal (ex GST)</dt>
+              <dd><Price amount={gst.subtotalEx} className="text-text-primary" /></dd>
             </div>
             {(
               [
@@ -420,51 +422,51 @@ export default async function QuoteDetailPage({
               .filter(([, amount]) => isMoneyRow(amount))
               .map(([label, amount]) => (
                 <div key={label} className="flex items-center justify-between">
-                  <dt className="text-zinc-600">{label}</dt>
-                  <dd className="text-zinc-900">
-                    −<Price amount={amount} className="text-zinc-900" />
+                  <dt className="text-text-secondary">{label}</dt>
+                  <dd className="text-text-primary">
+                    −<Price amount={amount} className="text-text-primary" />
                   </dd>
                 </div>
               ))}
             {isMoneyRow(gst.freightEx) && (
               <div className="flex items-center justify-between">
-                <dt className="text-zinc-600">Freight (ex GST)</dt>
-                <dd><Price amount={gst.freightEx} className="text-zinc-900" /></dd>
+                <dt className="text-text-secondary">Freight (ex GST)</dt>
+                <dd><Price amount={gst.freightEx} className="text-text-primary" /></dd>
               </div>
             )}
             {isMoneyRow(gst.adjustmentEx) && (
               <div className="flex items-center justify-between">
-                <dt className="text-zinc-600">Adjustment</dt>
-                <dd><Price amount={gst.adjustmentEx} className="text-zinc-900" /></dd>
+                <dt className="text-text-secondary">Adjustment</dt>
+                <dd><Price amount={gst.adjustmentEx} className="text-text-primary" /></dd>
               </div>
             )}
             <div className="flex items-center justify-between">
-              <dt className="text-zinc-600">GST</dt>
-              <dd><Price amount={gst.tax} className="text-zinc-900" /></dd>
+              <dt className="text-text-secondary">GST</dt>
+              <dd><Price amount={gst.tax} className="text-text-primary" /></dd>
             </div>
-            <div className="flex items-center justify-between border-t border-zinc-200 pt-1">
-              <dt className="font-medium text-zinc-600">Quote Total (inc GST)</dt>
-              <dd><Price amount={gst.incTax} className="text-lg font-semibold text-zinc-900" /></dd>
+            <div className="flex items-center justify-between border-t border-border pt-1">
+              <dt className="font-medium text-text-secondary">Quote Total (inc GST)</dt>
+              <dd><Price amount={gst.incTax} className="text-lg font-semibold text-text-primary" /></dd>
             </div>
             {/* Deposit set by the sales rep on the quote — shown to the customer
                 here, and it is the amount the Pay button charges. */}
             {deposit && (
               <>
-                <div className="flex items-center justify-between border-t border-zinc-200 pt-1">
-                  <dt className="font-medium text-zinc-600">{depositLabel(deposit)}</dt>
-                  <dd><Price amount={deposit.due_now} className="font-semibold text-zinc-900" /></dd>
+                <div className="flex items-center justify-between border-t border-border pt-1">
+                  <dt className="font-medium text-text-secondary">{depositLabel(deposit)}</dt>
+                  <dd><Price amount={deposit.due_now} className="font-semibold text-text-primary" /></dd>
                 </div>
                 <div className="flex items-center justify-between">
-                  <dt className="text-zinc-600">Balance</dt>
-                  <dd><Price amount={deposit.balance} className="text-zinc-900" /></dd>
+                  <dt className="text-text-secondary">Balance</dt>
+                  <dd><Price amount={deposit.balance} className="text-text-primary" /></dd>
                 </div>
               </>
             )}
           </dl>
         ) : (
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-zinc-600">Quote Total</span>
-            <span className="text-sm font-medium text-zinc-500">To be quoted</span>
+            <span className="text-sm font-medium text-text-secondary">Quote Total</span>
+            <span className="text-sm font-medium text-text-muted">To be quoted</span>
           </div>
         )}
       </div>
@@ -472,14 +474,13 @@ export default async function QuoteDetailPage({
       {/* Customer notes */}
       {quote.customer_notes && (
         <div className="mt-6">
-          <h2 className="text-sm font-semibold text-zinc-900 mb-1">Your notes</h2>
-          <p className="text-sm text-zinc-600 whitespace-pre-wrap">{quote.customer_notes}</p>
+          <h2 className="text-sm font-semibold text-text-primary mb-1">Your notes</h2>
+          <p className="text-sm text-text-secondary whitespace-pre-wrap">{quote.customer_notes}</p>
         </div>
       )}
 
       {/* Customer self-service actions */}
       <QuoteActions quoteId={quote.id} status={status} acceptState={acceptState} />
-
       {/* Pay this quote — inside the logged-in account area, per Steve. The
           panel renders even while pricing is being prepared: the Pay button
           stays visible and greyed with the reason rather than vanishing. */}

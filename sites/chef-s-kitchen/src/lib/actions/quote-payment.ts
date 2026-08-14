@@ -152,11 +152,9 @@ export async function payQuote(
 
   // ── Which methods this store, and this account, actually allow ──────────
   // Read EXACTLY as checkout reads them, and authorise against the same
-  // resolvers placeOrder uses — what we show is what we accept. BOTH staff-only
-  // controls are subtracted here as well as on the page — the CHANNEL's (inside
-  // customerPaymentMethods, card NmAfwrdE) and the ACCOUNT's (the third argument,
-  // card N8kE8arY) — so the customer can neither see a staff method nor post one
-  // back at this quote.
+  // resolvers placeOrder uses — what we show is what we accept. Staff-only
+  // methods are subtracted here as well as on the page, so the customer can
+  // neither see one nor post one back at this quote.
   const [checkoutSettings, accountOptions, netTerms] = await Promise.all([
     getCheckoutSettings(),
     resolveAccountOptions(session),
