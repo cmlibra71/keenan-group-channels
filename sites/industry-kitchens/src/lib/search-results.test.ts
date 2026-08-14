@@ -10,7 +10,6 @@ import {
   clampOffset,
   clampPage,
   isCappedByLimit,
-  nextChunkSize,
   remainingResults,
   sanitizeFacetValues,
   sanitizePriceKeys,
@@ -102,21 +101,24 @@ test("selected facets AND together", () => {
 });
 
 // ── Feed progress ─────────────────────────────────────────────────────────────
+// `remainingResults` and `isCappedByLimit` are what SearchResultsFeed itself
+// calls to decide whether to keep loading and whether to say it stopped early,
+// so these cover the live bound.
 
 test("the feed stops at the total when the result set is small", () => {
   assert.equal(remainingResults(40, 55), 15);
-  assert.equal(nextChunkSize(40, 55), 15);
   assert.equal(remainingResults(55, 55), 0);
-  assert.equal(nextChunkSize(55, 55), 0);
+  // A source that over-reports (Meili's estimate) can push the offset past the
+  // total; the feed must read that as "nothing left", never as a negative.
+  assert.equal(remainingResults(80, 55), 0);
 });
 
 test("the feed stops at the cap when the result set is large", () => {
   assert.equal(remainingResults(0, 5000), MAX_RESULTS);
-  assert.equal(nextChunkSize(0, 5000), PER_PAGE);
   assert.equal(remainingResults(MAX_RESULTS - 10, 5000), 10);
-  assert.equal(nextChunkSize(MAX_RESULTS - 10, 5000), 10);
   assert.equal(remainingResults(MAX_RESULTS, 5000), 0);
-  assert.equal(nextChunkSize(MAX_RESULTS, 5000), 0);
+  // One full page's worth is what the next request will ask for.
+  assert.equal(Math.min(PER_PAGE, remainingResults(0, 5000)), PER_PAGE);
 });
 
 test("only a result set past the cap is reported as capped", () => {

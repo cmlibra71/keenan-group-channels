@@ -1,10 +1,16 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { MAX_RESULTS, type SearchFeedParams } from "@/lib/search-results";
+import {
+  MAX_RESULTS,
+  isCappedByLimit,
+  remainingResults,
+  type SearchFeedParams,
+} from "@/lib/search-results";
 
 export type SearchFeedChunk = {
   node: ReactNode;
+  /** Tiles this chunk actually rendered, AFTER per-account visibility. */
   count: number;
   nextOffset: number;
   hasMore: boolean;
@@ -28,7 +34,13 @@ export type SearchFeedChunk = {
  *  - observer never fires (odd viewport, zoom, keyboard-only) -> the button is
  *    real and does the same thing;
  *  - JavaScript off -> `<noscript>` link to the cumulative `?page=N+1` render;
- *  - the loader errors -> the feed stops where it is and offers a retry.
+ *  - the loader errors -> the feed stops where it is and offers a retry;
+ *  - every result belongs to another account -> once the feed has walked the
+ *    whole set having rendered NOTHING, the page's own "no products" wording is
+ *    shown. Result COUNT is not the same as tiles shown: per-account visibility
+ *    is applied after the shared index, so a 40-hit chunk can legitimately draw
+ *    zero tiles, and a blank grid with no wording is the state this must never
+ *    leave a shopper in.
  */
 export function SearchResultsFeed({
   children,
@@ -36,9 +48,11 @@ export function SearchResultsFeed({
   params,
   loadMore,
   initialOffset,
+  initialCount,
   initialHasMore,
   total,
   fallbackHref,
+  emptyState,
 }: {
   children: ReactNode;
   gridClassName: string;
@@ -46,15 +60,20 @@ export function SearchResultsFeed({
   loadMore: (params: SearchFeedParams, offset: number) => Promise<SearchFeedChunk>;
   /** Result POSITIONS the server render consumed (not tiles rendered). */
   initialOffset: number;
+  /** Tiles the server render actually drew, AFTER per-account visibility. */
+  initialCount: number;
   /** False when the first render already exhausted the result set. */
   initialHasMore: boolean;
   /** The source's count for the whole result set. */
   total: number;
   /** Cumulative no-JavaScript link to the next page. */
   fallbackHref: string;
+  /** Shown when the feed finishes having rendered no tiles at all. */
+  emptyState: ReactNode;
 }) {
   const [chunks, setChunks] = useState<ReactNode[]>([]);
   const [offset, setOffset] = useState(initialOffset);
+  const [rendered, setRendered] = useState(initialCount);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
   const [done, setDone] = useState(!initialHasMore);
@@ -63,8 +82,7 @@ export function SearchResultsFeed({
   // in-flight/finished state it must not race lives in a ref, not in state.
   const progress = useRef({ loading: false, offset: initialOffset, done: !initialHasMore });
 
-  const ceiling = Math.min(total, MAX_RESULTS);
-  const remaining = Math.max(0, ceiling - offset);
+  const remaining = remainingResults(offset, total);
   const hasMore = !done && remaining > 0;
 
   const load = useCallback(async () => {
@@ -76,6 +94,7 @@ export function SearchResultsFeed({
     try {
       const chunk = await loadMore(params, p.offset);
       if (chunk?.node) setChunks((prev) => [...prev, chunk.node]);
+      if (chunk?.count) setRendered((n) => n + chunk.count);
       // The offset must strictly advance, whatever the server said, or a chunk
       // that consumed nothing would be requested for ever.
       const next = Math.max(0, chunk?.nextOffset ?? 0);
@@ -126,6 +145,10 @@ export function SearchResultsFeed({
     }
   }, [pending, hasMore, failed, load, chunks.length]);
 
+  // Nothing left to fetch and not one tile drawn: the grid is blank and the only
+  // thing that can explain it is the page's own empty state.
+  if (!hasMore && !pending && rendered === 0) return <>{emptyState}</>;
+
   return (
     <>
       <div className={gridClassName}>
@@ -135,8 +158,14 @@ export function SearchResultsFeed({
         ))}
       </div>
 
+      {/* Announces TILES DRAWN, never the source's count: `total` is
+          Meilisearch's estimate capped at its own maxTotalHits (a CD search for
+          "oven" reports 1000 while 320 are reachable), so announcing it told a
+          screen-reader user the feed had more to give and then stopped. */}
       <p aria-live="polite" className="sr-only">
-        Showing {Math.min(offset, ceiling)} of {total} results
+        {pending
+          ? "Loading more results."
+          : `Showing ${rendered} product${rendered === 1 ? "" : "s"}.`}
       </p>
 
       {hasMore && (
@@ -162,7 +191,7 @@ export function SearchResultsFeed({
         </div>
       )}
 
-      {!hasMore && total > MAX_RESULTS && (
+      {!hasMore && isCappedByLimit(total) && (
         <p className="mt-10 text-center text-sm text-zinc-500">
           Showing the first {MAX_RESULTS} results. Add another word to your search to narrow it down.
         </p>

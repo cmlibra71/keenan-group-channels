@@ -1,5 +1,6 @@
 import { getFeatureFlag, CHANNEL_ID } from "@/lib/store";
 import { getListingMemberPrices } from "@/lib/member";
+import { applyCatalogScope } from "@/lib/catalog-scope";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { SearchTypeahead } from "@/components/search/SearchTypeahead";
 import { SearchResultsFeed } from "@/components/search/SearchResultsFeed";
@@ -17,7 +18,13 @@ import {
   clampPage,
   type SearchFeedParams,
 } from "@/lib/search-results";
-import { fetchSearchChunk, resolveFeedFilters, searchWithPostgres, type SearchChunk } from "./search-query";
+import {
+  fetchSearchChunk,
+  resolveFeedFilters,
+  searchWithPostgres,
+  type SearchChunk,
+  type SearchProduct,
+} from "./search-query";
 import { loadMoreSearchResults } from "./actions";
 
 export const metadata = {
@@ -114,6 +121,7 @@ export default async function SearchPage({
   // there.
   const firstWindow = PER_PAGE * page;
   let results: SearchChunk | null = null;
+  let visible: SearchProduct[] = [];
   let groups: FacetGroupDef[] = [];
   if (query) {
     const [chunk, facetGroups] = await Promise.all([
@@ -121,8 +129,20 @@ export default async function SearchPage({
       fetchFacetGroups(query, params),
     ]);
     results = chunk ?? (await searchWithPostgres(query, { offset: 0, limit: firstWindow }));
+    // Per-account VISIBILITY is applied here, after the shared source, exactly
+    // as ProductGrid applies it (the scope is memoised per request, so asking
+    // twice costs one resolution). The page needs the SCOPED count, not the raw
+    // hit count, to choose between "no products found" and the feed: a product
+    // on any account's exclusivity list disappears for every other account AND
+    // for guests, so a query whose every hit is exclusive would otherwise render
+    // a result count, a blank grid and a Load-more button with no wording at all.
+    visible = await applyCatalogScope(results.products);
     groups = facetGroups;
   }
+  // Whether the feed still has result positions to walk. Kept separate from
+  // `visible.length` on purpose: a first window that scopes down to nothing may
+  // still be followed by results this shopper can see.
+  const feedHasMore = !!results && !results.exhausted && results.consumed < MAX_RESULTS;
 
   const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
   const showRail = groups.length > 0;
@@ -139,6 +159,22 @@ export default async function SearchPage({
   };
   const clearFiltersHref = `/search?q=${encodeURIComponent(query)}`;
 
+  // One definition of "nothing to show", used both immediately and by the feed
+  // when it finishes having drawn no tiles.
+  const emptyState = (
+    <div className="text-center py-16">
+      <p className="text-zinc-500">No products found for &ldquo;{query}&rdquo;.</p>
+      {hasFilters && (
+        <Link
+          href={clearFiltersHref}
+          className="mt-2 inline-block text-sm text-zinc-600 underline hover:text-zinc-900"
+        >
+          Clear filters
+        </Link>
+      )}
+    </div>
+  );
+
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
       <h1 className="text-3xl font-bold text-zinc-900 mb-8">Search</h1>
@@ -152,21 +188,9 @@ export default async function SearchPage({
           </div>
         )}
 
-        {query && results && results.products.length === 0 && (
-          <div className="text-center py-16">
-            <p className="text-zinc-500">No products found for &ldquo;{query}&rdquo;.</p>
-            {hasFilters && (
-              <Link
-                href={clearFiltersHref}
-                className="mt-2 inline-block text-sm text-zinc-600 underline hover:text-zinc-900"
-              >
-                Clear filters
-              </Link>
-            )}
-          </div>
-        )}
+        {query && results && visible.length === 0 && !feedHasMore && emptyState}
 
-        {results && results.products.length > 0 && (
+        {results && (visible.length > 0 || feedHasMore) && (
           <div className={showRail ? "flex gap-6" : ""}>
             {showRail && <FacetRail groups={groups} clearParams={["category", "brand", "price"]} />}
 
@@ -190,14 +214,16 @@ export default async function SearchPage({
                 params={params}
                 loadMore={loadMoreSearchResults}
                 initialOffset={results.consumed}
-                initialHasMore={!results.exhausted && results.consumed < MAX_RESULTS}
+                initialCount={visible.length}
+                initialHasMore={feedHasMore}
                 total={results.total}
                 fallbackHref={pageHref(Math.min(MAX_PAGES, page + 1))}
+                emptyState={emptyState}
               >
                 <ProductGrid
-                  products={results.products}
+                  products={visible}
                   memberPricingAvailable={memberPricingEnabled}
-                  memberPriceMap={await getListingMemberPrices(results.products)}
+                  memberPriceMap={await getListingMemberPrices(visible)}
                   listId="search_results"
                   listName="Search Results"
                   wrapperClassName="contents"

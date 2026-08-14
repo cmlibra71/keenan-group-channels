@@ -1,6 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifySurface, SURFACE_LIMITS, type SurfaceClass } from "./surfaces.ts";
+import {
+  classifyActionSurface,
+  classifySurface,
+  SURFACE_LIMITS,
+  type SurfaceClass,
+} from "./surfaces.ts";
 
 const CASES: [string, SurfaceClass][] = [
   // Operational routes that must never be guarded.
@@ -81,6 +86,27 @@ test("every non-exempt class has a limit defined", () => {
     assert.ok(limit.burstMax > 0 && limit.max > 0, `${c} limits are positive`);
     assert.ok(limit.max >= limit.burstMax, `${c} sustained cap >= burst cap`);
   }
+});
+
+test("a server action on an ordinary page path is charged to the api budget", () => {
+  assert.equal(classifyActionSurface("/checkout"), "api");
+  assert.equal(classifyActionSurface("/cart"), "api");
+  assert.equal(classifyActionSurface("/products/some-oven"), "api");
+  assert.equal(classifyActionSurface("/categories/combi-ovens"), "api");
+});
+
+test("a server action on /search stays on the SEARCH budget", () => {
+  // The search feed's load-more is a server action doing the same Meilisearch
+  // work the page does. Charging it to `api` would give catalogue enumeration a
+  // door 8x wider than the one the search budget deliberately holds shut.
+  assert.equal(classifyActionSurface("/search"), "search");
+  assert.equal(classifyActionSurface("/search/"), "search");
+  assert.ok(SURFACE_LIMITS.api.burstMax > SURFACE_LIMITS.search.burstMax);
+  assert.ok(SURFACE_LIMITS.api.max > SURFACE_LIMITS.search.max);
+});
+
+test("an action on an exempt path stays exempt", () => {
+  assert.equal(classifyActionSurface("/api/revalidate"), "exempt");
 });
 
 test("search is the tightest page-facing budget, image the loosest", () => {

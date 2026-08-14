@@ -111,14 +111,13 @@ export function clampOffset(raw: unknown): number {
   return Math.min(MAX_RESULTS, Math.max(0, Math.trunc(n)));
 }
 
-/** Results still fetchable after `loaded`, given the index count and the cap. */
+/**
+ * Results still fetchable after `loaded`, given the index count and the cap.
+ * This is the arithmetic the feed stops on — `SearchResultsFeed` calls it, so
+ * the tests below cover the live bound rather than a lookalike.
+ */
 export function remainingResults(loaded: number, total: number): number {
   return Math.max(0, Math.min(total, MAX_RESULTS) - Math.max(0, loaded));
-}
-
-/** How many to ask for next: a full page, or whatever is left under the cap. */
-export function nextChunkSize(loaded: number, total: number): number {
-  return Math.min(PER_PAGE, remainingResults(loaded, total));
 }
 
 /**

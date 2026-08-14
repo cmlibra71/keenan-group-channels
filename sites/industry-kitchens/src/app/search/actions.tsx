@@ -2,6 +2,7 @@
 
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { getListingMemberPrices } from "@/lib/member";
+import { applyCatalogScope } from "@/lib/catalog-scope";
 import { getFeatureFlag } from "@/lib/store";
 import {
   MAX_RESULTS,
@@ -60,16 +61,21 @@ export async function loadMoreSearchResults(
   const nextOffset = Math.min(MAX_RESULTS, start + Math.max(0, chunk.consumed));
   const hasMore = !chunk.exhausted && nextOffset > start && nextOffset < MAX_RESULTS;
 
-  if (chunk.products.length === 0) return { node: null, count: 0, nextOffset, hasMore };
+  // Per-account visibility, applied here as well as inside ProductGrid (the
+  // scope is memoised per request, so this costs one filter pass) so `count`
+  // means TILES DRAWN. The feed uses it to tell "this shopper may see nothing at
+  // all" from "more is coming", and a raw hit count cannot tell those apart.
+  const products = await applyCatalogScope(chunk.products);
+  if (products.length === 0) return { node: null, count: 0, nextOffset, hasMore };
 
   const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
 
   return {
     node: (
       <ProductGrid
-        products={chunk.products}
+        products={products}
         memberPricingAvailable={memberPricingEnabled}
-        memberPriceMap={await getListingMemberPrices(chunk.products)}
+        memberPriceMap={await getListingMemberPrices(products)}
         listId="search_results"
         listName="Search Results"
         // Joins the page's existing grid instead of starting a second one.
@@ -78,7 +84,7 @@ export async function loadMoreSearchResults(
         renderEmpty={false}
       />
     ),
-    count: chunk.products.length,
+    count: products.length,
     nextOffset,
     hasMore,
   };
