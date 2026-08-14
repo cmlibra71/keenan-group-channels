@@ -4,6 +4,7 @@ import { getCheckoutSettings, orderService, orderItemService } from "@/lib/store
 import { Ga4Purchase, type Ga4PurchaseProps } from "@/components/analytics/Ga4Purchase";
 import { ConfirmationRedirect } from "@/components/checkout/ConfirmationRedirect";
 import { canViewOrderConfirmation } from "@/lib/checkout/confirmation-access";
+import { isFinancePaymentMethod } from "@/lib/checkout/finance";
 import type { Ga4Item } from "@/components/analytics/ga4";
 
 export const metadata = {
@@ -200,6 +201,25 @@ export default async function ConfirmationPage({
           <p className="text-sm text-member-text">
             An invoice with Net {netTermsDays ?? 30} payment terms will be sent to you. No action
             is required at this time.
+          </p>
+        </div>
+      )}
+
+      {/* SilverChef / Finance (card VAjaPj0t). The order is placed and NOTHING
+          has been charged — this is the on-site "we've got your application"
+          the customer sees instead of a second email. */}
+      {isFinancePaymentMethod(pm ?? "") && (
+        <div className="mt-6 text-left bg-accent-subtle border border-accent/30 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <FileText className="h-4 w-4 text-accent" />
+            <h3 className="text-sm font-semibold text-accent-dark">
+              {pm === "silverchef" ? "SilverChef application received" : "Finance application received"}
+            </h3>
+          </div>
+          <p className="text-sm text-accent-dark">
+            Your application has been sent to our team and nothing has been charged. We&apos;ll be
+            in touch about your finance — your order is held against{" "}
+            <strong>{orderRef ?? "your order number"}</strong> until it is settled.
           </p>
         </div>
       )}

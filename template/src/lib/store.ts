@@ -45,6 +45,10 @@ import {
 } from "@keenan/services";
 import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
+import {
+  STOREFRONT_FILTERS_SETTING_KEY,
+  normalizeStorefrontFilters,
+} from "./storefront-filters";
 
 // Auto-initialize DB connection on first import
 const dbUrl = process.env.COMMERCE_DATABASE_URL;
@@ -200,6 +204,20 @@ export const getValueBarItems = unstable_cache(
   async () => getJsonSetting<ValueBarItem[]>("value_bar_items", []),
   [`value-bar-${CHANNEL_ID}`],
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
+/** The category rail's filter configuration for this channel — which of
+ *  Sub-category / Brand / Price are shown, in what order, under what heading,
+ *  open or collapsed. Set in the portal (Products > Filtering), which busts
+ *  `channel-${id}` on save, so an edit lands on the next page view; the TTL is
+ *  only the backstop. Never configured = the defaults (all three, open). */
+export const getStorefrontFilters = unstable_cache(
+  async () =>
+    normalizeStorefrontFilters(
+      await getJsonSetting<unknown>(STOREFRONT_FILTERS_SETTING_KEY, null)
+    ),
+  [`storefront-filters-${CHANNEL_ID}`],
+  { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
 );
 
 /** Klaviyo public (site) key for this channel — powers the onsite tracking snippet
