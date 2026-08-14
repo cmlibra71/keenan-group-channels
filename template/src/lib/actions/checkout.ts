@@ -54,6 +54,7 @@ import {
   minimumOrderError,
   disallowedPaymentMethodError,
 } from "@/lib/checkout/account-options-policy";
+import { enforceLimit } from "@/lib/security/rate-limits";
 import {
   resolvePaymentAvailability,
   PAY_UNAVAILABLE_ACCOUNT_ORDER,
@@ -90,6 +91,17 @@ export async function placeOrder(
   formData: FormData
 ): Promise<PlaceOrderResult> {
   const session = await getSession();
+
+  // Rate limit before any work: this is the endpoint card-testing hits, running
+  // a stolen card list through checkout one number at a time. Budgets are
+  // deliberately generous (lib/security/rate-limit-core.ts) — a false positive
+  // here costs a sale — and are keyed per caller AND per shopper.
+  const checkoutLimit = await enforceLimit("checkout", {
+    identifier: session ? String(session.contactId) : null,
+    identifierIsEmail: false,
+    surface: "checkout",
+  });
+  if (!checkoutLimit.allowed) return { error: checkoutLimit.message };
 
   // ── NO GUEST CHECKOUT (per channel). Industry Kitchens sells the way it does on
   // Zoey: sign in or create an account first (card LQM9FQYe). The checkout PAGE
@@ -1161,17 +1173,30 @@ export async function placeOrder(
 export async function confirmStripePayment(
   orderNumber: string
 ): Promise<{ success: boolean; error?: string }> {
-  // Ownership FIRST — order numbers are semi-guessable and this call has a side effect
-  // (finalising/clearing the cart), so an unauthorized caller must not be able to wipe a victim's
-  // cart. Exactly the two viewers the confirmation page itself accepts, resolved by the same
-  // helper: the signed-in contact who owns the order, or the GUEST who just placed it, proven by
-  // the short-lived httpOnly `last_order` cookie placeOrder writes for this purpose.
+  // Order numbers are semi-guessable, so cap how fast one caller can probe them
+  // BEFORE doing any lookup work. Guests are legitimate callers here (see below),
+  // so the per-caller identifier is the signed-in contact when there is one and
+  // the probed order number otherwise; the IP envelope applies to both.
+  const limitSession = await getSession();
+  const limit = await enforceLimit("payment_confirm", {
+    identifier: limitSession ? String(limitSession.contactId) : `order:${orderNumber}`,
+    identifierIsEmail: false,
+    surface: "stripe confirm",
+  });
+  if (!limit.allowed) return { success: false, error: limit.message };
+
+  // Ownership NEXT, and side effects only after it: this call finalises/clears the
+  // cart, so an unauthorized caller must not be able to wipe a victim's cart.
+  // Exactly the two viewers the confirmation page itself accepts, resolved by the
+  // same helper: the signed-in contact who owns the order, or the GUEST who just
+  // placed it, proven by the short-lived httpOnly `last_order` cookie placeOrder
+  // writes for this purpose.
   //
-  // It used to demand a SESSION, so a guest paying by card was refused here: their cart was never
-  // marked completed and the cart cookie never cleared, leaving the items sitting in the basket
-  // after they had paid — and a second checkout would have charged them again. Latent while no
-  // storefront took card payments; live the moment Industry Kitchens switched card on. Card
-  // NmAfwrdE.
+  // It used to demand a SESSION, so a guest paying by card was refused here: their
+  // cart was never marked completed and the cart cookie never cleared, leaving the
+  // items sitting in the basket after they had paid, and a second checkout would
+  // have charged them again. Latent while no storefront took card payments; live
+  // the moment Industry Kitchens switched card on. Card NmAfwrdE.
   const ownsOrder = await canViewOrderConfirmation(orderNumber).catch(() => false);
   if (!ownsOrder) return { success: false, error: "Forbidden" };
 
