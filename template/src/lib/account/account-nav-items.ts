@@ -11,8 +11,10 @@
 // (not greyed): a customer of a store that has no membership programme should
 // never learn one exists.
 //
-// "Contact your rep" is deliberately absent. The storefront holds no rep data,
-// so the item could only ever be a dead link.
+// "Contact your rep" names the person looking after this customer's quotes —
+// the rep assigned to their most recent quote, or the storefront's customer
+// service desk when none is (card DIj4B7Gr). It sits directly under My Quotes
+// because that is what it is about.
 //
 // Pure: no React (the icon is named, not imported), no DB, no server-only.
 // ============================================================================
@@ -44,6 +46,7 @@ export function buildAccountNavItems(flags: AccountNavFlags): AccountNavItem[] {
     { key: "security", label: "Password & Security", href: "/account/security" },
     { key: "orders", label: "Order History", href: "/account/orders" },
     { key: "quotes", label: "My Quotes", href: "/account/quotes" },
+    { key: "contact", label: "Contact your rep", href: "/account/contact" },
   ];
 
   if (flags.subscriptionsEnabled) {

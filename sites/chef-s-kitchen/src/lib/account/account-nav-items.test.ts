@@ -26,6 +26,7 @@ test("with every flag on the menu is the full ten items, in order", () => {
       "Password & Security",
       "Order History",
       "My Quotes",
+      "Contact your rep",
       "Membership",
       "My Draws",
       "Partner Offers",
@@ -45,6 +46,7 @@ test("with every flag off the three optional items are ABSENT, not greyed", () =
       "Password & Security",
       "Order History",
       "My Quotes",
+      "Contact your rep",
       "Continue Shopping",
       "Sign Out",
     ]
@@ -64,11 +66,12 @@ test("the flags are independent of one another", () => {
   assert.ok(!labels({ ...ALL_OFF, partnerOffersEnabled: true }).includes("My Draws"));
 });
 
-test("the optional items keep their position between My Quotes and Continue Shopping", () => {
+test("the optional items keep their position, just below Contact your rep", () => {
   const labels = buildAccountNavItems({ ...ALL_OFF, partnerOffersEnabled: true }).map(
     (i) => i.label
   );
-  assert.equal(labels.indexOf("Partner Offers"), labels.indexOf("My Quotes") + 1);
+  assert.equal(labels.indexOf("Contact your rep"), labels.indexOf("My Quotes") + 1);
+  assert.equal(labels.indexOf("Partner Offers"), labels.indexOf("Contact your rep") + 1);
   assert.equal(labels.indexOf("Continue Shopping"), labels.indexOf("Partner Offers") + 1);
 });
 
@@ -82,9 +85,15 @@ test("Sign Out is an action with no href; every other item links somewhere", () 
   }
 });
 
-test("'Contact your rep' is deliberately not in the menu", () => {
-  const labels = buildAccountNavItems(ALL_ON).map((i) => i.label.toLowerCase());
-  assert.ok(!labels.some((l) => l.includes("rep")));
+test("'Contact your rep' is in the menu, and goes somewhere real", () => {
+  // It used to be deliberately absent: the storefront held no rep data. It does
+  // now (card DIj4B7Gr) — the rep on the customer's most recent quote, or the
+  // storefront's customer service desk.
+  const items = buildAccountNavItems(ALL_ON);
+  const contact = items.find((i) => i.key === "contact");
+  assert.ok(contact, "Contact your rep is missing from the menu");
+  assert.equal(contact.label, "Contact your rep");
+  assert.equal(contact.href, "/account/contact");
 });
 
 test("keys are unique so a component can map them to icons safely", () => {

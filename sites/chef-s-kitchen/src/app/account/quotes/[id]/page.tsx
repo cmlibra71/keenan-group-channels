@@ -7,6 +7,11 @@ import { getSession } from "@/lib/auth";
 import { signInRedirect } from "@/lib/account-redirect";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import {
+  loadQuoteContactForQuote,
+  quoteCommentService,
+  resolveCustomerRequestState,
+} from "@keenan/services";
+import {
   quoteService,
   productImageService,
   customerAddressService,
@@ -15,6 +20,8 @@ import {
 } from "@/lib/store";
 import { Price } from "@/components/ui/Price";
 import { QuoteActions } from "./quote-actions";
+import { QuoteMessages, type QuoteThreadMessage } from "./quote-messages";
+import { RepContactPanel } from "@/components/account/RepContactPanel";
 import { AccountShell } from "@/components/account/AccountShell";
 import {
   quoteHidesPrices,
@@ -265,6 +272,25 @@ export default async function QuoteDetailPage({
     hasDeliveryAddress: quoteHasShipTo || addressOptions.length > 0,
   });
   const { gateway: stripeGateway } = await resolveStripeGateway();
+  // Card DIj4B7Gr: who is looking after this quote, which of the three "ask us
+  // something" controls it offers, and the message thread both sides read.
+  // Resolved server-side by the SAME rules the emailed /q/<uuid> link uses.
+  const [repContact, requestState, quoteMessages] = await Promise.all([
+    loadQuoteContactForQuote(quote.id).catch(() => ({
+      name: "Customer Service",
+      email: null,
+      phone: null,
+      isFallback: true,
+    })),
+    Promise.resolve(
+      resolveCustomerRequestState({
+        status,
+        hidesPrices: hidePrices,
+        expiresAt: raw.expires_at,
+      })
+    ),
+    quoteCommentService.listThread(quote.id, false).catch(() => [] as Record<string, unknown>[]),
+  ]);
   const freightPending = !isMoneyRow(gst.freightEx);
 
 
@@ -468,7 +494,12 @@ export default async function QuoteDetailPage({
       )}
 
       {/* Customer self-service actions */}
-      <QuoteActions quoteId={quote.id} status={status} acceptState={acceptState} />
+      <QuoteActions
+        quoteId={quote.id}
+        status={status}
+        acceptState={acceptState}
+        requestState={requestState}
+      />
       {/* Pay this quote — inside the logged-in account area, per Steve. The
           panel renders even while pricing is being prepared: the Pay button
           stays visible and greyed with the reason rather than vanishing. */}
@@ -495,6 +526,14 @@ export default async function QuoteDetailPage({
           currency={quote.currency_code || "AUD"}
         />
       }
+      <QuoteMessages
+        quoteId={quote.id}
+        messages={quoteMessages as unknown as QuoteThreadMessage[]}
+        canSend={requestState.canSendMessage}
+      />
+      <div className="mt-8">
+        <RepContactPanel contact={repContact} />
+      </div>
     </AccountShell>
   );
 }

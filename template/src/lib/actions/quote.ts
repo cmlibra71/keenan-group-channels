@@ -7,6 +7,7 @@ import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
 import { getSession } from "@/lib/auth";
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
 import { slidingWindowAllow } from "@/lib/rate-limit";
+import { resolveCustomerRequestState } from "@keenan/services";
 import {
   quoteHidesPrices,
   resolveQuoteAcceptState,
@@ -477,4 +478,154 @@ export async function duplicateQuote(quoteId: number) {
   }
   revalidatePath("/account/quotes");
   return { success: true, quoteId: copy.id };
+}
+
+// ── Customer requests on a quote: more time, a change, a message ─────────────
+// Card DIj4B7Gr (Steve 2026-08-07). The same three things the emailed /q/<uuid>
+// link offers, so the signed-in page and the emailed link behave identically.
+
+/**
+ * Load the customer's OWN quote for a REQUEST (not an edit).
+ *
+ * Deliberately looser than {@link loadEditableQuote}: asking a question or
+ * asking for more time is not editing, so it does not require
+ * `allow_edit_items` or an editable status. Still owner-only, still
+ * channel-scoped, still invisible for a staff-only draft, and still budgeted —
+ * every one of these sends a staff email.
+ */
+async function loadOwnQuoteForRequest(
+  quoteId: number
+): Promise<{ error: string } | { quote: EditableQuote; contactId: number }> {
+  const session = await getSession();
+  if (!session?.contactId) return { error: "Please sign in." };
+
+  // Tighter than the item-edit budget on purpose: a quantity stepper is clicked
+  // dozens of times a minute by a real person, a message is not.
+  if (!slidingWindowAllow(`quote-request:${session.contactId}`, { windowMs: 60_000, max: 10 })) {
+    return { error: "You've sent several messages just now — please wait a moment." };
+  }
+
+  const quote = (await quoteService.getById(quoteId)) as EditableQuote | null;
+  if (
+    !quote ||
+    isStaffOnlyDraft(quote) ||
+    quote.channel_id !== CHANNEL_ID ||
+    quote.contact_id !== session.contactId
+  ) {
+    return { error: "Quote not found." };
+  }
+  return { quote, contactId: session.contactId };
+}
+
+/** The three controls' availability, resolved from the quote the customer holds. */
+async function requestStateFor(quote: EditableQuote) {
+  return resolveCustomerRequestState({
+    status: quote.status,
+    hidesPrices: quoteHidesPrices(
+      quote as { status?: string | null; hide_prices?: boolean | null },
+      await getHidePriceStatuses()
+    ),
+    expiresAt: (quote.expires_at as string | null) ?? null,
+  });
+}
+
+/**
+ * "Can we have longer on this quote?" — emails the rep (else the storefront's
+ * cs@ desk) and records the request on the quote.
+ *
+ * It does NOT move the expiry date: extension is not automated, the rep extends
+ * by hand (Tim, 2026-08-07). Nothing about the quote changes.
+ */
+export async function requestMoreTime(quoteId: number, note?: string): Promise<QuoteEditResult> {
+  const loaded = await loadOwnQuoteForRequest(quoteId);
+  if ("error" in loaded) return loaded;
+  const { quote, contactId } = loaded;
+
+  const state = await requestStateFor(quote);
+  if (!state.canRequestMoreTime) {
+    return { error: "This quote can't take that request in its current state." };
+  }
+
+  try {
+    await quoteService.recordCustomerRequest(quoteId, {
+      kind: "more_time",
+      note: note ?? null,
+      authorContactId: contactId,
+    });
+  } catch (e) {
+    console.error("[requestMoreTime] failed:", e);
+    return { error: "Could not send that request." };
+  }
+
+  revalidatePath(`/account/quotes/${quoteId}`);
+  return { success: true };
+}
+
+/**
+ * "Please change something I can't change myself" — the delivery address,
+ * freight, anything past the quantity/remove editing that already ships.
+ *
+ * Routes through the SHIPPED single entry point `markChangeRequested`, the same
+ * one the quantity and remove edits use, so a change request behaves identically
+ * however it was raised (cards FPfvaYLp / 5bZsm1MF). The delivery address stays
+ * rep-only: the customer asks, the rep changes it.
+ */
+export async function requestQuoteChange(
+  quoteId: number,
+  message: string
+): Promise<QuoteEditResult> {
+  const text = (message ?? "").trim();
+  if (!text) return { error: "Tell us what needs to change." };
+
+  const loaded = await loadOwnQuoteForRequest(quoteId);
+  if ("error" in loaded) return loaded;
+  const { quote } = loaded;
+
+  const state = await requestStateFor(quote);
+  if (!state.canRequestChange) {
+    return { error: "This quote can't take that request in its current state." };
+  }
+
+  try {
+    await quoteService.markChangeRequested(quoteId, { changeSummary: text.slice(0, 1000) });
+  } catch (e) {
+    console.error("[requestQuoteChange] failed:", e);
+    return { error: "Could not send that request." };
+  }
+
+  revalidatePath(`/account/quotes/${quoteId}`);
+  revalidatePath("/account/quotes");
+  return { success: true };
+}
+
+/**
+ * A message on the quote. Joins the same public thread the rep reads in the
+ * portal, and emails them. Allowed on any quote the customer can see — including
+ * one still being priced, which is exactly when they most want to ask.
+ */
+export async function postQuoteMessage(quoteId: number, body: string): Promise<QuoteEditResult> {
+  const text = (body ?? "").trim();
+  if (!text) return { error: "Please write a message first." };
+
+  const loaded = await loadOwnQuoteForRequest(quoteId);
+  if ("error" in loaded) return loaded;
+  const { quote, contactId } = loaded;
+
+  const state = await requestStateFor(quote);
+  if (!state.canSendMessage) return { error: "Quote not found." };
+
+  try {
+    const result = await quoteService.recordCustomerRequest(quoteId, {
+      kind: "message",
+      note: text,
+      authorContactId: contactId,
+    });
+    if (!result) return { error: "Please write a message first." };
+  } catch (e) {
+    console.error("[postQuoteMessage] failed:", e);
+    return { error: "Could not send that message." };
+  }
+
+  revalidatePath(`/account/quotes/${quoteId}`);
+  return { success: true };
 }
