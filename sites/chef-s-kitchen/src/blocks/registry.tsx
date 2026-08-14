@@ -103,6 +103,109 @@ const HeroBlock: FC<BlockProps> = ({ props }) => (
   </section>
 );
 
+// --- landing-page blocks (card wp4GM2tq) ------------------------------------
+// Ready-made sections a page can drop in and re-word (Steve, 2026-07-28: "drop
+// in ready made blocks, but be able to customise elements such as text inside
+// those blocks"). Each was ALREADY offered by the portal's Add-a-block list and
+// had no component here, so the page came back "Block banner is not available
+// on this site" in preview and blank to a shopper.
+
+/** Full-width picture with a headline, a line of copy and one button over it. */
+const BannerBlock: FC<BlockProps> = ({ props }) => {
+  const image = str(props.image);
+  const heading = str(props.heading);
+  const body = str(props.body);
+  const ctaText = str(props.cta_text);
+  if (!image && !heading && !body && !ctaText) return null;
+  return (
+    <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="relative overflow-hidden rounded-lg bg-zinc-900">
+        {image && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={image}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover opacity-60"
+          />
+        )}
+        <div className="relative px-6 py-14 text-center sm:px-10 sm:py-20">
+          {heading && (
+            <h2 className="heading-serif text-3xl text-white sm:text-4xl">{heading}</h2>
+          )}
+          {body && (
+            <p className="mx-auto mt-3 max-w-2xl text-base leading-relaxed text-zinc-200">
+              {body}
+            </p>
+          )}
+          {ctaText && (
+            <a
+              href={str(props.cta_href) || "#"}
+              className="mt-7 inline-block rounded-md bg-white px-6 py-3 text-sm font-medium text-zinc-900 hover:bg-zinc-100"
+            >
+              {ctaText}
+            </a>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+type FaqItem = { q?: unknown; a?: unknown };
+
+/** Author-written questions and answers. Distinct from `seo_faq`, which draws
+ *  the homepage's own copy from a store setting rather than from the page. */
+const FaqBlock: FC<BlockProps> = ({ props }) => {
+  const items = (Array.isArray(props.items) ? props.items : []) as FaqItem[];
+  const rows = items.filter((it) => str(it.q) || str(it.a));
+  if (rows.length === 0) return null;
+  return (
+    <section className="mx-auto max-w-3xl px-4 py-12">
+      {str(props.heading) && (
+        <h2 className="heading-serif mb-6 text-2xl text-text-primary">{str(props.heading)}</h2>
+      )}
+      <div className="divide-y divide-zinc-200 border-y border-zinc-200">
+        {rows.map((it, i) => (
+          <details key={i} className="group py-4">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[15px] font-semibold text-text-primary">
+              {str(it.q)}
+              <span className="text-zinc-400 transition-transform duration-200 group-open:rotate-45">
+                +
+              </span>
+            </summary>
+            <RichContent
+              html={str(it.a)}
+              stripStyles
+              className="mt-2.5 text-sm leading-relaxed text-text-secondary"
+            />
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+};
+
+type StatItem = { value?: unknown; label?: unknown };
+
+/** A row of headline numbers ("30 years", "12,000 products"). */
+const StatsBannerBlock: FC<BlockProps> = ({ props }) => {
+  const stats = (Array.isArray(props.stats) ? props.stats : []) as StatItem[];
+  const rows = stats.filter((s) => str(s.value) || str(s.label));
+  if (rows.length === 0) return null;
+  return (
+    <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
+        {rows.map((s, i) => (
+          <div key={i} className="text-center">
+            <p className="heading-serif text-3xl text-text-primary">{str(s.value)}</p>
+            <p className="mt-1 text-sm text-text-secondary">{str(s.label)}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+};
+
 // --- system (live data) blocks ----------------------------------------------
 
 async function ProductListingBlock({ props }: BlockProps) {
@@ -148,6 +251,9 @@ export const BLOCK_COMPONENTS: Record<string, FC<BlockProps> | ((p: BlockProps) 
   spacer: SpacerBlock,
   cta: CtaBlock,
   hero: HeroBlock,
+  banner: BannerBlock,
+  faq: FaqBlock,
+  stats_banner: StatsBannerBlock,
   product_listing: ProductListingBlock,
   // Homepage section blocks (own data; verbatim markup from the legacy homepage).
   ...HOME_BLOCK_COMPONENTS,
