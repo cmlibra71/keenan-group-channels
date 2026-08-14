@@ -23,6 +23,7 @@ import {
   cmsFormSubmissionService,
   ensureFinanceApplicationForm,
   financeApplicationFields,
+  formatFinanceMoney,
   resolveFinanceApplicationRecipients,
   FINANCE_APPLICATION_FORM_KEY,
   FINANCE_APPLICATION_FORM_NAME,
@@ -54,7 +55,7 @@ export async function fileFinanceApplication(input: {
   accountId?: number | null;
   /** The order's contact email — staff reply straight to it. */
   replyTo?: string | null;
-  /** Weekly rent shown on the button, for the staff email. */
+  /** The weekly figure shown on the button the customer pressed, for the staff email. */
   weeklyAmount?: number;
   testMode?: boolean;
 }): Promise<FinanceApplicationResult> {
@@ -122,8 +123,17 @@ export async function fileFinanceApplication(input: {
       label: "Payment method",
       value: input.paymentMethod === "silverchef" ? "SilverChef" : "Finance",
     },
+    // The figure the CUSTOMER was shown, under the label they were shown it
+    // under. SilverChef and SKOPE are two offers at two rates (card VAjaPj0t) —
+    // printing a SKOPE figure as "Rent per Week" in the staff email would make
+    // the rep quote a SilverChef rent SilverChef never offered.
     ...(input.weeklyAmount
-      ? [{ label: "Rent per Week", value: `$${input.weeklyAmount.toFixed(2)}` }]
+      ? [
+          {
+            label: input.paymentMethod === "silverchef" ? "Rent per Week" : "Weekly (Skope Funding)",
+            value: formatFinanceMoney(input.weeklyAmount),
+          },
+        ]
       : []),
     ...Object.entries(payload).map(([name, value]) => ({
       label: fieldDefs.find((f) => f.name === name)?.label ?? name,
