@@ -21,6 +21,8 @@
  * so what we show is exactly what we accept.
  */
 
+import { PAY_UNAVAILABLE_ACCOUNT_QUOTE } from "../checkout/payment-availability";
+
 export type QuotePayState =
   /** No Pay control at all — this quote is settled, dead, or already an order. */
   | { kind: "hidden" }
@@ -34,8 +36,18 @@ export const PAY_REASON_UNPRICED_LINES =
 export const PAY_REASON_PRICING_PENDING = "Pricing is still being prepared";
 export const PAY_REASON_NOT_READY = "This quote isn't ready to pay yet";
 export const PAY_REASON_NO_TOTAL = "This quote has no amount to pay yet";
+/**
+ * Two different reasons a quote can't be paid online, and the customer is owed the
+ * right one. The store having nothing switched on is a store fact; every method
+ * being off-limits to this account (allow-list, or per-method "Staff only" — card
+ * N8kE8arY) is an ACCOUNT fact, and telling that customer "this store doesn't take
+ * online payments" is simply untrue. The account wording is shared with the
+ * checkout, word for word bar order/quote, so the two customer surfaces cannot
+ * disagree about the same account.
+ */
 export const PAY_REASON_NO_METHODS =
   "Online payment isn't switched on for this store — please contact us to pay this quote.";
+export const PAY_REASON_NO_METHODS_FOR_ACCOUNT = PAY_UNAVAILABLE_ACCOUNT_QUOTE;
 export const PAY_REASON_NO_ADDRESS =
   "We need a delivery address before this quote can be paid — please contact us.";
 
@@ -81,6 +93,13 @@ export interface QuotePayInput {
   amountDue: number;
   /** Payment methods this site has switched on for this shopper. */
   paymentMethodCount: number;
+  /**
+   * Payment methods the CHANNEL has switched on, before this account's allow-list
+   * and staff-only subtraction. Non-zero with paymentMethodCount 0 means the store
+   * can take payments but this account may use none of them — a different message.
+   * Optional so an older caller keeps the store-level wording it always had.
+   */
+  channelPaymentMethodCount?: number;
   /** A delivery address is on the quote, or the customer has one saved. */
   hasDeliveryAddress: boolean;
 }
@@ -122,7 +141,15 @@ export function resolveQuotePayState(
     return { kind: "disabled", reason: PAY_REASON_UNPRICED_LINES };
   }
   if (!(quote.amountDue > 0)) return { kind: "disabled", reason: PAY_REASON_NO_TOTAL };
-  if (quote.paymentMethodCount <= 0) return { kind: "disabled", reason: PAY_REASON_NO_METHODS };
+  if (quote.paymentMethodCount <= 0) {
+    return {
+      kind: "disabled",
+      reason:
+        (quote.channelPaymentMethodCount ?? 0) > 0
+          ? PAY_REASON_NO_METHODS_FOR_ACCOUNT
+          : PAY_REASON_NO_METHODS,
+    };
+  }
   if (!quote.hasDeliveryAddress) return { kind: "disabled", reason: PAY_REASON_NO_ADDRESS };
   return { kind: "enabled" };
 }

@@ -152,7 +152,9 @@ export async function payQuote(
 
   // ── Which methods this store, and this account, actually allow ──────────
   // Read EXACTLY as checkout reads them, and authorise against the same
-  // resolvers placeOrder uses — what we show is what we accept.
+  // resolvers placeOrder uses — what we show is what we accept. Staff-only
+  // methods are subtracted here as well as on the page, so the customer can
+  // neither see one nor post one back at this quote.
   const [checkoutSettings, accountOptions, netTerms] = await Promise.all([
     getCheckoutSettings(),
     resolveAccountOptions(session),
@@ -168,9 +170,13 @@ export async function payQuote(
   // form behind a $1,000 floor, none of which this screen implements. Enabling
   // them for the storefront checkout must not turn a quote into an unpaid order
   // through a bare button here.
+  const nonFinanceCustomerMethods = checkoutSettings.customerPaymentMethods.filter(
+    (m) => !isFinancePaymentMethod(m.id)
+  );
   const methods = filterPaymentMethodsForAccount(
-    checkoutSettings.customerPaymentMethods.filter((m) => !isFinancePaymentMethod(m.id)),
-    accountOptions?.allowedPaymentMethods ?? null
+    nonFinanceCustomerMethods,
+    accountOptions?.allowedPaymentMethods ?? null,
+    accountOptions?.staffOnlyPaymentMethods ?? null
   ).filter((m) => m.id !== "net_terms" || !!netTerms);
 
   // ── Where it ships ──────────────────────────────────────────────────────
@@ -201,6 +207,13 @@ export async function payQuote(
     items: (quote.items ?? []) as { list_price?: string | null; sale_price?: string | null }[],
     amountDue,
     paymentMethodCount: methods.length,
+    // …and how many the STORE offers a CUSTOMER on this surface, so a shopper whose
+    // ACCOUNT allows none of them is told that, not "this store doesn't take online
+    // payments" (card N8kE8arY) — and, just as importantly, the other way round: a
+    // channel whose only enabled method is staff-only (IK's Send Invoice, card
+    // NmAfwrdE) or finance offers this surface nothing, and that is the STORE's
+    // configuration, not a restriction on their account.
+    channelPaymentMethodCount: nonFinanceCustomerMethods.length,
     hasDeliveryAddress: quoteHasShipTo || fallbackShipTo !== null,
   });
   if (payState.kind !== "enabled") {

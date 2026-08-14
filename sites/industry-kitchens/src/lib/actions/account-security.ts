@@ -16,6 +16,7 @@ import {
   resolveEmailBranding,
   wantsStripeTestMode,
 } from "@keenan/services";
+import { enforceLimit, noteLimitFailure } from "@/lib/security/rate-limits";
 
 // Self-service password management. These are pure, channel-agnostic auth
 // flows shared byte-identically across template + every site (see
@@ -41,22 +42,6 @@ import {
 //     link-scanners can't burn them.
 
 type ActionResult = { error?: string; success?: boolean; message?: string };
-
-// Basic in-memory throttle (per container), mirroring lib/actions/auth.ts. Keyed
-// per (flow:identifier) so each flow's requests are bounded independently. Not a
-// cross-replica store, but it blunts abuse of a single node.
-const attempts = new Map<string, number[]>();
-const WINDOW_MS = 15 * 60_000;
-const MAX_ATTEMPTS = 5;
-
-function tooManyAttempts(key: string): boolean {
-  const now = Date.now();
-  const recent = (attempts.get(key) || []).filter((t) => now - t < WINDOW_MS);
-  recent.push(now);
-  attempts.set(key, recent);
-  if (attempts.size > 5000) attempts.clear(); // crude bound
-  return recent.length > MAX_ATTEMPTS;
-}
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -98,9 +83,14 @@ export async function requestPasswordReset(
     return { error: "Please enter a valid email address." };
   }
 
-  // Throttled, but still return the neutral success so throttling doesn't leak
-  // whether an account exists.
-  if (tooManyAttempts(`reset:${email}`)) {
+  // Rate limited per IP and per address (lib/security/rate-limit-core.ts), but
+  // still answered with the neutral success so the limiter doesn't become an
+  // enumeration oracle.
+  const limit = await enforceLimit("password_reset_request", {
+    identifier: email,
+    surface: "forgot password",
+  });
+  if (!limit.allowed) {
     return { success: true, message: NEUTRAL_RESET_MESSAGE };
   }
 
@@ -154,6 +144,12 @@ export async function resetPassword(
   const confirm = formData.get("confirmPassword") as string;
 
   if (!token) return { error: "This reset link is invalid or has expired. Please request a new one." };
+
+  // Per-IP only: guessing tokens is the attack, and there is no account to key a
+  // second bucket on until a token resolves.
+  const limit = await enforceLimit("password_reset_submit", { surface: "reset password" });
+  if (!limit.allowed) return { error: limit.message };
+
   const weak = validatePasswordStrength(password);
   if (weak) {
     return { error: weak };
@@ -208,6 +204,14 @@ export async function changePassword(
   const confirm = formData.get("confirmPassword") as string;
 
   if (!current) return { error: "Please enter your current password." };
+
+  const limit = await enforceLimit("password_change", {
+    identifier: String(session.contactId),
+    identifierIsEmail: false,
+    surface: "change password",
+  });
+  if (!limit.allowed) return { error: limit.message };
+
   const weak = validatePasswordStrength(password);
   if (weak) {
     return { error: weak.replace(/^Password/, "New password") };
@@ -219,6 +223,10 @@ export async function changePassword(
   } | null;
   const { valid } = await verifyPassword(current, contact?.password_hash);
   if (!contact || !valid) {
+    // Only a WRONG current password is charged to the per-account bucket — the
+    // attack this guards is a borrowed session cookie being used to take the
+    // login over, not a customer changing their password often.
+    await noteLimitFailure("password_change", String(session.contactId));
     return { error: "Your current password is incorrect." };
   }
 

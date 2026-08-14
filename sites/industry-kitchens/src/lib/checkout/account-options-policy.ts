@@ -17,6 +17,13 @@
 /** The already-collapsed options for the shopper's account (null = no account ⇒ no overrides). */
 export interface CheckoutAccountOptions {
   allowedPaymentMethods: string[] | null; // null = every channel method allowed
+  /**
+   * Of the allowed methods, the ones marked STAFF-ONLY on the account (Zoey's per-method
+   * "Access: Admin Only"). This is a CUSTOMER surface, so they are subtracted here — staff keep
+   * using them from the portal when they place an order, quote or payment for the account.
+   * null = none are staff-only.
+   */
+  staffOnlyPaymentMethods: string[] | null;
   minOrderAmount: number | null; // null = no minimum
   minOrderQty: number | null;
 }
@@ -57,23 +64,41 @@ export function effectiveMinimums(
   };
 }
 
-/** True when `id` is offerable/acceptable under the account's allow-list (null ⇒ everything is). */
-export function isPaymentMethodAllowed(id: string, allowed: string[] | null): boolean {
+/**
+ * True when `id` is offerable/acceptable to THIS SHOPPER: on the account's allow-list (null ⇒ every
+ * method is) and not marked staff-only. A staff-only method fails here exactly as an un-allowed one
+ * does — the storefront is the customer, and the customer must neither see it nor be able to force
+ * it through placeOrder.
+ *
+ * `staffOnly` is REQUIRED, and that is the point: it used to default to null, so a new customer
+ * surface could call this with two arguments, look perfectly correct, and quietly offer a staff-only
+ * method (which is exactly how the pay-a-quote screen, card 0Wy0xHuq, shipped the bug). Pass
+ * `accountOptions?.staffOnlyPaymentMethods ?? null` on a customer surface; a STAFF caller passes
+ * `null` explicitly, so the decision is visible in the diff.
+ */
+export function isPaymentMethodAllowed(
+  id: string,
+  allowed: string[] | null,
+  staffOnly: string[] | null
+): boolean {
+  if (staffOnly?.includes(id)) return false;
   if (!allowed) return true;
   return allowed.includes(id);
 }
 
 /**
- * Filter the channel's payment methods down to the account's allow-list. Called by the checkout
- * page (visibility); placeOrder authorizes the submitted method with isPaymentMethodAllowed against
- * the SAME resolved allow-list.
+ * Filter the channel's payment methods down to what this shopper may use — the account's allow-list
+ * minus its staff-only methods. Called by the checkout page (visibility); placeOrder authorizes the
+ * submitted method with isPaymentMethodAllowed against the SAME resolved lists, so the two cannot
+ * disagree about a staff-only method any more than they can about an un-allowed one.
  */
 export function filterPaymentMethodsForAccount<T extends { id: string }>(
   methods: T[],
-  allowed: string[] | null
+  allowed: string[] | null,
+  staffOnly: string[] | null
 ): T[] {
-  if (!allowed) return methods;
-  return methods.filter((m) => allowed.includes(m.id));
+  if (!allowed && !staffOnly) return methods;
+  return methods.filter((m) => isPaymentMethodAllowed(m.id, allowed, staffOnly));
 }
 
 /** Money for a user-facing message: 250 → "$250.00". */

@@ -22,6 +22,22 @@ export type CheckInput = {
    * navigation (see index.ts).
    */
   weight?: number;
+  /**
+   * Throttle but never escalate to a ban, AND ignore any ban already on record
+   * for this IP.
+   *
+   * Both halves are load-bearing, and the second one is the one that bites.
+   * The scraping guard RECORDS bans even while GUARD_MODE=log refuses to
+   * enforce them (that is how the log mode observes what it would have done),
+   * so a shopper's IP can be carrying a 15-minute-to-24-hour ban that nothing
+   * acts on. If the credential check consulted that list it would enforce the
+   * scraping guard's unproven verdict on the one surface that IS enforced —
+   * and a real Keenan customer would find they cannot sign in, register, reset
+   * a password or place an order, for a whole day, from an IP the shop is
+   * otherwise serving happily. Credential traffic answers ONLY to its own
+   * budget: throttle, with Retry-After, and never a lockout.
+   */
+  neverBan?: boolean;
 };
 
 export interface Limiter {
@@ -109,7 +125,7 @@ export function createLimiter(store: GuardStore, opts?: LimiterOptions): Limiter
   }
 
   return {
-    check({ ipKey, surface, tier, weight = 1 }): Verdict {
+    check({ ipKey, surface, tier, weight = 1, neverBan = false }): Verdict {
       const limit = limitFor(surface);
       if (!limit) return { action: "allow" };
 
@@ -119,17 +135,22 @@ export function createLimiter(store: GuardStore, opts?: LimiterOptions): Limiter
       // One Map lookup and one integer compare, BEFORE any counter maths. This
       // is the "a blocked request is near-free" contract, and the reason a
       // banned client hammering the origin costs almost nothing.
-      const existingBan = store.getBan(ipKey);
-      if (existingBan && existingBan.until > t) {
-        return {
-          action: "ban",
-          retryAfterSec: Math.max(1, Math.ceil((existingBan.until - t) / 1000)),
-          strikes: existingBan.strikes,
-          surface,
-        };
-        // NOTE: deliberately does NOT extend the ban. A client with a naive
-        // retry loop would otherwise be locked out forever — and behind a NAT
-        // that is an entire customer's office.
+      //
+      // Skipped entirely for `neverBan` traffic — see the flag: a credential
+      // request must never inherit a ban the scraping guard merely recorded.
+      if (!neverBan) {
+        const existingBan = store.getBan(ipKey);
+        if (existingBan && existingBan.until > t) {
+          return {
+            action: "ban",
+            retryAfterSec: Math.max(1, Math.ceil((existingBan.until - t) / 1000)),
+            strikes: existingBan.strikes,
+            surface,
+          };
+          // NOTE: deliberately does NOT extend the ban. A client with a naive
+          // retry loop would otherwise be locked out forever — and behind a NAT
+          // that is an entire customer's office.
+        }
       }
 
       const multiplier = TIER_MULTIPLIER[tier] ?? 1;
@@ -163,8 +184,9 @@ export function createLimiter(store: GuardStore, opts?: LimiterOptions): Limiter
 
       // Crawlers are throttled but NEVER banned: a 429 with Retry-After is
       // exactly what a crawler is built to obey, whereas a ban costs indexing
-      // and the Merchant feed.
-      if (tier !== "none") {
+      // and the Merchant feed. Credential traffic (neverBan) is treated the
+      // same way, for the reason on the flag.
+      if (tier !== "none" || neverBan) {
         store.setCounters(ipKey, counters);
         return { action: "throttle", retryAfterSec, surface };
       }
