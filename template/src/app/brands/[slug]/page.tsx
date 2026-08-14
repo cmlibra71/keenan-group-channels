@@ -65,6 +65,8 @@ export default async function BrandPage({
         page_title: string | null;
         meta_description: string | null;
         metafields: Record<string, unknown> | null;
+        /** This storefront's OWN approved page text (brand_channel_seo), as HTML. */
+        channel_intro_html?: string | null;
       }
     | null;
 
@@ -115,8 +117,11 @@ export default async function BrandPage({
         </div>
       </div>
 
-      {/* Brand-specific intro (conditional — only renders if metafields.intro_html present) */}
-      <BrandIntro html={meta.intro_html} />
+      {/* The content block at the top of the brand page (card xvz6pXB4, Steve 2026-08-13).
+          This site's OWN approved text wins; `metafields.intro_html` is the brand copy
+          scraped from the old Industry Kitchens site, kept as the fallback so the 19 pages
+          carrying it read exactly as they do today until wording is published for them. */}
+      <BrandIntro html={brand.channel_intro_html || meta.intro_html} />
 
       {/* Brand product lines (e.g. Rational iCombi Pro / Classic / Vario) */}
       <BrandProductLines heading="Product Lines" lines={meta.product_lines} />

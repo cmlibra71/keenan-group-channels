@@ -9,8 +9,10 @@ import {
   PAY_REASON_NOT_READY,
   PAY_REASON_NO_TOTAL,
   PAY_REASON_NO_METHODS,
+  PAY_REASON_NO_METHODS_FOR_ACCOUNT,
   PAY_REASON_NO_ADDRESS,
 } from "./quote-payable";
+import { PAY_UNAVAILABLE_ACCOUNT_QUOTE } from "../checkout/payment-availability.ts";
 
 const NOW = Date.parse("2026-08-12T00:00:00Z");
 const PAST = "2026-07-01T00:00:00Z";
@@ -104,6 +106,21 @@ describe("resolveQuotePayState", () => {
       kind: "disabled",
       reason: PAY_REASON_NO_METHODS,
     });
+  });
+
+  test("an account that may use none of the store's methods gets the ACCOUNT reason", () => {
+    // Chefs Depot has one enabled method; marking it Staff only on an account
+    // empties this customer's list while the store still takes payments. Telling
+    // them "this store doesn't take online payments" would be untrue, and would
+    // contradict what the checkout says about the same account.
+    assert.deepEqual(
+      resolveQuotePayState(
+        { ...PAYABLE, paymentMethodCount: 0, channelPaymentMethodCount: 1 },
+        NOW
+      ),
+      { kind: "disabled", reason: PAY_REASON_NO_METHODS_FOR_ACCOUNT }
+    );
+    assert.equal(PAY_REASON_NO_METHODS_FOR_ACCOUNT, PAY_UNAVAILABLE_ACCOUNT_QUOTE);
   });
 
   test("no delivery address greys Pay", () => {

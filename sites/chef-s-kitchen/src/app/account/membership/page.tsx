@@ -2,10 +2,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Check, AlertTriangle, Clock } from "lucide-react";
 import { getSession } from "@/lib/auth";
+import { formatMemberSince } from "@/lib/member-date";
 import { signInRedirect } from "@/lib/account-redirect";
 import {
   getSubscriptionPlans,
   getActiveSubscriptionForContact,
+  getMemberSince,
   getFeatureFlag,
   subscriptionService,
   drawEntryService,
@@ -27,10 +29,13 @@ export default async function MembershipPage() {
   const session = await getSession();
   if (!session) redirect(signInRedirect("/account/membership"));
 
-  const [plans, activeSub] = await Promise.all([
+  const [plans, activeSub, memberSince] = await Promise.all([
     getSubscriptionPlans(),
     getActiveSubscriptionForContact(session.contactId),
+    getMemberSince(session.contactId),
   ]);
+  // Melbourne, always — see member-date.ts.
+  const memberSinceLabel = formatMemberSince(memberSince);
 
   // If user has active subscription, show status
   if (activeSub) {
@@ -72,7 +77,7 @@ export default async function MembershipPage() {
               <p className="text-member-text text-sm font-medium">
                 Your membership is set to cancel. Benefits remain active until{" "}
                 {activeSub.current_period_end
-                  ? new Date(activeSub.current_period_end).toLocaleDateString()
+                  ? formatMemberSince(activeSub.current_period_end)
                   : "the end of your billing period"}.
               </p>
             </div>
@@ -100,6 +105,14 @@ export default async function MembershipPage() {
                 {isPastDue ? "Past Due" : isCancelling ? "Cancelling" : "Active"}
               </dd>
             </div>
+            {memberSinceLabel && (
+              <div>
+                <dt className="text-steel-500">Member since</dt>
+                <dd className="font-medium text-ink-900">
+                  {memberSinceLabel}
+                </dd>
+              </div>
+            )}
             <div>
               <dt className="text-steel-500">Consecutive Months</dt>
               <dd className="font-medium text-ink-900">{activeSub.consecutive_months ?? 0}</dd>
@@ -110,7 +123,7 @@ export default async function MembershipPage() {
                   {isCancelling ? "Benefits End" : "Next Billing Date"}
                 </dt>
                 <dd className="font-medium text-ink-900">
-                  {new Date(activeSub.current_period_end).toLocaleDateString()}
+                  {formatMemberSince(activeSub.current_period_end)}
                 </dd>
               </div>
             )}

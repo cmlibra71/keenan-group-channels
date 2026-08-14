@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { draftMode, headers } from "next/headers";
@@ -8,6 +9,7 @@ import { getListingPricing } from "@/lib/member";
 import { renderBrandNodeBranch, type BrandListingPricing } from "@/builder/brand-node-branch";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BrandHero, BrandProducts, DEFAULT_BRAND_BLOCKS } from "@/blocks/brand-page-blocks";
+import { BrandIntro } from "@/components/brand/BrandIntro";
 import { TemplateRenderer } from "@/blocks/TemplateRenderer";
 import { effectiveSubBlocks } from "@/blocks/BlockRenderer";
 import { BLOCK_REGISTRY } from "@keenan/services";
@@ -53,7 +55,14 @@ export default async function BrandPage({
   // getBrandBySlug → getBySlug runs transformRow, so the row is snake_case at runtime
   // (image_url). Type it so the loose Record<string,unknown> doesn't surface as `unknown`.
   const brand = (await getBrandBySlug(slug)) as
-    | { id: number; name: string; slug: string; image_url: string | null }
+    | {
+        id: number;
+        name: string;
+        slug: string;
+        image_url: string | null;
+        /** This storefront's OWN approved page text (brand_channel_seo), as HTML. */
+        channel_intro_html?: string | null;
+      }
     | null;
 
   if (!brand) {
@@ -98,6 +107,13 @@ export default async function BrandPage({
   const blocks: RenderedBlock[] =
     mainBlocks.length > 0 ? mainBlocks : (DEFAULT_BRAND_BLOCKS as unknown as RenderedBlock[]);
 
+  // The content block at the top of the page (card xvz6pXB4, Steve 2026-08-13): under the
+  // hero, above the products, which is where a shopper reads it before deciding what to
+  // click. It sits after the hero BLOCK rather than at a fixed position so a reordered
+  // brand template keeps it with the heading; with no hero block it leads the page.
+  const heroIndex = blocks.findIndex((b) => b.block_type === "brand_hero");
+  const intro = <BrandIntro html={brand.channel_intro_html} />;
+
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
       {/* Breadcrumbs */}
@@ -107,7 +123,18 @@ export default async function BrandPage({
         <span className="text-ink-700">{brand.name as string}</span>
       </nav>
 
+      {heroIndex < 0 && intro}
+
       {blocks.map((b, i) => {
+        const withIntro = (node: React.ReactNode) =>
+          i === heroIndex ? (
+            <Fragment key={i}>
+              {node}
+              {intro}
+            </Fragment>
+          ) : (
+            node
+          );
         if (b.block_type === "brand_hero") {
           // CMS v2: templated brand hero when the doc carries edited
           // sub-blocks (or CMS_V2_FORCE); the page supplies brand bindings.
@@ -116,9 +143,11 @@ export default async function BrandPage({
             ((Array.isArray(b.props?.subBlocks) && (b.props!.subBlocks as unknown[]).length > 0) ||
               process.env.CMS_V2_FORCE === "1");
           if (v2) {
-            return <BrandHeroV2 key={i} props={b.props ?? {}} brand={brand} total={total} draft={draft} />;
+            return withIntro(
+              <BrandHeroV2 key={i} props={b.props ?? {}} brand={brand} total={total} draft={draft} />
+            );
           }
-          return <BrandHero key={i} brand={brand} total={total} />;
+          return withIntro(<BrandHero key={i} brand={brand} total={total} />);
         }
         if (b.block_type === "brand_products") {
           const v2 =
@@ -127,7 +156,7 @@ export default async function BrandPage({
               draft ||
               process.env.CMS_V2_FORCE === "1");
           if (v2) {
-            return (
+            return withIntro(
               <BrandProductsV2
                 key={i}
                 props={b.props ?? {}}
@@ -138,9 +167,9 @@ export default async function BrandPage({
               />
             );
           }
-          return <BrandProducts key={i} {...productCtx} />;
+          return withIntro(<BrandProducts key={i} {...productCtx} />);
         }
-        return <BlockRenderer key={i} blocks={[b]} draft={draft} />;
+        return withIntro(<BlockRenderer key={i} blocks={[b]} draft={draft} />);
       })}
     </div>
   );

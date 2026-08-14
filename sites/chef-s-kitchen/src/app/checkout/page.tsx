@@ -5,8 +5,7 @@ import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
 import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
 import { getContactPermissions } from "@/lib/role-permissions";
-import { CheckoutForm } from "@/components/checkout/CheckoutForm";
-import { StartedCheckoutTracker } from "@/components/analytics/StartedCheckoutTracker";
+import { summariseLinesFreight } from "@keenan/services";
 import { gstSplit } from "@keenan/services/calc";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
@@ -20,6 +19,7 @@ import {
 } from "@/lib/checkout/free-shipping-brands";
 import { matchBrandSpecial } from "@/lib/checkout/free-shipping-brands-policy";
 import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-policy";
+import { resolvePaymentAvailability } from "@/lib/checkout/payment-availability";
 import {
   filterFinanceMethods,
   financeLinesFromCart,
@@ -27,6 +27,8 @@ import {
   isFinancePaymentMethod,
 } from "@/lib/checkout/finance";
 import { financeApplicationForm } from "@/lib/checkout/finance-form";
+import { CheckoutForm } from "@/components/checkout/CheckoutForm";
+import { StartedCheckoutTracker } from "@/components/analytics/StartedCheckoutTracker";
 
 export const metadata = {
   title: "Checkout",
@@ -78,19 +80,36 @@ export default async function CheckoutPage() {
     resolveNetTermsEntitlement(session),
     resolveAccountOptions(session),
   ]);
-  // customerPaymentMethods, never paymentMethods and never enabledPaymentMethods:
-  // the shared read returns EVERY configured method (the admin editor and
-  // past-order lookups need the disabled ones), and the "enabled" list still
-  // contains channel STAFF-ONLY methods — Zoey keeps Send Invoice to staff, and
-  // IK has it switched on today. A customer surface reads the customer list
-  // (services `customerFacingPaymentMethods`, card NmAfwrdE); placeOrder
-  // authorises against the same list.
+  // customerPaymentMethods, never paymentMethods and never enabledPaymentMethods.
+  // The shared read returns EVERY configured method (admin editor + past-order
+  // lookups need the disabled ones); "enabled" still contains the methods the
+  // CHANNEL marks staff-only — Industry Kitchens' Send Invoice is enabled so staff
+  // can raise an order on it, and must never be shown to a shopper (card NmAfwrdE).
+  //
+  // Two independent staff-only controls, both applied here: the CHANNEL's (already
+  // subtracted inside customerPaymentMethods) and the ACCOUNT's (the third argument,
+  // card N8kE8arY). placeOrder authorises against the same two.
   const entitledPaymentMethods = filterPaymentMethodsForAccount(
     checkoutSettings.customerPaymentMethods,
-    accountOptions?.allowedPaymentMethods ?? null
+    accountOptions?.allowedPaymentMethods ?? null,
+    accountOptions?.staffOnlyPaymentMethods ?? null
   )
     .filter((m) => m.id !== "net_terms" || !!netTerms)
     .map((m) => (m.id === "net_terms" && netTerms ? { ...m, netTermsDays: netTerms.netTermsDays } : m));
+
+  // Nothing left to offer means one of two very different things, and the customer
+  // must be told the right one: the STORE has no methods switched on (order still
+  // placed, invoiced later — unchanged), or this ACCOUNT may use none of the store's
+  // methods, in which case we refuse rather than book an unpaid order. placeOrder
+  // resolves the same two counts and refuses the same case (card N8kE8arY).
+  //
+  // "What the STORE offers" is the CUSTOMER-facing count, not the enabled count: a
+  // store whose only enabled method is staff-only offers a shopper nothing at all,
+  // and must say so rather than blame the shopper's account (card NmAfwrdE).
+  const paymentAvailability = resolvePaymentAvailability(
+    checkoutSettings.customerPaymentMethods.length,
+    entitledPaymentMethods.length
+  );
 
   const subtotal = parseFloat(cart.cart_amount ?? "0");
 
@@ -206,10 +225,36 @@ export default async function CheckoutPage() {
 
   // Resolve the channel's Stripe gateway (test-vs-live aware, prod-safe fallback)
   // from the global payment_gateways setting. All channels share one Stripe
-  // account; segmentation happens via metadata. wantTestMode also drives the
-  // TEST MODE banner shown on the payment options.
-  const { gateway: stripeGateway, wantTestMode } = await resolveStripeGateway();
+  // account; segmentation happens via metadata.
+  //
+  // `testSession` is true ONLY while this browser holds an ephemeral test checkout
+  // session (a short-lived signed cookie; nothing stored anywhere, no setting a
+  // human can leave switched on). It is the sole input to the on-screen "test
+  // mode, no money will be taken" banner, so the banner cannot be rendered
+  // without one.
+  const { gateway: stripeGateway, testSession } = await resolveStripeGateway();
   const stripePublishableKey: string | undefined = stripeGateway?.credentials?.publishable_key;
+
+  // A test checkout session that cannot resolve a TEST gateway must refuse to take
+  // payment, never fall back to live: this browser was told no money would be
+  // taken. Drop the card option entirely rather than mounting Elements on a live
+  // key or leaving a Pay button that would charge a real card.
+  const cardUnavailableInTestSession = testSession && !stripePublishableKey;
+  const offeredPaymentMethods = cardUnavailableInTestSession
+    ? paymentMethods.filter((m) => m.id !== "stripe")
+    : paymentMethods;
+
+  // Bulky items in this cart (card Wxjp8wpg). Non-empty ⇒ CheckoutForm makes the shopper choose
+  // curbside vs specialised delivery. Read from the products, and re-read by placeOrder, so what
+  // we ask is exactly what we enforce.
+  const bulkyProductNames = await summariseLinesFreight(
+    (cart.items as Array<{ product_id: number; quantity: number }>).map((i) => ({
+      product_id: i.product_id,
+      quantity: Number(i.quantity) || 0,
+    }))
+  )
+    .then((f) => f.bulky.map((p) => p.name))
+    .catch(() => [] as string[]);
 
   // Check if shipping rate calculation is available
   let shippingEnabled = false;
@@ -292,15 +337,18 @@ export default async function CheckoutPage() {
         contactPrefill={contactPrefill}
         canSaveNewAddress={canSaveNewAddress}
         countries={checkoutSettings.supportedCountries}
-        paymentMethods={paymentMethods}
+        paymentMethods={offeredPaymentMethods}
+        paymentAvailability={paymentAvailability}
         savedAddresses={savedAddresses}
         googlePlacesEnabled={checkoutSettings.googlePlacesEnabled}
         freeShippingEnabled={checkoutSettings.freeShippingEnabled}
         freeShippingThreshold={checkoutSettings.freeShippingThreshold}
         brandSpecial={brandSpecial}
         shippingEnabled={shippingEnabled}
+        bulkyProductNames={bulkyProductNames}
         stripePublishableKey={stripePublishableKey}
-        testMode={wantTestMode}
+        testMode={testSession}
+        testModeCardUnavailable={cardUnavailableInTestSession}
         finance={financeOffer}
       />
     </div>
