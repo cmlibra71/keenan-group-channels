@@ -38,12 +38,6 @@ function formatDateTime(value: string | Date | null): string {
   return d.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
 }
 
-/** "$154.00" — the same shape the `Price` component renders, for button wording. */
-const amountFormatter = new Intl.NumberFormat("en-AU", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
 export function PaymentSection({
   orderId,
   paymentMethod,
@@ -199,7 +193,6 @@ export function PaymentSection({
           <PayBalancePanel
             orderId={orderId}
             amount={payBalance.amount}
-            currencyLabel={`$${amountFormatter.format(payBalance.amount)}`}
             stripePublishableKey={stripePublishableKey}
           />
         )}

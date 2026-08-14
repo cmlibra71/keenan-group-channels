@@ -15,8 +15,17 @@ const base: PayBalanceInput = {
   owed: 154,
   settled: false,
   customerPaymentMethodIds: ["bank_transfer", "stripe"],
+  viewerIsAccountMember: false,
   viewerRoleName: null,
+  viewerRoleUnknown: false,
 };
+
+/** The same order, viewed by somebody who belongs to a business account. */
+const member = (roleName: string | null): PayBalanceInput => ({
+  ...base,
+  viewerIsAccountMember: true,
+  viewerRoleName: roleName,
+});
 
 test("an individual with money owing and card switched on may pay the whole balance", () => {
   const d = decidePayBalance(base);
@@ -112,6 +121,71 @@ test("an unknown or missing role on a business order is refused, never waved thr
 
 test("an individual's own order needs no role at all", () => {
   assert.equal(decidePayBalance({ ...base, orderAccountId: null, viewerRoleName: null }).allowed, true);
+});
+
+// ── The gate reads the VIEWER, not `orders.account_id` ───────────────────────
+//
+// Checkout stamps `account_id` only on a NET-TERMS order, so a business
+// account's card and bank-transfer orders carry NULL — 22 of the 32 live Chefs
+// Depot orders placed by account members (prod, 2026-08-14). A rule that asked
+// the column took the "individual, no role needed" branch on all of them, which
+// is the whole of Tim's restriction failing open on the majority of the orders
+// it exists for. These are the cases that catch it coming back.
+
+test("a Buyer is refused on their OWN order when the order carries no account_id", () => {
+  const d = decidePayBalance({ ...member("Buyer"), orderAccountId: null });
+  assert.equal(d.allowed, false);
+  assert.equal(d.refusal, "not_authorised");
+  assert.match(d.message ?? "", /Manager or Billing/);
+});
+
+test("a Manager is allowed on the same account_id-less order", () => {
+  assert.equal(decidePayBalance({ ...member("Manager"), orderAccountId: null }).allowed, true);
+  assert.equal(decidePayBalance({ ...member("Billing"), orderAccountId: null }).allowed, true);
+});
+
+test("an account member with no role at all is refused on an account_id-less order", () => {
+  for (const role of [null, "", "Restricted Buyer"]) {
+    assert.equal(
+      decidePayBalance({ ...member(role), orderAccountId: null }).refusal,
+      "not_authorised",
+      String(role)
+    );
+  }
+});
+
+test("belonging to no account keeps the individual path open", () => {
+  const d = decidePayBalance({ ...base, viewerIsAccountMember: false, orderAccountId: null });
+  assert.equal(d.allowed, true, "most of Chefs Depot has no business account");
+});
+
+// ── A role lookup that failed refuses; it never guesses ──────────────────────
+
+test("an unreadable role refuses the payment and says so", () => {
+  const d = decidePayBalance({ ...base, viewerRoleUnknown: true });
+  assert.equal(d.allowed, false);
+  assert.equal(d.refusal, "role_unknown");
+  assert.match(d.message ?? "", /bank transfer/, "a refusal must leave a way to pay");
+});
+
+test("an unreadable role refuses even when nothing else suggests an account", () => {
+  // The lookup that failed is the one that would have reported the membership,
+  // so `viewerIsAccountMember` reads false here. Deferring the check behind it
+  // would let exactly the orders this gate protects through.
+  const d = decidePayBalance({
+    ...base,
+    viewerIsAccountMember: false,
+    orderAccountId: null,
+    viewerRoleUnknown: true,
+  });
+  assert.equal(d.allowed, false);
+  assert.equal(d.refusal, "role_unknown");
+});
+
+test("an unreadable role on a PAID order still says nothing owing, not a permissions error", () => {
+  const d = decidePayBalance({ ...base, viewerRoleUnknown: true, settled: true });
+  assert.equal(d.refusal, "nothing_owing");
+  assert.equal(d.message, null);
 });
 
 // ── Ordering: money state is decided before permission state ─────────────────

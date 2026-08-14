@@ -25,6 +25,13 @@
 // payment history syncs (card 1IPO2D53), because its "unpaid" is missing data,
 // not real debt, and offering to charge a card for it would take money twice.
 //
+// THE ROLE GATE ASKS ABOUT THE VIEWER, NOT THE ORDER ROW. `orders.account_id` is
+// only written when checkout finds a net-terms entitlement, so a business
+// account's card and bank-transfer orders carry NULL — 22 of the 32 live Chefs
+// Depot orders placed by account members (prod, read 2026-08-14). A first cut of
+// this rule keyed the gate on that column, and consequently let a Buyer pay on
+// all of them.
+//
 // Pure: no I/O, no React. The caller does the lookups and hands in the answers.
 // ============================================================================
 
@@ -38,8 +45,10 @@ export type PayBalanceRefusal =
   | "not_payable"
   /** Imported from Zoey; its payments have not come across yet (card 1IPO2D53). */
   | "history_pending"
-  /** A business account's order, and this contact is not Manager or Billing. */
-  | "not_authorised";
+  /** A business account is involved, and this contact is not Manager or Billing. */
+  | "not_authorised"
+  /** The role lookup failed, so we cannot tell. Money gates refuse rather than guess. */
+  | "role_unknown";
 
 export interface PayBalanceDecision {
   allowed: boolean;
@@ -74,7 +83,12 @@ export interface PayBalanceInput {
   orderStatus: string | null | undefined;
   /** `orders.external_source`; "zoey" on the 33k imported orders. */
   orderExternalSource: string | null | undefined;
-  /** `orders.account_id` — set when the order belongs to a BUSINESS account. */
+  /**
+   * `orders.account_id`. Set only on NET-TERMS orders: checkout stamps it from the
+   * net-terms entitlement and nowhere else, so a business-account contact paying by
+   * card or bank transfer leaves it NULL. It is therefore evidence that an account
+   * is involved, NEVER evidence that one is not — see `viewerIsAccountMember`.
+   */
   orderAccountId: number | null | undefined;
   /** Outstanding balance inc GST, from `paymentPosition`. */
   owed: number;
@@ -87,8 +101,25 @@ export interface PayBalanceInput {
    * here" can never give different answers.
    */
   customerPaymentMethodIds: readonly string[];
-  /** The viewer's account role name (`account_roles.name`), null for a B2C shopper. */
+  /**
+   * True when the VIEWER holds an active business-account membership — the fact
+   * Tim's rule actually turns on. Read from the viewer, not the order row, because
+   * most of a business account's orders carry no `account_id` at all (22 of 32 live
+   * Chefs Depot orders placed by account members, read from prod 2026-08-14).
+   */
+  viewerIsAccountMember: boolean;
+  /**
+   * The role name (`account_roles.name`) that applies to THIS order for THIS
+   * viewer: their role on the order's account when the order names one, else their
+   * role on their own account. Null when they hold none.
+   */
   viewerRoleName: string | null | undefined;
+  /**
+   * True when the role lookup FAILED, so no role name can be trusted. This gate
+   * authorises spending somebody else's money and refuses rather than guessing —
+   * unlike the fail-open action codes the rest of the storefront uses.
+   */
+  viewerRoleUnknown: boolean;
 }
 
 /** Is `stripe` among the methods this customer may be charged on? */
@@ -131,14 +162,39 @@ export function decidePayBalance(input: PayBalanceInput): PayBalanceDecision {
     return refuse("card_unavailable", amount);
   }
 
-  // A business account's order: Tim's rule. An order with no account is an
-  // individual's or a guest's own order and needs no role at all.
-  if (input.orderAccountId != null && !roleMayPayAccountOrders(input.viewerRoleName)) {
+  // Tim's rule, asked of the VIEWER rather than of the order row.
+  //
+  // `orders.account_id` cannot carry this decision: checkout only stamps it when
+  // the shopper is net-terms entitled, so a business account's card and
+  // bank-transfer orders have it NULL — 22 of the 32 live Chefs Depot orders
+  // placed by account members (prod, 2026-08-14). Keying the gate on the column
+  // let a Buyer pay their own order, and a colleague's under
+  // `view_company_orders`, on every one of those. So a role is required whenever
+  // a business account is involved AT EITHER END: the viewer belongs to one, or
+  // the order names one.
+  //
+  // An individual or guest — most of Chefs Depot — belongs to no account and
+  // needs no role to pay their own order.
+  // Checked FIRST, and unconditionally: a failed lookup cannot report that the
+  // viewer belongs to an account, so deferring it behind `accountInvolved` would
+  // reinstate the same fail-open by another route.
+  if (input.viewerRoleUnknown === true) {
     return refuse(
-      "not_authorised",
+      "role_unknown",
       amount,
-      "Only a Manager or Billing contact on your account can pay this order by card. Anyone on the account can still pay by bank transfer."
+      "We couldn't check who is allowed to pay this order by card. Please reload the page to try again, or pay by bank transfer."
     );
+  }
+
+  const accountInvolved = input.viewerIsAccountMember === true || input.orderAccountId != null;
+  if (accountInvolved) {
+    if (!roleMayPayAccountOrders(input.viewerRoleName)) {
+      return refuse(
+        "not_authorised",
+        amount,
+        "Only a Manager or Billing contact on your account can pay this order by card. Anyone on the account can still pay by bank transfer."
+      );
+    }
   }
 
   return { allowed: true, amount, refusal: null, message: null };

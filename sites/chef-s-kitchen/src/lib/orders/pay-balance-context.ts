@@ -19,7 +19,7 @@ import type { CheckoutSettings } from "@keenan/services";
 import { getCheckoutSettings } from "@/lib/store";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
 import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-policy";
-import { getContactPermissions } from "@/lib/role-permissions";
+import { getContactPermissions, getContactRoleOnAccount } from "@/lib/role-permissions";
 import { paymentPosition, visibleTransaction, type TransactionRowLike } from "./order-presentation";
 import { decidePayBalance, type PayBalanceDecision } from "./pay-balance";
 
@@ -72,14 +72,30 @@ export async function resolvePayBalance(
     accountOptions?.allowedPaymentMethods ?? null
   ).map((m) => m.id);
 
-  // Only a BUSINESS account's order needs a role, so only that case pays for the
-  // lookup. A failure resolves to no role, which the pure rule refuses — paying
-  // is a money authorisation, and this one gate deliberately fails CLOSED.
-  let viewerRoleName: string | null = null;
-  if (order.account_id != null) {
-    viewerRoleName = await getContactPermissions(session.contactId)
-      .then((p) => p.roleName)
-      .catch(() => null);
+  // WHO IS PAYING, not what the order row says. `orders.account_id` is written
+  // only when checkout finds a net-terms entitlement, so a business account's
+  // card and bank-transfer orders leave it NULL and asking the column "is an
+  // account involved?" answers no on most of them. The viewer's own membership
+  // is the fact Tim's rule turns on, so it is always looked up.
+  const perms = await getContactPermissions(session.contactId).catch(() => null);
+
+  // `getContactPermissions` FAILS OPEN by design (a resolver hiccup must never
+  // brick checkout), which here would read as "not a business contact" and wave
+  // the payment through. This gate spends somebody else's money, so an unknown
+  // answer is refused instead — the one place that inverts the storefront's
+  // fail-open policy, and the pure rule says so in the refusal it returns.
+  let viewerRoleUnknown = perms === null || perms.failedOpen;
+  let viewerIsAccountMember = perms?.isB2B === true;
+  let viewerRoleName: string | null = perms?.roleName ?? null;
+
+  // When the order names an account that is NOT the viewer's primary one, the
+  // role above belongs to a different company. 488 live contacts hold more than
+  // one membership, so ask about the account that is actually paying.
+  if (!viewerRoleUnknown && order.account_id != null && order.account_id !== (perms?.accountId ?? null)) {
+    const onOrderAccount = await getContactRoleOnAccount(session.contactId, order.account_id);
+    viewerRoleUnknown = onOrderAccount.failed;
+    viewerIsAccountMember = true;
+    viewerRoleName = onOrderAccount.roleName;
   }
 
   return decidePayBalance({
@@ -89,6 +105,8 @@ export async function resolvePayBalance(
     owed,
     settled,
     customerPaymentMethodIds: methodIds,
+    viewerIsAccountMember,
     viewerRoleName,
+    viewerRoleUnknown,
   });
 }
