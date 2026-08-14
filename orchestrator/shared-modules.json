@@ -72,6 +72,8 @@
     "lib/checkout/au-address.ts",
     "lib/checkout/customer-payment-list.test.ts",
     "lib/checkout/customer-payment-surfaces.test.ts",
+    "lib/checkout/customer-reference.test.ts",
+    "lib/checkout/customer-reference.ts",
     "lib/checkout/finance-application.ts",
     "lib/checkout/finance-form.ts",
     "lib/checkout/finance.test.ts",

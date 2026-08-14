@@ -14,6 +14,7 @@ import {
   isValidAuPostcode,
   auAddressNeedsCorrection,
 } from "@/lib/checkout/au-address";
+import { CUSTOMER_REFERENCE_MAX_LENGTH } from "@/lib/checkout/customer-reference";
 import { Price } from "@/components/ui/Price";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
 import { FinanceApplicationPanel } from "@/components/checkout/FinanceApplicationPanel";
@@ -187,6 +188,9 @@ export function CheckoutForm({
   // "You already have an account" — shown when the address they typed as a guest
   // matches one, offering the same drawer rather than a silent guest order.
   const [existingAccount, setExistingAccount] = useState(false);
+  // The customer's own PO / reference (optional). Controlled so a failed submit
+  // re-renders with what they typed still in the box.
+  const [customerReference, setCustomerReference] = useState("");
   // Answers we already have, per address — see decideEmailProbe.
   const probed = useRef<Map<string, boolean>>(new Map());
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>(
@@ -906,6 +910,35 @@ export function CheckoutForm({
                 <input type="hidden" name="phone" value={selectedAddress.phone || ""} />
               </>
             )}
+
+            {/* Customer Reference — the shopper's own PO / job number, as Zoey
+                collects it at the delivery step (card rmHBw8vA). Optional and
+                free text: it is whatever their accounts team put on the PO.
+                Stored on the order as customer_po, which is what staff see and
+                what prints on the invoice and the delivery paperwork. */}
+            <div className="mt-6 border-t border-zinc-200 pt-4">
+              <label
+                htmlFor="customerReference"
+                className="block text-sm font-medium text-zinc-700"
+              >
+                Customer reference{" "}
+                <span className="font-normal text-zinc-500">(optional)</span>
+              </label>
+              <input
+                id="customerReference"
+                type="text"
+                name="customerReference"
+                maxLength={CUSTOMER_REFERENCE_MAX_LENGTH}
+                value={customerReference}
+                onChange={(e) => setCustomerReference(e.target.value)}
+                className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+                placeholder="e.g. your purchase order number"
+              />
+              <p className="mt-1 text-xs text-zinc-500">
+                Your own purchase order or job number. It appears on your invoice and delivery
+                paperwork.
+              </p>
+            </div>
           </div>
 
           <BulkyDeliveryChoice

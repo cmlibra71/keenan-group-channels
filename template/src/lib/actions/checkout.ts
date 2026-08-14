@@ -24,6 +24,7 @@ import {
 } from "@/lib/checkout/free-shipping-brands";
 import { matchBrandSpecial } from "@/lib/checkout/free-shipping-brands-policy";
 import { normaliseAuState, isValidAuPostcode } from "@/lib/checkout/au-address";
+import { normaliseCustomerReference } from "@/lib/checkout/customer-reference";
 import { setLastOrder } from "@/lib/checkout/last-order";
 import { canViewOrderConfirmation } from "@/lib/checkout/confirmation-access";
 import { siteBaseUrl } from "@/lib/seo";
@@ -152,6 +153,10 @@ export async function placeOrder(
   const country = (formData.get("country") as string)?.trim() || "AU";
   const phone = (formData.get("phone") as string)?.trim() || "";
   const paymentMethod = (formData.get("paymentMethod") as string)?.trim() || "";
+  // The customer's own PO / reference, typed at the delivery step. Optional —
+  // never a reason to refuse an order — and normalised (one line, capped at the
+  // varchar(100) column) so a pasted value can never make the insert fail.
+  const customerReference = normaliseCustomerReference(formData.get("customerReference"));
 
   if (!email || !firstName || !lastName || !address1 || !city || !postalCode) {
     return { error: "Please fill in all required fields." };
@@ -666,10 +671,18 @@ export async function placeOrder(
           ...(session?.contactId ? { contact_id: { type: "eq", value: session.contactId } } : {}),
         },
       });
-      const existing = (open.data as Array<{ id: number; order_number: string; metafields?: Record<string, unknown> | null }>).find(
+      const existing = (open.data as Array<{ id: number; order_number: string; customer_po?: string | null; metafields?: Record<string, unknown> | null }>).find(
         (o) => (o.metafields ?? {})?.cart_uuid === uuid
       );
       if (existing) {
+        // The shopper may have added, corrected OR CLEARED their reference on the
+        // retry — the box on the form is the truth, so an emptied box clears the
+        // order too rather than leaving the first attempt's value on it. Safe to
+        // write on its own: OrderService.beforeUpdate only moves status when
+        // paymentStatus is part of the same update.
+        if (customerReference !== (existing.customer_po ?? null)) {
+          await orderService.update(existing.id, { customerPo: customerReference });
+        }
         const { clientSecret } = await paymentService.createStripePaymentIntent(existing.id, {
           amount: String(totalIncTax),
           description: `Order ${existing.order_number}`,
@@ -712,6 +725,9 @@ export async function placeOrder(
     totalTax: String(totalTax),
     itemsTotal: totalItems,
     billingAddress,
+    // Zoey's "Customer Reference". Same field the portal's Delivery card and the
+    // amend form edit, and the first thing the invoice reads (card rmHBw8vA).
+    ...(customerReference ? { customerPo: customerReference } : {}),
     ...(belowCostLines.length > 0
       ? {
           internalMemo:
