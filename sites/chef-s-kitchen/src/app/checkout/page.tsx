@@ -10,10 +10,24 @@ import { StartedCheckoutTracker } from "@/components/analytics/StartedCheckoutTr
 import { gstSplit } from "@keenan/services/calc";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
+import { ACCOUNT_REQUIRED_SETTING, checkoutNeedsSignIn } from "@/lib/checkout/account-required";
+import { CheckoutSignInGate } from "@/components/checkout/CheckoutSignInGate";
 import { lastOrderConfirmationPath } from "@/lib/checkout/last-order";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
+import {
+  activeBrandFreeShippingSpecials,
+  brandIdsForProducts,
+} from "@/lib/checkout/free-shipping-brands";
+import { matchBrandSpecial } from "@/lib/checkout/free-shipping-brands-policy";
 import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-policy";
 import { resolvePaymentAvailability } from "@/lib/checkout/payment-availability";
+import {
+  filterFinanceMethods,
+  financeLinesFromCart,
+  financeOfferForCart,
+  isFinancePaymentMethod,
+} from "@/lib/checkout/finance";
+import { financeApplicationForm } from "@/lib/checkout/finance-form";
 
 export const metadata = {
   title: "Checkout",
@@ -30,10 +44,25 @@ export default async function CheckoutPage() {
     redirect(justOrdered ?? "/cart");
   }
 
-  const [session, checkoutSettings] = await Promise.all([
+  const [session, checkoutSettings, requireAccount] = await Promise.all([
     getSession(),
     getCheckoutSettings(),
+    getFeatureFlag(ACCOUNT_REQUIRED_SETTING),
   ]);
+
+  // No guest checkout on this channel (Industry Kitchens, as on Zoey — card
+  // LQM9FQYe): stop the shopper with the sign-in step instead of the form. The
+  // cart is untouched, so signing in from here drops them straight back onto a
+  // priced basket. placeOrder enforces the SAME rule server-side — this is only
+  // what we show. Chefs Depot leaves the setting off and keeps guest checkout.
+  if (checkoutNeedsSignIn(requireAccount, !!session)) {
+    return (
+      <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
+        <h1 className="page-title mb-8">Checkout</h1>
+        <CheckoutSignInGate />
+      </div>
+    );
+  }
 
   // Net Terms is account-gated: only a logged-in customer whose email maps to an
   // active B2B account with net_terms_days > 0 may defer payment. Everyone else
@@ -50,10 +79,16 @@ export default async function CheckoutPage() {
     resolveNetTermsEntitlement(session),
     resolveAccountOptions(session),
   ]);
-  // enabledPaymentMethods, never paymentMethods: the shared read returns EVERY
-  // configured method (admin editor + past-order lookups need the disabled ones).
-  const paymentMethods = filterPaymentMethodsForAccount(
-    checkoutSettings.enabledPaymentMethods,
+  // customerPaymentMethods, never paymentMethods and never enabledPaymentMethods:
+  // the shared read returns EVERY configured method (the admin editor and
+  // past-order lookups need the disabled ones), and the "enabled" list still
+  // contains channel STAFF-ONLY methods — Zoey keeps Send Invoice to staff, and
+  // IK has it switched on today. A customer surface reads the customer list
+  // (services `customerFacingPaymentMethods`, card NmAfwrdE); placeOrder
+  // authorises against the same list. Account-level staff-only methods are
+  // stripped here too via the third argument.
+  const entitledPaymentMethods = filterPaymentMethodsForAccount(
+    checkoutSettings.customerPaymentMethods,
     accountOptions?.allowedPaymentMethods ?? null,
     accountOptions?.staffOnlyPaymentMethods ?? null
   )
@@ -67,10 +102,27 @@ export default async function CheckoutPage() {
   // resolves the same two counts and refuses the same case (card N8kE8arY).
   const paymentAvailability = resolvePaymentAvailability(
     checkoutSettings.enabledPaymentMethods.length,
-    paymentMethods.length
+    entitledPaymentMethods.length
   );
 
   const subtotal = parseFloat(cart.cart_amount ?? "0");
+
+  // Brand free-shipping special (card 88Ay7UGA): any line from a promoted brand
+  // makes the whole order's delivery free, for everyone, with no minimum spend.
+  // `placeOrder` resolves this again from the same rows before charging.
+  const brandSpecials = await activeBrandFreeShippingSpecials();
+  const brandSpecial = brandSpecials.length
+    ? matchBrandSpecial(
+        brandSpecials,
+        [
+          ...(
+            await brandIdsForProducts(
+              (cart.items as { product_id: number }[]).map((i) => i.product_id)
+            )
+          ).values(),
+        ]
+      )
+    : null;
 
   // Check tax mode
   let pricesIncludeTax = false;
@@ -80,6 +132,30 @@ export default async function CheckoutPage() {
   } catch {}
   // GST display amount via gstSplit (single source of tax math — services D4).
   const gstAmount = Math.round(gstSplit(subtotal, pricesIncludeTax).tax * 100) / 100;
+
+  // ── SilverChef / Finance (card VAjaPj0t) ──────────────────────────────────
+  // Offered only above $1,000 inc GST, measured on the GOODS total so the offer
+  // can't appear and disappear as a postcode changes the freight. placeOrder
+  // re-resolves this with the SAME function before accepting the order — show
+  // equals accept. Nothing here is drawn when no finance method is enabled on
+  // the channel, so a storefront that doesn't offer finance pays nothing for it.
+  const financeMethodsEnabled = entitledPaymentMethods.some((m) => isFinancePaymentMethod(m.id));
+  const financeOffer = financeMethodsEnabled
+    ? financeOfferForCart({
+        lines: financeLinesFromCart(cart.items as never[], pricesIncludeTax),
+        goodsTotalIncGst: gstSplit(subtotal, pricesIncludeTax).incTax,
+      })
+    : null;
+  const paymentMethods = filterFinanceMethods(entitledPaymentMethods, !!financeOffer?.eligible);
+  // The application form has to exist before its attachment uploads can be
+  // accepted, and it is a shared definition rather than hand-made data — so it
+  // is provisioned on first use. Never fatal: a checkout must not fail because
+  // a form row couldn't be written.
+  if (financeOffer?.eligible) {
+    // Cached for a minute and shared with placeOrder — checkout is the critical
+    // path and this row changes only when staff edit the form. Never throws.
+    await financeApplicationForm();
+  }
 
   // Load saved addresses for the logged-in contact (identity unification —
   // listForContact also covers legacy customer-keyed rows via the migration's
@@ -235,9 +311,11 @@ export default async function CheckoutPage() {
         googlePlacesEnabled={checkoutSettings.googlePlacesEnabled}
         freeShippingEnabled={checkoutSettings.freeShippingEnabled}
         freeShippingThreshold={checkoutSettings.freeShippingThreshold}
+        brandSpecial={brandSpecial}
         shippingEnabled={shippingEnabled}
         stripePublishableKey={stripePublishableKey}
         testMode={wantTestMode}
+        finance={financeOffer}
       />
     </div>
   );

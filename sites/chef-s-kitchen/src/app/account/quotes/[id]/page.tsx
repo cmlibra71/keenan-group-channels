@@ -27,11 +27,17 @@ import { isStaffOnlyDraft } from "@/lib/quotes/draft-visibility";
 import { quoteGstTotals, isMoneyRow } from "@/lib/quotes/quote-gst";
 import { resolveQuoteGstRate } from "@/lib/quotes/quote-gst-rate";
 import { quoteStatusLabel } from "@/lib/quotes/quote-status-label";
+import {
+  isCustomerEditableStatus,
+  quoteAllowsItemEdits,
+} from "@/lib/quotes/customer-editable";
+import { QuoteItemControls } from "./quote-item-controls";
 import { readQuoteDeposit, resolveQuoteDeposit, depositLabel } from "@/lib/quotes/quote-deposit";
 import { resolveQuotePayState } from "@/lib/quotes/quote-payable";
 import { QuotePayPanel, type PayMethod } from "./quote-pay-panel";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
 import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-policy";
+import { isFinancePaymentMethod } from "@/lib/checkout/finance";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
 
@@ -68,6 +74,8 @@ interface QuoteDetail {
   attributes: Record<string, unknown> | null;
   shipping_address: Record<string, string | null> | null;
   hide_prices: boolean | null;
+  /** Customer-permission bag (allow_edit_items etc.), seeded from quote settings. */
+  permissions: Record<string, unknown> | null;
   expires_at: Date | string | null;
   created_at: Date | string | null;
   items: QuoteDetailItem[];
@@ -128,7 +136,8 @@ export default async function QuoteDetailPage({
   // an account-wide viewer, so this sits ABOVE the view_company_quotes branch. Same
   // answer a stranger's quote gets: confirming the draft exists is itself a leak.
   if (isStaffOnlyDraft(raw)) notFound();
-  if (raw.contact_id !== session.contactId) {
+  const isOwnQuote = raw.contact_id === session.contactId;
+  if (!isOwnQuote) {
     const perms = await getContactPermissions(session.contactId);
     const canSeeAccountQuotes =
       perms.isB2B && perms.accountId !== null && perms.can("view_company_quotes");
@@ -148,6 +157,12 @@ export default async function QuoteDetailPage({
     hidesPrices: hidePrices,
     expires_at: raw.expires_at,
   });
+  // The customer may change quantities and drop lines on their own live quote —
+  // before we have priced it AND after — exactly as they can on the emailed
+  // quote link (cards FPfvaYLp / 5bZsm1MF). A colleague reading the quote under
+  // `view_company_quotes` may look but not change, the same rule Accept uses.
+  const itemsEditable =
+    isOwnQuote && isCustomerEditableStatus(status) && quoteAllowsItemEdits(raw.permissions);
 
   // Item thumbnails (quote items don't carry images themselves).
   const productIds = [...new Set(quote.items.map((i) => i.product_id))];
@@ -177,18 +192,30 @@ export default async function QuoteDetailPage({
   const amountDue = deposit ? deposit.due_now : Math.round(gst.incTax * 100) / 100;
 
   // Payment methods are read EXACTLY as checkout reads them — the channel's
-  // enabled list, narrowed by the account's allow-list, MINUS the methods the
-  // account marks staff-only, with net terms only for an entitled account. This
-  // is a customer surface like the checkout, so a staff-only method must not
-  // appear here either. Switch card payments on later and they appear here with
-  // no further work.
+  // customer-facing list (enabled, minus channel staff-only), narrowed by the
+  // account's allow-list, with net terms only for an entitled account. Switch
+  // card payments on later and they appear here with no further work.
+  //
+  // EXCEPT the equipment-finance methods (card VAjaPj0t). SilverChef and Finance
+  // are not a way of paying: they place an order UNPAID against an application
+  // form, behind a $1,000 inc-GST floor, with a weekly figure on the button and
+  // the rep notified. None of that is built on this screen, and paying a quote
+  // has its own money rules (deposit, GST-inclusive amount due — cards 0Wy0xHuq,
+  // Sh03niVC). Enabling them for the checkout must not make a bare "SilverChef"
+  // button appear here that converts the quote to an order and charges nothing.
+  //
+  // This is a customer surface like the checkout, so a method the ACCOUNT marks
+  // staff-only must not appear here either (third argument below).
   const [checkoutSettings, accountOptions, netTerms] = await Promise.all([
     getCheckoutSettings(),
     resolveAccountOptions(session),
     resolveNetTermsEntitlement(session),
   ]);
+  const nonFinanceCustomerMethods = checkoutSettings.customerPaymentMethods.filter(
+    (m) => !isFinancePaymentMethod(m.id)
+  );
   const payMethods: PayMethod[] = filterPaymentMethodsForAccount(
-    checkoutSettings.enabledPaymentMethods,
+    nonFinanceCustomerMethods,
     accountOptions?.allowedPaymentMethods ?? null,
     accountOptions?.staffOnlyPaymentMethods ?? null
   )
@@ -280,9 +307,18 @@ export default async function QuoteDetailPage({
 
       {hidePrices && (
         <div className="mb-6 rounded-lg border border-warning/30 bg-warning-bg px-4 py-3 text-sm text-warning">
-          Our sales team is preparing pricing for this quote. We&apos;ll let you
-          know as soon as it&apos;s ready.
+          {status === "open_change_request"
+            ? "Your changes have been received — we'll re-quote shortly."
+            : "Our sales team is preparing pricing for this quote. We'll let you know as soon as it's ready."}
         </div>
+      )}
+
+      {itemsEditable && (
+        <p className="mb-4 text-sm text-text-muted">
+          {status === "quote_available"
+            ? "Need a different quantity? Change it below — we'll re-price the quote and send it back to you."
+            : "You can still change quantities or remove items below."}
+        </p>
       )}
 
       {/* Items */}
@@ -333,6 +369,13 @@ export default async function QuoteDetailPage({
                     </>
                   )}
                 </p>
+                {itemsEditable && (
+                  <QuoteItemControls
+                    quoteId={quote.id}
+                    itemId={item.id}
+                    quantity={item.quantity}
+                  />
+                )}
                 {/* "Requires quote" is reserved for a quote whose pricing hasn't
                     been prepared yet — never for a priced line that happens to
                     come to $0.00. */}

@@ -10,10 +10,20 @@ import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLine
 import { getLineCosts } from "@/lib/store";
 import { sendStaffNotification } from "@/lib/staff-email";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
+import {
+  activeBrandFreeShippingSpecials,
+  brandIdsForProducts,
+} from "@/lib/checkout/free-shipping-brands";
+import { matchBrandSpecial } from "@/lib/checkout/free-shipping-brands-policy";
 import { normaliseAuState, isValidAuPostcode } from "@/lib/checkout/au-address";
 import { setLastOrder } from "@/lib/checkout/last-order";
 import { siteBaseUrl } from "@/lib/seo";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
+import {
+  ACCOUNT_REQUIRED_SETTING,
+  SIGN_IN_REQUIRED_MESSAGE,
+  checkoutNeedsSignIn,
+} from "@/lib/checkout/account-required";
 import {
   getContactPermissions,
   accountHasSavedAddress,
@@ -30,6 +40,8 @@ import {
   effectiveMinimums,
   isPaymentMethodAllowed,
   filterPaymentMethodsForAccount,
+  isPaymentMethodOnChannel,
+  unavailablePaymentMethodError,
   minimumOrderError,
   disallowedPaymentMethodError,
 } from "@/lib/checkout/account-options-policy";
@@ -37,6 +49,22 @@ import {
   resolvePaymentAvailability,
   PAY_UNAVAILABLE_ACCOUNT_ORDER,
 } from "@/lib/checkout/payment-availability";
+import {
+  financeApplicationValues,
+  financeFloorError,
+  financeLinesFromCart,
+  financeOfferForCart,
+  fundingTypeError,
+  isFinancePaymentMethod,
+  weeklyAmountForMethod,
+} from "@/lib/checkout/finance";
+import { fileFinanceApplication } from "@/lib/checkout/finance-application";
+import { financeApplicationForm } from "@/lib/checkout/finance-form";
+import {
+  financeApplicationFields,
+  parseFieldDefs,
+  validateSubmissionPayload,
+} from "@keenan/services/services";
 
 // Pricing/tax/payment-status computation lives in the pure order-draft module
 // (lib/checkout/order-draft.ts), which delegates GST math to @keenan/services
@@ -53,6 +81,15 @@ export async function placeOrder(
   formData: FormData
 ): Promise<PlaceOrderResult> {
   const session = await getSession();
+
+  // ── NO GUEST CHECKOUT (per channel). Industry Kitchens sells the way it does on
+  // Zoey: sign in or create an account first (card LQM9FQYe). The checkout PAGE
+  // draws the sign-in step instead of this form for the same shopper — show equals
+  // accept, so the rule is enforced here too and a posted form cannot walk past it.
+  // Unset setting = guest checkout, which is what Chefs Depot keeps (yUNl5TPq).
+  if (checkoutNeedsSignIn(await getFeatureFlag(ACCOUNT_REQUIRED_SETTING), !!session)) {
+    return { error: SIGN_IN_REQUIRED_MESSAGE };
+  }
 
   // Get cart
   const uuid = await getCartUuid();
@@ -297,6 +334,22 @@ export async function placeOrder(
   const checkoutSettings = await getCheckoutSettings();
   const isMember = !!(session && await getActiveSubscriptionForContact(session.contactId));
 
+  // Brand free-shipping special (card 88Ay7UGA). Resolved here from the CART WE
+  // ARE CHARGING, against the same rows and the same Melbourne date the checkout
+  // page used to draw its summary — show equals accept, including on the last
+  // minute of the last day of a special.
+  const brandSpecials = await activeBrandFreeShippingSpecials();
+  const cartBrandIds = brandSpecials.length
+    ? [
+        ...(
+          await brandIdsForProducts(
+            (fullCart.items as { product_id: number }[]).map((i) => i.product_id)
+          )
+        ).values(),
+      ]
+    : [];
+  const brandFreeShipping = !!matchBrandSpecial(brandSpecials, cartBrandIds);
+
   // Shipping is quoted to the customer on the EX-tax subtotal (checkout page +
   // CheckoutForm pass cart.cartAmount), so the order must use the same basis or
   // the charged shipping diverges from the quote at tier/cap boundaries.
@@ -306,9 +359,10 @@ export async function placeOrder(
       isMember,
       amount: subtotalExTax,
       threshold: checkoutSettings.freeShippingThreshold,
+      brandFreeShipping,
     })
   ) {
-    // Free delivery for members over threshold
+    // Free delivery: a member over the threshold, or a brand special on this cart
     shippingIncTax = 0;
   } else {
     // Calculate from shipping rate cards (zone-based flat-rate)
@@ -360,6 +414,15 @@ export async function placeOrder(
   // "What we show is exactly what we accept" — every filter added to the checkout page MUST be
   // duplicated here or the storefront leaks a bypass.
   const accountOptions = await resolveAccountOptions(session);
+  // (0) FIRST: is the method offered on this channel to a customer at all? The
+  // account allow-list only NARROWS the channel list and is null for most
+  // shoppers, so on its own it accepted any string a form posted — a
+  // `paymentMethod=silverchef` POST would have written a real order on a channel
+  // that never enabled SilverChef, and a channel staff-only method could be
+  // forced through by a customer. Same list the page renders from.
+  if (!isPaymentMethodOnChannel(paymentMethod, checkoutSettings.customerPaymentMethods)) {
+    return { error: unavailablePaymentMethodError() };
+  }
   if (
     paymentMethod &&
     !isPaymentMethodAllowed(
@@ -378,7 +441,7 @@ export async function placeOrder(
   // still books the order with payment status "pending" (card N8kE8arY, and the
   // payment-methods register rule that predates it).
   const offerableMethods = filterPaymentMethodsForAccount(
-    checkoutSettings.enabledPaymentMethods,
+    checkoutSettings.customerPaymentMethods,
     accountOptions?.allowedPaymentMethods ?? null,
     accountOptions?.staffOnlyPaymentMethods ?? null
   ).filter((m) => m.id !== "net_terms" || !!netTerms);
@@ -398,6 +461,43 @@ export async function placeOrder(
     return { error: minError };
   }
 
+  // ── SilverChef / Finance (card VAjaPj0t) ──────────────────────────────────
+  // The authorization half of the checkout page's finance offer, resolved with
+  // the SAME function off the SAME goods total: a cart that has dropped under
+  // $1,000 inc GST since the page rendered is refused, never quietly financed.
+  // The application is validated HERE, before any order row is written — a
+  // half-filled application must not leave a numbered order behind. It is
+  // FILED after the order exists (it carries the order number).
+  const financeOffer = isFinancePaymentMethod(paymentMethod)
+    ? financeOfferForCart({
+        lines: financeLinesFromCart(fullCart.items as never[], pricesIncludeTax),
+        goodsTotalIncGst: subtotalIncTax,
+      })
+    : null;
+  let financeApplication: Record<string, string> | null = null;
+  if (financeOffer) {
+    if (!financeOffer.eligible) return { error: financeFloorError() };
+
+    financeApplication = financeApplicationValues((name) => formData.get(name) as string | null);
+    // The funding type has to belong to the button AND to this basket — the
+    // same list the page drew, off the same offer, so "Skope Funding (Skope
+    // Brands only)" cannot be posted against a basket that is not all SKOPE.
+    const typeError = fundingTypeError(paymentMethod, financeApplication.funding_type, financeOffer);
+    if (typeError) return { error: typeError };
+
+    // The stored field contract is the authority on what a complete application
+    // is — the same list the panel renders and the submission service validates,
+    // so the three cannot drift. Read from the DB when it is already there
+    // (staff may have edited it), else from the definition it is created with.
+    const storedForm = await financeApplicationForm();
+    const fields = parseFieldDefs(storedForm?.fields);
+    const result = validateSubmissionPayload(
+      (fields.length ? fields : financeApplicationFields()).filter((f) => f.name !== "order_number"),
+      financeApplication
+    );
+    if (!result.ok) return { error: result.error };
+  }
+
   // Determine payment status based on payment method
   const paymentStatus = determinePaymentStatus(paymentMethod);
 
@@ -414,6 +514,16 @@ export async function placeOrder(
   // Stamp the cart uuid on card orders so a retry/double-submit can find and reuse
   // the existing awaiting_payment order instead of creating a duplicate (see below).
   if (paymentMethod === "stripe") orderMetafields.cart_uuid = uuid;
+  // Finance: what was offered and what was chosen, on the order itself, so the
+  // back office can see the weekly figure the customer was shown even if the
+  // application row is later archived.
+  if (financeOffer && financeApplication) {
+    orderMetafields.finance_method = paymentMethod;
+    orderMetafields.finance_weekly_amount = (
+      weeklyAmountForMethod(paymentMethod, financeOffer) ?? 0
+    ).toFixed(2);
+    orderMetafields.finance_funding_type = financeApplication.funding_type ?? null;
+  }
   if (belowCostLines.length > 0) {
     orderMetafields.below_cost_lines = belowCostLines.map((l) => ({
       product_id: l.productId,
@@ -521,6 +631,36 @@ export async function placeOrder(
       }
     }
     return { error: err instanceof Error ? err.message : "We couldn't complete your order. Please try again." };
+  }
+
+  // File the finance application and tell the rep (card VAjaPj0t). The order is
+  // already placed and unpaid; this never throws, and a failure is stamped on
+  // the order rather than shown to the shopper — the staff email carries every
+  // answer, so an application is never silently lost.
+  if (financeOffer && financeApplication) {
+    const filed = await fileFinanceApplication({
+      orderId: order.id,
+      orderNumber: order.order_number,
+      paymentMethod,
+      values: financeApplication,
+      uploadToken: (formData.get("financeUploadToken") as string)?.trim() || null,
+      accountId: perms.accountId ?? netTerms?.accountId ?? null,
+      replyTo: email,
+      weeklyAmount: weeklyAmountForMethod(paymentMethod, financeOffer) ?? 0,
+      testMode: isTestMode,
+    });
+    try {
+      await orderService.update(order.id, {
+        metafields: {
+          ...orderMetafields,
+          finance_application_uuid: filed.submissionUuid,
+          finance_application_notified: filed.notified,
+          ...(filed.error ? { finance_application_error: filed.error } : {}),
+        },
+      });
+    } catch (e) {
+      console.error("[placeOrder] finance application not stamped on the order (non-fatal):", e);
+    }
   }
 
   // Below-cost alert to staff. Sent for EVERY payment method (runs before the
@@ -754,6 +894,11 @@ export async function placeOrder(
       // Email Templates page sets.
       bannerBgColor: branding?.bannerBgColor ?? null,
       footerText: branding?.footerText ?? null,
+      // This channel's per-email wording (Storefront → Email Templates → Order
+      // confirmation, card AnQgJh32). Branding is flattened here, so the wording
+      // has to travel explicitly or the customer's confirmation ignores the
+      // words staff wrote while the admin preview shows them.
+      wording: branding?.wording ?? null,
       testMode: isTestMode,
     };
 

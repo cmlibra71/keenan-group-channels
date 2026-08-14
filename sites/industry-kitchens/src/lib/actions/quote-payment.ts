@@ -28,6 +28,7 @@ import { getSession } from "@/lib/auth";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
 import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-policy";
+import { isFinancePaymentMethod } from "@/lib/checkout/finance";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 import { determinePaymentStatus } from "@/lib/checkout/order-draft";
 import { sendStaffNotification } from "@/lib/staff-email";
@@ -159,8 +160,21 @@ export async function payQuote(
     resolveAccountOptions(session),
     resolveNetTermsEntitlement(session),
   ]);
+  // Customer surface: the channel's customer-facing list (enabled minus channel
+  // staff-only, services `customerFacingPaymentMethods`), narrowed by the
+  // account's allow-list — read exactly as the page reads it, so what we show is
+  // what we accept.
+  //
+  // The equipment-finance methods are excluded HERE as well as on the page (card
+  // VAjaPj0t): SilverChef/Finance place an order unpaid against an application
+  // form behind a $1,000 floor, none of which this screen implements. Enabling
+  // them for the storefront checkout must not turn a quote into an unpaid order
+  // through a bare button here.
+  const nonFinanceCustomerMethods = checkoutSettings.customerPaymentMethods.filter(
+    (m) => !isFinancePaymentMethod(m.id)
+  );
   const methods = filterPaymentMethodsForAccount(
-    checkoutSettings.enabledPaymentMethods,
+    nonFinanceCustomerMethods,
     accountOptions?.allowedPaymentMethods ?? null,
     accountOptions?.staffOnlyPaymentMethods ?? null
   ).filter((m) => m.id !== "net_terms" || !!netTerms);

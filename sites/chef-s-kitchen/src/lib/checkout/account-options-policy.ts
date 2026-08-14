@@ -132,3 +132,33 @@ export function minimumOrderError(
 export function disallowedPaymentMethodError(): string {
   return "That payment method isn't available on your account. Please choose one of the payment methods shown at checkout.";
 }
+
+/**
+ * Is this method offered on THIS CHANNEL to a CUSTOMER at all?
+ *
+ * The account allow-list narrows the channel's list; it never widens it, and it
+ * is NULL (= "everything") for most shoppers. So `isPaymentMethodAllowed` alone
+ * accepted any string a form posted: a `paymentMethod=silverchef` POST landed a
+ * real order on a channel that had never enabled SilverChef, and a channel-level
+ * staff-only method (Zoey's Send Invoice) could be forced through by a customer.
+ * The page filters on the channel list; the sf-checkout rule is that every page
+ * filter is duplicated here, so this is that duplicate.
+ *
+ * `customerMethods` is `checkoutSettings.customerPaymentMethods` — enabled, minus
+ * channel staff-only (services `customerFacingPaymentMethods`, card NmAfwrdE).
+ * An EMPTY method id keeps its existing meaning (an order taken with no payment
+ * method, e.g. a specialised delivery held for a freight quote) and is not
+ * gated here.
+ */
+export function isPaymentMethodOnChannel(
+  id: string,
+  customerMethods: readonly { id: string }[]
+): boolean {
+  if (!id) return true;
+  return customerMethods.some((m) => m.id === id);
+}
+
+/** The rejection for a method this storefront does not offer customers. */
+export function unavailablePaymentMethodError(): string {
+  return "That payment method isn't available on this store. Please choose one of the payment methods shown at checkout.";
+}

@@ -16,12 +16,16 @@ import {
   type PurchaseProduct,
 } from "./ProductPurchaseProvider";
 
+import type { ProductKit } from "@/lib/product-kit";
+
 function ProductOverviewInner({
   brandName,
   reviewSummary,
+  kit,
 }: {
   brandName?: string | null;
   reviewSummary?: { avg: number; count: number } | null;
+  kit?: ProductKit | null;
 }) {
   const { product, variantImageUrl } = useProductPurchase();
 
@@ -65,7 +69,7 @@ function ProductOverviewInner({
           </div>
         )}
 
-        <ProductDetail />
+        <ProductDetail kit={kit} />
       </div>
     </div>
   );
@@ -81,6 +85,7 @@ export function ProductPageClient({
   membershipTeaser,
   brandName,
   reviewSummary,
+  kit,
 }: {
   product: PurchaseProduct;
   memberPrice?: number | null;
@@ -93,6 +98,8 @@ export function ProductPageClient({
   membershipTeaser?: { fromPrice: string | null } | null;
   brandName?: string | null;
   reviewSummary?: { avg: number; count: number } | null;
+  /** Grouped / bundle contents, read off products.metafields by the route. */
+  kit?: ProductKit | null;
 }) {
   return (
     <ProductPurchaseProvider
@@ -104,7 +111,7 @@ export function ProductPageClient({
       accountPricing={accountPricing ?? false}
       membershipTeaser={membershipTeaser ?? null}
     >
-      <ProductOverviewInner brandName={brandName} reviewSummary={reviewSummary} />
+      <ProductOverviewInner brandName={brandName} reviewSummary={reviewSummary} kit={kit} />
     </ProductPurchaseProvider>
   );
 }

@@ -6,6 +6,7 @@ import {
   isPaymentMethodAllowed,
   minimumOrderError,
   type ChannelMinimums,
+  isPaymentMethodOnChannel,
 } from "./account-options-policy.ts";
 
 const NO_GLOBALS: ChannelMinimums = {
@@ -163,4 +164,32 @@ test("an under-minimum-quantity cart is blocked", () => {
   assert.ok(err);
   assert.match(err, /minimum order quantity of 3 items/);
   assert.match(err, /has 2/);
+});
+
+// ── The channel half of "show equals accept" (card VAjaPj0t review) ─────────
+// The account allow-list only NARROWS the channel list and is null for most
+// shoppers, so on its own it accepted any string a form posted.
+
+test("a method this channel does not offer customers is refused", () => {
+  const cd = [{ id: "bank_transfer" }, { id: "stripe" }];
+  assert.equal(isPaymentMethodOnChannel("bank_transfer", cd), true);
+  assert.equal(isPaymentMethodOnChannel("stripe", cd), true);
+  // The exact bypass the review found: a posted silverchef on a channel that
+  // never enabled it would have written a real order at pending_payment.
+  assert.equal(isPaymentMethodOnChannel("silverchef", cd), false);
+  assert.equal(isPaymentMethodOnChannel("finance", cd), false);
+  assert.equal(isPaymentMethodOnChannel("net_terms", cd), false);
+});
+
+test("a channel staff-only method cannot be forced through by a customer", () => {
+  // customerPaymentMethods has already dropped staffOnly + disabled entries, so
+  // the customer list simply does not contain them.
+  const ikCustomerFacing = [{ id: "stripe" }, { id: "bank_transfer" }, { id: "net_terms" }];
+  assert.equal(isPaymentMethodOnChannel("send_invoice", ikCustomerFacing), false);
+});
+
+test("an order taken with NO payment method is still allowed through", () => {
+  // A specialised delivery held for a human freight quote (card Wxjp8wpg) has
+  // an empty method and must not be gated here.
+  assert.equal(isPaymentMethodOnChannel("", [{ id: "bank_transfer" }]), true);
 });

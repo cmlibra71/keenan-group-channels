@@ -2,7 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
+import BuilderImage from "./builder-image";
 import type { NodeTree, ProductPagePayload } from "@keenan/services/builder";
 import {
   ProductPurchaseProvider,
@@ -175,7 +175,7 @@ function ActionsBridge({
         components={components}
         nativeComponents={nativeComponents}
         linkComponent={Link as unknown as React.ComponentType<Record<string, unknown>>}
-        imageComponent={Image as unknown as React.ComponentType<Record<string, unknown>>}
+        imageComponent={BuilderImage}
         scope={scope}
       />
       {optionsPrompt ? (
