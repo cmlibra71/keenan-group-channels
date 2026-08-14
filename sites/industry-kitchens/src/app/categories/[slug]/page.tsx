@@ -7,6 +7,7 @@ import type { Metadata } from "next";
 import {
   getCategoryBySlug,
   getCategoryListing,
+  getStorefrontFilters,
   getSubcategories,
   getCategoryBreadcrumbs,
   getFeatureFlag,
@@ -18,6 +19,7 @@ import { getListingMemberPrices } from "@/lib/member";
 import { renderCategoryNodeBranch } from "@/builder/category-node-branch";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { assertCategoryVisible } from "@/lib/catalog-scope";
+import { applyStorefrontFilters, enabledFilterIds } from "@/lib/storefront-filters";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
 import { RichContent } from "@/components/content/RichContent";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
@@ -86,7 +88,14 @@ export default async function CategoryPage({
     ? (sp.sort as "price_asc" | "price_desc" | "saving" | "newest")
     : "relevance";
 
-  const priceBands = (sp.price?.split(",").filter(Boolean) ?? []).filter((b) =>
+  // This storefront's rail configuration (portal: Products > Filtering). A
+  // switched-off facet must not filter either: its options are pruned from the
+  // rail below, so a lingering ?brand= would narrow the listing with nothing on
+  // screen explaining or clearing it.
+  const storefrontFilters = await getStorefrontFilters();
+  const filtersOn = enabledFilterIds(storefrontFilters);
+
+  const priceBands = (filtersOn.has("price") ? (sp.price?.split(",").filter(Boolean) ?? []) : []).filter((b) =>
     ["lt1000", "1000to3000", "gt3000"].includes(b)
   ) as ("lt1000" | "1000to3000" | "gt3000")[];
   // Availability is no longer a shopper-facing facet at all: "In stock" was
@@ -118,8 +127,8 @@ export default async function CategoryPage({
       // passes the live listings' own TTL), so "Stoddart (43)" and "showing 31"
       // can no longer disagree.
       limit: PER_PAGE * page,
-      subcategoryIds: parseIds(sp.sub),
-      brandIds: parseIds(sp.brand),
+      subcategoryIds: filtersOn.has("sub") ? parseIds(sp.sub) : [],
+      brandIds: filtersOn.has("brand") ? parseIds(sp.brand) : [],
       priceBands,
       // No `availability` — the shopper can no longer filter on it (the option
       // stays in the data layer, unused by this route).
@@ -130,7 +139,11 @@ export default async function CategoryPage({
     getFeatureFlag("member_pricing_enabled"),
   ]);
 
-  const { products, total, facets } = listing;
+  const { products, total } = listing;
+  // Every renderer (sealed rail, CMS blocks, authored node tree) reads these
+  // facets, so applying the configuration here is what switches a facet off
+  // site-wide rather than in one component.
+  const facets = applyStorefrontFilters(listing.facets, storefrontFilters);
   const memberPriceMap = await getListingMemberPrices(products);
   const shown = products.length;
   const hasMore = shown < total && page < MAX_PAGES;
@@ -148,9 +161,9 @@ export default async function CategoryPage({
 
   const nextPageHref = (() => {
     const next = new URLSearchParams();
-    if (sp.sub) next.set("sub", sp.sub);
-    if (sp.brand) next.set("brand", sp.brand);
-    if (sp.price) next.set("price", sp.price);
+    if (sp.sub && filtersOn.has("sub")) next.set("sub", sp.sub);
+    if (sp.brand && filtersOn.has("brand")) next.set("brand", sp.brand);
+    if (sp.price && filtersOn.has("price")) next.set("price", sp.price);
     if (sp.sort) next.set("sort", sp.sort);
     next.set("page", String(page + 1));
     return `/categories/${slug}?${next.toString()}`;
@@ -173,9 +186,12 @@ export default async function CategoryPage({
       breadcrumbs: breadcrumbs as { id: number; name: string; slug: string }[],
       subcategories: subcategories as unknown as Record<string, unknown>[],
       selections: {
-        sub: sp.sub?.split(",").filter(Boolean) ?? [],
-        brand: sp.brand?.split(",").filter(Boolean) ?? [],
-        price: sp.price?.split(",").filter(Boolean) ?? [],
+        // Same gate as the query above: a switched-off facet's selections are
+        // dropped, so the authored rail never shows a ticked box or a chip for
+        // a filter that is no longer applied.
+        sub: filtersOn.has("sub") ? (sp.sub?.split(",").filter(Boolean) ?? []) : [],
+        brand: filtersOn.has("brand") ? (sp.brand?.split(",").filter(Boolean) ?? []) : [],
+        price: filtersOn.has("price") ? (sp.price?.split(",").filter(Boolean) ?? []) : [],
         stock: [],
       },
       memberPricingEnabled,

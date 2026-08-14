@@ -6,6 +6,13 @@ import { wantsStripeTestMode } from "@keenan/services";
 import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
 import { getSession } from "@/lib/auth";
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
+import {
+  describeKitChoices,
+  describeKitContents,
+  readProductKit,
+  resolveKitChoices,
+  type KitChoice,
+} from "@/lib/product-kit";
 import { slidingWindowAllow } from "@/lib/rate-limit";
 import {
   quoteHidesPrices,
@@ -51,14 +58,51 @@ async function countQuoteItems(quoteId: number): Promise<number> {
   return (full?.items ?? []).reduce((sum, i) => sum + (i.quantity ?? 0), 0);
 }
 
-export async function addToQuote(productId: number, variantId?: number | null) {
+export async function addToQuote(
+  productId: number,
+  variantId?: number | null,
+  kitChoices?: KitChoice[] | null
+) {
   // getById returns snake_case — read sale_price (reading salePrice was undefined,
   // so quotes silently used RRP instead of the catalog sale price).
   // Same visibility gate as the cart: a product restricted away from this shopper can't be quoted.
   if (!(await isProductVisibleToViewer(productId))) return { error: RESTRICTED_PRODUCT_ERROR };
 
-  const product = await productService.getById(productId) as { price: string; sale_price: string | null } | null;
+  const product = await productService.getById(productId) as {
+    price: string;
+    sale_price: string | null;
+    metafields?: unknown;
+  } | null;
   if (!product) return { error: "Product not found" };
+
+  // ── Kit products (Zoey grouped / bundle, authored in the portal) ──────────────────────────
+  // A BUNDLE is a modular configuration: it is not priced live, its picks come through as a
+  // quote request (Steve, card 7bmpuqei). The choices arrive as group names + product ids and are
+  // re-resolved against the product's OWN kit here, so nothing a browser sends can invent a line.
+  // A GROUPED kit has no choices — its contents ride along so the rep can see what the one price
+  // covers without opening the product.
+  const kit = readProductKit(product.metafields);
+  let lineAttributes: Record<string, unknown> | null = null;
+  let lineNotes: string | null = null;
+  if (kit?.kind === "bundle") {
+    const resolved = resolveKitChoices(kit, kitChoices);
+    if (!resolved) {
+      return { error: "Choose an option in every group before adding this to a quote." };
+    }
+    lineAttributes = { kit_kind: "bundle", kit_selection: resolved };
+    lineNotes = describeKitChoices(resolved);
+  } else if (kit?.kind === "grouped") {
+    lineAttributes = {
+      kit_kind: "grouped",
+      kit_contents: kit.items.map((i) => ({
+        product_id: i.productId,
+        sku: i.sku,
+        name: i.name,
+        quantity: i.quantity,
+      })),
+    };
+    lineNotes = describeKitContents(kit);
+  }
 
   let listPrice = product.price;
   let catalogSalePrice: string | null = product.sale_price;
@@ -104,12 +148,17 @@ export async function addToQuote(productId: number, variantId?: number | null) {
   const existing = await quoteItemService.findByProductVariant(quote.id, productId, variantId) as {
     id: number;
     quantity: number;
+    customer_notes?: string | null;
   } | null;
 
   if (existing) {
-    const newQty = existing.quantity + 1;
+    // A quote may hold only ONE line per product+variant, so re-configuring a bundle REPLACES the
+    // captured configuration on the line the customer already has (and does not stack a second
+    // quantity onto a different build). Everything else keeps counting up as before.
+    const reconfigured = kit?.kind === "bundle" && lineNotes !== existing.customer_notes;
     await quoteItemService.updateForParent(quote.id, existing.id, {
-      quantity: newQty,
+      quantity: reconfigured ? existing.quantity : existing.quantity + 1,
+      ...(lineAttributes ? { attributes: lineAttributes, customerNotes: lineNotes } : {}),
     });
   } else {
     await quoteItemService.createForParent(quote.id, {
@@ -118,6 +167,7 @@ export async function addToQuote(productId: number, variantId?: number | null) {
       quantity: 1,
       listPrice,
       salePrice,
+      ...(lineAttributes ? { attributes: lineAttributes, customerNotes: lineNotes } : {}),
     });
   }
 

@@ -40,9 +40,27 @@ import { resolveAccountOptions } from "@/lib/checkout/account-options";
 import {
   effectiveMinimums,
   isPaymentMethodAllowed,
+  isPaymentMethodOnChannel,
+  unavailablePaymentMethodError,
   minimumOrderError,
   disallowedPaymentMethodError,
 } from "@/lib/checkout/account-options-policy";
+import {
+  financeApplicationValues,
+  financeFloorError,
+  financeLinesFromCart,
+  financeOfferForCart,
+  fundingTypeError,
+  isFinancePaymentMethod,
+  weeklyAmountForMethod,
+} from "@/lib/checkout/finance";
+import { fileFinanceApplication } from "@/lib/checkout/finance-application";
+import { financeApplicationForm } from "@/lib/checkout/finance-form";
+import {
+  financeApplicationFields,
+  parseFieldDefs,
+  validateSubmissionPayload,
+} from "@keenan/services/services";
 
 // Pricing/tax/payment-status computation lives in the pure order-draft module
 // (lib/checkout/order-draft.ts), which delegates GST math to @keenan/services
@@ -392,6 +410,15 @@ export async function placeOrder(
   // "What we show is exactly what we accept" — every filter added to the checkout page MUST be
   // duplicated here or the storefront leaks a bypass.
   const accountOptions = await resolveAccountOptions(session);
+  // (0) FIRST: is the method offered on this channel to a customer at all? The
+  // account allow-list only NARROWS the channel list and is null for most
+  // shoppers, so on its own it accepted any string a form posted — a
+  // `paymentMethod=silverchef` POST would have written a real order on a channel
+  // that never enabled SilverChef, and a channel staff-only method could be
+  // forced through by a customer. Same list the page renders from.
+  if (!isPaymentMethodOnChannel(paymentMethod, checkoutSettings.customerPaymentMethods)) {
+    return { error: unavailablePaymentMethodError() };
+  }
   if (paymentMethod && !isPaymentMethodAllowed(paymentMethod, accountOptions?.allowedPaymentMethods ?? null)) {
     return { error: disallowedPaymentMethodError() };
   }
@@ -401,6 +428,43 @@ export async function placeOrder(
   );
   if (minError) {
     return { error: minError };
+  }
+
+  // ── SilverChef / Finance (card VAjaPj0t) ──────────────────────────────────
+  // The authorization half of the checkout page's finance offer, resolved with
+  // the SAME function off the SAME goods total: a cart that has dropped under
+  // $1,000 inc GST since the page rendered is refused, never quietly financed.
+  // The application is validated HERE, before any order row is written — a
+  // half-filled application must not leave a numbered order behind. It is
+  // FILED after the order exists (it carries the order number).
+  const financeOffer = isFinancePaymentMethod(paymentMethod)
+    ? financeOfferForCart({
+        lines: financeLinesFromCart(fullCart.items as never[], pricesIncludeTax),
+        goodsTotalIncGst: subtotalIncTax,
+      })
+    : null;
+  let financeApplication: Record<string, string> | null = null;
+  if (financeOffer) {
+    if (!financeOffer.eligible) return { error: financeFloorError() };
+
+    financeApplication = financeApplicationValues((name) => formData.get(name) as string | null);
+    // The funding type has to belong to the button AND to this basket — the
+    // same list the page drew, off the same offer, so "Skope Funding (Skope
+    // Brands only)" cannot be posted against a basket that is not all SKOPE.
+    const typeError = fundingTypeError(paymentMethod, financeApplication.funding_type, financeOffer);
+    if (typeError) return { error: typeError };
+
+    // The stored field contract is the authority on what a complete application
+    // is — the same list the panel renders and the submission service validates,
+    // so the three cannot drift. Read from the DB when it is already there
+    // (staff may have edited it), else from the definition it is created with.
+    const storedForm = await financeApplicationForm();
+    const fields = parseFieldDefs(storedForm?.fields);
+    const result = validateSubmissionPayload(
+      (fields.length ? fields : financeApplicationFields()).filter((f) => f.name !== "order_number"),
+      financeApplication
+    );
+    if (!result.ok) return { error: result.error };
   }
 
   // Determine payment status based on payment method
@@ -426,6 +490,16 @@ export async function placeOrder(
   // Stamp the cart uuid on card orders so a retry/double-submit can find and reuse
   // the existing awaiting_payment order instead of creating a duplicate (see below).
   if (paymentMethod === "stripe") orderMetafields.cart_uuid = uuid;
+  // Finance: what was offered and what was chosen, on the order itself, so the
+  // back office can see the weekly figure the customer was shown even if the
+  // application row is later archived.
+  if (financeOffer && financeApplication) {
+    orderMetafields.finance_method = paymentMethod;
+    orderMetafields.finance_weekly_amount = (
+      weeklyAmountForMethod(paymentMethod, financeOffer) ?? 0
+    ).toFixed(2);
+    orderMetafields.finance_funding_type = financeApplication.funding_type ?? null;
+  }
   if (belowCostLines.length > 0) {
     orderMetafields.below_cost_lines = belowCostLines.map((l) => ({
       product_id: l.productId,
@@ -536,6 +610,36 @@ export async function placeOrder(
       }
     }
     return { error: err instanceof Error ? err.message : "We couldn't complete your order. Please try again." };
+  }
+
+  // File the finance application and tell the rep (card VAjaPj0t). The order is
+  // already placed and unpaid; this never throws, and a failure is stamped on
+  // the order rather than shown to the shopper — the staff email carries every
+  // answer, so an application is never silently lost.
+  if (financeOffer && financeApplication) {
+    const filed = await fileFinanceApplication({
+      orderId: order.id,
+      orderNumber: order.order_number,
+      paymentMethod,
+      values: financeApplication,
+      uploadToken: (formData.get("financeUploadToken") as string)?.trim() || null,
+      accountId: perms.accountId ?? netTerms?.accountId ?? null,
+      replyTo: email,
+      weeklyAmount: weeklyAmountForMethod(paymentMethod, financeOffer) ?? 0,
+      testMode: isTestMode,
+    });
+    try {
+      await orderService.update(order.id, {
+        metafields: {
+          ...orderMetafields,
+          finance_application_uuid: filed.submissionUuid,
+          finance_application_notified: filed.notified,
+          ...(filed.error ? { finance_application_error: filed.error } : {}),
+        },
+      });
+    } catch (e) {
+      console.error("[placeOrder] finance application not stamped on the order (non-fatal):", e);
+    }
   }
 
   // Below-cost alert to staff. Sent for EVERY payment method (runs before the
@@ -772,6 +876,11 @@ export async function placeOrder(
       // Email Templates page sets.
       bannerBgColor: branding?.bannerBgColor ?? null,
       footerText: branding?.footerText ?? null,
+      // This channel's per-email wording (Storefront → Email Templates → Order
+      // confirmation, card AnQgJh32). Branding is flattened here, so the wording
+      // has to travel explicitly or the customer's confirmation ignores the
+      // words staff wrote while the admin preview shows them.
+      wording: branding?.wording ?? null,
       testMode: isTestMode,
     };
 
