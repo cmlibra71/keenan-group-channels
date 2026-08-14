@@ -17,7 +17,12 @@ import {
 import { Price } from "@/components/ui/Price";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
 import { FinanceApplicationPanel } from "@/components/checkout/FinanceApplicationPanel";
-import { isFinancePaymentMethod, weeklyAmountForMethod, type FinanceOffer } from "@/lib/checkout/finance";
+import {
+  isFinancePaymentMethod,
+  newUploadToken,
+  weeklyBadgeForMethod,
+  type FinanceOffer,
+} from "@/lib/checkout/finance";
 import { emailHasAccount } from "@/lib/actions/account-panel";
 import { decideEmailProbe, normaliseEmail } from "@/lib/checkout/account-prompt";
 import { useHeaderPanels } from "@/lib/cart-quote-counts";
@@ -167,10 +172,13 @@ export function CheckoutForm({
   const [cardReady, setCardReady] = useState(false);
   // One upload session per checkout: the licence/Medicare photos are uploaded
   // as they are picked and claimed by this token when the order is placed.
+  // The upload route only accepts a 36-char uuid shape (`/^[0-9a-f-]{36}$/i`),
+  // so the fallback has to BE that shape — `Date.now()` was rejected and every
+  // photo upload died with "Invalid upload session." wherever `randomUUID` is
+  // absent (an http:// origin, an older in-app browser: it needs a secure context).
   const financeUploadTokenRef = useRef<string | null>(null);
   if (financeUploadTokenRef.current === null) {
-    financeUploadTokenRef.current =
-      typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}`;
+    financeUploadTokenRef.current = newUploadToken();
   }
   const [financeUploading, setFinanceUploading] = useState(false);
   const handleFinanceUploading = useCallback((uploading: boolean) => setFinanceUploading(uploading), []);
@@ -893,14 +901,24 @@ export function CheckoutForm({
                       />
                       <div>
                         <span className="text-sm font-medium text-zinc-900">{method.name}</span>
-                        {/* The weekly rent for the WHOLE order, on the SilverChef
-                            button — Tim, 2026-08-11. Same wording the live IK
-                            site uses on a product ("Rent per Week: $X"). */}
-                        {weeklyAmountForMethod(method.id, finance) !== null && (
-                          <span className="ml-2 inline-block rounded-full bg-zinc-900 px-2 py-0.5 text-xs font-semibold text-white">
-                            Rent per Week: ${weeklyAmountForMethod(method.id, finance)!.toFixed(2)}
-                          </span>
-                        )}
+                        {/* The weekly cost, in that offer's OWN words — Tim,
+                            2026-08-11, and the live IK site's own two labels:
+                            "Rent per Week: $X" for SilverChef, "Own Me $X a week"
+                            for Skope Funding. They are two offers at two rates,
+                            so they are never blended into one figure. */}
+                        {(() => {
+                          const badge = weeklyBadgeForMethod(method.id, finance);
+                          return badge ? (
+                            <>
+                              <span className="ml-2 inline-block rounded-full bg-zinc-900 px-2 py-0.5 text-xs font-semibold text-white">
+                                {badge.text}
+                              </span>
+                              {badge.note && (
+                                <span className="block text-[11px] text-zinc-400 mt-0.5">{badge.note}</span>
+                              )}
+                            </>
+                          ) : null;
+                        })()}
                         <p className="text-xs text-zinc-500 mt-0.5">{method.description}</p>
                       </div>
                     </label>

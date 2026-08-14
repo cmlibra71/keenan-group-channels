@@ -26,7 +26,7 @@ import {
   financeOfferForCart,
   isFinancePaymentMethod,
 } from "@/lib/checkout/finance";
-import { ensureFinanceApplicationForm } from "@keenan/services/services";
+import { financeApplicationForm } from "@/lib/checkout/finance-form";
 
 export const metadata = {
   title: "Checkout",
@@ -78,10 +78,15 @@ export default async function CheckoutPage() {
     resolveNetTermsEntitlement(session),
     resolveAccountOptions(session),
   ]);
-  // enabledPaymentMethods, never paymentMethods: the shared read returns EVERY
-  // configured method (admin editor + past-order lookups need the disabled ones).
+  // customerPaymentMethods, never paymentMethods and never enabledPaymentMethods:
+  // the shared read returns EVERY configured method (the admin editor and
+  // past-order lookups need the disabled ones), and the "enabled" list still
+  // contains channel STAFF-ONLY methods — Zoey keeps Send Invoice to staff, and
+  // IK has it switched on today. A customer surface reads the customer list
+  // (services `customerFacingPaymentMethods`, card NmAfwrdE); placeOrder
+  // authorises against the same list.
   const entitledPaymentMethods = filterPaymentMethodsForAccount(
-    checkoutSettings.enabledPaymentMethods,
+    checkoutSettings.customerPaymentMethods,
     accountOptions?.allowedPaymentMethods ?? null
   )
     .filter((m) => m.id !== "net_terms" || !!netTerms)
@@ -134,9 +139,9 @@ export default async function CheckoutPage() {
   // is provisioned on first use. Never fatal: a checkout must not fail because
   // a form row couldn't be written.
   if (financeOffer?.eligible) {
-    await ensureFinanceApplicationForm(CHANNEL_ID).catch((e) =>
-      console.error("[checkout] finance application form not provisioned:", e)
-    );
+    // Cached for a minute and shared with placeOrder — checkout is the critical
+    // path and this row changes only when staff edit the form. Never throws.
+    await financeApplicationForm();
   }
 
   // Load saved addresses for the logged-in contact (identity unification —

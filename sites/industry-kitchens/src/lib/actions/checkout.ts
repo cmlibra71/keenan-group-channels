@@ -39,6 +39,8 @@ import { resolveAccountOptions } from "@/lib/checkout/account-options";
 import {
   effectiveMinimums,
   isPaymentMethodAllowed,
+  isPaymentMethodOnChannel,
+  unavailablePaymentMethodError,
   minimumOrderError,
   disallowedPaymentMethodError,
 } from "@/lib/checkout/account-options-policy";
@@ -49,10 +51,11 @@ import {
   financeOfferForCart,
   fundingTypeError,
   isFinancePaymentMethod,
+  weeklyAmountForMethod,
 } from "@/lib/checkout/finance";
 import { fileFinanceApplication } from "@/lib/checkout/finance-application";
+import { financeApplicationForm } from "@/lib/checkout/finance-form";
 import {
-  ensureFinanceApplicationForm,
   financeApplicationFields,
   parseFieldDefs,
   validateSubmissionPayload,
@@ -406,6 +409,15 @@ export async function placeOrder(
   // "What we show is exactly what we accept" — every filter added to the checkout page MUST be
   // duplicated here or the storefront leaks a bypass.
   const accountOptions = await resolveAccountOptions(session);
+  // (0) FIRST: is the method offered on this channel to a customer at all? The
+  // account allow-list only NARROWS the channel list and is null for most
+  // shoppers, so on its own it accepted any string a form posted — a
+  // `paymentMethod=silverchef` POST would have written a real order on a channel
+  // that never enabled SilverChef, and a channel staff-only method could be
+  // forced through by a customer. Same list the page renders from.
+  if (!isPaymentMethodOnChannel(paymentMethod, checkoutSettings.customerPaymentMethods)) {
+    return { error: unavailablePaymentMethodError() };
+  }
   if (paymentMethod && !isPaymentMethodAllowed(paymentMethod, accountOptions?.allowedPaymentMethods ?? null)) {
     return { error: disallowedPaymentMethodError() };
   }
@@ -435,16 +447,17 @@ export async function placeOrder(
     if (!financeOffer.eligible) return { error: financeFloorError() };
 
     financeApplication = financeApplicationValues((name) => formData.get(name) as string | null);
-    const typeError = fundingTypeError(paymentMethod, financeApplication.funding_type);
+    // The funding type has to belong to the button AND to this basket — the
+    // same list the page drew, off the same offer, so "Skope Funding (Skope
+    // Brands only)" cannot be posted against a basket that is not all SKOPE.
+    const typeError = fundingTypeError(paymentMethod, financeApplication.funding_type, financeOffer);
     if (typeError) return { error: typeError };
 
     // The stored field contract is the authority on what a complete application
     // is — the same list the panel renders and the submission service validates,
     // so the three cannot drift. Read from the DB when it is already there
     // (staff may have edited it), else from the definition it is created with.
-    const storedForm = (await ensureFinanceApplicationForm(CHANNEL_ID).catch(() => null)) as
-      | { fields?: unknown }
-      | null;
+    const storedForm = await financeApplicationForm();
     const fields = parseFieldDefs(storedForm?.fields);
     const result = validateSubmissionPayload(
       (fields.length ? fields : financeApplicationFields()).filter((f) => f.name !== "order_number"),
@@ -474,7 +487,9 @@ export async function placeOrder(
   // application row is later archived.
   if (financeOffer && financeApplication) {
     orderMetafields.finance_method = paymentMethod;
-    orderMetafields.finance_weekly_amount = financeOffer.weeklyAmount.toFixed(2);
+    orderMetafields.finance_weekly_amount = (
+      weeklyAmountForMethod(paymentMethod, financeOffer) ?? 0
+    ).toFixed(2);
     orderMetafields.finance_funding_type = financeApplication.funding_type ?? null;
   }
   if (belowCostLines.length > 0) {
@@ -599,7 +614,7 @@ export async function placeOrder(
       uploadToken: (formData.get("financeUploadToken") as string)?.trim() || null,
       accountId: perms.accountId ?? netTerms?.accountId ?? null,
       replyTo: email,
-      weeklyAmount: financeOffer.weeklyAmount,
+      weeklyAmount: weeklyAmountForMethod(paymentMethod, financeOffer) ?? 0,
       testMode: isTestMode,
     });
     try {

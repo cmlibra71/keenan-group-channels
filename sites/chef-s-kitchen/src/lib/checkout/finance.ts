@@ -24,6 +24,7 @@
 // CheckoutForm and 500 the checkout.
 import { gstSplit } from "@keenan/services/calc";
 import {
+  FINANCE_METHOD_ID,
   FINANCE_MIN_ORDER_INC_GST,
   FINANCE_APPLICATION_FORM_KEY,
   FINANCE_APPLICATION_INTRO,
@@ -33,9 +34,12 @@ import {
   financeAvailable,
   financeApplicationFields,
   financeApplicationInputNames,
+  formatFinanceMoney,
   fundingTypesForMethod,
   isFinancePaymentMethod,
-  orderWeeklyRent,
+  isSkopeOnly,
+  silverchefWeeklyRent,
+  skopeWeeklyRent,
   type FinanceLine,
   type FormFieldDef,
 } from "@keenan/services/finance";
@@ -59,8 +63,18 @@ export interface FinanceCartLine {
 export interface FinanceOffer {
   /** False = draw nothing finance-shaped, and refuse a finance submission. */
   eligible: boolean;
-  /** Weekly rent for the whole order, GST inclusive, 2dp. */
-  weeklyAmount: number;
+  /**
+   * SilverChef's own weekly rent for the WHOLE basket at SilverChef's rate,
+   * GST inclusive, 2dp. This is what the SilverChef button quotes.
+   */
+  silverchefWeekly: number;
+  /**
+   * SKOPE Funding's weekly figure, or null when the basket is not all SKOPE.
+   * A separate offer with a separate label — never blended into SilverChef's.
+   */
+  skopeWeekly: number | null;
+  /** True when every priced line is a SKOPE SKU, so SKOPE funding is on offer. */
+  skopeOnly: boolean;
   formKey: string;
   intro: string;
   fields: FormFieldDef[];
@@ -100,15 +114,23 @@ export function financeOfferForCart(input: {
   goodsTotalIncGst: number;
 }): FinanceOffer {
   const eligible = financeAvailable(input.goodsTotalIncGst);
+  // SKOPE Funding is a DIFFERENT offer from SilverChef's, not a cheaper rate
+  // inside it: the live IK site quotes them separately ("Rent per Week: $X" vs
+  // "Own Me $X a week") and the funding type is labelled "Skope Brands only".
+  // So SilverChef quotes the whole basket at its own rate, and SKOPE appears
+  // only on a basket it can actually fund.
+  const skopeOnly = eligible && isSkopeOnly(input.lines);
   return {
     eligible,
-    weeklyAmount: eligible ? orderWeeklyRent(input.lines) : 0,
+    silverchefWeekly: eligible ? silverchefWeeklyRent(input.lines) : 0,
+    skopeWeekly: skopeOnly ? skopeWeeklyRent(input.lines) : null,
+    skopeOnly,
     formKey: FINANCE_APPLICATION_FORM_KEY,
     intro: FINANCE_APPLICATION_INTRO,
     fields: financeApplicationFields().filter((f) => f.name !== "order_number"),
     fundingTypesByMethod: {
-      silverchef: fundingTypesForMethod("silverchef"),
-      finance: fundingTypesForMethod("finance"),
+      [SILVERCHEF_METHOD_ID]: fundingTypesForMethod(SILVERCHEF_METHOD_ID, skopeOnly),
+      [FINANCE_METHOD_ID]: fundingTypesForMethod(FINANCE_METHOD_ID, skopeOnly),
     },
     accountNumberTrigger: FUNDING_TYPE_HAS_SILVERCHEF_ACCOUNT,
     attachmentPrompts: [...FINANCE_ATTACHMENT_PROMPTS],
@@ -123,11 +145,48 @@ export function filterFinanceMethods<T extends { id: string }>(
   return methods.filter((m) => eligible || !isFinancePaymentMethod(m.id));
 }
 
-/** Only the SilverChef button carries a weekly figure (Tim's wording, 2026-08-11). */
+/** What a checkout button says about the weekly cost, if anything. */
+export interface WeeklyBadge {
+  /** The whole phrase, already formatted — "Rent per Week: $1,269.23". */
+  text: string;
+  /** Small print under it, or null. */
+  note: string | null;
+}
+
+/**
+ * The weekly figure on ONE button, in that offer's own words.
+ *
+ * SilverChef and SKOPE are two offers, not one number with two rates, and the
+ * live IK site labels them differently ("Rent per Week: $X" against "Own Me $X
+ * a week"). Printing a SKOPE-discounted blend under the SilverChef label quotes
+ * a rent SilverChef does not offer, so:
+ *   - the SilverChef button quotes the whole basket at SilverChef's rate;
+ *   - the Finance button carries the SKOPE figure ONLY on an all-SKOPE basket,
+ *     which is the only basket "Skope Funding (Skope Brands only)" can fund —
+ *     and on any other basket that funding type is not offered either.
+ */
+export function weeklyBadgeForMethod(methodId: string, offer: FinanceOffer | null): WeeklyBadge | null {
+  if (!offer?.eligible) return null;
+  if (methodId === SILVERCHEF_METHOD_ID) {
+    return offer.silverchefWeekly > 0
+      ? { text: `Rent per Week: ${formatFinanceMoney(offer.silverchefWeekly)}`, note: null }
+      : null;
+  }
+  if (methodId === FINANCE_METHOD_ID && offer.skopeOnly && (offer.skopeWeekly ?? 0) > 0) {
+    return {
+      text: `Own Me ${formatFinanceMoney(offer.skopeWeekly!)} a week`,
+      note: "Skope Funding — indicative only, subject to approval.",
+    };
+  }
+  return null;
+}
+
+/** The weekly figure stamped on the ORDER for the method that was chosen. */
 export function weeklyAmountForMethod(methodId: string, offer: FinanceOffer | null): number | null {
   if (!offer?.eligible) return null;
-  if (methodId !== SILVERCHEF_METHOD_ID) return null;
-  return offer.weeklyAmount > 0 ? offer.weeklyAmount : null;
+  if (methodId === SILVERCHEF_METHOD_ID) return offer.silverchefWeekly > 0 ? offer.silverchefWeekly : null;
+  if (methodId === FINANCE_METHOD_ID && offer.skopeOnly) return offer.skopeWeekly ?? null;
+  return null;
 }
 
 /** The application answers posted with the order, in the field contract's own names. */
@@ -142,16 +201,46 @@ export function financeApplicationValues(read: (name: string) => string | null):
 
 /**
  * The one cross-check the field contract can't make on its own: a funding type
- * has to belong to the button that was pressed. The SilverChef button offers
- * only SilverChef funding types, so a posted "Traditional Finance option" under
- * it is a form that has drifted (or been hand-edited) and is refused.
+ * has to belong to the button that was pressed, AND to this basket. The
+ * SilverChef button offers only SilverChef funding types, so a posted
+ * "Traditional Finance option" under it is a form that has drifted (or been
+ * hand-edited) and is refused; likewise "Skope Funding (Skope Brands only)" on
+ * a basket that is not all SKOPE. Authorised against the SAME offer the page
+ * drew the list from.
  */
-export function fundingTypeError(methodId: string, fundingType: string | undefined): string | null {
-  const allowed = fundingTypesForMethod(methodId);
+export function fundingTypeError(
+  methodId: string,
+  fundingType: string | undefined,
+  offer: FinanceOffer | null
+): string | null {
+  const allowed = offer?.fundingTypesByMethod[methodId] ?? fundingTypesForMethod(methodId);
   if (!allowed.length) return null;
   if (!fundingType || !allowed.includes(fundingType))
     return "Please choose a funding type from the list.";
   return null;
+}
+
+/**
+ * One upload session id for a checkout's attachments.
+ *
+ * MUST match the upload route's `TOKEN_RE` (`/^[0-9a-f-]{36}$/i`) — a token that
+ * doesn't is rejected with "Invalid upload session." and every photo upload dies.
+ * `crypto.randomUUID` needs a SECURE CONTEXT, so it is genuinely absent on an
+ * http:// origin and in some in-app browsers; the fallback therefore builds the
+ * same 36-character uuid shape from `Math.random` rather than falling back to
+ * something the route will refuse. Uniqueness is all this needs: the token only
+ * has to be unguessable enough not to collide with a concurrent checkout, and
+ * the submission claims its files immediately.
+ */
+export function newUploadToken(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  const hex = (n: number) =>
+    Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+  return `${hex(8)}-${hex(4)}-4${hex(3)}-${((Math.floor(Math.random() * 4) + 8) % 16).toString(16)}${hex(
+    3
+  )}-${hex(12)}`;
 }
 
 /** The refusal a cart under the floor gets, in the shopper's words. */
