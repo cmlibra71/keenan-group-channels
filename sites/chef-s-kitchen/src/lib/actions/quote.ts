@@ -631,7 +631,7 @@ export async function requestQuoteChange(
 
   const loaded = await loadOwnQuoteForRequest(quoteId);
   if ("error" in loaded) return loaded;
-  const { quote } = loaded;
+  const { quote, contactId } = loaded;
 
   const state = await requestStateFor(quote);
   if (!state.canRequestChange) {
@@ -639,7 +639,14 @@ export async function requestQuoteChange(
   }
 
   try {
-    await quoteService.markChangeRequested(quoteId, { changeSummary: text.slice(0, 1000) });
+    // `changeSummary` is the line in the rep's email; `customerNote` is what
+    // gets written ONTO the quote, so the rep who opens it reads the request
+    // itself rather than a bare "Change requested".
+    await quoteService.markChangeRequested(quoteId, {
+      changeSummary: text.slice(0, 1000),
+      customerNote: text.slice(0, 1000),
+      authorContactId: contactId,
+    });
   } catch (e) {
     console.error("[requestQuoteChange] failed:", e);
     return { error: "Could not send that request." };

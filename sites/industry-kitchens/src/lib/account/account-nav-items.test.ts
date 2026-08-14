@@ -17,7 +17,7 @@ const ALL_ON: AccountNavFlags = {
   partnerOffersEnabled: true,
 };
 
-test("with every flag on the menu is the full ten items, in order", () => {
+test("with every flag on the menu is the full eleven items, in order", () => {
   assert.deepEqual(
     buildAccountNavItems(ALL_ON).map((i) => i.label),
     [

@@ -10,7 +10,10 @@ import {
   loadQuoteContactForQuote,
   quoteCommentService,
   resolveCustomerRequestState,
+  type CustomerQuoteComment,
+  type CustomerRequestState,
 } from "@keenan/services";
+
 import {
   quoteService,
   productImageService,
@@ -20,7 +23,7 @@ import {
 } from "@/lib/store";
 import { Price } from "@/components/ui/Price";
 import { QuoteActions } from "./quote-actions";
-import { QuoteMessages, type QuoteThreadMessage } from "./quote-messages";
+import { QuoteMessages } from "./quote-messages";
 import { RepContactPanel } from "@/components/account/RepContactPanel";
 import { AccountShell } from "@/components/account/AccountShell";
 import {
@@ -47,6 +50,13 @@ import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-p
 import { isFinancePaymentMethod } from "@/lib/checkout/finance";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
+
+/** Nothing on offer: what a colleague viewing someone else's quote gets. */
+const NO_CUSTOMER_REQUESTS: CustomerRequestState = {
+  canRequestMoreTime: false,
+  canRequestChange: false,
+  canSendMessage: false,
+};
 
 /** en-AU money, matching the <Price> component's formatting. */
 function formatMoney(amount: number, currency: string | null): string {
@@ -275,22 +285,29 @@ export default async function QuoteDetailPage({
   // Card DIj4B7Gr: who is looking after this quote, which of the three "ask us
   // something" controls it offers, and the message thread both sides read.
   // Resolved server-side by the SAME rules the emailed /q/<uuid> link uses.
-  const [repContact, requestState, quoteMessages] = await Promise.all([
+  const [repContact, quoteMessages] = await Promise.all([
     loadQuoteContactForQuote(quote.id).catch(() => ({
       name: "Customer Service",
       email: null,
       phone: null,
       isFallback: true,
     })),
-    Promise.resolve(
-      resolveCustomerRequestState({
+    // Only the five fields the thread renders — the full row carries the
+    // internal author ids, the visibility flag and the email-send bookkeeping,
+    // and everything handed to a client component ships in the page payload.
+    quoteCommentService.listCustomerThread(quote.id).catch(() => [] as CustomerQuoteComment[]),
+  ]);
+  // A colleague reading this quote under `view_company_quotes` may LOOK but not
+  // act — the same rule the item editor uses above. Without the `isOwnQuote`
+  // gate they would be shown three controls whose server actions all refuse
+  // them, because those actions are owner-only.
+  const requestState = isOwnQuote
+    ? resolveCustomerRequestState({
         status,
         hidesPrices: hidePrices,
         expiresAt: raw.expires_at,
       })
-    ),
-    quoteCommentService.listThread(quote.id, false).catch(() => [] as Record<string, unknown>[]),
-  ]);
+    : NO_CUSTOMER_REQUESTS;
   const freightPending = !isMoneyRow(gst.freightEx);
 
 
@@ -528,7 +545,7 @@ export default async function QuoteDetailPage({
       }
       <QuoteMessages
         quoteId={quote.id}
-        messages={quoteMessages as unknown as QuoteThreadMessage[]}
+        messages={quoteMessages}
         canSend={requestState.canSendMessage}
       />
       <div className="mt-8">
