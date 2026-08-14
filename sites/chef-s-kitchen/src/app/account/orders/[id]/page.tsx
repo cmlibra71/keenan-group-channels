@@ -53,6 +53,12 @@ interface OrderItemRow {
   total_ex_tax: string | null;
   total_inc_tax: string | null;
   product_options?: unknown;
+  /**
+   * Set when a staff order amendment moved this line onto a replacement order. The goods and
+   * their money left THIS order — its stored totals were re-computed without them — so listing
+   * the line here shows the customer priced rows that do not add up to the total below.
+   */
+  cancelled_at?: string | null;
 }
 
 interface ShippingAddressRow {
@@ -212,7 +218,11 @@ export default async function OrderDetailPage({
   });
   if (!allowed) notFound();
 
-  const items = order.items ?? [];
+  // Lines an amendment moved to a replacement order are not part of this order any more —
+  // the Totals block below reads the re-computed order columns, so leaving them in the list
+  // shows priced rows that do not sum to the stated total. Dropped once, here, so the item
+  // list, the thumbnails, the product-link lookup and the dispatch section all agree.
+  const items = (order.items ?? []).filter((i) => !i.cancelled_at);
   const productIds = [
     ...new Set(items.map((i) => i.product_id).filter((v): v is number => typeof v === "number")),
   ];
