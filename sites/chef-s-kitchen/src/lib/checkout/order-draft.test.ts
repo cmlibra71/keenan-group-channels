@@ -19,6 +19,16 @@ test("determinePaymentStatus maps each method, defaults to pending", () => {
   assert.equal(determinePaymentStatus("paypal"), "pending");
 });
 
+test("a finance order is placed unpaid, exactly like a bank transfer", () => {
+  // Card VAjaPj0t: nothing is charged until the finance settles, so both
+  // finance buttons must land on the SAME status bank transfer lands on —
+  // never awaiting_payment (which reads as a card in flight) and never paid.
+  assert.equal(determinePaymentStatus("silverchef"), determinePaymentStatus("bank_transfer"));
+  assert.equal(determinePaymentStatus("finance"), determinePaymentStatus("bank_transfer"));
+  assert.equal(determinePaymentStatus("silverchef"), "pending_payment");
+  assert.equal(determinePaymentStatus("finance"), "pending_payment");
+});
+
 test("lineUnitPrice prefers sale_price, falls back to list_price", () => {
   assert.equal(lineUnitPrice({ sale_price: "80", list_price: "100" }), 80);
   assert.equal(lineUnitPrice({ sale_price: null, list_price: "100" }), 100);

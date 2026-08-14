@@ -34,7 +34,10 @@ export interface ProductCardProps {
   /** Render the ink Clearance badge (clearance/last-units contexts). */
   clearance?: boolean;
   availability?: string | null;
+  /** Accepted and deliberately unused: the tile does not gate on stock (7vu2iEEZ). Kept so the
+   *  grid can keep passing what it reads without every caller changing. */
   inventoryLevel?: number | null;
+  /** Accepted and deliberately unused — see `inventoryLevel`. */
   inventoryTracking?: string | null;
   /** GA4 select_item context (all optional — card works without analytics). */
   listId?: string;
@@ -59,8 +62,6 @@ export function ProductCard({
   planPrice,
   clearance,
   availability,
-  inventoryLevel,
-  inventoryTracking,
   listId,
   listName,
   listIndex,
@@ -70,10 +71,22 @@ export function ProductCard({
   const hasPrice = Number.isFinite(rrp) && rrp > 0;
   const savePct = sale && rrp > 0 ? Math.round(((rrp - sale) / rrp) * 100) : 0;
 
-  const tracked = (inventoryTracking ?? "none") !== "none";
   // No stock-level badge: per card CXnP1lrL the storefront never states stock
   // status on a tile (the old "Low Stock" tag is gone).
-  const outOfStock = availability === "disabled" || (tracked && (inventoryLevel ?? 0) <= 0);
+  //
+  // NOT BUYABLE means the product is switched off — it does NOT mean the shelf is empty.
+  // Stock used to be part of this test (`tracked && level <= 0`), which made the tile the one
+  // screen in the shop that refused a sale on stock: the product page has never done it
+  // (`@keenan/services/product-page/bridge.tsx`, "HARD RULE: never block an order on stock"),
+  // so the same product offered Add to Cart on its own page and hid it on the listing.
+  // Tim's ruling on card 7vu2iEEZ (2026-08-11) is that out of stock stays buyable as a back
+  // order and Add to Cart RETURNS on listing tiles, identical on all sites. Removing the stock
+  // term is that ruling for the tile. It also has to happen here and now, because card
+  // KT5lpNRu starts copying Zoey's quantity onto every uncounted product NIGHTLY: with the
+  // stock term still in, a product selling out in Zoey would silently lose its Add to Cart the
+  // next morning, and card CXnP1lrL removed the only wording that would have explained it.
+  // (IK and the template card carry no stock gate at all, so this is Chefs Depot only.)
+  const outOfStock = availability === "disabled";
 
   // Non-blocking: gtag queues the event; navigation proceeds immediately.
   function handleSelect() {

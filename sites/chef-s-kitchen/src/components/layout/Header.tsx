@@ -72,10 +72,15 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
             <div className="flex h-[72px] items-center gap-5 lg:h-[78px] lg:gap-6">
               <MobileNavDrawer departments={megaMenu.departments} />
 
-              {/* Logo — white wordmark on green (design-system asset) */}
+              {/* Logo — the portal's Storefront > Logo setting when one is set
+                  (same shape as Industry Kitchens), else the bundled white
+                  wordmark that the design system draws on green. The masthead
+                  is dark, so a logo uploaded on a solid light background shows
+                  as a light block here; that is the uploaded asset, not this
+                  fallback. */}
               <Link href="/" className="shrink-0" aria-label={storeName}>
                 <Image
-                  src="/brand/chefs-depot-logo-white.png"
+                  src={logoUrl || "/brand/chefs-depot-logo-white.png"}
                   alt={logoAlt || storeName}
                   height={48}
                   width={166}

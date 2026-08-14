@@ -13,6 +13,14 @@
 // question — "would this order qualify on amount alone if you joined" — so it
 // omits isMember on purpose and does not use this predicate.
 //
+// Two ways to earn free delivery, and this is the only place they are combined:
+//   • the MEMBER threshold — enabled AND member AND amount >= threshold;
+//   • a BRAND free-shipping special — the cart holds an item from a brand that
+//     is being marketed with free shipping today. Everyone, no minimum spend,
+//     no membership (card 88Ay7UGA). Whether one applies is decided in
+//     `free-shipping-brands-policy.ts` and handed in already resolved, because
+//     it needs the cart's brands and this stays pure.
+//
 // The actual shipping COST (zone rate-card lookup) is impure and stays in the
 // order action / the /api/shipping/calculate route; only the eligibility decision
 // is pure and shared here.
@@ -27,7 +35,14 @@ export function qualifiesForFreeDelivery(params: {
   /** The order amount this channel qualifies free delivery on (see NOTE on basis). */
   amount: number;
   threshold: number;
+  /**
+   * A brand free-shipping special covers this cart. Independent of the member
+   * threshold: it ignores `enabled`, `isMember` and `amount` entirely, because
+   * the special is public and has no minimum spend.
+   */
+  brandFreeShipping?: boolean;
 }): boolean {
-  const { enabled, isMember, amount, threshold } = params;
+  const { enabled, isMember, amount, threshold, brandFreeShipping } = params;
+  if (brandFreeShipping) return true;
   return enabled && isMember && amount >= threshold;
 }

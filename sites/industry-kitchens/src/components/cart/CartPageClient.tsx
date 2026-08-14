@@ -8,6 +8,10 @@ import { CartItemsList, type CartItemRow } from "@/components/cart/CartItemsList
 import { CartSummary } from "@/components/cart/CartSummary";
 import { MembershipCartUpsell } from "@/components/cart/MembershipCartUpsell";
 import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
+import {
+  matchBrandSpecial,
+  type MatchedBrandSpecial,
+} from "@/lib/checkout/free-shipping-brands-policy";
 
 /**
  * Client island for the /cart page body. Quantity changes update rows and
@@ -27,6 +31,7 @@ export function CartPageClient({
   isMember,
   freeShippingEnabled,
   freeShippingThreshold,
+  brandSpecials = [],
   upsell,
 }: {
   initialCart: CartData;
@@ -34,6 +39,8 @@ export function CartPageClient({
   isMember: boolean;
   freeShippingEnabled: boolean;
   freeShippingThreshold: number;
+  /** Brand free-shipping specials running today on this storefront (card 88Ay7UGA). */
+  brandSpecials?: MatchedBrandSpecial[];
   upsell: { planPrice: number; billingInterval: string; savingsPercentage: number } | null;
 }) {
   const [cart, setCart] = useState<CartData>(initialCart);
@@ -90,6 +97,13 @@ export function CartPageClient({
   const total = parseFloat(cart?.cart_amount ?? "0");
   const discount = Math.max(0, Math.round((subtotal - total) * 100) / 100);
 
+  // Re-decided from the CURRENT items, not fixed at first render: taking the last
+  // promoted line out of the basket has to take the free delivery with it.
+  const brandMatch = matchBrandSpecial(
+    brandSpecials,
+    items.map((i) => i.brand_id)
+  );
+
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
       <h1 className="text-3xl font-bold text-zinc-900 mb-8">Your Cart</h1>
@@ -107,6 +121,7 @@ export function CartPageClient({
             pricesIncludeTax={pricesIncludeTax}
             freeShippingEnabled={freeShippingEnabled}
             freeShippingThreshold={freeShippingThreshold}
+            brandSpecial={brandMatch}
           />
           {upsell && (
             <MembershipCartUpsell

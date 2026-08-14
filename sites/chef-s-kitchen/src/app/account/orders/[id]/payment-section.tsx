@@ -10,6 +10,8 @@ import {
   transactionOutcomeLabel,
   type VisibleTransaction,
 } from "@/lib/orders/order-presentation";
+import type { PayBalanceDecision } from "@/lib/orders/pay-balance";
+import { PayBalancePanel } from "./pay-balance-panel";
 
 // ============================================================================
 // Payment details — where the money on this order stands, and how to settle it.
@@ -37,6 +39,7 @@ function formatDateTime(value: string | Date | null): string {
 }
 
 export function PaymentSection({
+  orderId,
   paymentMethod,
   paymentStatus,
   totalIncTax,
@@ -48,7 +51,10 @@ export function PaymentSection({
   netTermsDaysOnAccount,
   xeroInvoiceNumber,
   xeroInvoiceStatus,
+  payBalance,
+  stripePublishableKey,
 }: {
+  orderId: number;
   paymentMethod: string | null;
   paymentStatus: string | null;
   totalIncTax: number;
@@ -60,6 +66,9 @@ export function PaymentSection({
   netTermsDaysOnAccount: number | null;
   xeroInvoiceNumber: string | null;
   xeroInvoiceStatus: string | null;
+  /** Whether this customer may settle the balance by card, decided on the server. */
+  payBalance: PayBalanceDecision;
+  stripePublishableKey: string | null;
 }) {
   // Paid / refunded / outstanding in one pure step. The stored status is
   // authoritative for "settled" — orders imported from Zoey are marked paid with
@@ -169,6 +178,28 @@ export function PaymentSection({
               ))}
             </ul>
           </div>
+        )}
+
+        {/* Settle the balance by card (card Sh03niVC). The decision was made on
+            the server and is re-made inside the action; this only renders it.
+
+            A refusal that carries wording is PRINTED rather than silently
+            dropping the control: a colleague who can see the balance but is not
+            a Manager or Billing contact would otherwise meet a screen showing a
+            debt with no way to clear it and no explanation. Refusals with no
+            wording (nothing owing, card switched off, cancelled) are already
+            explained by the figures and the panels around this one. */}
+        {payBalance.allowed && (
+          <PayBalancePanel
+            orderId={orderId}
+            amount={payBalance.amount}
+            stripePublishableKey={stripePublishableKey}
+          />
+        )}
+        {!payBalance.allowed && payBalance.message && (
+          <p className="mt-5 rounded-lg border border-border bg-surface-secondary p-4 text-sm text-text-secondary">
+            {payBalance.message}
+          </p>
         )}
 
         {/* How to pay — bank transfer still owing. Same source and wording as the

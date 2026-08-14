@@ -17,6 +17,19 @@ import {
 import { getStripeProvider } from "@/lib/stripe";
 import { getContactPermissions } from "@/lib/role-permissions";
 import { normaliseAuState, isValidAuPostcode } from "@/lib/checkout/au-address";
+import { getCommerceClient } from "@keenan/services";
+import {
+  normalisePeople,
+  validatePeople,
+  newlyAddedPeople,
+  type AccountPerson,
+} from "@/lib/account/account-people";
+import {
+  loadAccountPeople,
+  loadAccountRoles,
+  resolveAccountNotifyRecipients,
+} from "@/lib/account/account-people-data";
+import { sendAddedPeopleEmail } from "@/lib/account/people-email";
 
 type Result = { success: boolean; error?: string };
 
@@ -46,6 +59,8 @@ async function denyAddressAction(
   return null;
 }
 
+/** @deprecated The free-text shape the first "people on the account" build stored.
+ *  Read (never written) by `normalisePerson` so old rows still show. */
 export type AccountContact = {
   name: string;
   email?: string;
@@ -224,30 +239,126 @@ export async function setDefaultAddress(
   }
 }
 
-/** Save the member's "people on the account" list into contact metafields. */
-export async function updateAccountContacts(contacts: AccountContact[]): Promise<Result> {
+/**
+ * Save "people on the account" (card 8LfB0DZS, xqWftDcL).
+ *
+ * Three things this does that the first build did not:
+ *  1. It RETURNS the saved list. The screen then renders what the database now
+ *     holds instead of the boxes the customer typed into, which is Steve's
+ *     "after saved - info still showing".
+ *  2. For a person on a business account it stores the list on the ACCOUNT, so
+ *     the manager and every colleague see the same people. The old build wrote
+ *     each person's list onto their own contact row, where nobody else could
+ *     ever see it.
+ *  3. It emails the account manager about anyone newly added, naming their
+ *     access level, and tells the saver who was told.
+ *
+ * The role is validated against the live `account_roles` list server-side — a
+ * posted role id that isn't a real, non-retired role is refused.
+ */
+export async function saveAccountPeople(people: AccountPerson[]): Promise<{
+  success: boolean;
+  error?: string;
+  /** The list as stored — what the screen should now show. */
+  people?: AccountPerson[];
+  /** Names of the people we told about an addition; empty when there was nobody to tell. */
+  notified?: string[];
+}> {
   const session = await getSession();
   if (!session) return { success: false, error: "Not authenticated" };
 
-  const cleaned = (Array.isArray(contacts) ? contacts : [])
-    .map((c) => ({
-      name: (c.name || "").trim(),
-      email: (c.email || "").trim(),
-      phone: (c.phone || "").trim(),
-      role: (c.role || "").trim(),
-    }))
-    .filter((c) => c.name || c.email || c.phone || c.role);
-
   try {
-    const contact = await contactService.getById(session.contactId);
-    const metafields = {
-      ...((contact?.metafields as Record<string, unknown>) || {}),
-      account_contacts: cleaned,
-    };
-    await contactService.update(session.contactId, { metafields });
+    const roles = await loadAccountRoles();
+    const roleIndex = roles.map((r) => ({ id: r.id, name: r.name }));
+    const cleaned = normalisePeople(people, roleIndex);
+
+    const invalid = validatePeople(cleaned, roleIndex);
+    if (invalid) return { success: false, error: invalid };
+
+    // ONE definition of who may edit, shared with the page (Zoey gives this to
+    // the main-contact roles). A refusal is enforced here, not only in the UI:
+    // a stale page must not be able to write the list.
+    const previousView = await loadAccountPeople(session.contactId);
+    // The role resolver FAILS OPEN by design (a DB hiccup must never brick
+    // checkout). That is the wrong trade here: without it we cannot tell whether
+    // this person's list belongs to an account or to their own contact row, and
+    // guessing "contact" would drop a manager's edit somewhere no colleague can
+    // ever see, silently. Refuse and say so instead.
+    if (previousView.permissionsUnavailable) {
+      return {
+        success: false,
+        error: "We couldn't check your account just now, so nothing was saved. Please try again in a moment.",
+      };
+    }
+    if (!previousView.canEdit) {
+      return {
+        success: false,
+        error:
+          previousView.cannotEditReason ??
+          "Your role on this account doesn't allow changing who is on it.",
+      };
+    }
+    const accountId = previousView.accountId;
+    const previous = previousView.people;
+
+    const payload = JSON.stringify(cleaned);
+    const sql = getCommerceClient();
+    if (accountId !== null) {
+      if (!sql) throw new Error("Commerce database is not initialised.");
+      // ::text::jsonb — a bare ::jsonb cast on a bound string stores a JSON
+      // *scalar* under prepare:false (postgres_jsonb_text_cast).
+      //
+      // `updated_at` is deliberately NOT stamped: a customer tidying their own
+      // contact list would otherwise jump their company to the top of every
+      // staff list sorted by last-updated (same call as the 1kT6phnK backfill).
+      await sql`
+        UPDATE accounts
+        SET metafields = COALESCE(metafields, '{}'::jsonb)
+                       || jsonb_build_object('account_contacts', ${payload}::text::jsonb)
+        WHERE id = ${accountId}`;
+      // Retire this contact's own legacy copy in the same breath. The read path
+      // falls back to the contact's list only while the account has none, so
+      // leaving it behind means a customer who deletes everyone and saves gets
+      // the old rows back on reload — the list would be un-emptyable.
+      await sql`
+        UPDATE contacts
+        SET metafields = COALESCE(metafields, '{}'::jsonb) - 'account_contacts'
+        WHERE id = ${session.contactId}
+          AND metafields ? 'account_contacts'`;
+    } else {
+      const contact = await contactService.getById(session.contactId);
+      const metafields = {
+        ...((contact?.metafields as Record<string, unknown>) || {}),
+        account_contacts: cleaned,
+      };
+      await contactService.update(session.contactId, { metafields });
+    }
+
+    // Best effort from here on: the list is saved, so nothing below may fail it.
+    let notified: string[] = [];
+    const added = newlyAddedPeople(previous, cleaned);
+    if (added.length > 0 && accountId !== null) {
+      try {
+        const recipients = await resolveAccountNotifyRecipients(accountId, session.contactId);
+        const me = previousView.members.find((m) => m.isYou);
+        const sent = await sendAddedPeopleEmail({
+          to: recipients,
+          accountName: previousView.accountName,
+          addedBy: me?.name || session.email,
+          added: added.map((person) => ({
+            person,
+            role: roles.find((r) => r.id === person.roleId) ?? null,
+          })),
+        });
+        if (sent.length > 0) notified = recipients.map((r) => r.name);
+      } catch (e) {
+        console.error("[saveAccountPeople] manager notification failed (save kept):", e);
+      }
+    }
+
     revalidatePath("/account/profile");
-    return { success: true };
+    return { success: true, people: cleaned, notified };
   } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : "Failed to save contacts" };
+    return { success: false, error: err instanceof Error ? err.message : "Failed to save people" };
   }
 }

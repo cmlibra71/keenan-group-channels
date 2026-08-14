@@ -355,6 +355,54 @@ export async function getContactPermissions(
   }
 }
 
+/**
+ * The contact's role on ONE named account — the answer `getContactPermissions`
+ * cannot give, because it collapses to a single PRIMARY membership and 488 live
+ * contacts hold more than one.
+ *
+ * It exists for the pay-a-balance gate (card Sh03niVC), which authorises spending
+ * a company's money and so must be told the truth or told nothing. Unlike the
+ * resolver above it does NOT fail open: a lookup that throws reports `failed`,
+ * and the caller refuses. Reading a role for the wrong account, or inventing a
+ * bypass, is how somebody ends up paying with a permission they do not hold.
+ */
+export interface ContactAccountRole {
+  /** `account_roles.name` on that account; null when they hold no role or no membership. */
+  roleName: string | null;
+  /** True when an ACTIVE membership on that account exists. */
+  isMember: boolean;
+  /** True when the lookup FAILED. Nothing else in this result may be trusted. */
+  failed: boolean;
+}
+
+export async function getContactRoleOnAccount(
+  contactId: number | null | undefined,
+  accountId: number
+): Promise<ContactAccountRole> {
+  if (!contactId) return { roleName: null, isMember: false, failed: false };
+  try {
+    const sql = getCommerceClient();
+    if (!sql) throw new Error("Commerce database is not initialised.");
+    const rows = await sql<{ role_name: string | null }[]>`
+      SELECT r.name AS role_name
+      FROM account_memberships m
+      LEFT JOIN account_roles r ON r.id = m.role_id
+      WHERE m.contact_id = ${contactId}
+        AND m.account_id = ${accountId}
+        AND m.status = 'active'
+      ORDER BY m.id ASC
+      LIMIT 1`;
+    const row = rows[0];
+    return { roleName: row?.role_name ?? null, isMember: Boolean(row), failed: false };
+  } catch (e) {
+    console.error(
+      `[role-permissions] role lookup FAILED for contact ${contactId} on account ${accountId} — FAILING CLOSED:`,
+      e
+    );
+    return { roleName: null, isMember: false, failed: true };
+  }
+}
+
 /** Active member contact ids of an account (feeds view_company_orders/quotes). */
 export async function getAccountContactIds(accountId: number): Promise<number[]> {
   try {

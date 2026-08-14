@@ -7,6 +7,7 @@ import { getAccountId } from "@/lib/member";
 import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { getCartUuid, setCartUuid } from "@/lib/cart";
+import { brandIdsForProducts } from "@/lib/checkout/free-shipping-brands";
 import { getSession } from "@/lib/auth";
 import { pickBestBulkUnit, layerCartPrice } from "@/lib/pricing/cart-pricing";
 
@@ -312,10 +313,19 @@ const readCart = cache(async () => {
   // A line may have been added before a restriction was applied (or before the shopper logged in
   // as a different account). Such a line is DROPPED from what we render — and rejected outright at
   // checkout (placeOrder), which is where the money moves.
-  const items = (full.items ?? []) as { product_id: number }[];
+  const items = full.items ?? [];
   const blocked = await blockedProductIds(items.map((i) => i.product_id));
-  if (blocked.length === 0) return full;
-  return { ...full, items: items.filter((i) => !blocked.includes(i.product_id)) } as typeof full;
+  const visible = blocked.length === 0 ? items : items.filter((i) => !blocked.includes(i.product_id));
+
+  // Each line carries its product's BRAND, so the cart island can re-decide brand
+  // free shipping (card 88Ay7UGA) after a quantity change or a removal without a
+  // route re-render — removing the last promoted line must take the "FREE" away
+  // there and then. One batched lookup per cart read.
+  const brands = await brandIdsForProducts(visible.map((i) => i.product_id));
+  return {
+    ...full,
+    items: visible.map((i) => ({ ...i, brand_id: brands.get(i.product_id) ?? null })),
+  };
 });
 
 export async function getCart() {
