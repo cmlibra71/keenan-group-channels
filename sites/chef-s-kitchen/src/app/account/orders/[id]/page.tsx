@@ -20,8 +20,10 @@ import { canViewOrder } from "@/lib/orders/order-access";
 import {
   orderStatusChipClass,
   orderTotalRows,
+  paymentPosition,
   visibleTransaction,
 } from "@/lib/orders/order-presentation";
+import { orderDocumentName } from "@/lib/orders/order-document-name";
 import { customerOrderStage } from "@/lib/orders/order-status-label";
 import { OrderMoney, OrderTotals } from "@/components/account/OrderMoney";
 import { PaymentSection } from "./payment-section";
@@ -256,6 +258,19 @@ export default async function OrderDetailPage({
   const orderNumber = order.order_number || `#${order.id}`;
   const placed = formatDate(order.created_at);
 
+  // Named off the SAME payment position the Payment section states, resolved by the same pure
+  // function with the same inputs, so the heading can never contradict the figures under it.
+  const visibleTransactions = (order.transactions ?? []).map(visibleTransaction);
+  const documentName = orderDocumentName({
+    amountPaid: paymentPosition({
+      paymentStatus: order.payment_status,
+      totalIncTax: money(order.total_inc_tax),
+      refundedAmount: money(order.refunded_amount),
+      transactions: visibleTransactions,
+    }).paid,
+    paymentStatus: order.payment_status,
+  });
+
   const totalEx = money(order.total_ex_tax);
   const totalInc = money(order.total_inc_tax);
   const gst = money(order.total_tax);
@@ -286,7 +301,10 @@ export default async function OrderDetailPage({
         Back to Order History
       </Link>
 
-      <p className="eyebrow mb-3">ORDER</p>
+      {/* What this document is called, in the same words as the copy we print and email
+          (card RvWcoPEe): a pro-forma until money arrives, a paid tax invoice receipt once any
+          payment has — with what is still outstanding stated in Payment below. */}
+      <p className="eyebrow mb-3">{documentName}</p>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
         <h1 className="page-title">Order {orderNumber}</h1>
         {/* The status the customer just read on Order History — same word, same
@@ -382,7 +400,7 @@ export default async function OrderDetailPage({
         paymentStatus={order.payment_status}
         totalIncTax={totalInc}
         refundedAmount={money(order.refunded_amount)}
-        transactions={(order.transactions ?? []).map(visibleTransaction)}
+        transactions={visibleTransactions}
         paymentMethods={checkoutSettings.paymentMethods}
         orderNumber={order.order_number}
         netTermsDaysOnOrder={
