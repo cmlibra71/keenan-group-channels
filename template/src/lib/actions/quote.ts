@@ -328,12 +328,10 @@ export async function acceptQuote(quoteId: number) {
   // Lifecycle method, NOT a bare status update: stamps accepted_at and writes
   // the quote.accepted audit row. The generic update() fired no side effects,
   // which is why acceptances used to be invisible to staff.
-  // `markAccepted` is also the SINGLE sender of the "customer accepted a quote"
-  // staff alert (it fires on every acceptance path, including the magic link and
-  // the portal). The approval restriction is passed in so that one email still
-  // tells staff the conversion needs sign-off — this action must NOT send its
-  // own copy, or every configured recipient gets the acceptance twice.
-  await quoteService.markAccepted(quoteId, { requiresAdminApproval });
+  // `suppressStaffAlert`: the portal follow-up called below is the one sender of
+  // the acceptance email. Without it the service sends its own older alert too
+  // and every configured inbox gets two.
+  await quoteService.markAccepted(quoteId, { requiresAdminApproval, suppressStaffAlert: true });
 
   // Flag the acceptance so staff know this contact's conversions need sign-off
   // before the quote becomes an order. Best-effort — never fail the acceptance.
@@ -362,6 +360,23 @@ export async function acceptQuote(quoteId: number) {
     console.error("[acceptQuote] pro-forma email failed (non-fatal):", e);
   }
 
+
+  // Everything that happens after an acceptance — the rep's email with the quote
+  // PDF, the customer's confirmation, and the two freight gates that decide
+  // whether this becomes an order (card 9XRQmaiz) — is ONE place, and that place
+  // is in the portal: it draws the PDF and the order from the portal's own quote
+  // money view, and a second copy of that arithmetic here would be a second
+  // place for a quote's money to be wrong. So the storefront asks the portal to
+  // run it, rather than behaving differently from the emailed quote link.
+  //
+  // Best-effort and never fatal: the customer has already been told their
+  // acceptance succeeded. The endpoint is idempotent, so a retry is safe.
+  //
+  // `customerAlreadyNotified` matters: this path has just sent the customer
+  // their pro-forma (card 0Wy0xHuq), which IS their acceptance confirmation.
+  // Without the flag they would get a second email about the same event, and a
+  // person gets ONE email per order (Product Brief).
+  await runPortalAcceptanceFollowUp(q.uuid, { customerAlreadyNotified: true });
   revalidatePath(`/account/quotes/${quoteId}`);
   revalidatePath("/account/quotes");
   return {
@@ -685,4 +700,34 @@ export async function postQuoteMessage(quoteId: number, body: string): Promise<Q
 
   revalidatePath(`/account/quotes/${quoteId}`);
   return { success: true };
+}
+
+/**
+ * Ask the portal to run the acceptance follow-up for a quote we have just
+ * accepted (card 9XRQmaiz). The quote's own uuid is the credential — the same
+ * unguessable token this customer used to reach the quote — and the endpoint
+ * only ever acts on a quote that is ALREADY accepted, so it grants no authority
+ * the caller did not have.
+ *
+ * Never throws and never blocks: the acceptance itself has already succeeded.
+ */
+async function runPortalAcceptanceFollowUp(
+  uuid: string | null | undefined,
+  options: { customerAlreadyNotified?: boolean } = {}
+): Promise<void> {
+  if (!uuid) return;
+  const base = (process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/$/, "");
+  try {
+    const res = await fetch(`${base}/api/q/${encodeURIComponent(uuid)}/accepted-followup`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ customer_already_notified: options.customerAlreadyNotified === true }),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      console.error(`[acceptQuote] portal follow-up returned ${res.status} for quote ${uuid}`);
+    }
+  } catch (error) {
+    console.error("[acceptQuote] portal follow-up failed (non-fatal):", error);
+  }
 }
