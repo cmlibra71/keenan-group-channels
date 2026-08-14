@@ -5,7 +5,6 @@ import { ChevronLeft, Package } from "lucide-react";
 import { ApiError } from "@keenan/services";
 import { getSession } from "@/lib/auth";
 import { signInRedirect } from "@/lib/account-redirect";
-import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import {
   orderService,
   shipmentService,
@@ -13,15 +12,18 @@ import {
   getLinkableProductPaths,
   getCheckoutSettings,
   getAccountNetTermsDays,
-  isGuestOrderForEmail,
   CHANNEL_ID,
 } from "@/lib/store";
-import { canViewOrder } from "@/lib/orders/order-access";
+import { canCustomerViewOrder } from "@/lib/orders/order-visibility";
+import { resolvePayBalance } from "@/lib/orders/pay-balance-context";
+import { resolveStripeGateway } from "@/lib/payments/gateway";
 import {
   orderStatusChipClass,
   orderTotalRows,
+  paymentPosition,
   visibleTransaction,
 } from "@/lib/orders/order-presentation";
+import { orderDocumentName } from "@/lib/orders/order-document-name";
 import { customerOrderStage } from "@/lib/orders/order-status-label";
 import { OrderMoney, OrderTotals } from "@/components/account/OrderMoney";
 import { PaymentSection } from "./payment-section";
@@ -53,6 +55,12 @@ interface OrderItemRow {
   total_ex_tax: string | null;
   total_inc_tax: string | null;
   product_options?: unknown;
+  /**
+   * Set when a staff order amendment moved this line onto a replacement order. The goods and
+   * their money left THIS order — its stored totals were re-computed without them — so listing
+   * the line here shows the customer priced rows that do not add up to the total below.
+   */
+  cancelled_at?: string | null;
 }
 
 interface ShippingAddressRow {
@@ -83,6 +91,13 @@ interface OrderDetail {
   channel_id: number;
   contact_id: number | null;
   account_id: number | null;
+  /**
+   * Never rendered. Read ONLY so the Pay-by-card button stays off Zoey-imported
+   * orders, whose payments have not come across yet and whose "outstanding"
+   * figure is therefore missing data rather than real debt (cards Sh03niVC,
+   * 1IPO2D53).
+   */
+  external_source: string | null;
   order_number: string | null;
   status: string | null;
   payment_status: string | null;
@@ -185,39 +200,24 @@ export default async function OrderDetailPage({
   }
 
   // ── Access gate: the SAME rule the Order History list applies ──────────────
-  // Own order → straight through. Otherwise resolve exactly what the list
-  // resolves: account-wide visibility for a role that grants view_company_orders,
-  // else the normalised guest-email match. Failure is a 404, never a part-render.
-  let accountMemberIds: number[] = [];
-  let guestEmailMatch = false;
-  if (order.contact_id !== session.contactId) {
-    if (order.contact_id == null) {
-      guestEmailMatch = await isGuestOrderForEmail(order.id, session.email);
-    } else {
-      const perms = await getContactPermissions(session.contactId);
-      const seesWholeAccount =
-        perms.isB2B && perms.accountId !== null && perms.can("view_company_orders");
-      // An empty member list (lookup failure) degrades to own-only, never wider.
-      accountMemberIds = seesWholeAccount ? await getAccountContactIds(perms.accountId!) : [];
-    }
-  }
-
-  const allowed = canViewOrder({
-    orderChannelId: order.channel_id,
-    orderContactId: order.contact_id,
-    channelId: CHANNEL_ID,
-    sessionContactId: session.contactId,
-    accountMemberIds,
-    guestEmailMatch,
-  });
+  // Own order → straight through. Otherwise account-wide visibility for a role
+  // that grants view_company_orders, else the normalised guest-email match.
+  // Failure is a 404, never a part-render. The lookups live in one module because
+  // the pay-balance action has to re-ask the identical question before it will
+  // charge a card.
+  const allowed = await canCustomerViewOrder(order, session);
   if (!allowed) notFound();
 
-  const items = order.items ?? [];
+  // Lines an amendment moved to a replacement order are not part of this order any more —
+  // the Totals block below reads the re-computed order columns, so leaving them in the list
+  // shows priced rows that do not sum to the stated total. Dropped once, here, so the item
+  // list, the thumbnails, the product-link lookup and the dispatch section all agree.
+  const items = (order.items ?? []).filter((i) => !i.cancelled_at);
   const productIds = [
     ...new Set(items.map((i) => i.product_id).filter((v): v is number => typeof v === "number")),
   ];
 
-  const [thumbs, linkablePaths, checkoutSettings, shipmentPage, accountNetTermsDays] =
+  const [thumbs, linkablePaths, checkoutSettings, shipmentPage, accountNetTermsDays, stripe] =
     await Promise.all([
       productImageService.getThumbnailsForProducts(productIds) as Promise<
         { product_id: number; url_thumbnail: string | null; url_standard: string | null }[]
@@ -236,7 +236,17 @@ export default async function OrderDetailPage({
       order.payment_method === "net_terms"
         ? getAccountNetTermsDays(order.account_id, order.contact_id)
         : Promise.resolve(null),
+      // The publishable key for the Pay-by-card panel. Resolved the same way the
+      // checkout page resolves it (test-vs-live aware, prod-safe fallback), and
+      // never fatal: with no gateway the panel simply says card payment is not
+      // available (card Sh03niVC).
+      resolveStripeGateway().catch(() => ({ gateway: null })),
     ]);
+
+  // May this person settle the balance by card? Decided here and re-decided
+  // inside `startOrderBalancePayment`, from one function reading one set of
+  // facts — the button and the charge cannot disagree.
+  const payBalance = await resolvePayBalance(order, session, { checkoutSettings });
 
   const thumbByProduct = new Map(
     thumbs.map((t) => [t.product_id, t.url_thumbnail || t.url_standard])
@@ -245,6 +255,19 @@ export default async function OrderDetailPage({
 
   const orderNumber = order.order_number || `#${order.id}`;
   const placed = formatDate(order.created_at);
+
+  // Named off the SAME payment position the Payment section states, resolved by the same pure
+  // function with the same inputs, so the heading can never contradict the figures under it.
+  const visibleTransactions = (order.transactions ?? []).map(visibleTransaction);
+  const documentName = orderDocumentName({
+    amountPaid: paymentPosition({
+      paymentStatus: order.payment_status,
+      totalIncTax: money(order.total_inc_tax),
+      refundedAmount: money(order.refunded_amount),
+      transactions: visibleTransactions,
+    }).paid,
+    paymentStatus: order.payment_status,
+  });
 
   const totalEx = money(order.total_ex_tax);
   const totalInc = money(order.total_inc_tax);
@@ -276,7 +299,10 @@ export default async function OrderDetailPage({
         Back to Order History
       </Link>
 
-      <p className="eyebrow mb-3">ORDER</p>
+      {/* What this document is called, in the same words as the copy we print and email
+          (card RvWcoPEe): a pro-forma until money arrives, a paid tax invoice receipt once any
+          payment has — with what is still outstanding stated in Payment below. */}
+      <p className="eyebrow mb-3">{documentName}</p>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
         <h1 className="page-title">Order {orderNumber}</h1>
         {/* The status the customer just read on Order History — same word, same
@@ -368,11 +394,12 @@ export default async function OrderDetailPage({
           Stripe payment-intent id, the raw gateway response and fraud/AVS/CVV
           results, and none of that goes any further than this file. */}
       <PaymentSection
+        orderId={order.id}
         paymentMethod={order.payment_method}
         paymentStatus={order.payment_status}
         totalIncTax={totalInc}
         refundedAmount={money(order.refunded_amount)}
-        transactions={(order.transactions ?? []).map(visibleTransaction)}
+        transactions={visibleTransactions}
         paymentMethods={checkoutSettings.paymentMethods}
         orderNumber={order.order_number}
         netTermsDaysOnOrder={
@@ -383,6 +410,8 @@ export default async function OrderDetailPage({
         netTermsDaysOnAccount={accountNetTermsDays}
         xeroInvoiceNumber={order.xero_invoice_number}
         xeroInvoiceStatus={order.xero_invoice_status}
+        payBalance={payBalance}
+        stripePublishableKey={stripe.gateway?.credentials?.publishable_key ?? null}
       />
 
       {/* ── Delivery & dispatch ───────────────────────────────────────────── */}
