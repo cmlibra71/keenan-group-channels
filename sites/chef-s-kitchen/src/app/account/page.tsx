@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Package, FileText, MapPin, LogOut, Crown, Trophy, Gift, ArrowRight, Calendar, Ticket, KeyRound } from "lucide-react";
 import { getSession } from "@/lib/auth";
-import { contactService, getActiveSubscriptionForContact, getUpcomingDraws, drawEntryService, CHANNEL_ID } from "@/lib/store";
+import { formatMemberSince } from "@/lib/member-date";
+import { contactService, getActiveSubscriptionForContact, getMemberSince, getUpcomingDraws, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { safeNextPath, signInPrompt } from "@/lib/account-redirect";
 import { normaliseEmail, looksLikeEmail } from "@/lib/checkout/account-prompt";
@@ -56,6 +57,13 @@ export default async function AccountPage({
     ? await getActiveSubscriptionForContact(session.contactId)
     : null;
 
+  // The date they joined, shown on the member card (card pgRmsaTX). Only asked for
+  // when there IS a membership, so a non-member's page costs nothing extra.
+  const memberSince = activeSub ? await getMemberSince(session.contactId) : null;
+  // Melbourne, always — the container runs UTC and a UTC-evening sign-up
+  // would otherwise tell the member they joined the day before (member-date.ts).
+  const memberSinceLabel = formatMemberSince(memberSince);
+
   // Fetch draw info for members
   let totalEntries = 0;
   let nextDrawDate: Date | null = null;
@@ -108,6 +116,12 @@ export default async function AccountPage({
                 {customer?.first_name} {customer?.last_name}
               </p>
               <p className="text-sm text-steel-400">{customer?.email}</p>
+              {memberSinceLabel && (
+                <p className="text-sm text-steel-400">
+                  Member since{" "}
+                  {memberSinceLabel}
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-4 text-sm">
               {activeSub.consecutive_months != null && (

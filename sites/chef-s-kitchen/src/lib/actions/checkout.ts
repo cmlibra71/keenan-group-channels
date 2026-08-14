@@ -7,7 +7,7 @@ import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { hasTestCheckoutSession } from "@/lib/checkout/test-session";
 import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, siteAccessProfileService, type EmailLineItem } from "@keenan/services";
-import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, type BelowCostLine } from "@/lib/checkout/order-draft";
+import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, memberSavings, type BelowCostLine } from "@/lib/checkout/order-draft";
 import { getLineCosts } from "@/lib/store";
 import { sendStaffNotification } from "@/lib/staff-email";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
@@ -234,8 +234,11 @@ export async function placeOrder(
   // Re-validate subscription status — if member pricing is enabled but subscription
   // has expired since items were added, recalculate at non-member prices
   const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
+  // Held so the order can record what being a MEMBER saved on it (card pgRmsaTX).
+  let memberSubscription: { id: number; plan_id: number } | null = null;
   if (memberPricingEnabled && session) {
     const activeSub = await getActiveSubscriptionForContact(session.contactId);
+    if (activeSub) memberSubscription = activeSub as unknown as { id: number; plan_id: number };
     if (!activeSub) {
       // Subscription expired — recalculate any member-priced items at standard price
       const suppressCatalogSale = await shouldSuppressCatalogSalePrice();
@@ -630,6 +633,36 @@ export async function placeOrder(
   if (deliveryServiceType) {
     orderMetafields.delivery_service_type = deliveryServiceType;
     orderMetafields.bulky_products = bulkyProducts.map((p: { sku: string | null; name: string }) => p.sku ?? p.name);
+  }
+  if (paymentMethod === "stripe") orderMetafields.cart_uuid = uuid;
+  // MEMBER SAVINGS, recorded at the moment of sale. Historically only the price paid
+  // was stored, so "what has my membership saved me?" could only ever be estimated
+  // against today's prices; from here on the comparison against the non-member price
+  // is frozen onto the order (card pgRmsaTX). Non-fatal by design, exactly like the
+  // below-cost sentry: a reporting figure must never cost a customer their order.
+  if (memberSubscription) {
+    try {
+      const savings = memberSavings(fullCart.items, pricesIncludeTax);
+      if (savings.savedExTax > 0) {
+        orderMetafields.member_savings = {
+          subscription_id: memberSubscription.id,
+          plan_id: memberSubscription.plan_id,
+          saved_ex_tax: savings.savedExTax.toFixed(2),
+          saved_inc_tax: savings.savedIncTax.toFixed(2),
+          compared_against: "non_member_list_price",
+          lines: savings.lines.map((l) => ({
+            product_id: l.productId,
+            variant_id: l.variantId,
+            sku: l.sku,
+            quantity: l.quantity,
+            non_member_unit: l.nonMemberUnit.toFixed(2),
+            charged_unit: l.chargedUnit.toFixed(2),
+          })),
+        };
+      }
+    } catch (e) {
+      console.error("[placeOrder] member savings stamp failed (non-fatal):", e);
+    }
   }
   // Finance: what was offered and what was chosen, on the order itself, so the
   // back office can see the weekly figure the customer was shown even if the
