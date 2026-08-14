@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { placeOrder, confirmStripePayment } from "@/lib/actions/checkout";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
 import {
+  brandFreeShippingMessage,
+  type MatchedBrandSpecial,
+} from "@/lib/checkout/free-shipping-brands-policy";
+import {
   AU_STATES,
   normaliseAuState,
   isValidAuPostcode,
@@ -12,6 +16,13 @@ import {
 } from "@/lib/checkout/au-address";
 import { Price } from "@/components/ui/Price";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
+import { FinanceApplicationPanel } from "@/components/checkout/FinanceApplicationPanel";
+import {
+  isFinancePaymentMethod,
+  newUploadToken,
+  weeklyBadgeForMethod,
+  type FinanceOffer,
+} from "@/lib/checkout/finance";
 import { emailHasAccount } from "@/lib/actions/account-panel";
 import { decideEmailProbe, normaliseEmail } from "@/lib/checkout/account-prompt";
 import { useHeaderPanels } from "@/lib/cart-quote-counts";
@@ -102,10 +113,12 @@ export function CheckoutForm({
   googlePlacesEnabled = false,
   freeShippingEnabled = false,
   freeShippingThreshold = 500,
+  brandSpecial = null,
   shippingEnabled = false,
   bulkyProductNames = [],
   stripePublishableKey,
   testMode = false,
+  finance = null,
 }: {
   items: CartItem[];
   subtotal: number;
@@ -128,12 +141,19 @@ export function CheckoutForm({
   googlePlacesEnabled?: boolean;
   freeShippingEnabled?: boolean;
   freeShippingThreshold?: number;
+  /** The brand free-shipping special this cart earns, if any (card 88Ay7UGA).
+   *  Resolved on the server and re-resolved by placeOrder before charging. */
+  brandSpecial?: MatchedBrandSpecial | null;
   shippingEnabled?: boolean;
   /** Names of the cart's bulky products (card Wxjp8wpg). Non-empty ⇒ the shopper must choose
    *  curbside vs specialised delivery before this order can be placed. */
   bulkyProductNames?: string[];
   stripePublishableKey?: string;
   testMode?: boolean;
+  /** SilverChef / Finance: the weekly figure and the application form for this
+   *  cart, or null when the cart is under the $1,000 inc GST floor (card
+   *  VAjaPj0t). placeOrder re-resolves it before accepting the order. */
+  finance?: FinanceOffer | null;
 }) {
   const router = useRouter();
   const { open: openPanel } = useHeaderPanels();
@@ -164,6 +184,18 @@ export function CheckoutForm({
   const [stripeError, setStripeError] = useState<string | null>(null);
   const [stripeProcessing, setStripeProcessing] = useState(false);
   const [cardReady, setCardReady] = useState(false);
+  // One upload session per checkout: the licence/Medicare photos are uploaded
+  // as they are picked and claimed by this token when the order is placed.
+  // The upload route only accepts a 36-char uuid shape (`/^[0-9a-f-]{36}$/i`),
+  // so the fallback has to BE that shape — `Date.now()` was rejected and every
+  // photo upload died with "Invalid upload session." wherever `randomUUID` is
+  // absent (an http:// origin, an older in-app browser: it needs a secure context).
+  const financeUploadTokenRef = useRef<string | null>(null);
+  if (financeUploadTokenRef.current === null) {
+    financeUploadTokenRef.current = newUploadToken();
+  }
+  const [financeUploading, setFinanceUploading] = useState(false);
+  const handleFinanceUploading = useCallback((uploading: boolean) => setFinanceUploading(uploading), []);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const stripeRef = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -289,6 +321,7 @@ export function CheckoutForm({
     isMember: !!isMember,
     amount: subtotal,
     threshold: freeShippingThreshold,
+    brandFreeShipping: !!brandSpecial,
   });
 
   const calculateShippingCost = useCallback(
@@ -901,6 +934,24 @@ export function CheckoutForm({
                       />
                       <div>
                         <span className="text-sm font-medium text-ink-900">{method.name}</span>
+                        {/* The weekly cost, in that offer's OWN words — Tim,
+                            2026-08-11, and the live IK site's own two labels:
+                            "Rent per Week: $X" for SilverChef, "Own Me $X a week"
+                            for Skope Funding. They are two offers at two rates,
+                            so they are never blended into one figure. */}
+                        {(() => {
+                          const badge = weeklyBadgeForMethod(method.id, finance);
+                          return badge ? (
+                            <>
+                              <span className="ml-2 inline-block rounded-full bg-ink-900 px-2 py-0.5 text-xs font-semibold text-white">
+                                {badge.text}
+                              </span>
+                              {badge.note && (
+                                <span className="block text-[11px] text-steel-400 mt-0.5">{badge.note}</span>
+                              )}
+                            </>
+                          ) : null;
+                        })()}
                         <p className="text-xs text-steel-500 mt-0.5">{method.description}</p>
                       </div>
                     </label>
@@ -937,6 +988,18 @@ export function CheckoutForm({
                         </p>
                       </div>
                     )}
+
+                    {/* SilverChef / Finance application (card VAjaPj0t) */}
+                    {isFinancePaymentMethod(method.id) &&
+                      selectedPaymentMethod === method.id &&
+                      finance?.eligible && (
+                        <FinanceApplicationPanel
+                          methodId={method.id}
+                          offer={finance}
+                          uploadToken={financeUploadTokenRef.current!}
+                          onUploadingChange={handleFinanceUploading}
+                        />
+                      )}
 
                     {/* Stripe card element */}
                     {method.id === "stripe" && selectedPaymentMethod === "stripe" && stripePublishableKey && (
@@ -1019,6 +1082,11 @@ export function CheckoutForm({
                   <span className="font-medium text-steel-400">--</span>
                 )}
               </div>
+              {brandSpecial && (
+                <p className="mt-1 text-xs text-brand">
+                  {brandFreeShippingMessage(brandSpecial)}
+                </p>
+              )}
               <div className="flex justify-between text-base font-semibold mt-4 pt-4 border-t border-steel-200">
                 <span>Total</span>
                 <span>
@@ -1048,6 +1116,9 @@ export function CheckoutForm({
                 stripeProcessing ||
                 (!heldForSpecialised && selectedPaymentMethod === "stripe" && !cardReady) ||
                 (hasBulkyItems && deliveryService === "") ||
+                // A photo still going up would arrive AFTER the application had
+                // claimed its attachments, so it would never reach the file.
+                financeUploading ||
                 shippingUnresolved
               }
               className="btn-primary mt-6 w-full"
@@ -1064,6 +1135,13 @@ export function CheckoutForm({
             {hasBulkyItems && deliveryService === "" && (
               <p className="mt-2 text-center text-xs text-steel-500">
                 Choose a delivery method above to continue.
+              </p>
+            )}
+
+            {/* A disabled button must always say why (sf-checkout register). */}
+            {financeUploading && (
+              <p className="mt-2 text-center text-xs text-steel-500">
+                Waiting for your photos to finish uploading…
               </p>
             )}
 

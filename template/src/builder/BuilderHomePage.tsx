@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import Image from "next/image";
+import BuilderImage from "./builder-image";
 import { useRouter } from "next/navigation";
 import type { NodeTree } from "@keenan/services/builder";
 import { BuilderTree, BuilderActionsProvider, type NativeComponents } from "@keenan/services/builder-react";
@@ -104,7 +104,7 @@ export function BuilderHomePage({
         components={components}
         nativeComponents={nativeComponents}
         linkComponent={Link as unknown as React.ComponentType<Record<string, unknown>>}
-        imageComponent={Image as unknown as React.ComponentType<Record<string, unknown>>}
+        imageComponent={BuilderImage}
         draft={draft}
       />
     </BuilderActionsProvider>

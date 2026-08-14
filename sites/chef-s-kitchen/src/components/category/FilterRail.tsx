@@ -3,6 +3,11 @@
 import { useState, useTransition } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { ChevronDown, X, SlidersHorizontal } from "lucide-react";
+import {
+  normalizeStorefrontFilters,
+  type StorefrontFilter,
+  type StorefrontFilterId,
+} from "@/lib/storefront-filters";
 
 // ── Generic facet model ───────────────────────────────────────────────────
 // A group is one accordion section (Brand, Category, Price …). `value` is the
@@ -16,6 +21,8 @@ export interface FacetGroupDef {
   param: string;
   title: string;
   options: FacetOption[];
+  /** Accordion state on first paint (portal: Products > Filtering). */
+  defaultOpen?: boolean;
 }
 
 export interface CategoryFacets {
@@ -23,6 +30,9 @@ export interface CategoryFacets {
   brands: { id: number; name: string; count: number }[];
   price: { key: string; count: number }[];
   availability: { key: string; count: number }[];
+  /** Per-channel rail config attached by the route (applyStorefrontFilters);
+   *  absent on a call site that never resolved it — then the defaults apply. */
+  filters?: StorefrontFilter[];
 }
 
 const PRICE_LABELS: Record<string, string> = {
@@ -36,27 +46,46 @@ const PRICE_LABELS: Record<string, string> = {
 // materialized listing cache keeps the counts) — it is simply never rendered.
 // Clearance products are browsed via the dedicated /clearance page.
 
-/** Map the category page's CategoryFacets into the generic group list. */
+/**
+ * Map the category page's CategoryFacets into the generic group list, in the
+ * order / under the headings / with the open state this channel configured in
+ * the portal (Products > Filtering). A switched-off facet arrives with no
+ * options (the route pruned it) and is dropped here as well, so it cannot come
+ * back through a call site that forgot to pass the config.
+ */
 function categoryGroups(facets: CategoryFacets): FacetGroupDef[] {
+  const config = normalizeStorefrontFilters(facets.filters);
+  const optionsFor = (id: StorefrontFilterId): FacetOption[] => {
+    if (id === "sub")
+      return facets.subcategories.map((f) => ({ value: String(f.id), label: f.name, count: f.count }));
+    if (id === "brand")
+      return facets.brands.map((f) => ({ value: String(f.id), label: f.name, count: f.count }));
+    return facets.price.map((f) => ({ value: f.key, label: PRICE_LABELS[f.key] ?? f.key, count: f.count }));
+  };
+
   const groups: FacetGroupDef[] = [];
-  if (facets.subcategories.length > 0)
+  for (const filter of config) {
+    if (!filter.enabled) continue;
+    const options = optionsFor(filter.id);
+    // Price kept its section even when empty before this change; RailContent
+    // drops any group whose options are all zero-count anyway, so the rail looks
+    // the same and the empty case is now decided in one place.
+    if (options.length === 0) continue;
     groups.push({
-      param: "sub",
-      title: "Sub-category",
-      options: facets.subcategories.map((f) => ({ value: String(f.id), label: f.name, count: f.count })),
+      param: filter.id,
+      title: filter.label,
+      options,
+      defaultOpen: !filter.collapsed,
     });
-  if (facets.brands.length > 0)
-    groups.push({
-      param: "brand",
-      title: "Brand",
-      options: facets.brands.map((f) => ({ value: String(f.id), label: f.name, count: f.count })),
-    });
-  groups.push({
-    param: "price",
-    title: "Price (ex GST)",
-    options: facets.price.map((f) => ({ value: f.key, label: PRICE_LABELS[f.key] ?? f.key, count: f.count })),
-  });
+  }
   return groups;
+}
+
+/** Params the rail's "Clear all" / chips act on — the enabled facets only. */
+function clearParamsFor(facets: CategoryFacets): string[] {
+  return normalizeStorefrontFilters(facets.filters)
+    .filter((f) => f.enabled)
+    .map((f) => f.id);
 }
 
 /**
@@ -112,7 +141,7 @@ export function FacetRail({ groups, clearParams }: { groups: FacetGroupDef[]; cl
  *  authored DESKTOP rail pairs with this sealed mobile unit. */
 export function MobileFilterRail({ facets }: { facets: CategoryFacets }) {
   const groups = categoryGroups(facets);
-  const clearParams = ["sub", "brand", "price"];
+  const clearParams = clearParamsFor(facets);
   const [drawerOpen, setDrawerOpen] = useState(false);
   return (
     <>
@@ -164,7 +193,7 @@ export function ClearFiltersButton() {
 
 /** Category-page adapter — keeps the existing `<FilterRail facets={…} />` call site. */
 export function FilterRail({ facets }: { facets: CategoryFacets }) {
-  return <FacetRail groups={categoryGroups(facets)} clearParams={["sub", "brand", "price"]} />;
+  return <FacetRail groups={categoryGroups(facets)} clearParams={clearParamsFor(facets)} />;
 }
 
 function useFacetParam(param: string) {
@@ -217,7 +246,7 @@ function RailContent({ groups, clearParams }: { groups: FacetGroupDef[]; clearPa
         const opts = g.options.filter((o) => o.count > 0);
         if (opts.length === 0) return null;
         return (
-          <FacetGroup key={g.param} title={g.title}>
+          <FacetGroup key={g.param} title={g.title} defaultOpen={g.defaultOpen}>
             {opts.map((o) => (
               <FacetCheckbox key={o.value} param={g.param} value={o.value} label={o.label} count={o.count} />
             ))}
@@ -228,8 +257,16 @@ function RailContent({ groups, clearParams }: { groups: FacetGroupDef[]; clearPa
   );
 }
 
-function FacetGroup({ title, children }: { title: string; children: React.ReactNode }) {
-  const [open, setOpen] = useState(true);
+function FacetGroup({
+  title,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="border-t border-border py-3 first:border-t-0">
       <button

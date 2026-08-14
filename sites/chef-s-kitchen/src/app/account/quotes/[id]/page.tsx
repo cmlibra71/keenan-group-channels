@@ -6,7 +6,13 @@ import { Package } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { signInRedirect } from "@/lib/account-redirect";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
-import { quoteService, productImageService, CHANNEL_ID } from "@/lib/store";
+import {
+  quoteService,
+  productImageService,
+  customerAddressService,
+  getCheckoutSettings,
+  CHANNEL_ID,
+} from "@/lib/store";
 import { Price } from "@/components/ui/Price";
 import { QuoteActions } from "./quote-actions";
 import { AccountShell } from "@/components/account/AccountShell";
@@ -21,6 +27,27 @@ import { isStaffOnlyDraft } from "@/lib/quotes/draft-visibility";
 import { quoteGstTotals, isMoneyRow } from "@/lib/quotes/quote-gst";
 import { resolveQuoteGstRate } from "@/lib/quotes/quote-gst-rate";
 import { quoteStatusLabel } from "@/lib/quotes/quote-status-label";
+import {
+  isCustomerEditableStatus,
+  quoteAllowsItemEdits,
+} from "@/lib/quotes/customer-editable";
+import { QuoteItemControls } from "./quote-item-controls";
+import { readQuoteDeposit, resolveQuoteDeposit, depositLabel } from "@/lib/quotes/quote-deposit";
+import { resolveQuotePayState } from "@/lib/quotes/quote-payable";
+import { QuotePayPanel, type PayMethod } from "./quote-pay-panel";
+import { resolveAccountOptions } from "@/lib/checkout/account-options";
+import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-policy";
+import { isFinancePaymentMethod } from "@/lib/checkout/finance";
+import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
+import { resolveStripeGateway } from "@/lib/payments/gateway";
+
+/** en-AU money, matching the <Price> component's formatting. */
+function formatMoney(amount: number, currency: string | null): string {
+  return new Intl.NumberFormat("en-AU", {
+    style: "currency",
+    currency: currency || "AUD",
+  }).format(amount);
+}
 
 // QuoteService returns snake_case rows (transformRow convention).
 interface QuoteDetail {
@@ -43,7 +70,12 @@ interface QuoteDetail {
   shipping_cost: string | null;
   base_amount: string | null;
   customer_notes: string | null;
+  currency_code: string | null;
+  attributes: Record<string, unknown> | null;
+  shipping_address: Record<string, string | null> | null;
   hide_prices: boolean | null;
+  /** Customer-permission bag (allow_edit_items etc.), seeded from quote settings. */
+  permissions: Record<string, unknown> | null;
   expires_at: Date | string | null;
   created_at: Date | string | null;
   items: QuoteDetailItem[];
@@ -104,7 +136,8 @@ export default async function QuoteDetailPage({
   // an account-wide viewer, so this sits ABOVE the view_company_quotes branch. Same
   // answer a stranger's quote gets: confirming the draft exists is itself a leak.
   if (isStaffOnlyDraft(raw)) notFound();
-  if (raw.contact_id !== session.contactId) {
+  const isOwnQuote = raw.contact_id === session.contactId;
+  if (!isOwnQuote) {
     const perms = await getContactPermissions(session.contactId);
     const canSeeAccountQuotes =
       perms.isB2B && perms.accountId !== null && perms.can("view_company_quotes");
@@ -124,6 +157,12 @@ export default async function QuoteDetailPage({
     hidesPrices: hidePrices,
     expires_at: raw.expires_at,
   });
+  // The customer may change quantities and drop lines on their own live quote —
+  // before we have priced it AND after — exactly as they can on the emailed
+  // quote link (cards FPfvaYLp / 5bZsm1MF). A colleague reading the quote under
+  // `view_company_quotes` may look but not change, the same rule Accept uses.
+  const itemsEditable =
+    isOwnQuote && isCustomerEditableStatus(status) && quoteAllowsItemEdits(raw.permissions);
 
   // Item thumbnails (quote items don't carry images themselves).
   const productIds = [...new Set(quote.items.map((i) => i.product_id))];
@@ -143,6 +182,91 @@ export default async function QuoteDetailPage({
   // implicit — the same split the cart summary and the emailed quote show, at the
   // same per-quote rate the portal resolves.
   const gst = quoteGstTotals(total ?? 0, quote, await resolveQuoteGstRate(raw.tax_class_id));
+  // ── Paying this quote (card 0Wy0xHuq) ────────────────────────────────────
+  // The rep may have set a deposit on the quote; that is what the customer is
+  // charged now, with the balance following. Both figures are GST-INCLUSIVE,
+  // because that is the money the customer actually pays.
+  const deposit = hidePrices
+    ? null
+    : resolveQuoteDeposit(readQuoteDeposit(raw.attributes), gst.incTax);
+  const amountDue = deposit ? deposit.due_now : Math.round(gst.incTax * 100) / 100;
+
+  // Payment methods are read EXACTLY as checkout reads them — the channel's
+  // customer-facing list (enabled, minus channel staff-only), narrowed by the
+  // account's allow-list, with net terms only for an entitled account. Switch
+  // card payments on later and they appear here with no further work.
+  //
+  // EXCEPT the equipment-finance methods (card VAjaPj0t). SilverChef and Finance
+  // are not a way of paying: they place an order UNPAID against an application
+  // form, behind a $1,000 inc-GST floor, with a weekly figure on the button and
+  // the rep notified. None of that is built on this screen, and paying a quote
+  // has its own money rules (deposit, GST-inclusive amount due — cards 0Wy0xHuq,
+  // Sh03niVC). Enabling them for the checkout must not make a bare "SilverChef"
+  // button appear here that converts the quote to an order and charges nothing.
+  const [checkoutSettings, accountOptions, netTerms] = await Promise.all([
+    getCheckoutSettings(),
+    resolveAccountOptions(session),
+    resolveNetTermsEntitlement(session),
+  ]);
+  const payMethods: PayMethod[] = filterPaymentMethodsForAccount(
+    checkoutSettings.customerPaymentMethods.filter((m) => !isFinancePaymentMethod(m.id)),
+    accountOptions?.allowedPaymentMethods ?? null
+  )
+    .filter((m) => m.id !== "net_terms" || !!netTerms)
+    .map((m) => ({
+      id: m.id,
+      name: m.name,
+      description: m.description,
+      bankDetails: m.bankDetails,
+      netTermsDays: m.id === "net_terms" && netTerms ? netTerms.netTermsDays : m.netTermsDays,
+    }));
+
+  // Delivery address. The quote's own agreed address is shown read-only — staff
+  // can change it, customers can't (Steve, 2026-08-07). Only a quote that never
+  // carried one falls back to the customer's saved addresses.
+  const quoteShip = (raw.shipping_address ?? null) as Record<string, string | null> | null;
+  const quoteHasShipTo = !!quoteShip && Object.values(quoteShip).some((v) => v);
+  const addressSummary = quoteHasShipTo
+    ? [
+        quoteShip!.street1 ?? quoteShip!.address1,
+        quoteShip!.street2 ?? quoteShip!.address2,
+        quoteShip!.city,
+        quoteShip!.region ?? quoteShip!.state_or_province,
+        quoteShip!.postcode ?? quoteShip!.postal_code,
+      ]
+        .filter(Boolean)
+        .join(", ")
+    : null;
+  let addressOptions: { id: number; label: string }[] = [];
+  if (!quoteHasShipTo) {
+    try {
+      const rows = (await customerAddressService.listForContact(session.contactId)) as Record<
+        string,
+        unknown
+      >[];
+      addressOptions = rows.slice(0, 20).map((a) => ({
+        id: a.id as number,
+        label: [a.address1, a.city, a.state_or_province, a.postal_code]
+          .filter(Boolean)
+          .join(", "),
+      }));
+    } catch {
+      /* no saved addresses — the pay gate greys the button with the reason */
+    }
+  }
+
+  const payState = resolveQuotePayState({
+    status,
+    hidesPrices: hidePrices,
+    expiresAt: raw.expires_at,
+    items: raw.items,
+    amountDue,
+    paymentMethodCount: payMethods.length,
+    hasDeliveryAddress: quoteHasShipTo || addressOptions.length > 0,
+  });
+  const { gateway: stripeGateway } = await resolveStripeGateway();
+  const freightPending = !isMoneyRow(gst.freightEx);
+
 
   return (
     <AccountShell>
@@ -173,9 +297,18 @@ export default async function QuoteDetailPage({
 
       {hidePrices && (
         <div className="mb-6 rounded-lg border border-warning/30 bg-warning-bg px-4 py-3 text-sm text-warning">
-          Our sales team is preparing pricing for this quote. We&apos;ll let you
-          know as soon as it&apos;s ready.
+          {status === "open_change_request"
+            ? "Your changes have been received — we'll re-quote shortly."
+            : "Our sales team is preparing pricing for this quote. We'll let you know as soon as it's ready."}
         </div>
+      )}
+
+      {itemsEditable && (
+        <p className="mb-4 text-sm text-text-muted">
+          {status === "quote_available"
+            ? "Need a different quantity? Change it below — we'll re-price the quote and send it back to you."
+            : "You can still change quantities or remove items below."}
+        </p>
       )}
 
       {/* Items */}
@@ -226,6 +359,13 @@ export default async function QuoteDetailPage({
                     </>
                   )}
                 </p>
+                {itemsEditable && (
+                  <QuoteItemControls
+                    quoteId={quote.id}
+                    itemId={item.id}
+                    quantity={item.quantity}
+                  />
+                )}
                 {/* "Requires quote" is reserved for a quote whose pricing hasn't
                     been prepared yet — never for a priced line that happens to
                     come to $0.00. */}
@@ -296,6 +436,20 @@ export default async function QuoteDetailPage({
               <dt className="font-medium text-text-secondary">Quote Total (inc GST)</dt>
               <dd><Price amount={gst.incTax} className="text-lg font-semibold text-text-primary" /></dd>
             </div>
+            {/* Deposit set by the sales rep on the quote — shown to the customer
+                here, and it is the amount the Pay button charges. */}
+            {deposit && (
+              <>
+                <div className="flex items-center justify-between border-t border-border pt-1">
+                  <dt className="font-medium text-text-secondary">{depositLabel(deposit)}</dt>
+                  <dd><Price amount={deposit.due_now} className="font-semibold text-text-primary" /></dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-text-secondary">Balance</dt>
+                  <dd><Price amount={deposit.balance} className="text-text-primary" /></dd>
+                </div>
+              </>
+            )}
           </dl>
         ) : (
           <div className="flex items-center justify-between">
@@ -315,6 +469,32 @@ export default async function QuoteDetailPage({
 
       {/* Customer self-service actions */}
       <QuoteActions quoteId={quote.id} status={status} acceptState={acceptState} />
+      {/* Pay this quote — inside the logged-in account area, per Steve. The
+          panel renders even while pricing is being prepared: the Pay button
+          stays visible and greyed with the reason rather than vanishing. */}
+      {
+        <QuotePayPanel
+          quoteId={quote.id}
+          payState={payState}
+          amountDue={formatMoney(amountDue, quote.currency_code)}
+          amountKnown={!hidePrices && total !== null}
+          totalDue={formatMoney(gst.incTax, quote.currency_code)}
+          depositNote={
+            deposit
+              ? `${depositLabel(deposit)} of ${formatMoney(
+                  deposit.total_inc,
+                  quote.currency_code
+                )} — ${formatMoney(deposit.balance, quote.currency_code)} to follow.`
+              : null
+          }
+          methods={payMethods}
+          stripePublishableKey={stripeGateway?.credentials?.publishable_key}
+          addressSummary={addressSummary}
+          addressOptions={addressOptions}
+          freightPending={freightPending}
+          currency={quote.currency_code || "AUD"}
+        />
+      }
     </AccountShell>
   );
 }
