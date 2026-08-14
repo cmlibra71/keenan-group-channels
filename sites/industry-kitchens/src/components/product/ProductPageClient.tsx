@@ -14,8 +14,9 @@ import {
   useProductPurchase,
   type PurchaseProduct,
 } from "./ProductPurchaseProvider";
+import type { ProductKit } from "@/lib/product-kit";
 
-function ProductOverviewInner() {
+function ProductOverviewInner({ kit }: { kit?: ProductKit | null }) {
   const { product, variantImageUrl } = useProductPurchase();
 
   return (
@@ -46,7 +47,7 @@ function ProductOverviewInner() {
           </div>
         )}
 
-        <ProductDetail />
+        <ProductDetail kit={kit} />
       </div>
     </div>
   );
@@ -58,12 +59,15 @@ export function ProductPageClient({
   memberPriceMap,
   isMember,
   membershipTeaser,
+  kit,
 }: {
   product: PurchaseProduct;
   memberPrice?: number | null;
   memberPriceMap?: Record<number, number>;
   isMember?: boolean;
   membershipTeaser?: { fromPrice: string | null } | null;
+  /** Grouped / bundle contents, read off products.metafields by the route. */
+  kit?: ProductKit | null;
 }) {
   return (
     <ProductPurchaseProvider
@@ -73,7 +77,7 @@ export function ProductPageClient({
       isMember={isMember ?? false}
       membershipTeaser={membershipTeaser ?? null}
     >
-      <ProductOverviewInner />
+      <ProductOverviewInner kit={kit} />
     </ProductPurchaseProvider>
   );
 }

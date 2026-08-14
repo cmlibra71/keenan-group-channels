@@ -16,7 +16,9 @@ interface OrderRecord {
   status: string;
   total_inc_tax: string;
   created_at: Date | null;
-  items?: Array<{ name: string; quantity: number }>;
+  // `cancelled_at` is set when a staff order amendment moved this line onto a replacement
+  // order — it is no longer part of THIS order and must not be listed to the customer.
+  items?: Array<{ name: string; quantity: number; cancelled_at?: string | null }>;
 }
 
 export const metadata = {
@@ -127,7 +129,7 @@ export default async function OrdersPage() {
 
       <div className="space-y-4">
         {ordersWithItems.map((order) => {
-          const orderItemsList = order.items || [];
+          const orderItemsList = (order.items || []).filter((i) => !i.cancelled_at);
           const totalItems = orderItemsList.reduce((sum, i) => sum + i.quantity, 0);
 
           return (
