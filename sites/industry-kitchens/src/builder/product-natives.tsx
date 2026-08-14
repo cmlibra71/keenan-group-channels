@@ -1,6 +1,8 @@
 "use client";
 import type { NativeComponents } from "@keenan/services/builder-react";
 import { ProductImageGallery, type ProductImage as GalleryImage } from "@/components/product/ProductImageGallery";
+import { ProductKitNative } from "@/components/product/ProductKitNative";
+import type { ProductKit } from "@/lib/product-kit";
 import { WarrantyDirectory } from "@/components/product/WarrantyDirectory";
 import { GstToggle } from "@/components/layout/GstToggle";
 
@@ -34,7 +36,6 @@ export interface ProductNativesArgs {
 
 export function productNatives({ payload, variantImageUrl, data }: ProductNativesArgs): NativeComponents {
   const product = (payload.product ?? {}) as Record<string, unknown>;
-  void data;
 
   return {
     "product-gallery": () => (
@@ -51,5 +52,18 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // the GST cookie, flips a site-wide React context). It sits in normal flow
     // with no `hidden md:` gating, so phones get it too.
     "gst-toggle": () => <GstToggle className="mt-3" />,
+    // Grouped / bundle contents (card 7bmpuqei). Sealed, not exploded: it holds the customer's
+    // picks and sends them through with Add to Quote. Renders nothing for a product that is not a
+    // kit, so the node is safe to leave in the template for every product.
+    "product-kit": () => {
+      // `data.kit` is ALREADY parsed: the product route parses metafields exactly
+      // once (`nativeData: { kit: readProductKit(product.metafields) }`) — the
+      // same way every other native receives its data. Re-parsing a ProductKit as
+      // if it were metafields found no `.kit.items` and returned null, so kit
+      // contents never rendered (release-review blocker).
+      const kit = (data.kit ?? null) as ProductKit | null;
+      if (!kit) return null;
+      return <ProductKitNative kit={kit} productId={Number(product.id)} />;
+    },
   };
 }
