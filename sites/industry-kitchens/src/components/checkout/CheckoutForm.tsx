@@ -1115,6 +1115,12 @@ export function CheckoutForm({
               </p>
             )}
 
+            {paymentUnavailable && (
+              <p className="mt-2 text-center text-xs text-zinc-500">
+                {PAY_UNAVAILABLE_ACCOUNT_ORDER}
+              </p>
+            )}
+
             {shippingUnresolved && !shippingLoading && (
               <p className="mt-2 text-center text-xs text-zinc-500">
                 {shippingError

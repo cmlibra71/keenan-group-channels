@@ -77,6 +77,8 @@ export async function resolvePayBalance(
   const methodIds = filterPaymentMethodsForAccount(
     checkoutSettings.customerPaymentMethods,
     accountOptions?.allowedPaymentMethods ?? null,
+    // Pay-balance is a CUSTOMER surface: an account's staff-only methods are
+    // subtracted here exactly as checkout and pay-a-quote subtract them.
     accountOptions?.staffOnlyPaymentMethods ?? null
   ).map((m) => m.id);
 

@@ -17,6 +17,7 @@ import {
 import { matchBrandSpecial } from "@/lib/checkout/free-shipping-brands-policy";
 import { normaliseAuState, isValidAuPostcode } from "@/lib/checkout/au-address";
 import { setLastOrder } from "@/lib/checkout/last-order";
+import { canViewOrderConfirmation } from "@/lib/checkout/confirmation-access";
 import { siteBaseUrl } from "@/lib/seo";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 import {
@@ -423,6 +424,10 @@ export async function placeOrder(
   if (!isPaymentMethodOnChannel(paymentMethod, checkoutSettings.customerPaymentMethods)) {
     return { error: unavailablePaymentMethodError() };
   }
+  // (1) THEN the account's own two controls, and BOTH of them: the allow-list
+  // (which methods this account may use at all) and the per-account staff-only
+  // list (methods staff may key on the account's behalf but the customer may
+  // never pick). One without the other is a bypass.
   if (
     paymentMethod &&
     !isPaymentMethodAllowed(
@@ -440,6 +445,11 @@ export async function placeOrder(
   // order past it. The store-has-nothing case is deliberately untouched: that one
   // still books the order with payment status "pending" (card N8kE8arY, and the
   // payment-methods register rule that predates it).
+  // Both counts are taken from the CUSTOMER list (enabled minus channel
+  // staff-only, card NmAfwrdE): a store whose only enabled method is staff-only
+  // offers this shopper nothing, and that is the store's configuration, not a
+  // restriction on their account — telling them otherwise sends them to ring a
+  // sales desk that can't help.
   const offerableMethods = filterPaymentMethodsForAccount(
     checkoutSettings.customerPaymentMethods,
     accountOptions?.allowedPaymentMethods ?? null,
@@ -447,7 +457,7 @@ export async function placeOrder(
   ).filter((m) => m.id !== "net_terms" || !!netTerms);
   if (
     resolvePaymentAvailability(
-      checkoutSettings.enabledPaymentMethods.length,
+      checkoutSettings.customerPaymentMethods.length,
       offerableMethods.length
     ) === "account-restricted"
   ) {
@@ -498,8 +508,17 @@ export async function placeOrder(
     if (!result.ok) return { error: result.error };
   }
 
-  // Determine payment status based on payment method
-  const paymentStatus = determinePaymentStatus(paymentMethod);
+  // Determine payment status based on payment method.
+  //
+  // A ZERO-VALUE cart is a special shape: there is nothing to charge. Stripe refuses a $0
+  // PaymentIntent outright, and this action writes the order row BEFORE it calls Stripe — so a $0
+  // card checkout used to leave a real order behind and then fail in front of the shopper. Zero-
+  // value orders are a live Zoey flow (316 of them, last used 3 August — card NmAfwrdE), so the
+  // order is simply placed with no payment method, exactly like a store with none configured, and
+  // staff close it off from the order screen.
+  const nothingToPay = totalIncTax <= 0;
+  const effectivePaymentMethod = nothingToPay ? "" : paymentMethod;
+  const paymentStatus = determinePaymentStatus(effectivePaymentMethod);
 
   // Tag orders created while this channel is in payments test mode so they can be
   // cleared later from the portal. Only storefront orders are tagged — Zoey/backfill
@@ -510,10 +529,10 @@ export async function placeOrder(
   // so the confirmation page / invoice email show the customer's real terms.
   const orderMetafields: Record<string, unknown> = {};
   if (isTestMode) orderMetafields.test_mode = true;
-  if (paymentMethod === "net_terms" && netTerms) orderMetafields.net_terms_days = netTerms.netTermsDays;
+  if (effectivePaymentMethod === "net_terms" && netTerms) orderMetafields.net_terms_days = netTerms.netTermsDays;
   // Stamp the cart uuid on card orders so a retry/double-submit can find and reuse
   // the existing awaiting_payment order instead of creating a duplicate (see below).
-  if (paymentMethod === "stripe") orderMetafields.cart_uuid = uuid;
+  if (effectivePaymentMethod === "stripe") orderMetafields.cart_uuid = uuid;
   // Finance: what was offered and what was chosen, on the order itself, so the
   // back office can see the weekly figure the customer was shown even if the
   // application row is later archived.
@@ -541,7 +560,7 @@ export async function placeOrder(
   // on the cart uuid stamped in order metafields. createStripePaymentIntent is
   // itself idempotent on (orderId, amount), so re-confirming returns a usable
   // client secret for the same order.
-  if (paymentMethod === "stripe") {
+  if (effectivePaymentMethod === "stripe") {
     try {
       const open = await orderService.list({
         page: 1,
@@ -582,7 +601,7 @@ export async function placeOrder(
     // backoffice can reconcile it (esp. net-terms invoices).
     ...(netTerms ? { accountId: netTerms.accountId } : {}),
     status: "pending",
-    paymentMethod: paymentMethod || undefined,
+    paymentMethod: effectivePaymentMethod || undefined,
     paymentStatus,
     currencyCode: cartWithItems.currency_code,
     subtotalExTax: String(subtotalExTax),
@@ -797,7 +816,7 @@ export async function placeOrder(
   // Uses the global paymentService — credentials live in store_settings.payment_gateways
   // (configured at /dashboard/settings/payments in the portal). Channel segmentation
   // happens via metadata stamped by paymentService.
-  if (paymentMethod === "stripe") {
+  if (effectivePaymentMethod === "stripe") {
     try {
       const { clientSecret } = await paymentService.createStripePaymentIntent(order.id, {
         amount: String(totalIncTax),
@@ -864,7 +883,7 @@ export async function placeOrder(
   // orders never email a real person. Branded with THIS channel's name/logo/from
   // address (not Keenan Group) from the site config.
   try {
-    const method = checkoutSettings.paymentMethods.find((m) => m.id === paymentMethod);
+    const method = checkoutSettings.paymentMethods.find((m) => m.id === effectivePaymentMethod);
     const { site, channel } = await getSiteConfig();
     // Central template: sites row + Email Templates overrides (channel_settings
     // `email_template`), resolved by @keenan/services so every sender matches.
@@ -878,12 +897,15 @@ export async function placeOrder(
       orderNumber: order.order_number,
       customerName: `${firstName} ${lastName}`.trim() || undefined,
       storeName,
-      paymentMethod,
+      paymentMethod: effectivePaymentMethod,
       total: String(totalIncTax),
       items: emailItems,
       bankDetails: method?.bankDetails ?? null,
       // Use the customer's actual account terms for a net-terms invoice email.
-      netTermsDays: paymentMethod === "net_terms" && netTerms ? netTerms.netTermsDays : (method?.netTermsDays ?? null),
+      netTermsDays:
+        effectivePaymentMethod === "net_terms" && netTerms
+          ? netTerms.netTermsDays
+          : (method?.netTermsDays ?? null),
       siteUrl,
       logoUrl: branding?.logoUrl ?? site?.logoUrl ?? null,
       logoAlt: branding?.logoAlt ?? site?.logoAlt ?? null,
@@ -958,7 +980,7 @@ export async function placeOrder(
         customerEmail: email,
         customerName: `${firstName} ${lastName}`.trim() || null,
         total: String(totalIncTax),
-        paymentMethod,
+        paymentMethod: effectivePaymentMethod,
         storeName,
         logoUrl: branding?.logoUrl ?? site?.logoUrl ?? null,
         logoAlt: branding?.logoAlt ?? site?.logoAlt ?? null,
@@ -977,9 +999,9 @@ export async function placeOrder(
 
   // Breadcrumb so a shopper who comes BACK to /checkout after ordering lands on
   // their confirmation instead of the now-empty cart.
-  await setLastOrder(order.order_number, paymentMethod);
+  await setLastOrder(order.order_number, effectivePaymentMethod);
 
-  const pmParam = paymentMethod ? `&pm=${encodeURIComponent(paymentMethod)}` : "";
+  const pmParam = effectivePaymentMethod ? `&pm=${encodeURIComponent(effectivePaymentMethod)}` : "";
   redirect(`/checkout/confirmation?order=${order.order_number}${pmParam}`);
 }
 
@@ -992,23 +1014,19 @@ export async function placeOrder(
 export async function confirmStripePayment(
   orderNumber: string
 ): Promise<{ success: boolean; error?: string }> {
-  // Auth + ownership FIRST — order numbers are semi-guessable, and this call has
-  // a side effect (finalising/clearing the cart). Verifying ownership before any
-  // mutation means an unauthorized caller can't wipe a victim's cart.
-  const session = await getSession();
-  if (!session) return { success: false, error: "Not authenticated" };
-
-  try {
-    const orders = await orderService.list({
-      page: 1, limit: 1, sort: "id", direction: "desc",
-      filters: { order_number: { type: "eq", value: orderNumber } },
-    });
-    const order = orders.data[0] as { id: number; contact_id: number | null } | undefined;
-    if (!order) return { success: false, error: "Order not found" };
-    if (order.contact_id !== session.contactId) return { success: false, error: "Forbidden" };
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : "Failed to confirm payment" };
-  }
+  // Ownership FIRST — order numbers are semi-guessable and this call has a side effect
+  // (finalising/clearing the cart), so an unauthorized caller must not be able to wipe a victim's
+  // cart. Exactly the two viewers the confirmation page itself accepts, resolved by the same
+  // helper: the signed-in contact who owns the order, or the GUEST who just placed it, proven by
+  // the short-lived httpOnly `last_order` cookie placeOrder writes for this purpose.
+  //
+  // It used to demand a SESSION, so a guest paying by card was refused here: their cart was never
+  // marked completed and the cart cookie never cleared, leaving the items sitting in the basket
+  // after they had paid — and a second checkout would have charged them again. Latent while no
+  // storefront took card payments; live the moment Industry Kitchens switched card on. Card
+  // NmAfwrdE.
+  const ownsOrder = await canViewOrderConfirmation(orderNumber).catch(() => false);
+  if (!ownsOrder) return { success: false, error: "Forbidden" };
 
   // Ownership verified — finalise the cart now that the card has been confirmed
   // (placeOrder's Stripe branch deliberately left it intact — see the comment

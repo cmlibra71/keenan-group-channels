@@ -207,9 +207,13 @@ export async function payQuote(
     items: (quote.items ?? []) as { list_price?: string | null; sale_price?: string | null }[],
     amountDue,
     paymentMethodCount: methods.length,
-    // …and how many the STORE has, so a customer whose ACCOUNT allows none of them
-    // is told that, not "this store doesn't take online payments" (card N8kE8arY).
-    channelPaymentMethodCount: checkoutSettings.enabledPaymentMethods.length,
+    // …and how many the STORE offers a CUSTOMER on this surface, so a shopper whose
+    // ACCOUNT allows none of them is told that, not "this store doesn't take online
+    // payments" (card N8kE8arY) — and, just as importantly, the other way round: a
+    // channel whose only enabled method is staff-only (IK's Send Invoice, card
+    // NmAfwrdE) or finance offers this surface nothing, and that is the STORE's
+    // configuration, not a restriction on their account.
+    channelPaymentMethodCount: nonFinanceCustomerMethods.length,
     hasDeliveryAddress: quoteHasShipTo || fallbackShipTo !== null,
   });
   if (payState.kind !== "enabled") {

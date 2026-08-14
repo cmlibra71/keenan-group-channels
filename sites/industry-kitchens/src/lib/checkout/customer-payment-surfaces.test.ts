@@ -54,6 +54,27 @@ const ENTRY_POINTS = ["filterPaymentMethodsForAccount(", "isPaymentMethodAllowed
 // "staff" — see the header. Written as a regex so the comment style is the seam.
 const STAFF_OPT_OUT = /null\s*\/\*\s*staff/i;
 
+/**
+ * The argument list of the call starting at `at`, read to its MATCHING close paren.
+ * Counting brackets matters: a real call site passes an expression carrying its own
+ * parentheses (`customerPaymentMethods.filter((m) => !isFinancePaymentMethod(m.id))`),
+ * and stopping at the first `)` reads half an argument list — reporting a correct
+ * call site as an offender and, worse, teaching the next person to silence it.
+ */
+function callArgs(src: string, at: number): string {
+  const open = src.indexOf("(", at);
+  if (open === -1) return "";
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === "(") depth++;
+    else if (src[i] === ")") {
+      depth--;
+      if (depth === 0) return src.slice(open + 1, i);
+    }
+  }
+  return src.slice(open + 1);
+}
+
 test("every customer-facing payment-method list subtracts the account's staff-only methods", () => {
   const offenders: string[] = [];
   for (const file of sourceFiles(SRC)) {
@@ -64,8 +85,7 @@ test("every customer-facing payment-method list subtracts the account's staff-on
         const at = src.indexOf(entry, from);
         if (at === -1) break;
         from = at + 1;
-        const end = src.indexOf(")", at);
-        const call = src.slice(at, end === -1 ? src.length : end);
+        const call = callArgs(src, at);
         if (!call.includes("staffOnlyPaymentMethods") && !STAFF_OPT_OUT.test(call)) {
           offenders.push(`${path.relative(SRC, file)} (${entry.slice(0, -1)})`);
         }

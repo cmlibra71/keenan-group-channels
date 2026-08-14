@@ -193,8 +193,10 @@ export default async function QuoteDetailPage({
 
   // Payment methods are read EXACTLY as checkout reads them — the channel's
   // customer-facing list (enabled, minus channel staff-only), narrowed by the
-  // account's allow-list, with net terms only for an entitled account. Switch
-  // card payments on later and they appear here with no further work.
+  // account's allow-list AND minus the methods the ACCOUNT marks staff-only,
+  // with net terms only for an entitled account. This is a customer surface like
+  // the checkout, so both staff-only controls apply here too. Switch card
+  // payments on later and they appear here with no further work.
   //
   // EXCEPT the equipment-finance methods (card VAjaPj0t). SilverChef and Finance
   // are not a way of paying: they place an order UNPAID against an application
@@ -269,9 +271,13 @@ export default async function QuoteDetailPage({
     items: raw.items,
     amountDue,
     paymentMethodCount: payMethods.length,
-    // …and how many the STORE has, so a customer whose ACCOUNT allows none of them
-    // is told that, not "this store doesn't take online payments" (card N8kE8arY).
-    channelPaymentMethodCount: checkoutSettings.enabledPaymentMethods.length,
+    // …and how many the STORE offers a CUSTOMER on this surface, so a shopper whose
+    // ACCOUNT allows none of them is told that, not "this store doesn't take online
+    // payments" (card N8kE8arY) — and, just as importantly, the other way round: a
+    // channel whose only enabled method is staff-only (IK's Send Invoice, card
+    // NmAfwrdE) or finance offers this surface nothing, and that is the STORE's
+    // configuration, not a restriction on their account.
+    channelPaymentMethodCount: nonFinanceCustomerMethods.length,
     hasDeliveryAddress: quoteHasShipTo || addressOptions.length > 0,
   });
   const { gateway: stripeGateway } = await resolveStripeGateway();
