@@ -8,6 +8,7 @@ import {
   parseAttributeSelections,
   parsePriceBands,
   parseRangeParam,
+  priceBandWindow,
   rangeParamFor,
   type AttributeFacet,
 } from "./category-attributes";
@@ -78,4 +79,17 @@ test("labels read the way a chip should", () => {
 test("only the three real price bands survive parsing", () => {
   assert.deepEqual(parsePriceBands("lt1000,gt3000,nonsense"), ["lt1000", "gt3000"]);
   assert.deepEqual(parsePriceBands("1000-3000"), [], "a slider window is not a band");
+});
+
+test("a legacy price band still has a window the slider can show", () => {
+  // A shared ?price=lt1000 link narrows the grid server-side. Before this, the
+  // slider sat at full travel and drew no chip, so the rail said "no price
+  // filter" while one was applied.
+  assert.deepEqual(priceBandWindow(["lt1000"]), { min: undefined, max: 1000 });
+  assert.deepEqual(priceBandWindow(["gt3000"]), { min: 3000, max: undefined });
+  assert.deepEqual(priceBandWindow(["1000to3000"]), { min: 1000, max: 3000 });
+  assert.deepEqual(priceBandWindow(["lt1000", "1000to3000"]), { min: undefined, max: 3000 });
+  assert.equal(priceBandWindow([]), undefined);
+  // Both ends open is not a window the slider can draw — the chips carry it.
+  assert.equal(priceBandWindow(["lt1000", "gt3000"]), undefined);
 });

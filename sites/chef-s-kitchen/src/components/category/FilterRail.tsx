@@ -12,7 +12,9 @@ import {
   attributeParam,
   formatPriceLabel,
   formatRangeLabel,
+  parsePriceBands,
   parseRangeParam,
+  priceBandWindow,
   rangeParamFor,
   type AttributeFacet,
 } from "@/lib/category-attributes";
@@ -90,7 +92,11 @@ function categoryGroups(facets: CategoryFacets): FacetGroupDef[] {
       groups.push({
         param: "price",
         title: filter.label,
-        options: [],
+        // The slider replaced the three tick boxes, but the band tokens are still
+        // honoured server-side, so the band LABELS stay on the group: a shared or
+        // bookmarked ?price=lt1000 still narrows the grid and must still be named
+        // and removable on screen (NfYe3P3G).
+        options: optionsFor("price"),
         defaultOpen: !filter.collapsed,
         range: { ...facets.priceRange, money: true },
       });
@@ -311,7 +317,7 @@ function RailContent({ groups, clearParams }: { groups: FacetGroupDef[]; clearPa
         if (g.range) {
           return (
             <FacetGroup key={g.param} title={g.title} defaultOpen={g.defaultOpen}>
-              <RangeFacet param={g.param} range={g.range} />
+              <RangeFacet param={g.param} title={g.title} range={g.range} />
             </FacetGroup>
           );
         }
@@ -343,9 +349,11 @@ function RailContent({ groups, clearParams }: { groups: FacetGroupDef[]; clearPa
  */
 function RangeFacet({
   param,
+  title,
   range,
 }: {
   param: string;
+  title: string;
   range: { min: number; max: number; unit?: string; money?: boolean };
 }) {
   const router = useRouter();
@@ -363,7 +371,11 @@ function RangeFacet({
   const top = range.min + Math.ceil(span / step) * step;
   const travel = { min: range.min, max: top };
 
-  const applied = parseRangeParam(searchParams.get(param));
+  // A legacy band token (?price=lt1000) is shown as the window it covers, so
+  // the thumbs never sit at full travel while the grid is actually narrowed.
+  const raw = searchParams.get(param);
+  const applied =
+    parseRangeParam(raw) ?? (range.money ? priceBandWindow(parsePriceBands(raw)) : undefined);
   const lo = Math.max(travel.min, Math.min(travel.max, applied?.min ?? travel.min));
   const hi = Math.min(travel.max, Math.max(travel.min, applied?.max ?? travel.max));
   const [draft, setDraft] = useState<[number, number]>([lo, hi]);
@@ -417,7 +429,7 @@ function RangeFacet({
           <input
             key={which}
             type="range"
-            aria-label={which === 0 ? `Minimum ${param}` : `Maximum ${param}`}
+            aria-label={which === 0 ? `Minimum ${title}` : `Maximum ${title}`}
             min={travel.min}
             max={travel.max}
             step={step}
@@ -497,7 +509,15 @@ export function FacetChips({ groups }: { groups: FacetGroupDef[] }) {
     // per value — and removing it clears the whole window.
     if (g.range) {
       const window = parseRangeParam(raw);
-      if (!window) continue;
+      if (!window) {
+        // Not a min-max window — a legacy price band. It still narrows the grid,
+        // so it still gets a named, removable chip rather than disappearing.
+        if (!g.range.money) continue;
+        for (const band of parsePriceBands(raw)) {
+          chips.push({ param: g.param, value: band, label: PRICE_LABELS[band] ?? band });
+        }
+        continue;
+      }
       const label = g.range.money
         ? formatPriceLabel(window)
         : formatRangeLabel(window, g.range.unit);

@@ -111,6 +111,27 @@ export function parsePriceBands(raw: string | undefined | null): PriceBand[] {
   );
 }
 
+/** The window a legacy band token covers, so a bookmarked `?price=lt1000` can
+ *  still be SHOWN on the slider it replaced. Several bands union into the widest
+ *  window they span; an unrecognised token yields nothing. */
+export function priceBandWindow(bands: PriceBand[]): RangeWindow | undefined {
+  const spans: Record<PriceBand, RangeWindow> = {
+    lt1000: { max: 1000 },
+    "1000to3000": { min: 1000, max: 3000 },
+    gt3000: { min: 3000 },
+  };
+  if (bands.length === 0) return undefined;
+  let min: number | undefined = Infinity;
+  let max: number | undefined = -Infinity;
+  for (const band of bands) {
+    const span = spans[band];
+    min = span.min === undefined || min === undefined ? undefined : Math.min(min, span.min);
+    max = span.max === undefined || max === undefined ? undefined : Math.max(max, span.max);
+  }
+  if (min === undefined && max === undefined) return undefined;
+  return { min: min === Infinity ? undefined : min, max: max === -Infinity ? undefined : max };
+}
+
 /** Money for a price chip / slider label — whole dollars, ex GST like the facet. */
 export function formatPriceLabel(range: RangeWindow): string {
   const money = (n: number) => `$${Math.round(n).toLocaleString("en-AU")}`;
