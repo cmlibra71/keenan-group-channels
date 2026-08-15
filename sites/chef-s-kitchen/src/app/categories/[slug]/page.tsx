@@ -18,6 +18,7 @@ import type { RenderContext } from "@keenan/services";
 import { getListingPricing } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { assertCategoryVisible } from "@/lib/catalog-scope";
+import { redirectIfMapped } from "@/lib/redirect-seam";
 import { applyStorefrontFilters, enabledFilterIds } from "@/lib/storefront-filters";
 import { renderCategoryNodeBranch, type CategoryListingPricing } from "@/builder/category-node-branch";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
@@ -82,6 +83,11 @@ export default async function CategoryPage({
         redirect(`/categories/${newSlug}`);
       }
     }
+    // A renamed or retired category redirects rather than bare-404ing, the same way a
+    // retired product does. The `category_redirects` channel setting above still runs
+    // first — it is the older, hand-maintained map and nothing has migrated off it.
+    // (card EVvRDnZt)
+    await redirectIfMapped(`/categories/${slug}`);
     notFound();
   }
 

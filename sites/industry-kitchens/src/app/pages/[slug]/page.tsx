@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { redirectIfMapped } from "@/lib/redirect-seam";
 import { draftMode, headers } from "next/headers";
 import type { Metadata } from "next";
 import { getContentPage, getCmsPage, getCmsTemplate, getFeatureFlag, getNamedStyles, getComponents, getDraftComponents, getChannelSetting, CHANNEL_ID } from "@/lib/store";
@@ -135,7 +136,12 @@ export default async function ContentPage({
   }
 
   const page = await getContentPage(slug);
-  if (!page) notFound();
+  if (!page) {
+    // A renamed content page, or a legacy Zoey address that used to be one,
+    // redirects rather than bare-404ing. (card EVvRDnZt)
+    await redirectIfMapped(`/pages/${slug}`);
+    notFound();
+  }
 
   return (
     <article className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
