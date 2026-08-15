@@ -1,6 +1,10 @@
 import { permanentRedirect, redirect } from "next/navigation";
 import { getRedirectForPath } from "@/lib/store";
-import { isRedirectCandidate, normalizeLookupPath } from "@/lib/redirect-path";
+import {
+  isRedirectCandidate,
+  normalizeLookupPath,
+  relativeRedirectTarget,
+} from "@/lib/redirect-path";
 
 /**
  * The one place a storefront address that no longer resolves is checked against
@@ -27,12 +31,18 @@ export async function redirectIfMapped(pathname: string): Promise<void> {
   const hit = await getRedirectForPath(path);
   if (!hit?.toPath) return;
 
+  // Last check before the browser is told where to go: the target must be a path on THIS
+  // site. A row carrying an origin — or the backslash a browser reads as a slash — is
+  // dropped, and the shopper gets the 404 they were already heading for.
+  const target = relativeRedirectTarget(hit.toPath);
+  if (!target) return;
+
   // A row that somehow points at itself would loop the browser. Drop it instead.
-  if (normalizeLookupPath(hit.toPath) === path) return;
+  if (normalizeLookupPath(target) === path) return;
 
   // 301/308 are the permanent pair (Next emits 308 for `permanentRedirect`); anything
-  // else is a temporary move. Both emit the stored, relative path verbatim.
+  // else is a temporary move. Both emit the stored, relative path.
   const permanent = hit.statusCode == null || hit.statusCode === 301 || hit.statusCode === 308;
-  if (permanent) permanentRedirect(hit.toPath);
-  redirect(hit.toPath);
+  if (permanent) permanentRedirect(target);
+  redirect(target);
 }

@@ -1,6 +1,6 @@
 import { notFound, permanentRedirect } from "next/navigation";
 import { getCategoryBySlug, getCmsPage, getProductBySlug } from "@/lib/store";
-import { normalizeLookupPath } from "@/lib/redirect-path";
+import { isReservedCatchAllPath, normalizeLookupPath } from "@/lib/redirect-path";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import { legacyProbes, newStyleAddress } from "@/lib/legacy-address";
 
@@ -24,10 +24,14 @@ import { legacyProbes, newStyleAddress } from "@/lib/legacy-address";
  *     site never had a redirect for these, because they were the live pages, so no
  *     export contains them.
  *
- * Real routes still win over both: Next matches static and dynamic segments before a
- * catch-all, so `/products/x`, `/categories/x` and the rest never reach this file. It
- * only runs where the answer used to be a flat 404 — and when neither pass finds
- * anything it still is one, rendered by the site's own `not-found.tsx`.
+ * Routes that EXIST still win over both: Next matches static and dynamic segments before a
+ * catch-all, so `/products/x`, `/categories/x` and the rest never reach this file. What
+ * does reach it is an address under a namespace with nothing behind it — `/api/typo`,
+ * `/_next/whatever` — and those are answered with a plain 404 before any lookup runs
+ * (`isReservedCatchAllPath`): an API caller wants a 404, not a page, and it is also the
+ * traffic scanners generate most of. Otherwise this route only runs where the answer used
+ * to be a flat 404 — and when neither pass finds anything it still is one, rendered by the
+ * site's own `not-found.tsx`.
  */
 export const dynamic = "force-dynamic";
 
@@ -38,6 +42,8 @@ export default async function LegacyAddress({
 }) {
   const { path } = await params;
   const pathname = `/${(path ?? []).join("/")}`;
+
+  if (isReservedCatchAllPath(pathname)) notFound();
 
   await redirectIfMapped(pathname);
 
