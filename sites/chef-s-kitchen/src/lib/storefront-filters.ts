@@ -113,6 +113,11 @@ export interface StorefrontFacets {
   brands: { id: number; name: string; count: number }[];
   price: { key: string; count: number }[];
   availability: { key: string; count: number }[];
+  /** Slider travel for Price — the same facet as `price`, a different control
+   *  (C8G4f4U8). It is switched off by the same setting. */
+  priceRange?: { min: number; max: number } | null;
+  /** Per-category attribute sections; decided from the data, not configurable. */
+  attributes?: { code: string }[];
   /** Set by applyStorefrontFilters; absent means "use the defaults". */
   filters?: StorefrontFilter[];
 }
@@ -138,6 +143,10 @@ export function applyStorefrontFilters<T extends StorefrontFacets>(
     subcategories: on.has("sub") ? facets.subcategories : [],
     brands: on.has("brand") ? facets.brands : [],
     price: on.has("price") ? facets.price : [],
+    // Switching Price off has to take its SLIDER with it; the bands and the
+    // slider are two controls for one facet, and leaving the travel behind
+    // would put the section straight back on the rail.
+    priceRange: on.has("price") ? (facets.priceRange ?? null) : null,
     filters,
   };
 }

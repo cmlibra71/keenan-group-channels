@@ -8,6 +8,14 @@ import {
   type StorefrontFilter,
   type StorefrontFilterId,
 } from "@/lib/storefront-filters";
+import {
+  attributeParam,
+  formatPriceLabel,
+  formatRangeLabel,
+  parseRangeParam,
+  rangeParamFor,
+  type AttributeFacet,
+} from "@/lib/category-attributes";
 
 // ── Generic facet model ───────────────────────────────────────────────────
 // A group is one accordion section (Brand, Category, Price …). `value` is the
@@ -23,6 +31,9 @@ export interface FacetGroupDef {
   options: FacetOption[];
   /** Accordion state on first paint (portal: Products > Filtering). */
   defaultOpen?: boolean;
+  /** Present = this group is a min-max SLIDER, not a tick list (C8G4f4U8).
+   *  `min`/`max` are the slider's travel; `money` prints the labels as dollars. */
+  range?: { min: number; max: number; unit?: string; money?: boolean };
 }
 
 export interface CategoryFacets {
@@ -30,6 +41,12 @@ export interface CategoryFacets {
   brands: { id: number; name: string; count: number }[];
   price: { key: string; count: number }[];
   availability: { key: string; count: number }[];
+  /** Slider travel for the Price facet; absent on a payload computed before
+   *  C8G4f4U8 (the materialized listing row is refreshed within minutes), in
+   *  which case Price falls back to the three bands it always had. */
+  priceRange?: { min: number; max: number } | null;
+  /** The per-category attribute sections this category earned. */
+  attributes?: AttributeFacet[];
   /** Per-channel rail config attached by the route (applyStorefrontFilters);
    *  absent on a call site that never resolved it — then the defaults apply. */
   filters?: StorefrontFilter[];
@@ -66,6 +83,19 @@ function categoryGroups(facets: CategoryFacets): FacetGroupDef[] {
   const groups: FacetGroupDef[] = [];
   for (const filter of config) {
     if (!filter.enabled) continue;
+    // Price is a min-max slider now (C8G4f4U8 — Steve: "we just want sliders"),
+    // and keeps the three bands as its fallback for a listing payload that
+    // predates the change.
+    if (filter.id === "price" && facets.priceRange) {
+      groups.push({
+        param: "price",
+        title: filter.label,
+        options: [],
+        defaultOpen: !filter.collapsed,
+        range: { ...facets.priceRange, money: true },
+      });
+      continue;
+    }
     const options = optionsFor(filter.id);
     // Price kept its section even when empty before this change; RailContent
     // drops any group whose options are all zero-count anyway, so the rail looks
@@ -78,14 +108,42 @@ function categoryGroups(facets: CategoryFacets): FacetGroupDef[] {
       defaultOpen: !filter.collapsed,
     });
   }
+
+  // Per-category attribute sections sit UNDER the three configurable facets.
+  // Which ones appear is decided by the data, not by a setting: the site reads
+  // the values this category's products carry (services/catalog/attributeFacets).
+  for (const attr of facets.attributes ?? []) {
+    if (attr.kind === "range") {
+      if (attr.min === undefined || attr.max === undefined) continue;
+      groups.push({
+        param: attributeParam(attr.code),
+        title: attr.label,
+        options: [],
+        defaultOpen: true,
+        range: { min: attr.min, max: attr.max, unit: attr.unit },
+      });
+    } else {
+      const options = (attr.options ?? []).map((o) => ({
+        value: o.value,
+        label: o.label,
+        count: o.count,
+      }));
+      if (options.length === 0) continue;
+      groups.push({ param: attributeParam(attr.code), title: attr.label, options, defaultOpen: true });
+    }
+  }
   return groups;
 }
 
-/** Params the rail's "Clear all" / chips act on — the enabled facets only. */
+/** Params the rail's "Clear all" / chips act on — the enabled facets, plus every
+ *  attribute section this category offers. */
 function clearParamsFor(facets: CategoryFacets): string[] {
-  return normalizeStorefrontFilters(facets.filters)
-    .filter((f) => f.enabled)
-    .map((f) => f.id);
+  return [
+    ...normalizeStorefrontFilters(facets.filters)
+      .filter((f) => f.enabled)
+      .map((f) => f.id),
+    ...(facets.attributes ?? []).map((a) => attributeParam(a.code)),
+  ];
 }
 
 /**
@@ -174,7 +232,14 @@ export function ClearFiltersButton() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const clearParams = ["sub", "brand", "price"];
+  // Every rail param, including whichever attribute sections this category
+  // offers — they are decided from the data, so they cannot be listed here.
+  const clearParams = [
+    "sub",
+    "brand",
+    "price",
+    ...[...searchParams.keys()].filter((k) => k.startsWith("f_")),
+  ];
   const hasAny = clearParams.some((p) => searchParams.get(p));
   if (!hasAny) return null;
   return (
@@ -243,7 +308,17 @@ function RailContent({ groups, clearParams }: { groups: FacetGroupDef[]; clearPa
       </div>
 
       {groups.map((g) => {
-        const opts = g.options.filter((o) => o.count > 0);
+        if (g.range) {
+          return (
+            <FacetGroup key={g.param} title={g.title} defaultOpen={g.defaultOpen}>
+              <RangeFacet param={g.param} range={g.range} />
+            </FacetGroup>
+          );
+        }
+        // A ticked value stays on the rail even when this narrowing left it no
+        // products of its own — otherwise the shopper cannot untick it.
+        const ticked = new Set(searchParams.get(g.param)?.split(",").filter(Boolean) ?? []);
+        const opts = g.options.filter((o) => o.count > 0 || ticked.has(o.value));
         if (opts.length === 0) return null;
         return (
           <FacetGroup key={g.param} title={g.title} defaultOpen={g.defaultOpen}>
@@ -253,6 +328,112 @@ function RailContent({ groups, clearParams }: { groups: FacetGroupDef[]; clearPa
           </FacetGroup>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * Min-max slider — the control Steve asked for in place of the old Industry
+ * Kitchens tick-list of exact millimetre values (card C8G4f4U8, 2026-08-05).
+ *
+ * Two overlaid range inputs, so it is keyboard-operable and needs no library.
+ * The URL is written on RELEASE, not on every pixel of the drag, and a thumb
+ * left at either end writes no bound at all — the travel is trimmed to the 1st
+ * to 99th percentile, so pinning the bound would quietly drop the extremes.
+ */
+function RangeFacet({
+  param,
+  range,
+}: {
+  param: string;
+  range: { min: number; max: number; unit?: string; money?: boolean };
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [, startTransition] = useTransition();
+
+  // A range input can only stop on the step grid measured from `min`, so a top
+  // that is not on that grid is UNREACHABLE — the thumb parks one step short,
+  // which reads as "up to $59,020" and would quietly drop the dearest products.
+  // The travel is therefore rounded UP to the next step; the extra sliver costs
+  // nothing because a thumb at the end applies no bound at all.
+  const span = range.max - range.min;
+  const step = span > 2000 ? 50 : span > 200 ? 10 : span > 20 ? 1 : 0.1;
+  const top = range.min + Math.ceil(span / step) * step;
+  const travel = { min: range.min, max: top };
+
+  const applied = parseRangeParam(searchParams.get(param));
+  const lo = Math.max(travel.min, Math.min(travel.max, applied?.min ?? travel.min));
+  const hi = Math.min(travel.max, Math.max(travel.min, applied?.max ?? travel.max));
+  const [draft, setDraft] = useState<[number, number]>([lo, hi]);
+  const [dragging, setDragging] = useState(false);
+  // While the thumb is down the draft owns the value; otherwise the URL does,
+  // so a chip removed elsewhere snaps the slider back.
+  const [low, high] = dragging ? draft : [lo, hi];
+
+  const format = (n: number) =>
+    range.money ? formatPriceLabel({ min: n }).replace(" and up", "") : `${Number(n.toFixed(2)).toLocaleString("en-AU")}${range.unit ?? ""}`;
+
+  const commit = (next: [number, number]) => {
+    const value = rangeParamFor(travel, { min: next[0], max: next[1] });
+    const params = new URLSearchParams(searchParams.toString());
+    if (value === null) params.delete(param);
+    else params.set(param, value);
+    params.delete("page");
+    startTransition(() => router.replace(`${pathname}?${params.toString()}`, { scroll: false }));
+  };
+
+  const move = (which: 0 | 1) => (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = Number(event.target.value);
+    setDragging(true);
+    setDraft(([a, b]) => (which === 0 ? [Math.min(value, b), b] : [a, Math.max(value, a)]));
+  };
+  const release = () => {
+    if (!dragging) return;
+    setDragging(false);
+    commit(draft);
+  };
+
+  const left = ((low - travel.min) / (travel.max - travel.min)) * 100;
+  const width = ((high - low) / (travel.max - travel.min)) * 100;
+
+  return (
+    <div className="pt-1">
+      <div className="mb-2 flex items-center justify-between text-[12px] font-semibold text-accent-dark">
+        <span>{format(low)}</span>
+        <span>
+          {format(high)}
+          {high >= travel.max ? "+" : ""}
+        </span>
+      </div>
+      <div className="relative h-6">
+        <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-steel-200" />
+        <div
+          className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full"
+          style={{ left: `${left}%`, width: `${width}%`, backgroundColor: "#00786F" }}
+        />
+        {([0, 1] as const).map((which) => (
+          <input
+            key={which}
+            type="range"
+            aria-label={which === 0 ? `Minimum ${param}` : `Maximum ${param}`}
+            min={travel.min}
+            max={travel.max}
+            step={step}
+            value={which === 0 ? low : high}
+            onChange={move(which)}
+            onPointerUp={release}
+            onKeyUp={release}
+            onBlur={release}
+            className="pointer-events-none absolute inset-x-0 top-1/2 h-6 w-full -translate-y-1/2 appearance-none bg-transparent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:bg-[#00786F] [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-[#00786F] [&::-webkit-slider-thumb]:shadow"
+          />
+        ))}
+      </div>
+      <div className="mt-1 flex items-center justify-between text-[11px] text-steel-400">
+        <span>{format(travel.min)}</span>
+        <span>{format(travel.max)}+</span>
+      </div>
     </div>
   );
 }
@@ -310,7 +491,20 @@ export function FacetChips({ groups }: { groups: FacetGroupDef[] }) {
 
   const chips: { param: string; value: string; label: string }[] = [];
   for (const g of groups) {
-    for (const v of searchParams.get(g.param)?.split(",").filter(Boolean) ?? []) {
+    const raw = searchParams.get(g.param);
+    if (!raw) continue;
+    // A slider is ONE chip naming its window ("Width 600–900mm"), not one chip
+    // per value — and removing it clears the whole window.
+    if (g.range) {
+      const window = parseRangeParam(raw);
+      if (!window) continue;
+      const label = g.range.money
+        ? formatPriceLabel(window)
+        : formatRangeLabel(window, g.range.unit);
+      chips.push({ param: g.param, value: raw, label: `${g.title} ${label}` });
+      continue;
+    }
+    for (const v of raw.split(",").filter(Boolean)) {
       chips.push({ param: g.param, value: v, label: labelFor(g.param, v) });
     }
   }
