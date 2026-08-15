@@ -28,6 +28,16 @@ import {
 import { isStaffOnlyDraft, withoutStaffOnlyDrafts } from "@/lib/quotes/draft-visibility";
 import { getContactPermissions } from "@/lib/role-permissions";
 import { isProductVisibleToViewer, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
+import { contactService, customerAddressService } from "@/lib/store";
+import { saveCheckoutAddressForContact } from "@/lib/contact-addresses";
+import {
+  QUOTE_REQUEST_PROBLEM_MESSAGE,
+  quoteShippingAddressFromSaved,
+  quoteShippingAddressSnapshot,
+  validateQuoteRequest,
+  type QuoteRequestForm,
+  type SavedQuoteAddress,
+} from "@/lib/quotes/quote-request";
 
 // QuoteService returns snake_case rows (transformRow convention).
 type QuoteRow = { id: number; uuid: string; contact_id?: number | null; [key: string]: unknown };
@@ -219,7 +229,75 @@ export async function getQuote() {
   return quoteService.getWithItems(quote.id);
 }
 
-export async function submitQuote(notes?: string) {
+/**
+ * Who is signed in, for the delivery address's "ask for" name. Best effort: a lookup
+ * that fails costs a name on the address, never the quote request.
+ */
+async function contactName(contactId: number): Promise<{ firstName: string; lastName: string }> {
+  try {
+    const c = (await contactService.getById(contactId)) as Record<string, unknown> | null;
+    return {
+      firstName: ((c?.first_name as string) ?? "").trim(),
+      lastName: ((c?.last_name as string) ?? "").trim(),
+    };
+  } catch {
+    return { firstName: "", lastName: "" };
+  }
+}
+
+/**
+ * The customer's saved delivery addresses, for the quote request form's dropdown.
+ *
+ * Same read the checkout uses (`listForContact` also covers legacy customer-keyed
+ * rows through the migration's contact_id backfill), reduced to the fields the
+ * dropdown and the snapshot need — a whole-row read would ship the default flags and
+ * timestamps into a client component for no reason.
+ */
+export async function getQuoteDeliveryAddresses(): Promise<SavedQuoteAddress[]> {
+  const session = await getSession();
+  if (!session) return [];
+  try {
+    const rows = (await customerAddressService.listForContact(session.contactId)) as Record<
+      string,
+      unknown
+    >[];
+    return rows.slice(0, 20).map((a) => ({
+      id: a.id as number,
+      firstName: (a.first_name ?? "") as string,
+      lastName: (a.last_name ?? "") as string,
+      company: (a.company ?? "") as string,
+      phone: (a.phone ?? "") as string,
+      address1: (a.address1 ?? "") as string,
+      address2: (a.address2 ?? "") as string,
+      city: (a.city ?? "") as string,
+      stateOrProvince: (a.state_or_province ?? "") as string,
+      postalCode: (a.postal_code ?? "") as string,
+      country: (a.country ?? "") as string,
+      countryCode: (a.country_code ?? "AU") as string,
+    }));
+  } catch (e) {
+    // No address book is a normal state (a brand-new customer). The form falls back
+    // to "enter a new address", which is the only option they had anyway.
+    console.error("[getQuoteDeliveryAddresses] read failed (non-fatal):", e);
+    return [];
+  }
+}
+
+/**
+ * Send the quote request (card 9tbz3sBF).
+ *
+ * Zoey's own form asks for a Quote Name (required), Quote Comments and a Delivery
+ * Address, and so do we. The rules are `validateQuoteRequest`, applied HERE as well
+ * as on the button: the action is callable directly, and a stale tab must not be
+ * able to file a nameless, address-less request that a rep then has to chase.
+ *
+ * The address is snapshotted onto `quotes.shipping_address` rather than looked up
+ * later, because a quote's Ship-To is its own frozen copy (card iJfNIFn9) — the
+ * customer editing their address book next month must not silently redirect a quote
+ * already with a rep. A newly typed address is also filed in the address book, which
+ * is Steve's "yes we should also save that address".
+ */
+export async function submitQuote(form: QuoteRequestForm) {
   const uuid = await getQuoteUuid();
   if (!uuid) return { error: "No quote" };
 
@@ -240,18 +318,79 @@ export async function submitQuote(notes?: string) {
     };
   }
 
-  // Attach customer identity + notes. The quote stays in `quote_pending`
-  // (Zoey lifecycle): the sales team reviews it in the portal and sends
-  // pricing back via markSent → quote_available. The submitted_at attribute
-  // distinguishes a customer-submitted request from an in-progress draft
-  // (both share the quote_pending status).
+  // The saved addresses are re-read on the server: the posted id is checked against
+  // what this contact ACTUALLY has, so a tampered form cannot attach someone else's
+  // address to a quote.
+  const savedAddresses = await getQuoteDeliveryAddresses();
+  const problem = validateQuoteRequest(
+    form,
+    savedAddresses.map((a) => a.id)
+  );
+  if (problem) return { error: QUOTE_REQUEST_PROBLEM_MESSAGE[problem] };
+
+  const chosen = form.addressId === "new" ? null : savedAddresses.find((a) => a.id === form.addressId);
+  // A blank name on a delivery address reads as nobody to ask for on site, so it falls
+  // back to whoever is signed in. Only read when a NEW address is being typed.
+  const signedInName = chosen
+    ? { firstName: "", lastName: "" }
+    : await contactName(session.contactId);
+  const newAddress = chosen
+    ? null
+    : {
+        ...form.newAddress,
+        firstName: form.newAddress.firstName.trim() || signedInName.firstName,
+        lastName: form.newAddress.lastName.trim() || signedInName.lastName,
+      };
+  const shippingAddress = chosen
+    ? quoteShippingAddressFromSaved(chosen)
+    : quoteShippingAddressSnapshot(newAddress!);
+
+  // Attach customer identity, the name, their comment and the delivery address. The
+  // quote stays in `quote_pending` (Zoey lifecycle): the sales team reviews it in the
+  // portal and sends pricing back via markSent → quote_available. The submitted_at
+  // attribute distinguishes a customer-submitted request from an in-progress draft
+  // (both share the quote_pending status) and is what LOCKS the request — the panel
+  // starts a fresh quote afterwards, so there is nothing left to edit (Steve: address
+  // changes after submission are by phone or email).
   const existingAttributes = (quote.attributes ?? {}) as Record<string, unknown>;
   await quoteService.update(quote.id, {
     contactId: session.contactId,
     email: session.email,
-    customerNotes: notes || null,
+    quoteName: form.quoteName.trim(),
+    customerNotes: form.comments.trim() || null,
+    shippingAddress,
     attributes: { ...existingAttributes, submitted_at: new Date().toISOString() },
   });
+
+  // File a newly typed address for next time. Wrapped whole: a request that reached
+  // the sales team must never fail because the address book could not be updated, and
+  // the B2B role gate is the checkout's own (`add_shipping_address_in_checkout`) — a
+  // role that may not add addresses still gets its quote, just not a saved address.
+  if (newAddress) {
+    try {
+      const mayAddAddress =
+        !perms.isB2B || perms.accountId === null || perms.can("add_shipping_address_in_checkout");
+      if (mayAddAddress) {
+        await saveCheckoutAddressForContact(session.contactId, {
+          firstName: newAddress.firstName,
+          lastName: newAddress.lastName,
+          company: newAddress.company.trim(),
+          phone: newAddress.phone.trim(),
+          address1: newAddress.address1.trim(),
+          address2: newAddress.address2.trim(),
+          city: newAddress.city.trim(),
+          stateOrProvince: newAddress.state.trim(),
+          postalCode: newAddress.postalCode.trim(),
+          // The canonical pair the address book itself writes (actions/account.ts).
+          country: String(shippingAddress.country ?? "Australia"),
+          countryCode: String(shippingAddress.country_code ?? "AU"),
+        });
+      }
+    } catch (e) {
+      console.error("[submitQuote] address book save failed (non-fatal):", e);
+    }
+  }
+
   await clearQuoteUuid();
 
   refresh(); // acting user's view refreshes; shared data cache stays intact

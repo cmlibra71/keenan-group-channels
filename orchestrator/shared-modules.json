@@ -133,6 +133,7 @@
     "lib/pricing/cart-pricing.ts",
     "lib/quote.ts",
     "lib/quotes/customer-editable.ts",
+    "lib/quotes/quote-request.ts",
     "lib/rate-limit.ts",
     "lib/role-permissions.test.ts",
     "lib/role-permissions.ts",

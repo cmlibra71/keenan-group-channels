@@ -28,6 +28,8 @@ interface QuoteRecord {
   hide_prices: boolean | null;
   contact_id: number | null;
   quote_number: string | null;
+  /** The name the customer gave the request — what they call this quote (card 9tbz3sBF). */
+  quote_name: string | null;
   quote_amount: string | null;
   // Basis of the stored total (a Zoey-ingested total already includes GST) plus
   // the components that reconcile to it — see quoteGstTotals.
@@ -218,6 +220,11 @@ export default async function QuotesPage() {
                   )}
                 </div>
               </div>
+              {/* The customer's own name for this quote — Steve, card 9tbz3sBF:
+                  "The name should appear also in My Account". */}
+              {quote.quote_name && (
+                <p className="mb-1 text-sm font-medium text-zinc-900">{quote.quote_name}</p>
+              )}
               <p className="text-sm text-zinc-500">
                 {totalItems} item{totalItems !== 1 ? "s" : ""}
               </p>

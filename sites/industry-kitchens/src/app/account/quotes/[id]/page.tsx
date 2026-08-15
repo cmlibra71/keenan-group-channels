@@ -74,6 +74,8 @@ interface QuoteDetail {
   channel_id: number;
   contact_id: number | null;
   quote_number: string | null;
+  /** The name the customer gave the request when they sent it (card 9tbz3sBF). */
+  quote_name: string | null;
   quote_amount: string | null;
   // Basis of the stored total (a Zoey-ingested total already includes GST) plus
   // every component that reconciles to it — see quoteGstTotals.
@@ -349,6 +351,11 @@ export default async function QuoteDetailPage({
           {quoteStatusLabel(status)}
         </span>
       </div>
+      {/* What the customer called this quote when they asked for it — the name
+          reads back here as well as in the list (Steve, card 9tbz3sBF). */}
+      {quote.quote_name && (
+        <p className="text-base font-medium text-zinc-900 mb-1">{quote.quote_name}</p>
+      )}
       <p className="text-sm text-zinc-500 mb-8">
         {quote.created_at ? `Requested ${new Date(quote.created_at).toLocaleDateString()}` : ""}
         {quote.expires_at ? ` · Valid until ${new Date(quote.expires_at).toLocaleDateString()}` : ""}
@@ -518,11 +525,25 @@ export default async function QuoteDetailPage({
         )}
       </div>
 
-      {/* Customer notes */}
+      {/* The customer's own comment, read back to them (Steve, card 9tbz3sBF,
+          answer #3 "Yes they should"). */}
       {quote.customer_notes && (
         <div className="mt-6">
-          <h2 className="text-sm font-semibold text-zinc-900 mb-1">Your notes</h2>
+          <h2 className="text-sm font-semibold text-zinc-900 mb-1">Your comments</h2>
           <p className="text-sm text-zinc-600 whitespace-pre-wrap">{quote.customer_notes}</p>
+        </div>
+      )}
+
+      {/* Where this quote is being delivered. Read-only by design: a submitted
+          request is locked, and an address change is a phone call or an email
+          (Steve, card 9tbz3sBF: "They need to phone or email for that"). */}
+      {addressSummary && (
+        <div className="mt-6">
+          <h2 className="text-sm font-semibold text-zinc-900 mb-1">Delivery address</h2>
+          <p className="text-sm text-zinc-600">{addressSummary}</p>
+          <p className="mt-1 text-xs text-zinc-500">
+            To change this address, call or email us and we&apos;ll update the quote.
+          </p>
         </div>
       )}
 
