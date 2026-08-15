@@ -24,6 +24,7 @@ import {
   accountService,
   contactService,
   orderService,
+  shipmentService,
   orderItemService,
   orderShippingAddressService,
   subscriptionPlanService,
@@ -425,6 +426,7 @@ export async function getSitemapProducts(
   }));
 }
 
+
 /**
  * Guest orders (no customer_id AND no contact_id) on this channel whose billing
  * email matches
@@ -446,19 +448,131 @@ export async function getGuestOrdersForEmail(
   const rows = await sql<{ id: number; order_number: string; status: string; total_inc_tax: string; created_at: string | Date | null }[]>`
     SELECT id, order_number, status, total_inc_tax, created_at
     FROM orders
-    WHERE customer_id IS NULL
+    WHERE ${guestOrderForEmailCondition(sql, target)}
+    ORDER BY id DESC
+    LIMIT 50`;
+  return rows;
+}
+
+/**
+ * THE guest-order rule, as one SQL fragment: a channel order with no customer and
+ * no contact whose billing email resolves to the same inbox as `normalizedEmail`.
+ *
+ * Deliberately shared by {@link getGuestOrdersForEmail} (the history list) and
+ * {@link isGuestOrderForEmail} (the per-order access gate). Two copies of this
+ * CASE expression would drift, and a drift here is not cosmetic: a looser copy
+ * WIDENS who can read an order, a tighter one 404s an order the list is showing.
+ */
+function guestOrderForEmailCondition(
+  sql: NonNullable<ReturnType<typeof getCommerceClient>>,
+  normalizedEmail: string
+) {
+  return sql`customer_id IS NULL
       AND contact_id IS NULL
       AND channel_id = ${CHANNEL_ID}
       AND CASE
         WHEN split_part(lower(billing_address->>'email'), '@', 2) IN ('gmail.com','googlemail.com')
         THEN regexp_replace(split_part(split_part(lower(billing_address->>'email'), '@', 1), '+', 1), '\\.', '', 'g')
         ELSE split_part(split_part(lower(billing_address->>'email'), '@', 1), '+', 1)
-      END || '@' || split_part(lower(billing_address->>'email'), '@', 2) = ${target}
-    ORDER BY id DESC
-    LIMIT 50`;
-  return rows;
+      END || '@' || split_part(lower(billing_address->>'email'), '@', 2) = ${normalizedEmail}`;
 }
 
+/**
+ * True when THIS order is a guest order on this channel that belongs to `email`'s
+ * inbox — the single-row form of {@link getGuestOrdersForEmail}, for the order
+ * detail page's access gate.
+ *
+ * Not expressed as "is it in the list?": the list is capped at 50 rows, so a
+ * shopper with a long guest history would be 404'd on their own older orders.
+ * Same normalisation, no cap, one order.
+ */
+export async function isGuestOrderForEmail(orderId: number, email: string): Promise<boolean> {
+  const sql = getCommerceClient();
+  if (!sql || !email || !Number.isFinite(orderId)) return false;
+  const target = normalizeEmailForMatch(email);
+  if (!target) return false;
+  const rows = await sql<{ id: number }[]>`
+    SELECT id FROM orders
+    WHERE id = ${orderId}
+      AND ${guestOrderForEmailCondition(sql, target)}
+    LIMIT 1`;
+  return rows.length > 0;
+}
+
+/**
+ * The payment term agreed with the account an order bills to, in days, or `null`
+ * when no term is on record.
+ *
+ * Orders placed through the storefront stamp the term they were quoted; orders
+ * created elsewhere (and most of the historical ones) do not, and the account is
+ * then the only place the real term lives. Both routes to it are tried in one
+ * round trip — the order's own `account_id`, then the account behind the order's
+ * contact — because on this channel most net-terms orders carry a contact but no
+ * account id.
+ *
+ * `accounts.net_terms_days` defaults to 0, which means "no term recorded", not
+ * "due immediately" — hence the `> 0` test. A null answer must stay null: the
+ * page says the invoice follows on the agreed terms rather than quoting a number
+ * the business never agreed.
+ */
+export async function getAccountNetTermsDays(
+  accountId: number | null | undefined,
+  contactId: number | null | undefined
+): Promise<number | null> {
+  const sql = getCommerceClient();
+  if (!sql) return null;
+  const account = Number.isFinite(accountId) ? Number(accountId) : 0;
+  const contact = Number.isFinite(contactId) ? Number(contactId) : 0;
+  if (account <= 0 && contact <= 0) return null;
+  try {
+    const rows = await sql<{ days: number | null; rank: number }[]>`
+      SELECT a.net_terms_days AS days, 1 AS rank
+        FROM accounts a
+       WHERE a.id = ${account}
+      UNION ALL
+      SELECT a.net_terms_days AS days, 2 AS rank
+        FROM contacts c
+        JOIN accounts a ON a.id = c.account_id
+       WHERE c.id = ${contact}
+      ORDER BY rank`;
+    for (const row of rows) {
+      const days = Number(row.days);
+      if (Number.isFinite(days) && days > 0) return Math.round(days);
+    }
+  } catch {
+    // Best-effort: no term on record reads the same as a lookup that failed.
+  }
+  return null;
+}
+
+/**
+ * Storefront URLs for the products a customer may still open, keyed by product id.
+ *
+ * An order keeps its line items forever, but the product behind a line can be
+ * retired or pulled from this channel — linking to it would land the customer on
+ * a 404 inside their own order history. Same channel-visibility join the sitemap
+ * uses ({@link getSitemapProducts}); anything absent renders as plain text.
+ */
+export async function getLinkableProductPaths(productIds: number[]): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  const sql = getCommerceClient();
+  const ids = [...new Set(productIds.filter((id) => Number.isFinite(id)))];
+  if (!sql || ids.length === 0) return out;
+  const rows = await sql<{ id: number; url_path: string | null }[]>`
+    SELECT p.id, p.url_path
+    FROM product_channel_assignments a
+    JOIN products p ON p.id = a.product_id
+    WHERE a.channel_id = ${CHANNEL_ID}
+      AND a.is_visible = true
+      AND p.is_visible = true
+      AND p.id = ANY(${ids})`;
+  for (const row of rows) {
+    // Product routes are keyed by url_path, falling back to the numeric id
+    // (mirrors ProductGrid: `slug={product.urlPath || String(product.id)}`).
+    out.set(Number(row.id), row.url_path || String(row.id));
+  }
+  return out;
+}
 /**
  * Current buy costs for a set of order lines, keyed `${productId}:${variantId ?? 0}`.
  * Variant cost wins over the product cost (same precedence as the pricing
@@ -530,6 +644,7 @@ export {
   contactService,
   customerAddressService,
   orderService,
+  shipmentService,
   orderItemService,
   orderShippingAddressService,
   subscriptionPlanService,
