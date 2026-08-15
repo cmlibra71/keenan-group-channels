@@ -25,6 +25,7 @@ import {
 } from "@/lib/orders/order-presentation";
 import { orderDocumentName } from "@/lib/orders/order-document-name";
 import { customerOrderStage } from "@/lib/orders/order-status-label";
+import { readCustomerOrderNotes } from "@/lib/orders/customer-order-notes";
 import { OrderMoney, OrderTotals } from "@/components/account/OrderMoney";
 import { PaymentSection } from "./payment-section";
 import { ShipmentsSection } from "./shipments-section";
@@ -39,9 +40,15 @@ export const metadata = {
 //
 // These interfaces deliberately name ONLY the customer-facing columns. The row
 // carries plenty that is staff-only — internal_memo (which the checkout stamps
-// with a below-cost pricing warning), staff_notes, metafields, and per-line cost
-// prices — and none of it is read here, rendered, or passed to a client
-// component.
+// with a below-cost pricing warning), staff_notes and per-line cost prices — and
+// none of it is read here, rendered, or passed to a client component.
+//
+// `metafields` is the one bag this page reaches into, and it reads exactly TWO
+// keys out of it: the net-terms figure, and `customer_order_notes` — the notes a
+// staff member deliberately published with the portal's "Visible on Store
+// Frontend" tick (mlZ3aTT1). Both go through their own reader, which returns only
+// the fields below; nothing else in the bag is read, rendered or handed to a
+// client component.
 // ────────────────────────────────────────────────────────────────────────────
 
 interface OrderItemRow {
@@ -253,6 +260,11 @@ export default async function OrderDetailPage({
   );
   const shipments = (shipmentPage.data ?? []) as unknown as ShipmentRow[];
 
+  // Notes staff published to this customer from the portal's Order History panel. Read off the
+  // order row that is already loaded — no extra query, and the ONLY metafield keys this page
+  // touches are this one and the net-terms figure below.
+  const customerNotes = readCustomerOrderNotes(order.metafields);
+
   const orderNumber = order.order_number || `#${order.id}`;
   const placed = formatDate(order.created_at);
 
@@ -318,6 +330,27 @@ export default async function OrderDetailPage({
         {placed ? `Placed ${placed}` : ""}
         {order.customer_po ? `${placed ? " · " : ""}Your reference: ${order.customer_po}` : ""}
       </p>
+
+      {/* ── Updates staff published to this customer ─────────────────────────
+          The other end of the portal Order History panel's "Visible on Store Frontend" tick
+          (mlZ3aTT1). Notes only — never a status word: the portal's internal set carries
+          finance-company names and the chip above is the only status a customer reads
+          (uvRji87U). Absent when nothing has been published. */}
+      {customerNotes.length > 0 && (
+        <section className="mb-8">
+          <h2 className="panel-title mb-3">Updates on this order</h2>
+          <ul className="border border-border divide-y divide-border">
+            {customerNotes.map((n) => (
+              <li key={n.id} className="p-4">
+                <p className="text-sm text-text-primary whitespace-pre-line">{n.note}</p>
+                {formatDate(n.at) && (
+                  <p className="mt-1 text-xs text-text-muted">{formatDate(n.at)}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* ── Items ─────────────────────────────────────────────────────────── */}
       <h2 className="panel-title mb-3">Items</h2>
