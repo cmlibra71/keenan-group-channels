@@ -6,7 +6,7 @@ import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogS
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { hasTestCheckoutSession } from "@/lib/checkout/test-session";
-import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, siteAccessProfileService, type EmailLineItem } from "@keenan/services";
+import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveOrderBusinessName, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, siteAccessProfileService, type EmailLineItem } from "@keenan/services";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, memberSavings, type BelowCostLine } from "@/lib/checkout/order-draft";
 import { getLineCosts } from "@/lib/store";
 import { sendStaffNotification } from "@/lib/staff-email";
@@ -1172,6 +1172,15 @@ export async function placeOrder(
       // branding the customer confirmation email uses) — not the Keenan default.
       const branding = await resolveEmailBranding(CHANNEL_ID).catch(() => undefined);
       const portalBase = (process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/$/, "");
+      // The customer's BUSINESS, where we already hold one (card yK25KBID). This
+      // checkout asks for no company and none is being added (Chris, 2026-08-11),
+      // so on a storefront order it comes from the shopper's own ACCOUNT — the
+      // same resolver the portal's card-order alert uses, so the two senders can
+      // never name different businesses for the same buyer.
+      const company = await resolveOrderBusinessName({
+        billingAddress: billingAddress as unknown as Record<string, unknown>,
+        accountId: perms.accountId ?? netTerms?.accountId ?? null,
+      });
       await sendOrderStaffNotificationEmail({
         // Records the send on the order's history panel, exactly like the
         // customer confirmation above — without it a storefront order's staff
@@ -1183,6 +1192,7 @@ export async function placeOrder(
         orderUrl: `${portalBase}/dashboard/orders/${order.id}`,
         customerEmail: email,
         customerName: `${firstName} ${lastName}`.trim() || null,
+        company,
         total: String(totalIncTax),
         paymentMethod: effectivePaymentMethod,
         storeName,
