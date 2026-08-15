@@ -200,13 +200,13 @@ export const AddToCartWidget: WidgetComponent = ({ attrs }) => {
     displayPrice,
     quantity,
     cartVariantId,
-    inStock,
     purchaseBlockedByStock,
     restrictAddToCart,
-    restrictAddToQuote,
     purchasingDisabled,
     allOptionsSelected,
   } = purchase;
+  // Also covers a product staff set to Hide Price: the provider masks its amounts to zero, so it
+  // takes the same quote-only path a genuinely unpriced product takes (7vu2iEEZ).
   if (displayPrice <= 0) return null; // POA items sell via quote only
   // A product staff switched off for cart, or set to refuse out-of-stock buys, shows NO button at
   // all rather than a greyed one — there is no availability wording left on this site to explain a
@@ -284,14 +284,16 @@ export const MobileBuyBarWidget: WidgetComponent = () => {
     isMember,
     quantity,
     cartVariantId,
-    inStock,
     purchaseBlockedByStock,
     restrictAddToCart,
-    restrictAddToQuote,
     purchasingDisabled,
     allOptionsSelected,
   } = purchase;
   if (displayPrice <= 0) return null;
+  // The bar is a price and an Add to Cart and nothing else, so a product whose cart button is
+  // refused has no bar left worth rendering — a price strip with the button taken out reads as a
+  // broken bar. Same call as `showMobileBar` in the shared bridge (7vu2iEEZ).
+  if (restrictAddToCart || purchaseBlockedByStock) return null;
   return (
     <div className="fixed inset-x-0 bottom-0 z-[90] flex items-center justify-between gap-3 border-t border-border bg-white px-4 py-3 shadow-lg lg:hidden">
       <div className="min-w-0">
@@ -310,15 +312,13 @@ export const MobileBuyBarWidget: WidgetComponent = () => {
             : "ex GST"}
         </span>
       </div>
-      {!(restrictAddToCart || purchaseBlockedByStock) && (
-        <AddToCartButton
-          productId={product.id}
-          variantId={cartVariantId}
-          quantity={quantity}
-          size="sm"
-          disabled={purchasingDisabled || !allOptionsSelected}
-        />
-      )}
+      <AddToCartButton
+        productId={product.id}
+        variantId={cartVariantId}
+        quantity={quantity}
+        size="sm"
+        disabled={purchasingDisabled || !allOptionsSelected}
+      />
     </div>
   );
 };

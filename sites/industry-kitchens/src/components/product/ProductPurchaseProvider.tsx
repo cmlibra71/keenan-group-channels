@@ -237,21 +237,30 @@ export function ProductPurchaseProvider({
   }, [activeVariantId, onVariantChange]);
 
   const variantImageUrl = activeVariant?.imageUrl ?? null;
-  const activeMemberPrice =
+  const rawActiveMemberPrice =
     activeVariantId != null && memberPriceMap[activeVariantId] != null
       ? memberPriceMap[activeVariantId]
       : memberPrice ?? null;
 
-  const displayPrice = activeVariant?.price
+  const hidePrice = product.hidePrice === true;
+  const rawDisplayPrice = activeVariant?.price
     ? parseFloat(activeVariant.price)
     : parseFloat(product.price);
-  const displaySalePrice = activeVariant?.salePrice
+  const rawDisplaySalePrice = activeVariant?.salePrice
     ? parseFloat(activeVariant.salePrice)
     : activeVariant
       ? null
       : product.salePrice
         ? parseFloat(product.salePrice)
         : null;
+  // Card 7vu2iEEZ, Tim 2026-08-11: a product staff set to hide its price behaves EXACTLY like a
+  // product with no price — "Call for Price", no GST switch, no bulk table, no member teaser, no
+  // cart button, and Add to Quote instead. The masking is done HERE, on the numbers, rather than
+  // by adding a `hidePrice` test to every price-shaped branch downstream: a dozen places read
+  // these three values, and one missed branch is a leaked price. `hidePrice` is still exported
+  // for the two places that must know WHY (the cart button, which hides rather than greys).
+  const displayPrice = hidePrice ? 0 : rawDisplayPrice;
+  const displaySalePrice = hidePrice ? null : rawDisplaySalePrice;
 
   const inStock = (() => {
     if ((product.availability ?? "available") === "disabled") return false;
@@ -276,7 +285,8 @@ export function ProductPurchaseProvider({
   );
   const restrictAddToQuote = product.restrictAddToQuote === true;
   const restrictAddToCart = product.restrictAddToCart === true;
-  const hidePrice = product.hidePrice === true;
+  // Masked with the rest of the price fields — a member price is still a price.
+  const activeMemberPrice = hidePrice ? null : rawActiveMemberPrice;
   const allOptionsSelected = useGroupedMode
     ? Object.keys(selectedOptions).length === options.length && matchedVariant !== null
     : true;

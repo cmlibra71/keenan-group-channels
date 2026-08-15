@@ -179,11 +179,16 @@ export const AddToCartWidget: WidgetComponent = () => {
   // all rather than a greyed one — there is no availability wording left on this site to explain a
   // dead control (cards 7vu2iEEZ + CXnP1lrL). Add to Quote is still there.
   if (restrictAddToCart || purchaseBlockedByStock) return null;
+  // A product with no price sells by quote only, and a product staff set to Hide Price has its
+  // amounts masked to zero by the provider so it lands here too. This used to render the button
+  // greyed, which is the same dead control by another name — and Chefs Depot's fork of this widget
+  // has always returned null. Both sites now do (7vu2iEEZ, Tim's "the same on ALL sites").
+  if (displayPrice <= 0) return null;
   return (
     <AddToCartButton
       productId={product.id}
       variantId={cartVariantId}
-      disabled={purchasingDisabled || !allOptionsSelected || displayPrice === 0}
+      disabled={purchasingDisabled || !allOptionsSelected}
     />
   );
 };

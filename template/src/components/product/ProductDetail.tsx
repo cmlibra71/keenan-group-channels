@@ -34,7 +34,6 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
     activeMemberPrice: memberPrice,
     displayPrice,
     displaySalePrice,
-    inStock,
     purchaseBlockedByStock,
     restrictAddToCart,
     restrictAddToQuote,
@@ -184,15 +183,18 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
         {/* A bundle is never bought straight off the page — the configuration goes to a rep. */}
         {/* Card 7vu2iEEZ: a product staff switched off for cart, set to hide its price, or set to
             refuse out-of-stock buys shows NO cart button rather than a greyed one — this site
-            carries no availability wording that could explain a dead control (CXnP1lrL). */}
-        {!isBundle && !hidePrice && !restrictAddToCart && !purchaseBlockedByStock && (
+            carries no availability wording that could explain a dead control (CXnP1lrL). A product
+            with no price at all takes the same exit, which is what Chefs Depot's fork of this file
+            has always done; `hidePrice` reaches here as a zero price through the provider, and is
+            named as well so the reason is readable. */}
+        {displayPrice > 0 && !isBundle && !hidePrice && !restrictAddToCart && !purchaseBlockedByStock && (
           <AddToCartButton
             productId={productId}
             variantId={cartVariantId}
             productName={product.name}
             sku={product.sku}
             price={displaySalePrice ?? displayPrice}
-            disabled={purchasingDisabled || !allOptionsSelected || displayPrice === 0}
+            disabled={purchasingDisabled || !allOptionsSelected}
           />
         )}
         {!restrictAddToQuote && (

@@ -41,7 +41,6 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
     activeMemberPrice: memberPrice,
     displayPrice,
     displaySalePrice,
-    inStock,
     purchaseBlockedByStock,
     restrictAddToCart,
     restrictAddToQuote,
