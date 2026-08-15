@@ -24,31 +24,200 @@ export interface PaymentMethodLike {
   name?: string;
 }
 
-/** Fallbacks for methods the channel has never configured, or historical ids. */
-const FALLBACK_METHOD_LABELS: Record<string, string> = {
-  stripe: "Card",
+// ── Method ids, and the fact that most of ours are Zoey's, not ours ──────────
+//
+// Industry Kitchens' order history is fifteen years of Magento/Zoey plugin ids,
+// not the handful our own checkout writes. Of the ~20,500 IK orders a customer
+// can actually open (channel 1 with a `contact_id`, read from production
+// 2026-08-15):
+//
+//   cryozonic_stripe 15,319 · banktransfer 3,722 · send_bill 709 ·
+//   ewayrapid_ewayone 348 · netterm 247 · free 110 · paypal_standard 22 ·
+//   purchaseorder 7 · bank_transfer 3 · stripe 1
+//
+// Chefs Depot never exposed this — all of its orders came from the new checkout,
+// on `stripe` / `bank_transfer` / `net_terms` — which is why a page written and
+// verified on CD alone reads perfectly there and badly on IK. Two consequences,
+// both customer-visible:
+//
+//   1. A gateway id must never be printed. "cryozonic stripe" is a plugin's
+//      name, not a way to pay, and the brief's standing rule is real terms only.
+//      An id we do not recognise reads "Not recorded" — saying nothing is
+//      honest, showing plumbing is not.
+//   2. The panels that tell a customer HOW to settle an unpaid order key off the
+//      method. `paymentMethod === "bank_transfer"` is false on all 3,722 IK bank
+//      transfers, which would print a five-figure balance in red with no bank
+//      details, no reference and no explanation next to it.
+//
+// So an id resolves to a FAMILY, and everything downstream asks about the family
+// rather than the literal string.
+
+/** The kinds of payment this page has to be able to talk about. */
+export type PaymentMethodFamily =
+  | "card"
+  | "bank_transfer"
+  | "net_terms"
+  | "paypal"
+  | "purchase_order"
+  | "free";
+
+/**
+ * Every payment-method id that has ever reached an order on either storefront,
+ * mapped to what it MEANS. Legacy Zoey ids sit beside the modern ones because
+ * they are the same act of paying under a different plugin's name.
+ */
+const METHOD_FAMILY: Record<string, PaymentMethodFamily> = {
+  // Card. `cryozonic_stripe` is Zoey's Stripe plugin; `ewayrapid_ewayone` is eWAY.
+  stripe: "card",
+  card: "card",
+  cryozonic_stripe: "card",
+  ewayrapid_ewayone: "card",
+  // Bank transfer. Zoey wrote it without the underscore.
+  bank_transfer: "bank_transfer",
+  banktransfer: "bank_transfer",
+  // On account, invoiced. Zoey's "Send Bill" is the same promise as Net Terms:
+  // the goods go out and an invoice follows.
+  net_terms: "net_terms",
+  netterm: "net_terms",
+  send_bill: "net_terms",
+  send_invoice: "net_terms",
+  paypal_standard: "paypal",
+  paypal: "paypal",
+  purchaseorder: "purchase_order",
+  purchase_order: "purchase_order",
+  free: "free",
+};
+
+/** What each family is called on a customer's screen. */
+const FAMILY_LABELS: Record<PaymentMethodFamily, string> = {
   card: "Card",
   bank_transfer: "Bank transfer",
   net_terms: "Account (invoice)",
+  paypal: "PayPal",
+  purchase_order: "Purchase order",
+  free: "No payment required",
+};
+
+/** Ids that are a wording of their own rather than a way of paying. */
+const FALLBACK_METHOD_LABELS: Record<string, string> = {
   manual: "Recorded by our team",
 };
+
+function methodId(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+/** What kind of payment this id is, or `null` when we have never seen it. */
+export function paymentMethodFamily(
+  id: string | null | undefined
+): PaymentMethodFamily | null {
+  return METHOD_FAMILY[methodId(id)] ?? null;
+}
+
+/** Paid by card — modern Stripe, Zoey's Stripe plugin or the old eWAY one. */
+export function isCardMethod(id: string | null | undefined): boolean {
+  return paymentMethodFamily(id) === "card";
+}
+
+/** Settled by bank transfer, under either spelling. */
+export function isBankTransferMethod(id: string | null | undefined): boolean {
+  return paymentMethodFamily(id) === "bank_transfer";
+}
+
+/** On account and invoiced — Net Terms, Zoey's `netterm`, or Zoey's Send Bill. */
+export function isNetTermsMethod(id: string | null | undefined): boolean {
+  return paymentMethodFamily(id) === "net_terms";
+}
+
+/**
+ * The channel's configuration for this order's method, matched by id and then by
+ * FAMILY.
+ *
+ * The family step is what lets a legacy `banktransfer` order show the bank
+ * details and reference configured against `bank_transfer` today. It is used for
+ * the PANELS (bank details, the channel's default net-terms days) and never for
+ * the label — see `paymentMethodLabel`, which stays on an exact match so a
+ * Zoey "Send Bill" order is not relabelled with the name of a Net Terms method
+ * the customer may never have been given.
+ */
+export function resolvePaymentMethodConfig<T extends PaymentMethodLike>(
+  id: string | null | undefined,
+  methods: readonly T[] = []
+): T | undefined {
+  const key = methodId(id);
+  if (!key) return undefined;
+  const exact = methods.find((m) => methodId(m.id) === key);
+  if (exact) return exact;
+  const family = METHOD_FAMILY[key];
+  if (!family) return undefined;
+  return methods.find((m) => METHOD_FAMILY[methodId(m.id)] === family);
+}
 
 /**
  * What the customer calls the way they paid.
  *
- * The channel's own configured name wins — that is the wording the checkout and
- * the confirmation email already used, and `getCheckoutSettings().paymentMethods`
- * deliberately keeps disabled methods so a historical order still resolves.
+ * The channel's own configured name wins on an EXACT id match — that is the
+ * wording the checkout and the confirmation email already used, and
+ * `getCheckoutSettings().paymentMethods` deliberately keeps disabled methods so a
+ * historical order still resolves. Otherwise the family's own plain word.
+ *
+ * An id in none of those tables answers "Not recorded". It deliberately does NOT
+ * fall through to the id with its underscores swapped for spaces: that is how
+ * "cryozonic stripe" and "ewayrapid ewayone" would have reached ~15,700 IK
+ * customers' screens.
  */
 export function paymentMethodLabel(
   methodId: string | null | undefined,
   methods: readonly PaymentMethodLike[] = []
 ): string {
-  const id = (methodId ?? "").trim();
+  const id = (methodId ?? "").trim().toLowerCase();
   if (!id) return "Not recorded";
-  const configured = methods.find((m) => m.id === id)?.name?.trim();
+  const configured = methods.find((m) => (m.id ?? "").trim().toLowerCase() === id)?.name?.trim();
   if (configured) return configured;
-  return FALLBACK_METHOD_LABELS[id] ?? id.replace(/_/g, " ");
+  const explicit = FALLBACK_METHOD_LABELS[id];
+  if (explicit) return explicit;
+  const family = METHOD_FAMILY[id];
+  return family ? FAMILY_LABELS[family] : "Not recorded";
+}
+
+/**
+ * Which "here is how you settle this" block the page owes the customer.
+ *
+ * One decision, because leaving it as three independent conditions in the markup
+ * is what allowed an unpaid order to render a red balance and nothing else. The
+ * rule: an account order states its invoice terms; anything still owing must
+ * carry SOMETHING telling the customer what to do about it, and when we have no
+ * specific instructions for the method that something is "contact us".
+ *
+ * A CANCELLED or refunded order is silent, whatever its figures say. Those orders
+ * routinely keep a full outstanding balance on the row — Industry Kitchens has
+ * cancelled orders carrying six and seven figures — and asking a customer to
+ * settle one, or telling them an invoice is on its way, would be asking for money
+ * that is not owed. That is `orderPayable`, and the page derives it with
+ * `isUnpayableOrderStatus` — the SAME list the Pay-by-card button refuses on, so
+ * the button and the wording beside it cannot disagree about what a cancelled
+ * order is. A BOOLEAN rather than the status itself, so that `orders.status`
+ * (which carries finance-company names like `silverchef`) never crosses into a
+ * component boundary: a dev build serialises those props into the page.
+ *
+ * `explainedElsewhere` is the pay-by-card control or its refusal sentence — where
+ * one of those renders, the customer already has an answer.
+ */
+export type OutstandingGuidance = "bank_transfer" | "net_terms" | "contact_us" | null;
+
+export function outstandingGuidance(input: {
+  methodId: string | null | undefined;
+  /** False on a cancelled, declined or refunded order. */
+  orderPayable: boolean;
+  owed: number;
+  explainedElsewhere: boolean;
+}): OutstandingGuidance {
+  if (!input.orderPayable) return null;
+  if (isNetTermsMethod(input.methodId)) return "net_terms";
+  if (!(input.owed > 0)) return null;
+  if (isBankTransferMethod(input.methodId)) return "bank_transfer";
+  if (input.explainedElsewhere) return null;
+  return "contact_us";
 }
 
 const PAYMENT_STATUS_LABELS: Record<string, string> = {
@@ -61,6 +230,9 @@ const PAYMENT_STATUS_LABELS: Record<string, string> = {
   refunded: "Refunded",
   partially_refunded: "Partly refunded",
   pending: "Awaiting payment",
+  // Zoey's own two, carried by 1,078 Industry Kitchens orders (prod 2026-08-15).
+  unpaid: "Awaiting payment",
+  refund_in_progress: "Refund in progress",
 };
 
 /** Customer-facing wording for `orders.payment_status`. Blank reads as awaiting payment. */

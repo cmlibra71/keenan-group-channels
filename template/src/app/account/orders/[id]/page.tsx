@@ -16,11 +16,13 @@ import {
 } from "@/lib/store";
 import { canCustomerViewOrder } from "@/lib/orders/order-visibility";
 import { payBalanceForOrder } from "@/lib/orders/pay-balance-site";
+import { isUnpayableOrderStatus } from "@/lib/orders/pay-balance";
 import {
   orderStatusChipClass,
   orderTotalRows,
   paymentPosition,
   visibleTransaction,
+  isNetTermsMethod,
 } from "@/lib/orders/order-presentation";
 import { orderDocumentName } from "@/lib/orders/order-document-name";
 import { customerOrderStage } from "@/lib/orders/order-status-label";
@@ -37,11 +39,26 @@ export const metadata = {
 // ────────────────────────────────────────────────────────────────────────────
 // Row shapes. Services return snake_case (transformRow).
 //
-// These interfaces deliberately name ONLY the customer-facing columns. The row
-// carries plenty that is staff-only — internal_memo (which the checkout stamps
-// with a below-cost pricing warning), staff_notes, metafields, and per-line cost
-// prices — and none of it is read here, rendered, or passed to a client
-// component.
+// These interfaces name the columns this page RENDERS, plus two it only reasons
+// about (`external_source`, `status`). Nothing staff-only is rendered or passed
+// to a client component: `internal_memo` (which checkout stamps with a below-cost
+// pricing warning), `staff_notes` and the per-line cost prices are never named
+// here, and the one metafield read is `net_terms_days`, a commercial term the
+// customer is entitled to be told.
+//
+// KNOWN GAP, recorded rather than papered over (card BIig1Zo1, and see
+// docs/behaviour/customers.md → sf-account-orders): the narrowing above is on the
+// RENDER, not on the READ. `orderService.getByIdScoped` is a plain `.select()`
+// over `orders` with `items` and `transactions` as includes, so the whole row —
+// staff notes, internal memo, per-line cost prices, raw gateway columns — is
+// loaded into this process and only these fields are used. BIig1Zo1 fixed exactly
+// this shape on the customer QUOTE page by projecting the columns in SQL, and the
+// same is owed here. It was deliberately not done under D045H6Zh: re-shaping the
+// read of a live money page is its own change with its own verification, and
+// doing it as a side effect of adding a route to a second storefront is how a
+// figure moves without anyone noticing. `visibleTransaction` already whitelists
+// the transaction rows at the component boundary, which is what stops the gateway
+// internals reaching the browser in the meantime.
 // ────────────────────────────────────────────────────────────────────────────
 
 interface OrderItemRow {
@@ -232,8 +249,11 @@ export default async function OrderDetailPage({
         includes: ["items"],
       }) as Promise<{ data: unknown[] }>,
       // The term agreed with the account this order bills to, for when the order
-      // itself carries none. Only worth a query on a net-terms order.
-      order.payment_method === "net_terms"
+      // itself carries none. Only worth a query on a net-terms order — asked of
+      // the method's FAMILY, so Zoey's `netterm` and `send_bill` orders (956 on
+      // Industry Kitchens) get the lookup too and not just the id our own
+      // checkout writes.
+      isNetTermsMethod(order.payment_method)
         ? getAccountNetTermsDays(order.account_id, order.contact_id)
         : Promise.resolve(null),
     ]);
@@ -398,6 +418,7 @@ export default async function OrderDetailPage({
       <PaymentSection
         paymentMethod={order.payment_method}
         paymentStatus={order.payment_status}
+        orderPayable={!isUnpayableOrderStatus(order.status)}
         totalIncTax={totalInc}
         refundedAmount={money(order.refunded_amount)}
         transactions={visibleTransactions}

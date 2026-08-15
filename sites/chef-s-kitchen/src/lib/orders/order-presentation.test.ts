@@ -14,7 +14,14 @@ import {
   netTermsMessage,
   outstanding,
   isSettled,
+  paymentMethodFamily,
+  isCardMethod,
+  isBankTransferMethod,
+  isNetTermsMethod,
+  resolvePaymentMethodConfig,
+  outstandingGuidance,
 } from "./order-presentation.ts";
+import { isUnpayableOrderStatus } from "./pay-balance.ts";
 
 // ── paymentMethodLabel ───────────────────────────────────────────────────────
 
@@ -32,11 +39,220 @@ test("method label falls back when the channel has no such method configured", (
 test("method label handles a blank / unknown method without leaking an id", () => {
   assert.equal(paymentMethodLabel(null), "Not recorded");
   assert.equal(paymentMethodLabel(""), "Not recorded");
-  assert.equal(paymentMethodLabel("some_new_gateway"), "some new gateway");
+  // An id we do not know is NOT prettified onto the screen: that fallback is how
+  // "cryozonic stripe" would have reached an Industry Kitchens customer.
+  assert.equal(paymentMethodLabel("some_new_gateway"), "Not recorded");
+  assert.equal(paymentMethodLabel("worldpay_v2"), "Not recorded");
 });
 
 test("method label ignores a configured entry with a blank name", () => {
   assert.equal(paymentMethodLabel("stripe", [{ id: "stripe", name: "   " }]), "Card");
+});
+
+// ── Legacy Zoey / Magento method ids (Industry Kitchens) ─────────────────────
+//
+// The exact ids and counts on production 2026-08-15, over channel-1 orders
+// carrying a contact_id — i.e. exactly what appears in a customer's own order
+// history. If this list ever needs extending, extend METHOD_FAMILY with it.
+
+const IK_LIVE_METHOD_IDS = [
+  ["cryozonic_stripe", 15319, "Card"],
+  ["banktransfer", 3722, "Bank transfer"],
+  ["send_bill", 709, "Account (invoice)"],
+  ["ewayrapid_ewayone", 348, "Card"],
+  ["netterm", 247, "Account (invoice)"],
+  ["free", 110, "No payment required"],
+  ["paypal_standard", 22, "PayPal"],
+  ["purchaseorder", 7, "Purchase order"],
+  ["bank_transfer", 3, "Bank transfer"],
+  ["stripe", 1, "Card"],
+] as const;
+
+test("every payment method id live on Industry Kitchens reads as plain English", () => {
+  for (const [id, , expected] of IK_LIVE_METHOD_IDS) {
+    assert.equal(paymentMethodLabel(id, []), expected, id);
+  }
+});
+
+test("no gateway id is prettified onto the screen", () => {
+  // The ids that are plumbing rather than English. `bank_transfer` is left out
+  // on purpose: its label IS "Bank transfer", which is the right answer, not a
+  // leak — the test is about the prettify fallback, not about the spelling.
+  const plumbing = [
+    "cryozonic_stripe",
+    "ewayrapid_ewayone",
+    "banktransfer",
+    "netterm",
+    "send_bill",
+    "purchaseorder",
+    "paypal_standard",
+  ];
+  for (const id of plumbing) {
+    const label = paymentMethodLabel(id, []);
+    assert.ok(!label.includes("_"), `${id} printed an underscore`);
+    assert.notEqual(label.toLowerCase(), id.replace(/_/g, " "), `${id} printed itself`);
+  }
+});
+
+test("the configured name still wins on an exact id, and only on an exact id", () => {
+  const methods = [{ id: "net_terms", name: "Net Terms" }];
+  assert.equal(paymentMethodLabel("net_terms", methods), "Net Terms");
+  // A Zoey Send Bill order is NOT relabelled with the name of a Net Terms method
+  // that customer may never have been given.
+  assert.equal(paymentMethodLabel("send_bill", methods), "Account (invoice)");
+});
+
+test("method families cover both spellings of the ids that drive the panels", () => {
+  assert.equal(isBankTransferMethod("bank_transfer"), true);
+  assert.equal(isBankTransferMethod("banktransfer"), true);
+  assert.equal(isBankTransferMethod("BankTransfer"), true);
+  assert.equal(isBankTransferMethod("stripe"), false);
+
+  assert.equal(isNetTermsMethod("net_terms"), true);
+  assert.equal(isNetTermsMethod("netterm"), true);
+  assert.equal(isNetTermsMethod("send_bill"), true);
+  assert.equal(isNetTermsMethod("send_invoice"), true);
+  assert.equal(isNetTermsMethod("banktransfer"), false);
+
+  assert.equal(isCardMethod("stripe"), true);
+  assert.equal(isCardMethod("cryozonic_stripe"), true);
+  assert.equal(isCardMethod("ewayrapid_ewayone"), true);
+  assert.equal(isCardMethod("paypal_standard"), false);
+
+  assert.equal(paymentMethodFamily("purchaseorder"), "purchase_order");
+  assert.equal(paymentMethodFamily(null), null);
+  assert.equal(paymentMethodFamily("who_knows"), null);
+});
+
+test("the channel's bank details are found through a legacy id, by family", () => {
+  const methods = [
+    { id: "stripe", name: "Credit/Debit Card" },
+    { id: "bank_transfer", name: "Bank Transfer", bankDetails: { bsb: "083-004" } },
+  ];
+  assert.equal(resolvePaymentMethodConfig("banktransfer", methods)?.id, "bank_transfer");
+  assert.equal(resolvePaymentMethodConfig("bank_transfer", methods)?.id, "bank_transfer");
+  assert.equal(resolvePaymentMethodConfig("cryozonic_stripe", methods)?.id, "stripe");
+  assert.equal(resolvePaymentMethodConfig("purchaseorder", methods), undefined);
+  assert.equal(resolvePaymentMethodConfig(null, methods), undefined);
+});
+
+// ── outstandingGuidance ──────────────────────────────────────────────────────
+
+test("a balance still owing always carries something telling the customer what to do", () => {
+  for (const [id] of IK_LIVE_METHOD_IDS) {
+    const guidance = outstandingGuidance({
+      methodId: id,
+      orderPayable: true,
+      owed: 23873.26,
+      explainedElsewhere: false,
+    });
+    assert.ok(guidance !== null, `${id} left an outstanding balance unexplained`);
+  }
+  // Including an order whose method was never recorded at all.
+  assert.equal(
+    outstandingGuidance({
+      methodId: null,
+      orderPayable: true,
+      owed: 10,
+      explainedElsewhere: false,
+    }),
+    "contact_us"
+  );
+});
+
+test("guidance names the right block for each family", () => {
+  assert.equal(
+    outstandingGuidance({
+      methodId: "banktransfer",
+      orderPayable: true,
+      owed: 10,
+      explainedElsewhere: false,
+    }),
+    "bank_transfer"
+  );
+  assert.equal(
+    outstandingGuidance({
+      methodId: "netterm",
+      orderPayable: true,
+      owed: 10,
+      explainedElsewhere: false,
+    }),
+    "net_terms"
+  );
+  assert.equal(
+    outstandingGuidance({
+      methodId: "purchaseorder",
+      orderPayable: true,
+      owed: 10,
+      explainedElsewhere: false,
+    }),
+    "contact_us"
+  );
+});
+
+test("a cancelled or refunded order is never asked to pay, whatever its figures say", () => {
+  // Industry Kitchens carries cancelled orders with six- and seven-figure
+  // balances still on the row (prod: order 28083, $25,242,800 "canceled" and
+  // "unpaid"). Neither the bank details, the account-terms wording nor the
+  // contact-us sentence may appear on one.
+  for (const status of ["canceled", "cancelled", "refunded", "declined", "refund_in_progress"]) {
+    for (const methodId of ["banktransfer", "netterm", "purchaseorder", "bank_transfer"]) {
+      assert.equal(
+        outstandingGuidance({
+          methodId,
+          orderPayable: !isUnpayableOrderStatus(status),
+          owed: 25242800,
+          explainedElsewhere: false,
+        }),
+        null,
+        `${status} / ${methodId}`
+      );
+    }
+  }
+});
+
+test("an account order states its terms even when nothing is owing", () => {
+  assert.equal(
+    outstandingGuidance({
+      methodId: "net_terms",
+      orderPayable: true,
+      owed: 0,
+      explainedElsewhere: false,
+    }),
+    "net_terms"
+  );
+});
+
+test("a settled order is told nothing, and a pay control is not talked over", () => {
+  assert.equal(
+    outstandingGuidance({
+      methodId: "cryozonic_stripe",
+      orderPayable: true,
+      owed: 0,
+      explainedElsewhere: false,
+    }),
+    null
+  );
+  // The Pay-by-card button (or its refusal sentence) is already the answer.
+  assert.equal(
+    outstandingGuidance({
+      methodId: "stripe",
+      orderPayable: true,
+      owed: 100,
+      explainedElsewhere: true,
+    }),
+    null
+  );
+  // …but bank details are still repeated beside it, as they always were on CD.
+  assert.equal(
+    outstandingGuidance({
+      methodId: "bank_transfer",
+      orderPayable: true,
+      owed: 100,
+      explainedElsewhere: true,
+    }),
+    "bank_transfer"
+  );
 });
 
 // ── paymentStatusLabel ───────────────────────────────────────────────────────
@@ -49,6 +265,15 @@ test("payment status reads in customer language for every value on channel 2", (
   assert.equal(paymentStatusLabel("net_terms"), "On account");
   assert.equal(paymentStatusLabel("failed"), "Payment failed");
   assert.equal(paymentStatusLabel("pending"), "Awaiting payment");
+});
+
+test("payment status reads in customer language for every value on channel 1", () => {
+  // Zoey's own two, live on 1,078 Industry Kitchens orders (prod 2026-08-15).
+  assert.equal(paymentStatusLabel("unpaid"), "Awaiting payment");
+  assert.equal(paymentStatusLabel("refund_in_progress"), "Refund in progress");
+  assert.equal(paymentStatusLabel("paid"), "Paid");
+  assert.equal(paymentStatusLabel("refunded"), "Refunded");
+  assert.equal(paymentStatusLabel("partially_paid"), "Part paid");
 });
 
 test("a blank payment status reads as awaiting payment, not blank", () => {

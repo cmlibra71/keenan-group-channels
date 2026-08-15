@@ -4,9 +4,9 @@ import { PANEL_TITLE_CLASS } from "@/lib/orders/order-page-styles";
 // ============================================================================
 // Delivery & dispatch.
 //
-// Nothing having shipped yet is by far the commonest state on Chefs Depot, so the
-// empty state is written as a deliberate answer ("not yet dispatched, we'll email
-// tracking") rather than an empty panel that reads as a broken page.
+// Nothing having shipped yet is by far the commonest state on both storefronts,
+// so the empty state is written as a deliberate answer ("not yet dispatched,
+// we'll email tracking") rather than an empty panel that reads as a broken page.
 //
 // When an order went out in more than one dispatch, each entry lists what was in
 // it — resolved against the order's already-loaded line items, so no extra query.

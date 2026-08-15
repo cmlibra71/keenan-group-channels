@@ -84,6 +84,19 @@ const UNPAYABLE_STATUSES: ReadonlySet<string> = new Set([
   "refund_in_progress",
 ]);
 
+/**
+ * Is this an order we would refuse to take further money for?
+ *
+ * Exported because the Payment panel asks the same question for a different
+ * reason: a cancelled order can still carry a full "outstanding" figure, and
+ * neither the Pay button NOR the "here is how to pay" wording beside it may
+ * appear on one. One list, so the button and the wording cannot disagree about
+ * what a cancelled order is.
+ */
+export function isUnpayableOrderStatus(status: string | null | undefined): boolean {
+  return UNPAYABLE_STATUSES.has((status ?? "").trim().toLowerCase());
+}
+
 export interface PayBalanceInput {
   /** `orders.status` — the staff column, never rendered; only reasoned about. */
   orderStatus: string | null | undefined;
@@ -162,8 +175,7 @@ export function decidePayBalance(input: PayBalanceInput): PayBalanceDecision {
   // rule the Net Terms list applies), and a $0.00 charge is refused by Stripe.
   if (input.settled || amount < 0.01) return refuse("nothing_owing", amount);
 
-  const status = (input.orderStatus ?? "").trim().toLowerCase();
-  if (UNPAYABLE_STATUSES.has(status)) return refuse("not_payable", amount);
+  if (isUnpayableOrderStatus(input.orderStatus)) return refuse("not_payable", amount);
 
   // A Zoey order's ledger is empty by construction, so its "outstanding" figure
   // is the whole order total whatever the customer already paid Zoey.

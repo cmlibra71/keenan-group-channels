@@ -7,7 +7,10 @@ import {
   paymentStatusLabel,
   paymentPosition,
   resolveNetTermsDays,
+  resolvePaymentMethodConfig,
   netTermsMessage,
+  outstandingGuidance,
+  isCardMethod,
   transactionOutcomeLabel,
   type VisibleTransaction,
 } from "@/lib/orders/order-presentation";
@@ -17,11 +20,18 @@ import { PANEL_TITLE_CLASS } from "@/lib/orders/order-page-styles";
 // ============================================================================
 // Payment details — where the money on this order stands, and how to settle it.
 //
-// Unpaid is the ordinary case on Chefs Depot, not the exception: most orders sit
-// on bank transfer awaiting payment, so this section has to be as useful when
-// nothing has been paid as when it has. When money is still owing on a bank
-// transfer it repeats the bank details from the SAME channel setting the checkout
-// confirmation page reads, so the customer can pay without hunting for an email.
+// Unpaid is the ordinary case on both storefronts, not the exception: plenty of
+// orders sit on bank transfer or on account awaiting payment, so this section has
+// to be as useful when nothing has been paid as when it has. When money is still
+// owing on a bank transfer it repeats the bank details from the SAME channel
+// setting the checkout confirmation page reads, so the customer can pay without
+// hunting for an email.
+//
+// Which block that is comes from `outstandingGuidance`, one decision rather than
+// three conditions in the markup, and every method question is asked of the
+// method's FAMILY. Industry Kitchens' orders carry Zoey plugin ids — 3,722 of
+// them say `banktransfer`, not `bank_transfer` — so a literal comparison would
+// leave those customers looking at a red balance with nothing beside it.
 //
 // Two figures here are commercial statements, not display: what the customer still
 // owes, and the term an account order will be invoiced on. Both are computed in
@@ -42,6 +52,7 @@ function formatDateTime(value: string | Date | null): string {
 export function PaymentSection({
   paymentMethod,
   paymentStatus,
+  orderPayable,
   totalIncTax,
   refundedAmount,
   transactions,
@@ -56,6 +67,14 @@ export function PaymentSection({
 }: {
   paymentMethod: string | null;
   paymentStatus: string | null;
+  /**
+   * False on a cancelled, declined or refunded order — which can still carry its
+   * full balance on the row, and must never be asked to pay it. Derived on the
+   * page from `orders.status` and handed over as a BOOLEAN: the raw column
+   * carries finance-company names (`silverchef`, `food_by_us`) and a dev build
+   * serialises a server component's props into the page.
+   */
+  orderPayable: boolean;
   totalIncTax: number;
   refundedAmount: number;
   transactions: VisibleTransaction[];
@@ -86,7 +105,9 @@ export function PaymentSection({
     transactions,
   });
 
-  const methodConfig = paymentMethods.find((m) => m.id === (paymentMethod ?? ""));
+  // Matched by id and then by family, so a legacy `banktransfer` order picks up
+  // the bank details configured against `bank_transfer` today.
+  const methodConfig = resolvePaymentMethodConfig(paymentMethod, paymentMethods);
   const bankDetails = methodConfig?.bankDetails;
   const reference = bankDetails?.reference?.trim() || orderNumber || undefined;
   // Order → account → channel default, and NO further. A number nobody agreed is
@@ -97,8 +118,15 @@ export function PaymentSection({
     methodConfig?.netTermsDays
   );
 
-  const showBankDetails = paymentMethod === "bank_transfer" && owed > 0;
-  const showNetTerms = paymentMethod === "net_terms";
+  // A balance still owing must never be printed on its own. Where the pay-by-card
+  // control or its refusal sentence is already answering "what do I do now?",
+  // this stays quiet; otherwise it names the bank, the account terms, or us.
+  const guidance = outstandingGuidance({
+    methodId: paymentMethod,
+    orderPayable,
+    owed,
+    explainedElsewhere: payBalance.allowed || Boolean(payBalance.message),
+  });
 
   return (
     <section className="mt-10">
@@ -128,16 +156,24 @@ export function PaymentSection({
               <Price amount={paid} />
             </dd>
           </div>
-          <div>
-            <dt className="text-text-muted">Still outstanding (inc GST)</dt>
-            <dd
-              className={
-                owed > 0 ? "text-sale-deep font-semibold" : "text-text-primary font-medium"
-              }
-            >
-              <Price amount={owed} />
-            </dd>
-          </div>
+          {/* Nothing is outstanding on a CANCELLED order, whatever the row still
+              says: `paymentPosition` reports the untouched total as owed, and 890
+              Industry Kitchens orders are cancelled-and-unpaid carrying $38m
+              between them (prod 2026-08-15). Printing that in red under "Still
+              outstanding" tells a customer they owe money on an order we called
+              off. So the figure is stated only where it could actually be paid. */}
+          {orderPayable && (
+            <div>
+              <dt className="text-text-muted">Still outstanding (inc GST)</dt>
+              <dd
+                className={
+                  owed > 0 ? "text-sale-deep font-semibold" : "text-text-primary font-medium"
+                }
+              >
+                <Price amount={owed} />
+              </dd>
+            </div>
+          )}
           {refunded > 0 && (
             <div>
               <dt className="text-text-muted">Refunded (inc GST)</dt>
@@ -203,7 +239,7 @@ export function PaymentSection({
 
         {/* How to pay — bank transfer still owing. Same source and wording as the
             checkout confirmation page, so the two surfaces read as one. */}
-        {showBankDetails && (
+        {guidance === "bank_transfer" && (
           <div className="mt-5 bg-accent-subtle border border-accent/30 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
               <Building2 className="h-4 w-4 text-accent" />
@@ -251,7 +287,7 @@ export function PaymentSection({
           </div>
         )}
 
-        {showNetTerms && (
+        {guidance === "net_terms" && (
           <div className="mt-5 bg-member-bg border border-member/40 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
               <FileText className="h-4 w-4 text-member-text" />
@@ -263,7 +299,28 @@ export function PaymentSection({
           </div>
         )}
 
-        {paymentMethod === "stripe" && owed === 0 && transactions.length === 0 && (
+        {/* Still owing, on a method we hold no instructions for — a purchase
+            order, PayPal, or an id from before this business ran on this
+            software. Better a plain sentence than a red figure on its own. */}
+        {guidance === "contact_us" && (
+          <div className="mt-5 bg-surface-secondary border border-border rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Building2 className="h-4 w-4 text-text-secondary" />
+              <h3 className="text-sm font-semibold text-text-primary">How to pay</h3>
+            </div>
+            <p className="text-sm text-text-secondary">
+              There is still an amount outstanding on this order. Please contact us
+              {reference ? (
+                <>
+                  , quoting <strong>{reference}</strong>,
+                </>
+              ) : null}{" "}
+              and we will arrange payment with you.
+            </p>
+          </div>
+        )}
+
+        {isCardMethod(paymentMethod) && owed === 0 && transactions.length === 0 && (
           <p className="mt-5 flex items-center gap-2 text-sm text-text-secondary">
             <CreditCard className="h-4 w-4 text-accent" />
             Your card payment was processed successfully.
