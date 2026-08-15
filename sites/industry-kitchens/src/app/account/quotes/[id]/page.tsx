@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import Image from "next/image";
 import { Package } from "lucide-react";
+import { loadQuoteLineDocuments, type QuoteLineDocument } from "@keenan/services";
 import { getSession } from "@/lib/auth";
 import { signInRedirect } from "@/lib/account-redirect";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
@@ -190,6 +191,16 @@ export default async function QuoteDetailPage({
   }[];
   const thumbByProduct = new Map(
     thumbs.map((t) => [t.product_id, t.url_thumbnail || t.url_standard])
+  );
+
+  // The spec sheets for each LINE (card WcJCByE3): the product's own saved files
+  // plus anything the sales rep attached to that line and shared. One shared
+  // loader answers this for the portal, the emailed quote link, the printed copy
+  // and this page, so a customer is never shown a different list depending on
+  // where they opened their quote. Failure-tolerant — no documents is a quieter
+  // page, never a broken one.
+  const lineDocuments = await loadQuoteLineDocuments(quote.id, { audience: "customer" }).catch(
+    () => new Map<number, QuoteLineDocument[]>()
   );
 
   // Show the real total whenever prices are visible — including $0.00 — but not a
@@ -424,6 +435,22 @@ export default async function QuoteDetailPage({
                     itemId={item.id}
                     quantity={item.quantity}
                   />
+                )}
+                {(lineDocuments.get(item.id) ?? []).length > 0 && (
+                  <ul className="mt-1 space-y-0.5">
+                    {(lineDocuments.get(item.id) ?? []).map((doc) => (
+                      <li key={doc.key}>
+                        <a
+                          href={doc.file_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-zinc-600 hover:text-zinc-900 underline"
+                        >
+                          {doc.file_name}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
                 )}
                 {/* "Requires quote" is reserved for a quote whose pricing hasn't
                     been prepared yet — never for a priced line that happens to
