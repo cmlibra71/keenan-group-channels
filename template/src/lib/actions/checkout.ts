@@ -1180,6 +1180,10 @@ export async function placeOrder(
       const company = await resolveOrderBusinessName({
         billingAddress: billingAddress as unknown as Record<string, unknown>,
         accountId: perms.accountId ?? netTerms?.accountId ?? null,
+        // So an account merely named after this shopper — 7,330 of 20,356 live
+        // memberships are, because a sole trader opens theirs under their own
+        // name — is not printed straight back at staff as their "business".
+        customerName: `${firstName} ${lastName}`.trim() || null,
       });
       await sendOrderStaffNotificationEmail({
         // Records the send on the order's history panel, exactly like the
