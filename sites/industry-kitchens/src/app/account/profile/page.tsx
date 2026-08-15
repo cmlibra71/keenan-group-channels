@@ -1,13 +1,18 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, AlertCircle } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { signInRedirect } from "@/lib/account-redirect";
-import { contactService, customerAddressService, getCheckoutSettings } from "@/lib/store";
+import { getCheckoutSettings } from "@/lib/store";
 import { ProfileEditForm } from "@/components/account/ProfileEditForm";
 import { AddressBook, type Address } from "@/components/account/AddressBook";
 import { AccountPeople } from "@/components/account/AccountPeople";
 import { loadAccountPeople } from "@/lib/account/account-people-data";
+import { loadProfileContact, loadProfileAddresses } from "@/lib/account/profile-data";
+import {
+  missingProfileDetails,
+  profilePromptLines,
+} from "@/lib/account/profile-completeness";
 import { AccountShell } from "@/components/account/AccountShell";
 
 export const metadata = { title: "Account details" };
@@ -16,39 +21,26 @@ export default async function ProfilePage() {
   const session = await getSession();
   if (!session) redirect(signInRedirect("/account/profile"));
 
+  // Both customer reads are PROJECTED in SQL (lib/account/profile-data.ts): this
+  // page renders five contact fields, and reading the whole contact row would
+  // serialise `password_hash`, staff notes and the net-terms entitlement into
+  // the page payload in a dev build (card BIig1Zo1).
   const [contact, addressRows, checkoutSettings, peopleView] = await Promise.all([
-    contactService.getById(session.contactId).catch(() => null),
-    customerAddressService.listForContact(session.contactId).catch(() => [] as Record<string, unknown>[]),
+    loadProfileContact(session.contactId),
+    loadProfileAddresses(session.contactId),
     getCheckoutSettings(),
     loadAccountPeople(session.contactId),
   ]);
-  // Contacts have no company column (identity unification) — company lives
-  // under attributes.company; materialise it so the form reads stay simple.
-  const customer: Record<string, unknown> | null = contact
-    ? {
-        ...(contact as Record<string, unknown>),
-        company:
-          (((contact as Record<string, unknown>).attributes as Record<string, unknown> | null)
-            ?.company as string | undefined) ?? "",
-      }
-    : null;
 
-  const addresses: Address[] = (addressRows ?? []).map(
-    (a) => ({
-      id: a.id as number,
-      firstName: (a.first_name as string) || "",
-      lastName: (a.last_name as string) || "",
-      company: (a.company as string) || "",
-      phone: (a.phone as string) || "",
-      address1: (a.address1 as string) || "",
-      address2: (a.address2 as string) || "",
-      city: (a.city as string) || "",
-      state: (a.state_or_province as string) || "",
-      postalCode: (a.postal_code as string) || "",
-      isDefaultBilling: Boolean(a.is_default_billing),
-      isDefaultShipping: Boolean(a.is_default_shipping),
-    })
-  );
+  const addresses: Address[] = addressRows;
+
+  // What is still outstanding on this account (card xqWftDcL). It PROMPTS — it
+  // never blocks: no order and no checkout reads this.
+  const missing = missingProfileDetails({
+    phone: contact?.phone ?? "",
+    addresses,
+  });
+  const promptLines = profilePromptLines(missing);
 
   return (
     <AccountShell>
@@ -57,15 +49,34 @@ export default async function ProfilePage() {
       </Link>
       <h1 className="text-3xl font-bold text-zinc-900 mb-8">Account details</h1>
 
+      {promptLines.length > 0 && (
+        <div className="mb-8 rounded-lg border border-amber-300 bg-amber-50 p-4">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <div>
+              <p className="text-sm font-semibold text-amber-900">Finish setting up your details</p>
+              <p className="mt-0.5 text-sm text-amber-800">
+                You can still order without these — they just save you time at the checkout.
+              </p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-800">
+                {promptLines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
       <section className="mb-10">
         <h2 className="text-lg font-semibold text-zinc-900 mb-4">Profile</h2>
         <div className="border border-zinc-200 rounded-lg bg-white p-6 shadow-sm">
           <ProfileEditForm
-            firstName={(customer?.first_name as string) || ""}
-            lastName={(customer?.last_name as string) || ""}
-            email={(customer?.email as string) || ""}
-            company={(customer?.company as string) || ""}
-            phone={(customer?.phone as string) || ""}
+            firstName={contact?.firstName || ""}
+            lastName={contact?.lastName || ""}
+            email={contact?.email || ""}
+            company={contact?.company || ""}
+            phone={contact?.phone || ""}
           />
         </div>
       </section>
@@ -76,7 +87,18 @@ export default async function ProfilePage() {
           Manage your delivery and billing addresses. You can keep a billing
           address separate from your company/shipping address.
         </p>
-        <AddressBook addresses={addresses} googlePlacesEnabled={checkoutSettings.googlePlacesEnabled} />
+        <AddressBook
+          addresses={addresses}
+          googlePlacesEnabled={checkoutSettings.googlePlacesEnabled}
+          // The details from the Profile card above, so a new address does not
+          // ask for the same name, business and phone a second time (xqWftDcL).
+          prefill={{
+            firstName: contact?.firstName || "",
+            lastName: contact?.lastName || "",
+            company: contact?.company || "",
+            phone: contact?.phone || "",
+          }}
+        />
       </section>
 
       <section>
