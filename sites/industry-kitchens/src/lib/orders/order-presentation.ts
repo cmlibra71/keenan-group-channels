@@ -262,15 +262,92 @@ export function orderStatusChipClass(status: string | null | undefined): string 
   return "bg-surface-secondary text-text-secondary";
 }
 
-/** One line of the money breakdown, carried in both bases so the GST toggle can pick. */
-export interface OrderTotalRow {
-  label: string;
-  exTax: number;
-  incTax: number;
+// ── The money the customer reads, GST-INCLUSIVE ──────────────────────────────
+//
+// Every figure on the order page is GST-inclusive, whatever the storewide
+// "Excluding GST" toggle is set to (card Roy0kIEz). The toggle belongs to product
+// pages and nowhere else (Steve, 2026-08-05, card 33HGX8U2), and the standing
+// rule is that customer-facing money — quotes, orders, refunds — is GST-inclusive.
+// This page used to follow the toggle while the Order History list it is opened
+// from always printed `total_inc_tax`, so one order read $1,100.00 on the list and
+// "Order Total (ex GST) $1,000.00" one click later.
+//
+// An order stores every figure twice, `*_ex_tax` and `*_inc_tax`, and on real data
+// those columns cannot be taken at face value (production 2026-08-15, over the
+// orders a customer can actually open):
+//
+//   * Chefs Depot — 53 orders, all written by our own checkout: every column
+//     correct, inc = ex x 1.1 on the order, on delivery and on all 102 lines.
+//   * Industry Kitchens — 20,488 orders, fifteen years of Zoey: subtotal and
+//     delivery are correct, but the ORDER TOTAL holds the INCLUSIVE figure in both
+//     columns (20,484 of 20,488) and every LINE holds the EXCLUSIVE figure in both
+//     (39,040 of 39,043 lines).
+//
+// So a page that simply printed `*_inc_tax` would show an Industry Kitchens
+// customer $87.00 lines under a $95.70 subtotal — a column that visibly fails to
+// add up. One rule covers every component figure:
+//
+//   the inclusive amount is the stored inclusive figure where that figure really
+//   is inclusive; otherwise the stored exclusive figure at THIS ORDER'S OWN GST
+//   rate, which is its own subtotal_inc / subtotal_ex.
+//
+// Using the order's own rate rather than a hard-coded 1.1 is what keeps a GST-free
+// order honest (order 1806 carries $300 of GST-free goods and $25 of freight: its
+// subtotal columns are equal, so its goods are quoted unchanged and only the
+// freight carries tax) and what keeps the lines summing to the subtotal — they are
+// scaled by exactly the factor that maps one to the other.
+//
+// The ORDER TOTAL is never derived. It is the stored `total_inc_tax`, the same
+// column the Order History list prints, because those two screens agreeing is the
+// whole point of the card. Anything the components fail to reach is stated in the
+// reconciling row, as it always has been.
+
+/**
+ * This order's own GST rate on goods, as a multiplier.
+ *
+ * Read from the subtotal columns rather than assumed, so an order that carried no
+ * GST (or a rate that is not 10%) is quoted at what it actually charged. Answers 1
+ * — "quote it as stored" — when the columns cannot tell us, which is the safe
+ * direction: it can never invent tax that was never charged.
+ */
+export function orderTaxFactor(input: {
+  subtotalExTax: number;
+  subtotalIncTax: number;
+}): number {
+  const ex = input.subtotalExTax;
+  const inc = input.subtotalIncTax;
+  if (!Number.isFinite(ex) || !Number.isFinite(inc)) return 1;
+  if (!(ex > 0) || !(inc > ex)) return 1;
+  return inc / ex;
 }
 
 /**
- * The rows above the order total, in order.
+ * The GST-inclusive amount of one stored figure.
+ *
+ * A figure whose inclusive column is genuinely higher than its exclusive one has
+ * recorded its own GST and is taken as stored. A figure that stores the same
+ * amount twice — every Zoey-imported line — never recorded it, so it is quoted at
+ * the order's own rate.
+ */
+export function gstInclusiveAmount(input: {
+  exTax: number;
+  incTax: number;
+  taxFactor: number;
+}): number {
+  const { exTax, incTax } = input;
+  if (incTax > exTax + 0.005) return incTax;
+  const factor = Number.isFinite(input.taxFactor) && input.taxFactor > 1 ? input.taxFactor : 1;
+  return exTax * factor;
+}
+
+/** One line of the money breakdown. GST-inclusive — there is no other basis here. */
+export interface OrderTotalRow {
+  label: string;
+  amount: number;
+}
+
+/**
+ * The rows above the order total, in order, every one GST-inclusive.
  *
  * Subtotal and delivery are always shown; handling only when it was charged. The
  * last row is the reason the column adds up: on real orders the stored total does
@@ -279,9 +356,6 @@ export interface OrderTotalRow {
  * Rather than print a column of figures that visibly fails to sum — the fastest
  * way to earn a support call — the residual is stated as its own row, named after
  * its cause where the order records one.
- *
- * Computed independently on each basis, because the ex-tax and inc-tax columns are
- * stored separately and a credit is a single figure applied to both.
  */
 export function orderTotalRows(input: {
   subtotalExTax: number;
@@ -290,32 +364,43 @@ export function orderTotalRows(input: {
   shippingIncTax: number;
   handlingExTax: number;
   handlingIncTax: number;
-  totalExTax: number;
   totalIncTax: number;
   storeCreditAmount?: number;
   discountAmount?: number;
 }): OrderTotalRow[] {
+  const taxFactor = orderTaxFactor(input);
+  const subtotal = gstInclusiveAmount({
+    exTax: input.subtotalExTax,
+    incTax: input.subtotalIncTax,
+    taxFactor,
+  });
+  const shipping = gstInclusiveAmount({
+    exTax: input.shippingExTax,
+    incTax: input.shippingIncTax,
+    taxFactor,
+  });
+  const handling = gstInclusiveAmount({
+    exTax: input.handlingExTax,
+    incTax: input.handlingIncTax,
+    taxFactor,
+  });
+
   const rows: OrderTotalRow[] = [
-    { label: "Subtotal", exTax: input.subtotalExTax, incTax: input.subtotalIncTax },
-    { label: "Delivery", exTax: input.shippingExTax, incTax: input.shippingIncTax },
+    { label: "Subtotal", amount: subtotal },
+    { label: "Delivery", amount: shipping },
   ];
-  if (input.handlingExTax > 0 || input.handlingIncTax > 0) {
-    rows.push({ label: "Handling", exTax: input.handlingExTax, incTax: input.handlingIncTax });
-  }
+  if (handling > 0) rows.push({ label: "Handling", amount: handling });
 
-  const residualEx =
-    input.totalExTax - (input.subtotalExTax + input.shippingExTax + input.handlingExTax);
-  const residualInc =
-    input.totalIncTax - (input.subtotalIncTax + input.shippingIncTax + input.handlingIncTax);
+  const residual = input.totalIncTax - (subtotal + shipping + handling);
 
-  if (Math.abs(residualEx) > 0.005 || Math.abs(residualInc) > 0.005) {
+  if (Math.abs(residual) > 0.005) {
     const label =
       (input.storeCreditAmount ?? 0) > 0
         ? "Store credit applied"
         : (input.discountAmount ?? 0) > 0
           ? "Discount"
           : "Adjustment";
-    rows.push({ label, exTax: residualEx, incTax: residualInc });
+    rows.push({ label, amount: residual });
   }
 
   return rows;

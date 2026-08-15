@@ -19,7 +19,9 @@ import { payBalanceForOrder } from "@/lib/orders/pay-balance-site";
 import { isUnpayableOrderStatus } from "@/lib/orders/pay-balance";
 import {
   orderStatusChipClass,
+  orderTaxFactor,
   orderTotalRows,
+  gstInclusiveAmount,
   paymentPosition,
   visibleTransaction,
   isNetTermsMethod,
@@ -291,9 +293,19 @@ export default async function OrderDetailPage({
     paymentStatus: order.payment_status,
   });
 
-  const totalEx = money(order.total_ex_tax);
   const totalInc = money(order.total_inc_tax);
   const gst = money(order.total_tax);
+
+  // Every figure below is GST-INCLUSIVE (card Roy0kIEz): the storewide toggle is a
+  // product-page control (33HGX8U2) and a customer's own order must read the same
+  // total here as it did on the Order History list they clicked. `taxFactor` is
+  // this order's own GST rate, used to quote the figures Zoey imported without
+  // their tax — see order-presentation.ts for why the stored columns cannot simply
+  // be printed.
+  const taxFactor = orderTaxFactor({
+    subtotalExTax: money(order.subtotal_ex_tax),
+    subtotalIncTax: money(order.subtotal_inc_tax),
+  });
 
   // Subtotal / delivery / handling, plus the row that reconciles them to the
   // stored total — real orders carry store credits and imported ones do not
@@ -305,7 +317,6 @@ export default async function OrderDetailPage({
     shippingIncTax: money(order.shipping_cost_inc_tax),
     handlingExTax: money(order.handling_cost_ex_tax),
     handlingIncTax: money(order.handling_cost_inc_tax),
-    totalExTax: totalEx,
     totalIncTax: totalInc,
     storeCreditAmount: money(order.store_credit_amount),
     discountAmount: money(order.discount_amount),
@@ -390,16 +401,22 @@ export default async function OrderDetailPage({
                   Qty {item.quantity}
                   {" · "}
                   <OrderMoney
-                    exTax={money(item.price_ex_tax)}
-                    incTax={money(item.price_inc_tax)}
+                    amount={gstInclusiveAmount({
+                      exTax: money(item.price_ex_tax),
+                      incTax: money(item.price_inc_tax),
+                      taxFactor,
+                    })}
                   />{" "}
                   each
                 </p>
               </div>
               <div className="text-right">
                 <OrderMoney
-                  exTax={money(item.total_ex_tax)}
-                  incTax={money(item.total_inc_tax)}
+                  amount={gstInclusiveAmount({
+                    exTax: money(item.total_ex_tax),
+                    incTax: money(item.total_inc_tax),
+                    taxFactor,
+                  })}
                   className="text-sm font-semibold text-text-primary"
                 />
               </div>
@@ -409,7 +426,7 @@ export default async function OrderDetailPage({
       </div>
 
       {/* ── Totals ────────────────────────────────────────────────────────── */}
-      <OrderTotals rows={totalRows} totalExTax={totalEx} totalIncTax={totalInc} gst={gst} />
+      <OrderTotals rows={totalRows} total={totalInc} gst={gst} />
 
       {/* ── Payment ─────────────────────────────────────────────────────────
           `transactions` is whitelisted at THIS boundary: the raw rows carry the

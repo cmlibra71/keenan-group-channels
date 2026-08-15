@@ -4,6 +4,8 @@ import {
   paymentMethodLabel,
   paymentStatusLabel,
   orderStatusChipClass,
+  orderTaxFactor,
+  gstInclusiveAmount,
   orderTotalRows,
   visibleTransaction,
   transactionOutcomeLabel,
@@ -292,6 +294,61 @@ test("the status chip is coloured exactly as the Order History list colours it",
   assert.equal(orderStatusChipClass(null), "bg-surface-secondary text-text-secondary");
 });
 
+// ── orderTaxFactor / gstInclusiveAmount ──────────────────────────────────────
+//
+// The order page is GST-INCLUSIVE throughout (card Roy0kIEz). These two decide
+// what "inclusive" means for a figure whose stored columns disagree with reality —
+// which, on Industry Kitchens' fifteen years of Zoey orders, is every line.
+
+test("the tax factor is the order's own rate, read from its subtotal", () => {
+  assert.equal(orderTaxFactor({ subtotalExTax: 87, subtotalIncTax: 95.7 }), 1.1);
+});
+
+test("an order with no GST on its goods is quoted as stored, never scaled", () => {
+  // Real order 1806 on channel 1: $300 of GST-free goods plus $25 freight; the
+  // whole $2.50 of tax is the freight's. Inventing 10% on the goods would add $30.
+  assert.equal(orderTaxFactor({ subtotalExTax: 300, subtotalIncTax: 300 }), 1);
+  assert.equal(
+    gstInclusiveAmount({ exTax: 300, incTax: 300, taxFactor: 1 }),
+    300
+  );
+});
+
+test("the tax factor answers 1 when the columns cannot tell us", () => {
+  // A freight-only order (subtotal zero), and junk.
+  assert.equal(orderTaxFactor({ subtotalExTax: 0, subtotalIncTax: 0 }), 1);
+  assert.equal(orderTaxFactor({ subtotalExTax: NaN, subtotalIncTax: 110 }), 1);
+  // Never below 1: an inclusive column BELOW the exclusive one cannot mean tax.
+  assert.equal(orderTaxFactor({ subtotalExTax: 100, subtotalIncTax: 90 }), 1);
+});
+
+test("a figure that recorded its own GST is taken exactly as stored", () => {
+  // Chefs Depot, order 148836: every column written by our own checkout.
+  assert.equal(
+    gstInclusiveAmount({ exTax: 612.7273, incTax: 674, taxFactor: 1.1 }),
+    674
+  );
+});
+
+test("a Zoey line that stores the same figure twice is quoted at the order's rate", () => {
+  // Real order 148945 on channel 1: the line holds $87.00 in BOTH columns, while
+  // the order's subtotal columns say 87.00 / 95.70. Printing the stored "inc"
+  // figure would put $87.00 lines under a $95.70 subtotal.
+  const taxFactor = orderTaxFactor({ subtotalExTax: 87, subtotalIncTax: 95.7 });
+  assert.ok(
+    Math.abs(gstInclusiveAmount({ exTax: 87, incTax: 87, taxFactor }) - 95.7) < 0.005
+  );
+});
+
+test("scaled lines still sum to the order's own subtotal", () => {
+  // Two lines, 250.80 ex between them (real order 148824 shape).
+  const taxFactor = orderTaxFactor({ subtotalExTax: 250.8, subtotalIncTax: 275.88 });
+  const lines = [102.6, 148.2].map((exTax) =>
+    gstInclusiveAmount({ exTax, incTax: exTax, taxFactor })
+  );
+  assert.ok(Math.abs(lines.reduce((a, b) => a + b, 0) - 275.88) < 0.005);
+});
+
 // ── orderTotalRows ───────────────────────────────────────────────────────────
 
 test("an ordinary order is subtotal + delivery, with no adjustment row", () => {
@@ -302,13 +359,54 @@ test("an ordinary order is subtotal + delivery, with no adjustment row", () => {
     shippingIncTax: 11,
     handlingExTax: 0,
     handlingIncTax: 0,
-    totalExTax: 110,
     totalIncTax: 121,
   });
   assert.deepEqual(
     rows.map((r) => r.label),
     ["Subtotal", "Delivery"]
   );
+  assert.deepEqual(
+    rows.map((r) => r.amount),
+    [110, 11]
+  );
+});
+
+test("every row is the GST-INCLUSIVE figure, never the exclusive one", () => {
+  const rows = orderTotalRows({
+    subtotalExTax: 100,
+    subtotalIncTax: 110,
+    shippingExTax: 10,
+    shippingIncTax: 11,
+    handlingExTax: 0,
+    handlingIncTax: 0,
+    totalIncTax: 121,
+  });
+  for (const row of rows) {
+    assert.notEqual(row.amount, 100, "the ex-GST subtotal must never be rendered");
+    assert.notEqual(row.amount, 10, "the ex-GST delivery must never be rendered");
+  }
+});
+
+test("a Zoey-imported order reconciles on the inclusive basis with no adjustment", () => {
+  // Real order 148945 on channel 1: subtotal and delivery carry their GST, the
+  // total holds the INCLUSIVE figure in both of its columns. On the ex-GST basis
+  // this order could never add up ($87 + $30 against a $128.70 total) — which is
+  // why there is only one basis now.
+  const rows = orderTotalRows({
+    subtotalExTax: 87,
+    subtotalIncTax: 95.7,
+    shippingExTax: 30,
+    shippingIncTax: 33,
+    handlingExTax: 0,
+    handlingIncTax: 0,
+    totalIncTax: 128.7,
+  });
+  assert.deepEqual(
+    rows.map((r) => r.label),
+    ["Subtotal", "Delivery"]
+  );
+  const sum = rows.reduce((n, r) => n + r.amount, 0);
+  assert.ok(Math.abs(sum - 128.7) < 0.005, "the column must reach the stored total");
 });
 
 test("handling only appears when it was actually charged", () => {
@@ -319,13 +417,29 @@ test("handling only appears when it was actually charged", () => {
     shippingIncTax: 0,
     handlingExTax: 5,
     handlingIncTax: 5.5,
-    totalExTax: 105,
     totalIncTax: 115.5,
   });
   assert.deepEqual(
     rows.map((r) => r.label),
     ["Subtotal", "Delivery", "Handling"]
   );
+});
+
+test("handling stored without its GST is still shown, at the order's rate", () => {
+  const rows = orderTotalRows({
+    subtotalExTax: 100,
+    subtotalIncTax: 110,
+    shippingExTax: 0,
+    shippingIncTax: 0,
+    handlingExTax: 5,
+    handlingIncTax: 5,
+    totalIncTax: 115.5,
+  });
+  assert.deepEqual(
+    rows.map((r) => r.label),
+    ["Subtotal", "Delivery", "Handling"]
+  );
+  assert.ok(Math.abs(rows[2].amount - 5.5) < 0.005);
 });
 
 test("a store credit is named, and the rows add up to the stored total", () => {
@@ -337,7 +451,6 @@ test("a store credit is named, and the rows add up to the stored total", () => {
     shippingIncTax: 0,
     handlingExTax: 0,
     handlingIncTax: 0,
-    totalExTax: -916.8364,
     totalIncTax: -1008.52,
     storeCreditAmount: 1250,
   });
@@ -345,10 +458,8 @@ test("a store credit is named, and the rows add up to the stored total", () => {
     rows.map((r) => r.label),
     ["Subtotal", "Delivery", "Store credit applied"]
   );
-  const sumInc = rows.reduce((n, r) => n + r.incTax, 0);
-  const sumEx = rows.reduce((n, r) => n + r.exTax, 0);
-  assert.ok(Math.abs(sumInc - -1008.52) < 0.005, "inc-GST column must reach the stored total");
-  assert.ok(Math.abs(sumEx - -916.8364) < 0.005, "ex-GST column must reach the stored total");
+  const sum = rows.reduce((n, r) => n + r.amount, 0);
+  assert.ok(Math.abs(sum - -1008.52) < 0.005, "the column must reach the stored total");
 });
 
 test("an imported order whose total omits delivery still adds up", () => {
@@ -360,16 +471,15 @@ test("an imported order whose total omits delivery still adds up", () => {
     shippingIncTax: 33,
     handlingExTax: 0,
     handlingIncTax: 0,
-    totalExTax: 34236.03,
     totalIncTax: 37659.633,
   });
   assert.deepEqual(
     rows.map((r) => r.label),
     ["Subtotal", "Delivery", "Adjustment"]
   );
-  assert.ok(Math.abs(rows[2].incTax - -33) < 0.005);
-  const sumInc = rows.reduce((n, r) => n + r.incTax, 0);
-  assert.ok(Math.abs(sumInc - 37659.633) < 0.005);
+  assert.ok(Math.abs(rows[2].amount - -33) < 0.005);
+  const sum = rows.reduce((n, r) => n + r.amount, 0);
+  assert.ok(Math.abs(sum - 37659.633) < 0.005);
 });
 
 test("sub-cent rounding does not manufacture an adjustment row", () => {
@@ -380,7 +490,6 @@ test("sub-cent rounding does not manufacture an adjustment row", () => {
     shippingIncTax: 0,
     handlingExTax: 0,
     handlingIncTax: 0,
-    totalExTax: 100,
     totalIncTax: 110,
   });
   assert.equal(rows.length, 2);
