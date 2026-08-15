@@ -33,6 +33,7 @@ import {
 } from "@/lib/quotes/price-visibility";
 import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
 import { isStaffOnlyDraft } from "@/lib/quotes/draft-visibility";
+import { stripStaffOnlyFields } from "@/lib/quotes/staff-only-fields";
 import { quoteGstTotals, isMoneyRow } from "@/lib/quotes/quote-gst";
 import { resolveQuoteGstRate } from "@/lib/quotes/quote-gst-rate";
 import { quoteStatusLabel } from "@/lib/quotes/quote-status-label";
@@ -145,7 +146,17 @@ export default async function QuoteDetailPage({
   const session = await getSession();
   if (!session) redirect(signInRedirect(`/account/quotes/${quoteId}`));
 
-  const raw = (await quoteService.getWithItems(quoteId)) as QuoteDetail | null;
+  // `getWithItems` is a SELECT * and this is a CUSTOMER surface, so the staff-only
+  // column comes straight back off with the read. `internal_notes` is where reps are
+  // now invited to type "for our team only" (card 9tbz3sBF split the single Customer
+  // Notes box into a customer note and an internal one), and a dev build serialises
+  // every awaited value into the page — so it is dropped here, before anything can
+  // render or serialise it, rather than merely left un-rendered (Product Brief §3;
+  // same shape of leak as card BIig1Zo1).
+  const loaded = (await quoteService.getWithItems(quoteId)) as
+    | (QuoteDetail & { internal_notes?: string | null })
+    | null;
+  const raw: QuoteDetail | null = loaded ? stripStaffOnlyFields(loaded) : null;
   // Only the owning contact, on this channel, may view a quote — UNLESS their B2B
   // account role grants `view_company_quotes`, in which case any quote belonging to
   // an active member of their account is visible (docs/crm-parity/10-role-enforcement.md).
@@ -528,7 +539,11 @@ export default async function QuoteDetailPage({
           answer #3 "Yes they should"). */}
       {quote.customer_notes && (
         <div className="mt-6">
-          <h2 className="text-sm font-semibold text-zinc-900 mb-1">Your comments</h2>
+          {/* ONE customer-facing word for this field on every screen it appears —
+              the drawer's label, this page, the emailed /q/<uuid> copy and the
+              printed quote all say "Quote comments" (card 9tbz3sBF). Staff see the
+              same text under its staff name, "Customer Note". */}
+          <h2 className="text-sm font-semibold text-zinc-900 mb-1">Quote comments</h2>
           <p className="text-sm text-zinc-600 whitespace-pre-wrap">{quote.customer_notes}</p>
         </div>
       )}

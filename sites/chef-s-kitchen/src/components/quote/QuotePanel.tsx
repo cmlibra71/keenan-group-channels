@@ -3,7 +3,12 @@
 import { useEffect, useState, useTransition, useActionState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { FileText, CheckCircle, User } from "lucide-react";
-import { getQuote, getQuoteDeliveryAddresses, submitQuote } from "@/lib/actions/quote";
+import {
+  canSaveQuoteAddress,
+  getQuote,
+  getQuoteDeliveryAddresses,
+  submitQuote,
+} from "@/lib/actions/quote";
 import { loginFromPanel, registerFromPanel } from "@/lib/actions/account-panel";
 import { GoogleSignInButton } from "@/components/account/GoogleSignInButton";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
@@ -12,9 +17,13 @@ import { QuoteItemsList, type QuoteItemRow } from "./QuoteItemsList";
 import { usePanelContext } from "@/components/ui/PanelContext";
 import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
 import {
+  AU_STATES,
   EMPTY_QUOTE_REQUEST_ADDRESS,
   QUOTE_NAME_MAX_LENGTH,
   QUOTE_REQUEST_PROBLEM_MESSAGE,
+  mayFileQuoteAddressInBook,
+  normaliseAuState,
+  quoteAddressCountryCode,
   savedAddressLabel,
   validateQuoteRequest,
   type QuoteRequestAddressFields,
@@ -40,6 +49,10 @@ export function QuotePanel() {
   const [quoteName, setQuoteName] = useState("");
   const [comments, setComments] = useState("");
   const [savedAddresses, setSavedAddresses] = useState<SavedQuoteAddress[]>([]);
+  // Whether this customer's typed address will actually be FILED for next time. A
+  // B2B role can forbid it (the checkout's own gate), and we must not print the
+  // promise to someone we then silently skip.
+  const [canSaveAddress, setCanSaveAddress] = useState(false);
   const [addressId, setAddressId] = useState<number | "new">("new");
   const [newAddress, setNewAddress] = useState<QuoteRequestAddressFields>(
     EMPTY_QUOTE_REQUEST_ADDRESS
@@ -62,9 +75,14 @@ export function QuotePanel() {
       setNeedsLogin(false);
       setAuthView("login");
       startTransition(async () => {
-        const [data, addresses] = await Promise.all([getQuote(), getQuoteDeliveryAddresses()]);
+        const [data, addresses, maySave] = await Promise.all([
+          getQuote(),
+          getQuoteDeliveryAddresses(),
+          canSaveQuoteAddress(),
+        ]);
         setQuote(data);
         applyAddresses(addresses);
+        setCanSaveAddress(maySave);
       });
     }
   }, [isOpen]);
@@ -93,13 +111,14 @@ export function QuotePanel() {
   const allPoa = items.length > 0 && poaCount === items.length;
 
   const requestForm = { quoteName, comments, addressId, newAddress };
+  // Australia unless Google's autocomplete said otherwise (IK sells into NZ). Decides
+  // both the State control and whether the address book will take this address.
+  const isAuAddress = quoteAddressCountryCode(newAddress) === "AU";
+  const willSaveAddress = canSaveAddress && mayFileQuoteAddressInBook(newAddress);
 
   /** Send the request. The server applies the SAME rules, so this is courtesy, not the gate. */
   function doSubmit() {
-    const problem = validateQuoteRequest(
-      requestForm,
-      savedAddresses.map((a) => a.id)
-    );
+    const problem = validateQuoteRequest(requestForm, savedAddresses);
     if (problem) {
       setError(QUOTE_REQUEST_PROBLEM_MESSAGE[problem]);
       return;
@@ -136,12 +155,13 @@ export function QuotePanel() {
     setNeedsLogin(false);
     setIsSubmitting(true);
     startTransition(async () => {
-      const addresses = await getQuoteDeliveryAddresses();
+      const [addresses, maySave] = await Promise.all([
+        getQuoteDeliveryAddresses(),
+        canSaveQuoteAddress(),
+      ]);
       setSavedAddresses(addresses);
-      const problem = validateQuoteRequest(
-        requestForm,
-        addresses.map((a) => a.id)
-      );
+      setCanSaveAddress(maySave);
+      const problem = validateQuoteRequest(requestForm, addresses);
       if (problem) {
         setIsSubmitting(false);
         setAddressId(addresses[0]?.id ?? "new");
@@ -340,16 +360,20 @@ export function QuotePanel() {
                 />
                 <AddressAutocomplete
                   inputRef={streetRef}
-                  onSelect={(a) =>
+                  onSelect={(a) => {
+                    const code = (a.countryCode || "AU").toUpperCase();
                     setNewAddress((prev) => ({
                       ...prev,
                       address1: a.address1,
                       city: a.city,
-                      state: a.state,
+                      // Google hands back "Victoria" as often as "VIC"; the State
+                      // control only speaks codes, so normalise on the way in rather
+                      // than leaving the picker showing nothing selected.
+                      state: (code === "AU" ? normaliseAuState(a.state) : null) ?? a.state,
                       postalCode: a.postalCode,
-                      countryCode: a.countryCode || "AU",
-                    }))
-                  }
+                      countryCode: code,
+                    }));
+                  }}
                 />
               </div>
               <input
@@ -369,14 +393,37 @@ export function QuotePanel() {
                   autoComplete="address-level2"
                   className="col-span-2 input"
                 />
-                <input
-                  type="text"
-                  value={newAddress.state}
-                  onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })}
-                  placeholder="State *"
-                  autoComplete="address-level1"
-                  className="input"
-                />
+                {/* An Australian state is PICKED, never typed: a free-text state
+                    ("Victoria", which is what Zoey's own form shows) matches no
+                    shipping zone and used to be billed as $0 delivery. Same list and
+                    same rule as the checkout (cards 18PbOwaG / xqWftDcL). Only a
+                    non-AU address — Google's autocomplete on a NZ street — keeps the
+                    free-text box, because we have no region list for anywhere else. */}
+                {isAuAddress ? (
+                  <select
+                    value={newAddress.state}
+                    onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })}
+                    autoComplete="address-level1"
+                    aria-label="State"
+                    className="input"
+                  >
+                    <option value="">State *</option>
+                    {AU_STATES.map((s) => (
+                      <option key={s.code} value={s.code}>
+                        {s.code}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={newAddress.state}
+                    onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })}
+                    placeholder="Region *"
+                    autoComplete="address-level1"
+                    className="input"
+                  />
+                )}
               </div>
               <input
                 type="text"
@@ -384,11 +431,17 @@ export function QuotePanel() {
                 onChange={(e) => setNewAddress({ ...newAddress, postalCode: e.target.value })}
                 placeholder="Postcode *"
                 autoComplete="postal-code"
+                inputMode={isAuAddress ? "numeric" : "text"}
+                maxLength={isAuAddress ? 4 : undefined}
                 className="w-full input"
               />
-              <p className="text-xs text-text-muted">
-                We&apos;ll save this address to your account for next time.
-              </p>
+              {/* Only promised when it is actually true: the address book is AU only,
+                  and a B2B role can forbid adding an address at all. */}
+              {willSaveAddress && (
+                <p className="text-xs text-text-muted">
+                  We&apos;ll save this address to your account for next time.
+                </p>
+              )}
             </div>
           )}
           <p className="mt-2 text-xs text-text-muted">

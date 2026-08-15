@@ -31,6 +31,8 @@ import { contactService, customerAddressService } from "@/lib/store";
 import { saveCheckoutAddressForContact } from "@/lib/contact-addresses";
 import {
   QUOTE_REQUEST_PROBLEM_MESSAGE,
+  mayFileQuoteAddressInBook,
+  quoteAddressBookRow,
   quoteShippingAddressFromSaved,
   quoteShippingAddressSnapshot,
   validateQuoteRequest,
@@ -283,6 +285,40 @@ export async function getQuoteDeliveryAddresses(): Promise<SavedQuoteAddress[]> 
   }
 }
 
+function mayFileAddressForRole(perms: {
+  isB2B: boolean;
+  accountId: number | null;
+  can: (code: string) => boolean;
+}): boolean {
+  if (!perms.isB2B || perms.accountId === null) return true;
+  return (
+    perms.can("add_shipping_address_in_checkout") && perms.can("add_billing_address_in_checkout")
+  );
+}
+
+/**
+ * May THIS customer's typed address be filed in their address book?
+ *
+ * The checkout's rule, unchanged: a B2B contact whose role forbids adding an address
+ * does not get one saved, and because one saved address can become the contact's
+ * default BILLING as well as shipping (the first one always does), it takes BOTH
+ * codes — exactly as `placeOrder` does on the single-page checkout. It is asked here
+ * so the drawer can stop PRINTING a promise we then quietly do not keep.
+ *
+ * Fails open on a lookup error, like every other role read on a customer path: the
+ * worst case is an address saved for someone who could have added one anyway.
+ */
+export async function canSaveQuoteAddress(): Promise<boolean> {
+  const session = await getSession();
+  if (!session) return false;
+  try {
+    return mayFileAddressForRole(await getContactPermissions(session.contactId));
+  } catch (e) {
+    console.error("[canSaveQuoteAddress] role read failed (non-fatal):", e);
+    return true;
+  }
+}
+
 /**
  * Send the quote request (card 9tbz3sBF).
  *
@@ -322,10 +358,11 @@ export async function submitQuote(form: QuoteRequestForm) {
   // what this contact ACTUALLY has, so a tampered form cannot attach someone else's
   // address to a quote.
   const savedAddresses = await getQuoteDeliveryAddresses();
-  const problem = validateQuoteRequest(
-    form,
-    savedAddresses.map((a) => a.id)
-  );
+  // The SAME rules the button applied, including the Australian state and postcode
+  // rules the checkout enforces (cards 18PbOwaG / xqWftDcL) — this action writes the
+  // quote's Ship-To, which becomes the order's Ship-To, which is where freight is
+  // priced, so a free-text "Victoria" or a 5-digit postcode is refused here too.
+  const problem = validateQuoteRequest(form, savedAddresses);
   if (problem) return { error: QUOTE_REQUEST_PROBLEM_MESSAGE[problem] };
 
   const chosen = form.addressId === "new" ? null : savedAddresses.find((a) => a.id === form.addressId);
@@ -363,28 +400,26 @@ export async function submitQuote(form: QuoteRequestForm) {
   });
 
   // File a newly typed address for next time. Wrapped whole: a request that reached
-  // the sales team must never fail because the address book could not be updated, and
-  // the B2B role gate is the checkout's own (`add_shipping_address_in_checkout`) — a
-  // role that may not add addresses still gets its quote, just not a saved address.
+  // the sales team must never fail because the address book could not be updated.
+  //
+  // Two gates, both the checkout's own, both stated on the drawer so we never print a
+  // promise we do not keep:
+  //  * the B2B role — BOTH `add_shipping_address_in_checkout` and
+  //    `add_billing_address_in_checkout`, because the first address a contact saves
+  //    becomes their default BILLING as well as shipping (`defaultsForNewAddress`);
+  //  * the country — the address book is AU only (`sf-checkout`, cards 18PbOwaG /
+  //    xqWftDcL), so a NZ delivery address is used for this quote and not filed.
+  //
+  // What is filed is `quoteAddressBookRow`, i.e. the NORMALISED state, so the saved
+  // row and the quote's Ship-To carry the same value and neither is chipped
+  // "Needs details" the next time the customer reaches the checkout.
   if (newAddress) {
     try {
-      const mayAddAddress =
-        !perms.isB2B || perms.accountId === null || perms.can("add_shipping_address_in_checkout");
-      if (mayAddAddress) {
-        await saveCheckoutAddressForContact(session.contactId, {
-          firstName: newAddress.firstName,
-          lastName: newAddress.lastName,
-          company: newAddress.company.trim(),
-          phone: newAddress.phone.trim(),
-          address1: newAddress.address1.trim(),
-          address2: newAddress.address2.trim(),
-          city: newAddress.city.trim(),
-          stateOrProvince: newAddress.state.trim(),
-          postalCode: newAddress.postalCode.trim(),
-          // The canonical pair the address book itself writes (actions/account.ts).
-          country: String(shippingAddress.country ?? "Australia"),
-          countryCode: String(shippingAddress.country_code ?? "AU"),
-        });
+      if (mayFileAddressForRole(perms) && mayFileQuoteAddressInBook(newAddress)) {
+        await saveCheckoutAddressForContact(
+          session.contactId,
+          quoteAddressBookRow({ ...newAddress, country: String(shippingAddress.country ?? "") })
+        );
       }
     } catch (e) {
       console.error("[submitQuote] address book save failed (non-fatal):", e);
@@ -402,8 +437,8 @@ export async function getQuotesForCustomer() {
   if (!session) return { error: "Not logged in", quotes: [] };
 
   // Contact-keyed (identity unification). Mirrors the old listForCustomer
-  // semantics: this channel's quotes for the subject, hiding in-progress
-  // drafts (quote_pending), newest first.
+  // semantics: this channel's quotes for the subject, hiding the in-progress
+  // basket-shaped draft (quote_pending, never submitted), newest first.
   const result = await quoteService.list({
     page: 1,
     limit: 100,
@@ -416,8 +451,20 @@ export async function getQuotesForCustomer() {
   });
   // …and a staff-only Draft is not the customer's quote at all, whoever's contact
   // the portal's "Duplicate to Draft" hung it off.
+  //
+  // A SUBMITTED request is kept even though it is still `quote_pending`: the customer
+  // has just named it, been told "You can track your quotes in My Account" and handed
+  // a "View My Quotes" button (card 9tbz3sBF), so the quote they named has to be in
+  // the list. `attributes.submitted_at` is what `submitQuote` stamps and is the only
+  // thing separating a sent request from the basket-shaped draft the panel is holding.
+  // Same rule as the /account/quotes page — the two must not disagree.
   const contactQuotes = withoutStaffOnlyDrafts(
-    (result.data as Array<{ status?: string | null }>).filter((q) => q.status !== "quote_pending")
+    (
+      result.data as Array<{
+        status?: string | null;
+        attributes?: { submitted_at?: unknown } | null;
+      }>
+    ).filter((q) => q.status !== "quote_pending" || Boolean(q.attributes?.submitted_at))
   );
   return { quotes: contactQuotes };
 }
