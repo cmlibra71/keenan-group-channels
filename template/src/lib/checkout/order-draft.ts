@@ -17,6 +17,7 @@
 // ============================================================================
 
 import { gstSplit } from "@keenan/services/calc";
+import { backorderedUnits, type StockFacts } from "@keenan/services/backorder";
 
 export type PaymentStatus = "pending" | "awaiting_payment" | "pending_payment" | "net_terms";
 
@@ -86,6 +87,13 @@ export type OrderLineDraft = {
    */
   baseCostPrice?: string;
   costPriceExTax?: string;
+  /**
+   * Units of this line NOT in stock when the order was placed — Zoey's item status "Backordered"
+   * (card 7vu2iEEZ). Set by `withBackorderedQuantities` and omitted (never 0) on a line that is
+   * fully in stock, so the portal can tell "none on back order" from "we never worked it out" on
+   * every order placed before this shipped.
+   */
+  backorderedQuantity?: number;
 };
 
 export type MoneySplit = { exTax: number; incTax: number; tax: number };
@@ -209,6 +217,29 @@ export function withLineCosts(
     if (cost == null || !Number.isFinite(cost) || cost <= 0) return line;
     const asString = String(cost);
     return { ...line, baseCostPrice: asString, costPriceExTax: asString };
+  });
+}
+
+/**
+ * Stamp each line with the units that were not on the shelf when the order was placed
+ * (card 7vu2iEEZ, Tim 2026-08-11: "it needs to be shown in the item status for the order").
+ *
+ * Done ONCE, here, at order time. The portal never recomputes it: stock moves every night, so a
+ * derived answer would quietly change what the order says the customer was told, and Zoey's own
+ * behaviour is that the line reads Backordered until it ships.
+ *
+ * A line under a product set to stay quiet about back orders is still stamped — the shopper was
+ * not told, but the warehouse and the sales desk still have to know.
+ */
+export function withBackorderedQuantities(
+  lineItems: OrderLineDraft[],
+  stock: Map<number, StockFacts>
+): OrderLineDraft[] {
+  return lineItems.map((line) => {
+    const facts = stock.get(line.productId);
+    if (!facts) return line;
+    const units = backorderedUnits(facts, line.quantity);
+    return units > 0 ? { ...line, backorderedQuantity: units } : line;
   });
 }
 

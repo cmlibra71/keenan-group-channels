@@ -7,7 +7,9 @@ import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { hasTestCheckoutSession } from "@/lib/checkout/test-session";
 import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, siteAccessProfileService, type EmailLineItem } from "@keenan/services";
-import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, memberSavings, type BelowCostLine } from "@/lib/checkout/order-draft";
+import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, type BelowCostLine } from "@/lib/checkout/order-draft";
+import { backorderFactsForProducts } from "@/lib/cart/backorder-facts";
+import { canPurchaseQuantity } from "@keenan/services/backorder";
 import { getLineCosts } from "@/lib/store";
 import { sendStaffNotification } from "@/lib/staff-email";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
@@ -140,6 +142,28 @@ export async function placeOrder(
       error:
         "Some items are no longer available on your account and have been removed from your cart. Please review your cart and try again.",
     };
+  }
+
+  // Per-product buying controls (card 7vu2iEEZ), re-checked HERE because this is where the money
+  // moves: a cart built before staff switched a product off, or before its out-of-stock rule was
+  // set to "No", must not become an order. Stock alone never refuses — an empty shelf is a back
+  // order, and the cart said so. Never throws: a lookup failure places the order as it does today.
+  try {
+    const stock = await backorderFactsForProducts(
+      (fullCart.items as { product_id: number }[]).map((i) => i.product_id)
+    );
+    const refused = (fullCart.items as { product_id: number; quantity: number }[]).find((i) => {
+      const facts = stock.get(i.product_id);
+      return facts ? facts.restrictAddToCart || !canPurchaseQuantity(facts, i.quantity) : false;
+    });
+    if (refused) {
+      return {
+        error:
+          "One of the items in your cart isn't available to order online at that quantity. Please review your cart, or ask us for a quote.",
+      };
+    }
+  } catch (e) {
+    console.error("[placeOrder] buying-control check failed (non-fatal):", e);
   }
 
   // Validate billing info
@@ -317,6 +341,17 @@ export async function placeOrder(
     lineItems = withLineCosts(lineItems, costs);
   } catch (e) {
     console.error("[placeOrder] below-cost check failed (non-fatal):", e);
+  }
+
+  // Freeze what was NOT on the shelf onto each line, so the order screen can say "Backordered"
+  // per line for the rest of that line's life (card 7vu2iEEZ, Tim 2026-08-11). Read once, here:
+  // stock moves nightly, so anything derived later would rewrite what the customer was told.
+  // Non-fatal on the same terms as the cost read — an order must never fail to place over it.
+  try {
+    const stock = await backorderFactsForProducts(lineItems.map((l) => l.productId));
+    lineItems = withBackorderedQuantities(lineItems, stock);
+  } catch (e) {
+    console.error("[placeOrder] back-order stamp failed (non-fatal):", e);
   }
 
   // Zoey Conditions on `submit_orders` ("If Cart Total / Month-to-date / Year-to-date

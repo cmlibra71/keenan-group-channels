@@ -35,6 +35,10 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
     displayPrice,
     displaySalePrice,
     inStock,
+    purchaseBlockedByStock,
+    restrictAddToCart,
+    restrictAddToQuote,
+    hidePrice,
     purchasingDisabled,
     allOptionsSelected,
     cartVariantId,
@@ -178,23 +182,28 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
       {/* Add to Cart / Quote */}
       <div className="mt-8 space-y-3">
         {/* A bundle is never bought straight off the page — the configuration goes to a rep. */}
-        {!isBundle && (
+        {/* Card 7vu2iEEZ: a product staff switched off for cart, set to hide its price, or set to
+            refuse out-of-stock buys shows NO cart button rather than a greyed one — this site
+            carries no availability wording that could explain a dead control (CXnP1lrL). */}
+        {!isBundle && !hidePrice && !restrictAddToCart && !purchaseBlockedByStock && (
           <AddToCartButton
             productId={productId}
             variantId={cartVariantId}
             productName={product.name}
             sku={product.sku}
             price={displaySalePrice ?? displayPrice}
-            disabled={!inStock || purchasingDisabled || !allOptionsSelected || displayPrice === 0}
+            disabled={purchasingDisabled || !allOptionsSelected || displayPrice === 0}
           />
         )}
-        <AddToQuoteButton
-          productId={productId}
-          variantId={cartVariantId}
-          disabled={(useGroupedMode && !allOptionsSelected) || !kitReady}
-          kitChoices={isBundle ? toKitChoices(kitSelection) : null}
-          label={isBundle ? "Add to Quote — request pricing" : undefined}
-        />
+        {!restrictAddToQuote && (
+          <AddToQuoteButton
+            productId={productId}
+            variantId={cartVariantId}
+            disabled={(useGroupedMode && !allOptionsSelected) || !kitReady}
+            kitChoices={isBundle ? toKitChoices(kitSelection) : null}
+            label={isBundle ? "Add to Quote — request pricing" : undefined}
+          />
+        )}
       </div>
     </div>
   );

@@ -42,6 +42,10 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
     displayPrice,
     displaySalePrice,
     inStock,
+    purchaseBlockedByStock,
+    restrictAddToCart,
+    restrictAddToQuote,
+    hidePrice,
     purchasingDisabled,
     allOptionsSelected,
     cartVariantId,
@@ -63,7 +67,12 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
   const kitChoices = isBundle ? toKitChoices(kitSelection) : null;
   // A bundle is never bought straight off the page — its configuration goes to a rep, so the
   // quantity stepper, Add to Cart and the mobile buy bar are all out.
-  const canBuyNow = displayPrice > 0 && !isBundle;
+  // Card 7vu2iEEZ: a product staff set to hide its price, refuse out-of-stock buys, or keep out of
+  // the cart drops straight into the quote-only branch below — no greyed button, and nothing on
+  // this page to explain one (CXnP1lrL removed every availability line). `hidePrice` already
+  // arrives as displayPrice 0 through the provider on the node path; this covers the React path.
+  const canBuyNow =
+    displayPrice > 0 && !isBundle && !hidePrice && !restrictAddToCart && !purchaseBlockedByStock;
 
   return (
     <div>
@@ -185,15 +194,17 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
                 productName={product.name}
                 sku={product.sku}
                 price={displaySalePrice ?? displayPrice}
-                disabled={!inStock || purchasingDisabled || !allOptionsSelected}
+                disabled={purchasingDisabled || !allOptionsSelected}
               />
-              <AddToQuoteButton
-                productId={productId}
-                variantId={cartVariantId}
-                disabled={useGroupedMode && !allOptionsSelected}
-              />
+              {!restrictAddToQuote && (
+                <AddToQuoteButton
+                  productId={productId}
+                  variantId={cartVariantId}
+                  disabled={useGroupedMode && !allOptionsSelected}
+                />
+              )}
             </>
-          ) : (
+          ) : restrictAddToQuote ? null : (
             <AddToQuoteButton
               productId={productId}
               variantId={cartVariantId}
@@ -238,7 +249,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
             sku={product.sku}
             price={displaySalePrice ?? displayPrice}
             size="sm"
-            disabled={!inStock || purchasingDisabled || !allOptionsSelected}
+            disabled={purchasingDisabled || !allOptionsSelected}
           />
         </div>
       )}

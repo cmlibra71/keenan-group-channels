@@ -12,6 +12,7 @@
 // ============================================================================
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { canPurchaseQuantity } from "@keenan/services/backorder";
 import type { ProductImage } from "./ProductImageGallery";
 import type { FacadeVideo } from "@keenan/services/product-page";
 
@@ -65,6 +66,16 @@ export interface PurchaseProduct {
   salePrice: string | null;
   inventoryLevel: number | null;
   inventoryTracking: string | null;
+  /**
+   * Per-product buying controls (card 7vu2iEEZ, Tim 2026-08-11). Optional so a caller that
+   * predates them keeps compiling and keeps today's behaviour:
+   *   backorderPolicy      deny | allow_silent | allow_notify (unset ⇒ allow_notify)
+   *   restrictAddToQuote / restrictAddToCart / hidePrice
+   */
+  backorderPolicy?: string | null;
+  restrictAddToQuote?: boolean | null;
+  restrictAddToCart?: boolean | null;
+  hidePrice?: boolean | null;
   availability: string | null;
   descriptionShort: string | null;
   images: ProductImage[];
@@ -103,6 +114,15 @@ export interface ProductPurchaseState {
   displayPrice: number;
   displaySalePrice: number | null;
   inStock: boolean;
+  /**
+   * Refused at the quantity on screen because a staff member set this product to "No - do not let
+   * this product be purchased when Out of Stock". Every OTHER product stays buyable at zero, as a
+   * back order — which is why this is its own flag and not `!inStock` (card 7vu2iEEZ).
+   */
+  purchaseBlockedByStock: boolean;
+  restrictAddToQuote: boolean;
+  restrictAddToCart: boolean;
+  hidePrice: boolean;
   purchasingDisabled: boolean;
   allOptionsSelected: boolean;
   cartVariantId: number | null;
@@ -243,6 +263,20 @@ export function ProductPurchaseProvider({
   })();
 
   const purchasingDisabled = activeVariant?.purchasingDisabled ?? false;
+
+  // Card 7vu2iEEZ. `inStock` is still derived and still exported, but it has never gated the buy
+  // button and must not start now: out of stock is a BACK ORDER, and the cart is what says so.
+  const purchaseBlockedByStock = !canPurchaseQuantity(
+    {
+      inventoryTracking: product.inventoryTracking,
+      inventoryLevel: activeVariant ? activeVariant.inventoryLevel : product.inventoryLevel,
+      backorderPolicy: product.backorderPolicy,
+    },
+    quantity
+  );
+  const restrictAddToQuote = product.restrictAddToQuote === true;
+  const restrictAddToCart = product.restrictAddToCart === true;
+  const hidePrice = product.hidePrice === true;
   const allOptionsSelected = useGroupedMode
     ? Object.keys(selectedOptions).length === options.length && matchedVariant !== null
     : true;
@@ -269,6 +303,10 @@ export function ProductPurchaseProvider({
     displayPrice,
     displaySalePrice,
     inStock,
+    purchaseBlockedByStock,
+    restrictAddToQuote,
+    restrictAddToCart,
+    hidePrice,
     purchasingDisabled,
     allOptionsSelected,
     cartVariantId,

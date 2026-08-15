@@ -166,13 +166,24 @@ export const OptionSelectorWidget: WidgetComponent = () => {
 export const AddToCartWidget: WidgetComponent = () => {
   const purchase = useProductPurchaseOptional();
   if (!purchase) return <NoProvider name="add_to_cart" />;
-  const { product, displayPrice, cartVariantId, inStock, purchasingDisabled, allOptionsSelected } =
-    purchase;
+  const {
+    product,
+    displayPrice,
+    cartVariantId,
+    purchaseBlockedByStock,
+    restrictAddToCart,
+    purchasingDisabled,
+    allOptionsSelected,
+  } = purchase;
+  // A product staff switched off for cart, or set to refuse out-of-stock buys, shows NO button at
+  // all rather than a greyed one — there is no availability wording left on this site to explain a
+  // dead control (cards 7vu2iEEZ + CXnP1lrL). Add to Quote is still there.
+  if (restrictAddToCart || purchaseBlockedByStock) return null;
   return (
     <AddToCartButton
       productId={product.id}
       variantId={cartVariantId}
-      disabled={!inStock || purchasingDisabled || !allOptionsSelected || displayPrice === 0}
+      disabled={purchasingDisabled || !allOptionsSelected || displayPrice === 0}
     />
   );
 };
@@ -180,7 +191,10 @@ export const AddToCartWidget: WidgetComponent = () => {
 export const AddToQuoteWidget: WidgetComponent = () => {
   const purchase = useProductPurchaseOptional();
   if (!purchase) return <NoProvider name="add_to_quote" />;
-  const { product, cartVariantId, useGroupedMode, allOptionsSelected } = purchase;
+  const { product, cartVariantId, useGroupedMode, allOptionsSelected, restrictAddToQuote } =
+    purchase;
+  // Zoey "Restrict Add to Quote" — the button simply is not offered for this product (7vu2iEEZ).
+  if (restrictAddToQuote) return null;
   return (
     <AddToQuoteButton
       productId={product.id}

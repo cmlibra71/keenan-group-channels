@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { updateCartItem, removeCartItem } from "@/lib/actions/cart";
 import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
 import { Minus, Plus, Trash2 } from "lucide-react";
+import { backorderMessage } from "@keenan/services/backorder";
 import { Price } from "@/components/ui/Price";
 import { ga4AddToCart, ga4RemoveFromCart, type Ga4Item } from "@/components/analytics/ga4";
 
@@ -24,6 +25,15 @@ export type CartItemRow = {
   variant_option_name: string | null;
   /** The product's brand, carried so the island can decide brand free shipping (card 88Ay7UGA). */
   brand_id?: number | null;
+  /**
+   * Units of this product a shopper can have without waiting — `null` on an untracked product,
+   * which has no ceiling. Carried per line rather than a precomputed shortfall so the back-order
+   * note follows the OPTIMISTIC quantity on screen instead of lagging a round trip behind the
+   * +/- buttons. (Card 7vu2iEEZ.)
+   */
+  available_units?: number | null;
+  /** deny | allow_silent | allow_notify — only allow_notify says anything to the shopper. */
+  backorder_policy?: string | null;
 };
 
 export function CartItemsList({
@@ -56,6 +66,25 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
     ? parseFloat(item.sale_price)
     : parseFloat(item.list_price);
   const lineTotal = unitPrice * displayQty;
+
+  /**
+   * The back-order note — Tim's wording, verbatim (card 7vu2iEEZ). Worked out from the
+   * OPTIMISTIC quantity, so it appears, recounts and disappears as the shopper clicks +/-.
+   *
+   * This is the only availability wording left on these storefronts: card CXnP1lrL removed
+   * "In stock", "Check availability", "Ships to order" and the "Low Stock" tag from every page.
+   * If it goes, an out-of-stock line passes through the cart with nothing said on any screen.
+   */
+  const backorderNote = backorderMessage(
+    {
+      // The line only carries stock for a product it tracks; untracked arrives as null, which
+      // `availableUnits` reads as "no ceiling" via the tracking flag below.
+      inventoryTracking: item.available_units == null ? "none" : "product",
+      inventoryLevel: item.available_units ?? null,
+      backorderPolicy: item.backorder_policy ?? null,
+    },
+    displayQty
+  );
 
   // GA4 add/remove_from_cart carry the CHANGED quantity, not the line total.
   function ga4Item(qty: number): Ga4Item {
@@ -128,6 +157,11 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
           SKU: {item.variant_sku || item.product_sku || "N/A"}
         </p>
         <p className="text-sm text-zinc-600 mt-1"><Price amount={unitPrice} /> each</p>
+        {backorderNote && (
+          <p className="mt-2 rounded border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs text-sky-800">
+            {backorderNote}
+          </p>
+        )}
       </div>
 
       {/* Quantity controls */}
