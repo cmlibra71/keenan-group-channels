@@ -4,7 +4,7 @@ import { Search } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
-import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, getHeaderNav, drawEntryService, CHANNEL_ID } from "@/lib/store";
+import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, getHeaderNav, getMegaMenuHidden, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 import { HeaderPanels } from "./HeaderPanels";
 import { MegaMenu } from "./MegaMenu";
@@ -22,11 +22,12 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
   // wrong loading the site"), and it re-runs on every refresh()
   // from a cart/quote mutation. Degrade gracefully (empty badge / nav) on a
   // transient DB failure instead of taking down the whole storefront.
-  const [cart, quote, megaMenu, headerNav] = await Promise.all([
+  const [cart, quote, megaMenu, headerNav, hiddenDepartments] = await Promise.all([
     getCart().catch(() => null),
     getQuote().catch(() => null),
     getMegaMenu().catch(() => ({ departments: [], featured: {} })),
     getHeaderNav().catch(() => []),
+    getMegaMenuHidden().catch(() => []),
   ]);
   const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   // QuoteService.getWithItems types its items loosely (Record<string,unknown>) unlike
@@ -70,7 +71,11 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
         <div className="bg-brand">
           <div className="container-page">
             <div className="flex h-[72px] items-center gap-5 lg:h-[78px] lg:gap-6">
-              <MobileNavDrawer departments={megaMenu.departments} />
+              <MobileNavDrawer
+                departments={megaMenu.departments}
+                items={headerNav}
+                hiddenCategoryIds={hiddenDepartments}
+              />
 
               {/* Logo — the portal's Storefront > Logo setting when one is set
                   (same shape as Industry Kitchens), else the bundled white
@@ -107,9 +112,14 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
           </div>
         </div>
 
-        {/* Department nav — editor items (incl. mega-menu department items) when
-            set, else the bar's built-in default */}
-        <MegaMenu departments={megaMenu.departments} featured={megaMenu.featured} items={headerNav} />
+        {/* Department nav — every department by default, in the editor's order,
+            minus the ones switched off (card 9wau4Tx9) */}
+        <MegaMenu
+          departments={megaMenu.departments}
+          featured={megaMenu.featured}
+          items={headerNav}
+          hiddenCategoryIds={hiddenDepartments}
+        />
       </header>
 
       {/* The header's slide-out panels — rendered ONCE, outside <header>, so
