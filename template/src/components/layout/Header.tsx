@@ -4,7 +4,7 @@ import { Search, Crown } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
-import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, getHeaderNav, drawEntryService, CHANNEL_ID } from "@/lib/store";
+import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, getHeaderNav, getMegaMenuNav, getMegaMenuHidden, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 import { HeaderPanels } from "./HeaderPanels";
 import { MegaMenu } from "./MegaMenu";
@@ -28,11 +28,13 @@ export async function Header({
   // wrong loading the site"), and it re-runs on every refresh()
   // from a cart/quote mutation. Degrade gracefully (empty badge / nav) on a
   // transient DB failure instead of taking down the whole storefront.
-  const [cart, quote, megaMenu, headerNav] = await Promise.all([
+  const [cart, quote, megaMenu, headerNav, megaNav, hiddenDepartments] = await Promise.all([
     getCart().catch(() => null),
     getQuote().catch(() => null),
     getMegaMenu().catch(() => ({ departments: [], featured: {} })),
     getHeaderNav().catch(() => []),
+    getMegaMenuNav().catch(() => []),
+    getMegaMenuHidden().catch(() => []),
   ]);
   const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   // QuoteService.getWithItems types its items loosely (Record<string,unknown>) unlike
@@ -137,13 +139,22 @@ export async function Header({
                 <Search className="h-5 w-5" />
               </Link>
               <HeaderClient cartCount={cartCount} quoteCount={quoteCount} isMember={isMember} entryCount={entryCount} drawsEnabled={drawsEnabled} />
-              <MobileNavDrawer departments={megaMenu.departments} />
+              <MobileNavDrawer
+                departments={megaMenu.departments}
+                items={megaNav}
+                hiddenCategoryIds={hiddenDepartments}
+              />
             </div>
           </div>
         </div>
 
         {/* Department nav + mega panels — dark bar below the masthead */}
-        <MegaMenu departments={megaMenu.departments} featured={megaMenu.featured} />
+        <MegaMenu
+          departments={megaMenu.departments}
+          featured={megaMenu.featured}
+          items={megaNav}
+          hiddenCategoryIds={hiddenDepartments}
+        />
       </header>
 
       {/* The header's slide-out panels — rendered ONCE, outside <header>, so

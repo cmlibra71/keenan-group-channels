@@ -130,6 +130,8 @@
     "lib/image-origin.ts",
     "lib/image-params.test.ts",
     "lib/image-params.ts",
+    "lib/mega-menu.test.ts",
+    "lib/mega-menu.ts",
     "lib/password.test.ts",
     "lib/password.ts",
     "lib/payments/checkout-stripe-mode.test.ts",

@@ -48,6 +48,7 @@ import {
 } from "@keenan/services";
 import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
+import type { MegaNavItem } from "./mega-menu";
 import {
   STOREFRONT_FILTERS_SETTING_KEY,
   normalizeStorefrontFilters,
@@ -204,21 +205,45 @@ export const getFooterConfig = unstable_cache(
 // the storefront falls back to the category-driven mega-menu. `categories` items
 // render the All Departments entry; `category` items render a department with its
 // auto mega panel (resolved against the category tree by categoryId).
-export type HeaderNavItem = {
-  label: string;
-  url?: string;
-  type?: "categories" | "category" | "page" | "blog" | "link";
-  categoryId?: number;
-  pageSlug?: string;
-  newTab?: boolean;
-  children?: HeaderNavItem[];
+export type HeaderNavItem = MegaNavItem;
+
+/** Saved items carry a type; anything hand-written or older is read as a link
+ *  so one odd row cannot take the header down. */
+const normalizeNavItems = (value: unknown): MegaNavItem[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((i): i is Record<string, unknown> => !!i && typeof i === "object")
+    .map((i) => ({
+      type: (i.type as MegaNavItem["type"]) ?? "link",
+      label: typeof i.label === "string" ? i.label : "",
+      url: typeof i.url === "string" ? i.url : undefined,
+      categoryId: typeof i.categoryId === "number" ? i.categoryId : undefined,
+      pageSlug: typeof i.pageSlug === "string" ? i.pageSlug : undefined,
+      newTab: i.newTab === true,
+      children: normalizeNavItems(i.children),
+    }))
+    .filter((i) => i.label);
 };
+
 export const getHeaderNav = unstable_cache(
   async (): Promise<HeaderNavItem[]> => {
-    const nav = (await getChannelSetting("nav_structure")) as { header?: HeaderNavItem[] } | null;
-    return Array.isArray(nav?.header) ? nav!.header : [];
+    const nav = (await getChannelSetting("nav_structure")) as { header?: unknown } | null;
+    return normalizeNavItems(nav?.header);
   },
   [`header-nav-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
+/** Departments switched off in the portal (Storefront > Navigation > Mega menu).
+ *  Kept OUT of getMegaMenu: the same department tree also feeds the homepage
+ *  category blocks and the /categories page, and this switch is about the menu
+ *  only (card 9wau4Tx9, Steve 2026-08-10). */
+export const getMegaMenuHidden = unstable_cache(
+  async (): Promise<number[]> => {
+    const value = await getChannelSetting("mega_menu_hidden_categories");
+    return Array.isArray(value) ? value.filter((v): v is number => typeof v === "number") : [];
+  },
+  [`mega-menu-hidden-${CHANNEL_ID}`],
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
 );
 
