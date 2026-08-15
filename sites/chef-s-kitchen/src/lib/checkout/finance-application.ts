@@ -43,9 +43,15 @@ export interface FinanceApplicationResult {
 }
 
 export async function fileFinanceApplication(input: {
-  orderId: number;
-  orderNumber: string;
-  /** "silverchef" | "finance" — which button placed the order. */
+  /** The order this application was placed with — ABSENT when the customer
+   *  applied from the SilverChef page instead of the checkout (card 6f47rFeT).
+   *  Everything else is identical: same stored form, same rep-else-cs@ ladder,
+   *  same staff email, so an application can only be filed one way. */
+  orderId?: number | null;
+  orderNumber?: string | null;
+  /** Where they applied from, for the submission row. Defaults to the checkout. */
+  pagePath?: string;
+  /** "silverchef" | "finance" — which button they pressed. */
   paymentMethod: string;
   /** Answers keyed by the form's own field names. */
   values: Record<string, string>;
@@ -59,7 +65,13 @@ export async function fileFinanceApplication(input: {
   weeklyAmount?: number;
   testMode?: boolean;
 }): Promise<FinanceApplicationResult> {
-  const payload = { ...input.values, order_number: input.orderNumber };
+  const pagePath = input.pagePath ?? "/checkout";
+  // `order_number` is ours (it links the application to the order it was placed
+  // with). An application made from the SilverChef page has no order yet, and
+  // an empty answer would read as a lost order number on the enquiry.
+  const payload = input.orderNumber
+    ? { ...input.values, order_number: input.orderNumber }
+    : { ...input.values };
 
   let submission: Record<string, unknown> | null = null;
   let files: Record<string, unknown>[] = [];
@@ -71,13 +83,16 @@ export async function fileFinanceApplication(input: {
       channelId: CHANNEL_ID,
       values: payload,
       uploadToken: input.uploadToken ?? null,
-      pagePath: "/checkout",
+      pagePath,
     })) as { submission: Record<string, unknown>; files: Record<string, unknown>[] };
     submission = created.submission;
     files = created.files ?? [];
   } catch (e) {
     error = e instanceof Error ? e.message : "unknown";
-    console.error(`[finance] application NOT stored for order ${input.orderNumber}:`, e);
+    console.error(
+      `[finance] application NOT stored${input.orderNumber ? ` for order ${input.orderNumber}` : ""}:`,
+      e
+    );
   }
 
   // Rep first, cs@ second — resolved even when the submission failed, because
@@ -146,17 +161,24 @@ export async function fileFinanceApplication(input: {
     const branding = await resolveEmailBranding(CHANNEL_ID).catch(() => undefined);
     const sent = await sendFormSubmissionStaffEmail({
       to: emails,
-      formName: `${FINANCE_APPLICATION_FORM_NAME} — order ${input.orderNumber}`,
+      formName: input.orderNumber
+        ? `${FINANCE_APPLICATION_FORM_NAME} — order ${input.orderNumber}`
+        : FINANCE_APPLICATION_FORM_NAME,
+      // The enquiry is where an application is read. With no submission row AND
+      // no order there is nothing in the portal to point at, so the email is the
+      // whole record and carries every answer (see `lines` above).
       submissionUrl: submission
         ? `${PORTAL_URL}/dashboard/enquiries/${submission.uuid}`
-        : `${PORTAL_URL}/dashboard/orders/${input.orderId}`,
+        : input.orderId
+          ? `${PORTAL_URL}/dashboard/orders/${input.orderId}`
+          : `${PORTAL_URL}/dashboard/enquiries`,
       fields: lines,
       attachments: files.length
         ? files.map((f) => ({ fileName: String(f.file_name ?? "attachment") }))
         : undefined,
       replyTo: input.replyTo ?? null,
       branding,
-      pagePath: "/checkout",
+      pagePath,
       testMode: input.testMode,
     });
     if (submission)
