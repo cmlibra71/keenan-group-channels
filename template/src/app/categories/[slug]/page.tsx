@@ -16,6 +16,7 @@ import type { RenderContext } from "@keenan/services";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { assertCategoryVisible } from "@/lib/catalog-scope";
+import { redirectIfMapped } from "@/lib/redirect-seam";
 import { applyStorefrontFilters, enabledFilterIds } from "@/lib/storefront-filters";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
 import { RichContent } from "@/components/content/RichContent";
@@ -52,6 +53,9 @@ export default async function CategoryPage({
   const category = await getCategoryBySlug(slug);
 
   if (!category) {
+    // A renamed or retired category redirects rather than bare-404ing, the same way a
+    // retired product does. (card EVvRDnZt)
+    await redirectIfMapped(`/categories/${slug}`);
     notFound();
   }
 

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
+import { redirectIfMapped } from "@/lib/redirect-seam";
 import type { Metadata } from "next";
 import { ChevronRight } from "lucide-react";
 import { getBlogPostBySlug } from "@/lib/store";
@@ -60,7 +61,11 @@ export default async function BlogPostPage({
     published_at: string | Date | null;
   } | null;
 
-  if (!post) notFound();
+  if (!post) {
+    // A renamed or retired post address redirects rather than bare-404ing. (card EVvRDnZt)
+    await redirectIfMapped(`/blog/${slug}`);
+    notFound();
+  }
 
   const publishedLabel = formatPublishDate(post.published_at);
 
