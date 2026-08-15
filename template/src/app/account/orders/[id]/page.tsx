@@ -19,6 +19,7 @@ import { payBalanceForOrder } from "@/lib/orders/pay-balance-site";
 import { isUnpayableOrderStatus } from "@/lib/orders/pay-balance";
 import {
   orderStatusChipClass,
+  orderLineBasis,
   orderTaxFactor,
   orderTotalRows,
   gstInclusiveAmount,
@@ -298,19 +299,19 @@ export default async function OrderDetailPage({
 
   // Every figure below is GST-INCLUSIVE (card Roy0kIEz): the storewide toggle is a
   // product-page control (33HGX8U2) and a customer's own order must read the same
-  // total here as it did on the Order History list they clicked. `taxFactor` is
-  // this order's own GST rate, used to quote the figures Zoey imported without
-  // their tax — see order-presentation.ts for why the stored columns cannot simply
-  // be printed.
-  const taxFactor = orderTaxFactor({
-    subtotalExTax: money(order.subtotal_ex_tax),
-    subtotalIncTax: money(order.subtotal_inc_tax),
-  });
-
-  // Subtotal / delivery / handling, plus the row that reconciles them to the
-  // stored total — real orders carry store credits and imported ones do not
-  // always balance, and a breakdown that fails to add up reads as a mistake.
-  const totalRows = orderTotalRows({
+  // total here as it did on the Order History list they clicked.
+  //
+  // `lineBasis` splits the lines the page is about to print into the money that
+  // already records its own GST and the money that does not, and it is the input to
+  // BOTH the rate and the subtotal below — which is what makes the printed lines sum
+  // to the printed Subtotal exactly. It also lets the rate be read off the ORDER
+  // TOTAL on the 3,144 Industry Kitchens orders whose subtotal columns were never
+  // imported; without it those orders printed ex-GST lines under a $0.00 subtotal.
+  // See order-presentation.ts for why the stored columns cannot simply be printed.
+  const lineBasis = orderLineBasis(
+    items.map((i) => ({ exTax: money(i.total_ex_tax), incTax: money(i.total_inc_tax) }))
+  );
+  const orderMoney = {
     subtotalExTax: money(order.subtotal_ex_tax),
     subtotalIncTax: money(order.subtotal_inc_tax),
     shippingExTax: money(order.shipping_cost_ex_tax),
@@ -318,6 +319,18 @@ export default async function OrderDetailPage({
     handlingExTax: money(order.handling_cost_ex_tax),
     handlingIncTax: money(order.handling_cost_inc_tax),
     totalIncTax: totalInc,
+    lines: lineBasis,
+  };
+  const taxFactor = orderTaxFactor(orderMoney);
+
+  // Subtotal / delivery / handling, plus the row that reconciles them to the
+  // stored total — real orders carry store credits and imported ones do not
+  // always balance, and a breakdown that fails to add up reads as a mistake.
+  // Empty where the order stored no subtotal and its lines cannot be reconciled to
+  // its total: the Order Total then stands on its own rather than over a false
+  // breakdown.
+  const totalRows = orderTotalRows({
+    ...orderMoney,
     storeCreditAmount: money(order.store_credit_amount),
     discountAmount: money(order.discount_amount),
   });

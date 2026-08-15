@@ -273,52 +273,164 @@ export function orderStatusChipClass(status: string | null | undefined): string 
 // "Order Total (ex GST) $1,000.00" one click later.
 //
 // An order stores every figure twice, `*_ex_tax` and `*_inc_tax`, and on real data
-// those columns cannot be taken at face value (production 2026-08-15, over the
-// orders a customer can actually open):
+// those columns cannot be taken at face value (production 2026-08-15, all 33,908
+// orders on both storefronts):
 //
-//   * Chefs Depot — 53 orders, all written by our own checkout: every column
-//     correct, inc = ex x 1.1 on the order, on delivery and on all 102 lines.
-//   * Industry Kitchens — 20,488 orders, fifteen years of Zoey: subtotal and
-//     delivery are correct, but the ORDER TOTAL holds the INCLUSIVE figure in both
-//     columns (20,484 of 20,488) and every LINE holds the EXCLUSIVE figure in both
-//     (39,040 of 39,043 lines).
+//   * Chefs Depot — 74 orders, all written by our own checkout: every column
+//     correct, inc = ex x 1.1 on the order, on delivery and on every line.
+//   * Industry Kitchens — 33,834 orders, fifteen years of Zoey. On the 30,690 that
+//     carry a subtotal, that subtotal and the delivery are right, but the ORDER
+//     TOTAL holds the INCLUSIVE figure in both columns and every LINE holds the
+//     EXCLUSIVE figure in both (39,042 of the 39,145 lines a customer can open).
+//   * Industry Kitchens, 3,144 orders — the import wrote the grand total and
+//     NOTHING else: `subtotal_ex_tax`, `subtotal_inc_tax`, the delivery columns and
+//     `total_tax` are all 0 while `total_inc_tax` and the lines are real. 728 of
+//     them carry a `contact_id`, so a signed-in customer can open them today, and
+//     they are the RECENT ones — 64 of the last 500 IK orders, 244 of July's 1,230.
 //
 // So a page that simply printed `*_inc_tax` would show an Industry Kitchens
-// customer $87.00 lines under a $95.70 subtotal — a column that visibly fails to
-// add up. One rule covers every component figure:
+// customer $87.00 lines under a $95.70 subtotal, and a page that read its GST rate
+// off the subtotal columns alone would show that third group ex-GST lines under a
+// $0.00 subtotal with the whole order restated as an "Adjustment". Two rules,
+// applied in that order, cover every figure:
 //
-//   the inclusive amount is the stored inclusive figure where that figure really
-//   is inclusive; otherwise the stored exclusive figure at THIS ORDER'S OWN GST
-//   rate, which is its own subtotal_inc / subtotal_ex.
+//   1. THE RATE. An order's GST rate on goods is its own `subtotal_inc /
+//      subtotal_ex` wherever that pair says anything. Where it says nothing (the
+//      3,144), the rate is the one the ORDER TOTAL implies: the figures that
+//      already record their own GST are taken as they are, everything else is
+//      grossed by the single factor that makes the column reach the stored total —
+//      capped at 1.1, because 10% is the whole of Australian GST and a factor above
+//      it would be claiming tax that cannot legally have been charged, and floored
+//      at 1, because a total BELOW the lines is no evidence of tax at all.
+//   2. THE AMOUNT. The inclusive amount of a stored figure is that figure's
+//      inclusive column where it really is inclusive, else its exclusive column at
+//      the rate from step 1.
 //
-// Using the order's own rate rather than a hard-coded 1.1 is what keeps a GST-free
-// order honest (order 1806 carries $300 of GST-free goods and $25 of freight: its
-// subtotal columns are equal, so its goods are quoted unchanged and only the
-// freight carries tax) and what keeps the lines summing to the subtotal — they are
-// scaled by exactly the factor that maps one to the other.
+// Reading the rate off the order rather than hard-coding 1.1 is what keeps a
+// GST-free order honest (order 1806 carries $300 of GST-free goods and $25 of
+// freight: its subtotal columns are equal, so its goods are quoted unchanged and
+// only the freight carries tax). Scaling the lines and the subtotal by the SAME
+// factor — see `orderLineBasis`, which both share — is what makes the lines sum to
+// the subtotal exactly rather than approximately.
+//
+// The rate is a blended one where an order mixes taxed and GST-free goods (17 IK
+// orders, e.g. PFIK_20248880 at 186.46/172.24 = 1.0826). Every line is then scaled
+// by that blend, so a GST-free line reads slightly high and a taxed line slightly
+// low while the column still sums. It is an inference on money and it is stated
+// here because it is the least-bad option available: the per-line tax was never
+// imported, so the alternative is a breakdown that does not add up.
 //
 // The ORDER TOTAL is never derived. It is the stored `total_inc_tax`, the same
 // column the Order History list prints, because those two screens agreeing is the
 // whole point of the card. Anything the components fail to reach is stated in the
-// reconciling row, as it always has been.
+// reconciling row — and where the components cannot be reconciled to it at all,
+// `orderTotalRows` prints NO breakdown rather than a false one.
+
+/** Australian GST, as a multiplier. The only rate an order's goods can carry. */
+const GST_RATE_FACTOR = 1.1;
+
+/** One line's two stored money columns. */
+export interface OrderLineAmount {
+  exTax: number;
+  incTax: number;
+}
+
+/**
+ * The order's lines split by whether they recorded their own GST.
+ *
+ * `fixedIncTax` is the money that already knows what it is worth inclusive;
+ * `scalableExTax` is the money stored without its tax, which has to be grossed at
+ * the order's rate. Every consumer of the split — the rate, the subtotal, and the
+ * per-line figure the page prints — uses the SAME partition, which is why the
+ * lines sum to the subtotal exactly.
+ */
+export interface OrderLineBasis {
+  fixedIncTax: number;
+  scalableExTax: number;
+}
+
+/** Split the order's lines into what already records its GST and what does not. */
+export function orderLineBasis(lines: readonly OrderLineAmount[]): OrderLineBasis {
+  let fixedIncTax = 0;
+  let scalableExTax = 0;
+  for (const line of lines) {
+    const ex = num(line.exTax);
+    const inc = num(line.incTax);
+    if (inc > ex + 0.005) fixedIncTax += inc;
+    else scalableExTax += ex;
+  }
+  return { fixedIncTax, scalableExTax };
+}
+
+/** The inclusive subtotal of the lines, at this order's rate. */
+export function lineSubtotalIncTax(basis: OrderLineBasis, taxFactor: number): number {
+  const factor = Number.isFinite(taxFactor) && taxFactor > 1 ? taxFactor : 1;
+  return num(basis.fixedIncTax) + num(basis.scalableExTax) * factor;
+}
+
+/** The order columns and lines every money rule here reads. */
+export interface OrderMoneyInput {
+  subtotalExTax: number;
+  subtotalIncTax: number;
+  shippingExTax?: number;
+  shippingIncTax?: number;
+  handlingExTax?: number;
+  handlingIncTax?: number;
+  totalIncTax?: number;
+  /** The lines the page lists (cancelled ones already dropped). */
+  lines?: OrderLineBasis;
+}
+
+/** Is the stored subtotal pair worth anything? 3,144 IK orders store 0 in both. */
+function storedSubtotalUsable(input: { subtotalExTax: number }): boolean {
+  return Number.isFinite(input.subtotalExTax) && input.subtotalExTax > 0;
+}
 
 /**
  * This order's own GST rate on goods, as a multiplier.
  *
- * Read from the subtotal columns rather than assumed, so an order that carried no
- * GST (or a rate that is not 10%) is quoted at what it actually charged. Answers 1
- * — "quote it as stored" — when the columns cannot tell us, which is the safe
- * direction: it can never invent tax that was never charged.
+ * The subtotal columns answer it wherever they say anything at all, so an order
+ * that carried no GST (or a rate that is not 10%) is quoted at what it actually
+ * charged. Where they say nothing — 3,144 Industry Kitchens orders store 0 in both,
+ * with a real total and real lines — the rate is the one the stored TOTAL implies,
+ * clamped to the range a real Australian order can occupy:
+ *
+ *   * above 1.1 the answer is 1.1. Ten per cent is the whole of GST, so a larger
+ *     gap between the lines and the total is freight or a fee the import dropped,
+ *     not tax, and it belongs in the reconciling row rather than inside the goods.
+ *   * at or below 1 the answer is 1. A total no bigger than the lines is no
+ *     evidence of tax, and inventing some would overstate what was charged.
+ *
+ * Answering 1 is always the safe direction: it can never invent tax that was never
+ * charged. It is not always the HONEST one, which is why the total is consulted
+ * before falling back to it.
  */
-export function orderTaxFactor(input: {
-  subtotalExTax: number;
-  subtotalIncTax: number;
-}): number {
+export function orderTaxFactor(input: OrderMoneyInput): number {
   const ex = input.subtotalExTax;
   const inc = input.subtotalIncTax;
-  if (!Number.isFinite(ex) || !Number.isFinite(inc)) return 1;
-  if (!(ex > 0) || !(inc > ex)) return 1;
-  return inc / ex;
+  if (storedSubtotalUsable(input)) {
+    return Number.isFinite(inc) && inc > ex ? inc / ex : 1;
+  }
+
+  // The subtotal columns say nothing. Ask the order total instead.
+  const total = num(input.totalIncTax);
+  const basis = input.lines;
+  if (!basis || !(total > 0)) return 1;
+
+  let fixed = num(basis.fixedIncTax);
+  let scalable = num(basis.scalableExTax);
+  for (const part of [
+    { ex: num(input.shippingExTax), inc: num(input.shippingIncTax) },
+    { ex: num(input.handlingExTax), inc: num(input.handlingIncTax) },
+  ]) {
+    if (part.inc > part.ex + 0.005) fixed += part.inc;
+    else scalable += part.ex;
+  }
+  if (!(scalable > 0)) return 1;
+
+  const implied = (total - fixed) / scalable;
+  if (!Number.isFinite(implied) || implied <= 1) return 1;
+  return Math.min(implied, GST_RATE_FACTOR);
 }
 
 /**
@@ -349,31 +461,54 @@ export interface OrderTotalRow {
 /**
  * The rows above the order total, in order, every one GST-inclusive.
  *
- * Subtotal and delivery are always shown; handling only when it was charged. The
- * last row is the reason the column adds up: on real orders the stored total does
- * NOT always equal subtotal + delivery — a store credit was applied, or (on a
+ * Subtotal and delivery are always shown; handling only when it was charged, which
+ * no production order yet is — the handling branch is unit-tested, never observed.
+ * The last row is the reason the column adds up: on real orders the stored total
+ * does NOT always equal subtotal + delivery — a store credit was applied, or (on a
  * handful of imported orders) the total was written without the delivery line.
  * Rather than print a column of figures that visibly fails to sum — the fastest
  * way to earn a support call — the residual is stated as its own row, named after
  * its cause where the order records one.
+ *
+ * Where the order STORED its subtotal, that residual reconciles two stored facts
+ * and may be large: 298 orders were amended without their subtotal being recomputed
+ * (PF20225011-5 reads -$22,089.70 against a $26,407.51 total). That is a data
+ * problem this page reports rather than one it creates, and it predates this
+ * module; it is left visible rather than smoothed away.
+ *
+ * The subtotal is the stored one wherever the order stored one. Where it did not
+ * (3,144 Industry Kitchens orders store 0 in both columns) it is the sum of the
+ * lines the page is printing, at this order's rate — the same partition and the
+ * same factor the per-line figures use, so the column sums to it exactly. Never
+ * $0.00: a $0.00 subtotal above priced lines, with the whole order restated
+ * underneath as an "Adjustment", is the breakdown reading as broken.
+ *
+ * NO ROWS AT ALL is a legitimate answer, and the only honest one where the order
+ * stored no subtotal and the lines cannot be reconciled to its total: 81 such
+ * orders list no priced line to build a subtotal from, and 72 more list lines
+ * worth MORE than the total they were charged. Printing the Order Total on its own
+ * — the figure the customer was charged and the figure the Order History list
+ * shows — says less than we would like, but everything it says is true.
  */
-export function orderTotalRows(input: {
-  subtotalExTax: number;
-  subtotalIncTax: number;
-  shippingExTax: number;
-  shippingIncTax: number;
-  handlingExTax: number;
-  handlingIncTax: number;
-  totalIncTax: number;
-  storeCreditAmount?: number;
-  discountAmount?: number;
-}): OrderTotalRow[] {
+export function orderTotalRows(
+  input: OrderMoneyInput & {
+    shippingExTax: number;
+    shippingIncTax: number;
+    handlingExTax: number;
+    handlingIncTax: number;
+    totalIncTax: number;
+    storeCreditAmount?: number;
+    discountAmount?: number;
+  }
+): OrderTotalRow[] {
   const taxFactor = orderTaxFactor(input);
-  const subtotal = gstInclusiveAmount({
-    exTax: input.subtotalExTax,
-    incTax: input.subtotalIncTax,
-    taxFactor,
-  });
+  const subtotal = storedSubtotalUsable(input)
+    ? gstInclusiveAmount({
+        exTax: input.subtotalExTax,
+        incTax: input.subtotalIncTax,
+        taxFactor,
+      })
+    : lineSubtotalIncTax(input.lines ?? { fixedIncTax: 0, scalableExTax: 0 }, taxFactor);
   const shipping = gstInclusiveAmount({
     exTax: input.shippingExTax,
     incTax: input.shippingIncTax,
@@ -385,13 +520,20 @@ export function orderTotalRows(input: {
     taxFactor,
   });
 
+  const residual = input.totalIncTax - (subtotal + shipping + handling);
+
+  // Reconstructed from the lines because the order stored no subtotal — and the
+  // reconstruction does not describe this order. Say nothing rather than print a
+  // $0.00 subtotal, or a reconciling row the size of the order itself.
+  if (!storedSubtotalUsable(input) && (!(subtotal > 0) || residual < -0.005)) {
+    return [];
+  }
+
   const rows: OrderTotalRow[] = [
     { label: "Subtotal", amount: subtotal },
     { label: "Delivery", amount: shipping },
   ];
   if (handling > 0) rows.push({ label: "Handling", amount: handling });
-
-  const residual = input.totalIncTax - (subtotal + shipping + handling);
 
   if (Math.abs(residual) > 0.005) {
     const label =

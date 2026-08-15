@@ -35,8 +35,13 @@ export function Price({
   if (gst) {
     num = adjustForGst(num, inclusive, pricesIncludeTax);
   }
-  const formatted = formatter.format(num);
+  // The sign belongs OUTSIDE the dollar sign: "-$22.00", never "$-22.00". Splitting
+  // the formatted string leaves the minus attached to the dollars, which is how a
+  // refunded order's total and a discount row came to read "$-1,008.52".
+  const negative = num < 0;
+  const formatted = formatter.format(Math.abs(num));
   const [dollars, cents] = formatted.split(".");
+  const sign = negative ? "-" : "";
 
   // The label reflects the toggle when the amount follows it, else the stored basis.
   const gstLabel = (gst ? inclusive : pricesIncludeTax) ? "inc GST" : "ex GST";
@@ -45,7 +50,7 @@ export function Price({
     return (
       <span className={`${className ?? ""} inline-flex flex-col`}>
         <span>
-          ${dollars}
+          {sign}${dollars}
           <span className={centsClassName} style={{ fontSize: `${centsScale}em` }}>
             .{cents}
           </span>
@@ -57,7 +62,7 @@ export function Price({
 
   return (
     <span className={className}>
-      ${dollars}
+      {sign}${dollars}
       <span
         className={centsClassName}
         style={{ fontSize: `${centsScale}em` }}

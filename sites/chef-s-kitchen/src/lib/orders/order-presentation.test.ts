@@ -5,6 +5,8 @@ import {
   paymentStatusLabel,
   orderStatusChipClass,
   orderTaxFactor,
+  orderLineBasis,
+  lineSubtotalIncTax,
   gstInclusiveAmount,
   orderTotalRows,
   visibleTransaction,
@@ -314,12 +316,85 @@ test("an order with no GST on its goods is quoted as stored, never scaled", () =
   );
 });
 
-test("the tax factor answers 1 when the columns cannot tell us", () => {
-  // A freight-only order (subtotal zero), and junk.
+test("the tax factor answers 1 when nothing on the order can tell us", () => {
+  // No subtotal, no lines, no total: there is nothing to read a rate off.
   assert.equal(orderTaxFactor({ subtotalExTax: 0, subtotalIncTax: 0 }), 1);
   assert.equal(orderTaxFactor({ subtotalExTax: NaN, subtotalIncTax: 110 }), 1);
   // Never below 1: an inclusive column BELOW the exclusive one cannot mean tax.
   assert.equal(orderTaxFactor({ subtotalExTax: 100, subtotalIncTax: 90 }), 1);
+});
+
+// ── The 3,144 Industry Kitchens orders that stored only their total ──────────
+//
+// The import wrote `total_inc_tax` and left the subtotal, delivery and tax columns
+// at 0 while the lines kept their EXCLUSIVE figures. Reading the rate off the
+// subtotal alone answered 1 on every one of them, so the customer read ex-GST lines
+// — 10% understated — under a $0.00 Subtotal, with the whole order restated
+// underneath as an "Adjustment". 728 of them are reachable from a signed-in
+// customer's Order History today, and they are the RECENT ones.
+
+test("the rate is read off the order total when the subtotal columns are empty", () => {
+  // Real order 148926 / PFIK_20249233: subtotal 0/0, delivery 0/0, tax 0, total
+  // $1,467.88, one line of 4 x $326.11 ex = $1,304.44. 1,304.44 x 1.1 = $1,434.88,
+  // and the $33.00 left over is the freight the import dropped.
+  const lines = orderLineBasis([{ exTax: 1304.44, incTax: 1304.44 }]);
+  const factor = orderTaxFactor({
+    subtotalExTax: 0,
+    subtotalIncTax: 0,
+    shippingExTax: 0,
+    shippingIncTax: 0,
+    totalIncTax: 1467.88,
+    lines,
+  });
+  assert.equal(factor, 1.1, "the goods carried GST and must be quoted with it");
+  assert.ok(
+    Math.abs(gstInclusiveAmount({ exTax: 326.11, incTax: 326.11, taxFactor: factor }) - 358.72) <
+      0.005,
+    "the line reads $358.72 each, not the stored $326.11"
+  );
+});
+
+test("the derived rate is capped at 10% — the whole of Australian GST", () => {
+  // A total 25% above the lines is freight or a fee the import dropped. Calling it
+  // tax would inflate every line by 25% and hide the difference inside the goods.
+  const lines = orderLineBasis([{ exTax: 100, incTax: 100 }]);
+  const factor = orderTaxFactor({ subtotalExTax: 0, subtotalIncTax: 0, totalIncTax: 125, lines });
+  assert.equal(factor, 1.1);
+});
+
+test("a total no bigger than the lines is no evidence of tax", () => {
+  const lines = orderLineBasis([{ exTax: 2536.54, incTax: 2536.54 }]);
+  // Real order 5576 / PF20241848: $2,536.54 of lines against a $48.38 total.
+  assert.equal(
+    orderTaxFactor({ subtotalExTax: 0, subtotalIncTax: 0, totalIncTax: 48.38, lines }),
+    1
+  );
+});
+
+test("a delivery that already recorded its GST is not grossed again by the derived rate", () => {
+  // Lines $100 ex, delivery stored 30/33 (its own tax recorded), total $143.
+  // The goods rate is (143 - 33) / 100 = 1.1, not 143/100.
+  const lines = orderLineBasis([{ exTax: 100, incTax: 100 }]);
+  const factor = orderTaxFactor({
+    subtotalExTax: 0,
+    subtotalIncTax: 0,
+    shippingExTax: 30,
+    shippingIncTax: 33,
+    totalIncTax: 143,
+    lines,
+  });
+  assert.equal(factor, 1.1);
+});
+
+test("orderLineBasis splits the lines that recorded their GST from the ones that did not", () => {
+  const basis = orderLineBasis([
+    { exTax: 612.7273, incTax: 674 }, // our own checkout
+    { exTax: 87, incTax: 87 }, // Zoey
+    { exTax: 30, incTax: 30 }, // Zoey
+  ]);
+  assert.equal(basis.fixedIncTax, 674);
+  assert.equal(basis.scalableExTax, 117);
+  assert.ok(Math.abs(lineSubtotalIncTax(basis, 1.1) - (674 + 128.7)) < 0.005);
 });
 
 test("a figure that recorded its own GST is taken exactly as stored", () => {
@@ -493,6 +568,274 @@ test("sub-cent rounding does not manufacture an adjustment row", () => {
     totalIncTax: 110,
   });
   assert.equal(rows.length, 2);
+});
+
+// ── The breakdown on an order that stored no subtotal ────────────────────────
+
+test("an order with no stored subtotal takes it from the lines, never from zero", () => {
+  // Real order 148926 / PFIK_20249233 end to end.
+  const rows = orderTotalRows({
+    subtotalExTax: 0,
+    subtotalIncTax: 0,
+    shippingExTax: 0,
+    shippingIncTax: 0,
+    handlingExTax: 0,
+    handlingIncTax: 0,
+    totalIncTax: 1467.88,
+    lines: orderLineBasis([{ exTax: 1304.44, incTax: 1304.44 }]),
+  });
+  assert.deepEqual(
+    rows.map((r) => r.label),
+    ["Subtotal", "Delivery", "Adjustment"]
+  );
+  assert.ok(Math.abs(rows[0].amount - 1434.88) < 0.005, "Subtotal is the lines with their GST");
+  assert.ok(Math.abs(rows[2].amount - 33) < 0.005, "only the dropped freight is left over");
+  const sum = rows.reduce((n, r) => n + r.amount, 0);
+  assert.ok(Math.abs(sum - 1467.88) < 0.005, "the column must reach the stored total");
+});
+
+test("no breakdown at all where the order lists no priced line to build one from", () => {
+  // 81 Industry Kitchens imports: a real total, no usable subtotal, nothing priced
+  // above it. A $0.00 Subtotal over an "Adjustment" the size of the order is worse
+  // than saying nothing, so the Order Total stands on its own.
+  assert.deepEqual(
+    orderTotalRows({
+      subtotalExTax: 0,
+      subtotalIncTax: 0,
+      shippingExTax: 0,
+      shippingIncTax: 0,
+      handlingExTax: 0,
+      handlingIncTax: 0,
+      totalIncTax: 1467.88,
+      lines: orderLineBasis([]),
+    }),
+    []
+  );
+  // …and the same when the page passes no lines at all.
+  assert.deepEqual(
+    orderTotalRows({
+      subtotalExTax: 0,
+      subtotalIncTax: 0,
+      shippingExTax: 0,
+      shippingIncTax: 0,
+      handlingExTax: 0,
+      handlingIncTax: 0,
+      totalIncTax: 1467.88,
+    }),
+    []
+  );
+});
+
+test("no breakdown where the lines are worth more than the total that was charged", () => {
+  // 72 Industry Kitchens imports. Real order 5576 / PF20241848: $2,536.54 of lines
+  // against a $48.38 total. Reconciling that would need a -$2,488.16 row.
+  assert.deepEqual(
+    orderTotalRows({
+      subtotalExTax: 0,
+      subtotalIncTax: 0,
+      shippingExTax: 0,
+      shippingIncTax: 0,
+      handlingExTax: 0,
+      handlingIncTax: 0,
+      totalIncTax: 48.38,
+      lines: orderLineBasis([{ exTax: 2536.54, incTax: 2536.54 }]),
+    }),
+    []
+  );
+});
+
+// ── The two invariants the card promises, asserted over every shape ──────────
+//
+// These are the failures the card exists to remove, so they are asserted as rules
+// rather than as examples: whatever the stored columns say, the customer must never
+// read a $0.00 Subtotal above priced lines, and never a reconciling row the size of
+// the order itself.
+
+/**
+ * Every money shape production actually holds, named by the order it came from.
+ * `linesWorth` is the ex-tax value of the lines the page would list above the
+ * breakdown — 0 where the order lists none.
+ */
+const MONEY_SHAPES: Array<{
+  name: string;
+  linesWorth: number;
+  input: Parameters<typeof orderTotalRows>[0];
+}> = [
+  {
+    name: "148945 PFIK_20249243 — Zoey, subtotal and delivery stored",
+    linesWorth: 87,
+    input: {
+      subtotalExTax: 87,
+      subtotalIncTax: 95.7,
+      shippingExTax: 30,
+      shippingIncTax: 33,
+      handlingExTax: 0,
+      handlingIncTax: 0,
+      totalIncTax: 128.7,
+      lines: orderLineBasis([{ exTax: 87, incTax: 87 }]),
+    },
+  },
+  {
+    name: "1806 PF20237033-2 — GST-free goods plus taxed freight",
+    linesWorth: 300,
+    input: {
+      subtotalExTax: 300,
+      subtotalIncTax: 300,
+      shippingExTax: 25,
+      shippingIncTax: 27.5,
+      handlingExTax: 0,
+      handlingIncTax: 0,
+      totalIncTax: 327.5,
+      lines: orderLineBasis([{ exTax: 300, incTax: 300 }]),
+    },
+  },
+  {
+    name: "146643 PFIK_20248880 — blended goods rate",
+    linesWorth: 172.24,
+    input: {
+      subtotalExTax: 172.24,
+      subtotalIncTax: 186.46,
+      shippingExTax: 0,
+      shippingIncTax: 0,
+      handlingExTax: 0,
+      handlingIncTax: 0,
+      totalIncTax: 186.46,
+      lines: orderLineBasis([
+        { exTax: 30, incTax: 30 },
+        { exTax: 33, incTax: 33 },
+        { exTax: 30.08, incTax: 30.08 },
+        { exTax: 29.16, incTax: 29.16 },
+        { exTax: 50, incTax: 50 },
+      ]),
+    },
+  },
+  {
+    name: "148926 PFIK_20249233 — total stored, nothing else",
+    linesWorth: 1304.44,
+    input: {
+      subtotalExTax: 0,
+      subtotalIncTax: 0,
+      shippingExTax: 0,
+      shippingIncTax: 0,
+      handlingExTax: 0,
+      handlingIncTax: 0,
+      totalIncTax: 1467.88,
+      lines: orderLineBasis([{ exTax: 1304.44, incTax: 1304.44 }]),
+    },
+  },
+  {
+    name: "5576 PF20241848 — lines worth more than the total charged",
+    linesWorth: 2536.54,
+    input: {
+      subtotalExTax: 0,
+      subtotalIncTax: 0,
+      shippingExTax: 0,
+      shippingIncTax: 0,
+      handlingExTax: 0,
+      handlingIncTax: 0,
+      totalIncTax: 48.38,
+      lines: orderLineBasis([{ exTax: 2536.54, incTax: 2536.54 }]),
+    },
+  },
+  {
+    name: "an import with a total and no priced line at all",
+    linesWorth: 0,
+    input: {
+      subtotalExTax: 0,
+      subtotalIncTax: 0,
+      shippingExTax: 0,
+      shippingIncTax: 0,
+      handlingExTax: 0,
+      handlingIncTax: 0,
+      totalIncTax: 1467.88,
+      lines: orderLineBasis([]),
+    },
+  },
+  {
+    name: "141602 ORD-MR65S0G6-V86P — store credit larger than the order",
+    linesWorth: 219.5273,
+    input: {
+      subtotalExTax: 219.5273,
+      subtotalIncTax: 241.48,
+      shippingExTax: 0,
+      shippingIncTax: 0,
+      handlingExTax: 0,
+      handlingIncTax: 0,
+      totalIncTax: -1008.52,
+      storeCreditAmount: 1250,
+      lines: orderLineBasis([{ exTax: 219.5273, incTax: 241.48 }]),
+    },
+  },
+  {
+    name: "141627 — imported total that omits the delivery it charged",
+    linesWorth: 34236.03,
+    input: {
+      subtotalExTax: 34236.03,
+      subtotalIncTax: 37659.633,
+      shippingExTax: 30,
+      shippingIncTax: 33,
+      handlingExTax: 0,
+      handlingIncTax: 0,
+      totalIncTax: 37659.633,
+      lines: orderLineBasis([{ exTax: 34236.03, incTax: 34236.03 }]),
+    },
+  },
+];
+
+test("a $0.00 Subtotal is never printed above priced lines", () => {
+  for (const shape of MONEY_SHAPES) {
+    if (shape.linesWorth === 0) continue;
+    const subtotal = orderTotalRows(shape.input).find((r) => r.label === "Subtotal");
+    if (!subtotal) continue; // no breakdown at all is the other honest answer
+    assert.ok(
+      Math.abs(subtotal.amount) > 0.005,
+      `${shape.name}: Subtotal $0.00 above $${shape.linesWorth} of lines`
+    );
+  }
+});
+
+test("a reconstructed breakdown never restates the whole order as an Adjustment", () => {
+  // The rule holds where the SUBTOTAL was reconstructed from the lines, which is
+  // where the reconciling row would otherwise be measuring our own guess. Where the
+  // order stored its own subtotal the residual reconciles two stored facts and may
+  // legitimately be large — 298 production orders were amended without their
+  // subtotal being recomputed (PF20225011-5: -$22,089.70 against a $26,407.51
+  // total). That is a data problem this page reports rather than one it creates.
+  for (const shape of MONEY_SHAPES) {
+    if (shape.input.subtotalExTax > 0) continue;
+    const adjustment = orderTotalRows(shape.input).find((r) => r.label === "Adjustment");
+    if (!adjustment) continue;
+    const total = Math.abs(shape.input.totalIncTax);
+    assert.ok(
+      adjustment.amount > 0 && Math.abs(adjustment.amount) < total * 0.9,
+      `${shape.name}: an Adjustment of ${adjustment.amount} against a total of ${total}`
+    );
+  }
+});
+
+test("every breakdown that is printed adds up to the stored total", () => {
+  for (const shape of MONEY_SHAPES) {
+    const rows = orderTotalRows(shape.input);
+    if (rows.length === 0) continue;
+    const sum = rows.reduce((n, r) => n + r.amount, 0);
+    assert.ok(
+      Math.abs(sum - shape.input.totalIncTax) < 0.005,
+      `${shape.name}: the column sums to ${sum}, not ${shape.input.totalIncTax}`
+    );
+  }
+});
+
+test("the printed lines sum to the printed Subtotal, on every shape", () => {
+  for (const shape of MONEY_SHAPES) {
+    const rows = orderTotalRows(shape.input);
+    const subtotal = rows.find((r) => r.label === "Subtotal");
+    if (!subtotal || !shape.input.lines) continue;
+    const printedLines = lineSubtotalIncTax(shape.input.lines, orderTaxFactor(shape.input));
+    assert.ok(
+      Math.abs(printedLines - subtotal.amount) < 0.005,
+      `${shape.name}: lines print ${printedLines} under a Subtotal of ${subtotal.amount}`
+    );
+  }
 });
 
 // ── visibleTransaction (the data-exposure guard) ─────────────────────────────

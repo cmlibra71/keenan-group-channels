@@ -41,6 +41,13 @@ export function OrderMoney({
  * carried no GST while others simply never recorded it — printing "$0.00" would
  * state a fact we do not have. Saying nothing is honest.
  *
+ * `rows` may legitimately be EMPTY, and then the Order Total stands on its own.
+ * That is `orderTotalRows` refusing to break down an order it cannot reconcile
+ * (153 Industry Kitchens imports carry a real total with no usable subtotal and
+ * lines that do not reach it). The total itself is never in doubt — it is the
+ * stored `total_inc_tax`, the column Order History prints — so the customer still
+ * reads the same figure on both screens, just without a breakdown beneath it.
+ *
  * Numbers and row labels are the only props: the order row never crosses to the
  * client, since an RSC prop ships in the flight payload even when nothing renders it.
  */
@@ -62,7 +69,11 @@ export function OrderTotals({
         </div>
       ))}
 
-      <div className="flex items-center justify-between border-t border-border pt-2">
+      <div
+        className={`flex items-center justify-between${
+          rows.length > 0 ? " border-t border-border pt-2" : ""
+        }`}
+      >
         <span className="text-sm font-medium text-text-secondary">Order Total (inc GST)</span>
         <Price amount={total} className="text-lg font-semibold text-text-primary" />
       </div>
