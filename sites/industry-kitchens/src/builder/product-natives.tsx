@@ -5,6 +5,7 @@ import { ProductKitNative } from "@/components/product/ProductKitNative";
 import type { ProductKit } from "@/lib/product-kit";
 import { WarrantyDirectory } from "@/components/product/WarrantyDirectory";
 import { GstToggle } from "@/components/layout/GstToggle";
+import { SilverChefPanel } from "@/components/product/SilverChefPanel";
 
 // ============================================================================
 // Industry Kitchens' sealed product-page leaves.
@@ -65,5 +66,10 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
       if (!kit) return null;
       return <ProductKitNative kit={kit} productId={Number(product.id)} />;
     },
+    // SilverChef / Skope Funding weekly rental panel (card 6f47rFeT). Sealed
+    // because the figure follows the LIVE purchase state — variant choice,
+    // member/contract price — and an authored tree cannot call the finance
+    // calculator. It renders nothing for a product with no price.
+    "silverchef-panel": () => <SilverChefPanel />,
   };
 }
