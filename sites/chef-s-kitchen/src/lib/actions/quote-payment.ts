@@ -148,9 +148,13 @@ export async function payQuote(
     await getHidePriceStatuses()
   );
   // The SAME split the quote page prints — the customer pays the figure they read.
+  // On a quote carrying a STORE CREDIT that figure is `payableInc`, not `incTax`
+  // (card vkYOSmJj): the credit is money already paid, so it settles the
+  // GST-inclusive total without reducing the GST. `incTax` here would charge the
+  // customer the credit back and disagree with the quote the portal emailed them.
   const view = quoteGstTotals(resolveQuoteTotal(quote) ?? 0, quote, gstRate);
-  const deposit = resolveQuoteDeposit(readQuoteDeposit(quote.attributes), view.incTax);
-  const amountDue = deposit ? deposit.due_now : Math.round(view.incTax * 100) / 100;
+  const deposit = resolveQuoteDeposit(readQuoteDeposit(quote.attributes), view.payableInc);
+  const amountDue = deposit ? deposit.due_now : Math.round(view.payableInc * 100) / 100;
 
   // ── Which methods this store, and this account, actually allow ──────────
   // Read EXACTLY as checkout reads them, and authorise against the same
@@ -410,7 +414,7 @@ export async function payQuote(
 
   // ── Side effects: none of these may fail the payment ────────────────────
   if (plan.freightPending) {
-    await alertOrdersTeamNoFreight(created, quote, view.incTax).catch((e) =>
+    await alertOrdersTeamNoFreight(created, quote, view.payableInc).catch((e) =>
       console.error("[payQuote] no-freight alert failed (non-fatal):", e)
     );
   }
@@ -436,7 +440,10 @@ export async function payQuote(
     order: created,
     quote,
     paymentMethod,
-    totalInc: view.incTax,
+    // The order's own inclusive total, which after a store credit is what was
+    // actually charged (card vkYOSmJj) — the emails must not name a figure the
+    // order does not carry.
+    totalInc: view.payableInc,
     deposit,
     freightPending: plan.freightPending,
     netTermsDays: paymentMethod === "net_terms" && netTerms ? netTerms.netTermsDays : null,

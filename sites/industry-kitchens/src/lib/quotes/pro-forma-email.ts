@@ -66,7 +66,9 @@ export async function sendQuoteProForma(quote: QuoteRow, to: string | null): Pro
   const currency = (quote.currency_code as string) || "AUD";
   const rate = await resolveQuoteGstRate(quote.tax_class_id);
   const gst = quoteGstTotals(resolveQuoteTotal(quote) ?? 0, quote, rate);
-  const deposit = resolveQuoteDeposit(readQuoteDeposit(quote.attributes), gst.incTax);
+  // A store credit settles the inclusive total, so the deposit and the
+  // headline are both taken from what is left TO pay (card vkYOSmJj).
+  const deposit = resolveQuoteDeposit(readQuoteDeposit(quote.attributes), gst.payableInc);
   const freightPending = !isMoneyRow(gst.freightEx);
 
   const [{ site }, branding] = await Promise.all([
@@ -105,7 +107,11 @@ export async function sendQuoteProForma(quote: QuoteRow, to: string | null): Pro
     summaryRow("Subtotal (ex GST)", money(gst.subtotalEx, currency)) +
     (isMoneyRow(gst.freightEx) ? summaryRow("Freight (ex GST)", money(gst.freightEx, currency)) : "") +
     summaryRow("GST", money(gst.tax, currency)) +
-    summaryRow("Amount payable (inc GST)", money(gst.incTax, currency), true) +
+    (isMoneyRow(gst.creditInc)
+      ? summaryRow("Total (inc GST)", money(gst.incTax, currency)) +
+        summaryRow("Store credit", `-${money(gst.creditInc, currency)}`)
+      : "") +
+    summaryRow("Amount payable (inc GST)", money(gst.payableInc, currency), true) +
     (deposit
       ? summaryRow(depositLabel(deposit), money(deposit.due_now, currency), true) +
         summaryRow("Balance", money(deposit.balance, currency))
@@ -143,7 +149,9 @@ export async function sendQuoteProForma(quote: QuoteRow, to: string | null): Pro
     `Subtotal (ex GST): ${money(gst.subtotalEx, currency)}`,
     isMoneyRow(gst.freightEx) ? `Freight (ex GST): ${money(gst.freightEx, currency)}` : "",
     `GST: ${money(gst.tax, currency)}`,
-    `Amount payable (inc GST): ${money(gst.incTax, currency)}`,
+    isMoneyRow(gst.creditInc) ? `Total (inc GST): ${money(gst.incTax, currency)}` : "",
+    isMoneyRow(gst.creditInc) ? `Store credit: -${money(gst.creditInc, currency)}` : "",
+    `Amount payable (inc GST): ${money(gst.payableInc, currency)}`,
     deposit ? `${depositLabel(deposit)}: ${money(deposit.due_now, currency)}` : "",
     deposit ? `Balance: ${money(deposit.balance, currency)}` : "",
     freightPending ? `\n${PLUS_FREIGHT_NOTICE}` : "",
