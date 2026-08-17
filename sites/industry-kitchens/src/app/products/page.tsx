@@ -1,9 +1,23 @@
-import { getProducts, getFeatureFlag, getMegaMenu, productService, CHANNEL_ID } from "@/lib/store";
+import { getProducts, getFeatureFlag, getMegaMenu, productService, CHANNEL_ID, type MegaMenuNode } from "@/lib/store";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { getCatalogScope } from "@/lib/catalog-scope";
-import { CategoryTiles } from "@/components/category/CategoryTiles";
+import { CategoryTiles, type CategoryTile } from "@/components/category/CategoryTiles";
 import Link from "next/link";
+
+/**
+ * Industry Kitchens is deliberately NOT on the shared, self-populating
+ * department bar — Steve, 2026-08-10 (card 9wau4Tx9): "Leave Industry Kitchens
+ * for now, we will address that in another card." IK's `MegaMenu.tsx` still
+ * renders `departments.slice(0, 7)`: no off switch, no More overflow, and no
+ * `resolveNavItems`. This strip therefore takes the SAME seven so the two rows
+ * on this screen cannot disagree — the IK tree (Zoey's "Main Catalog", 257)
+ * carries 14 rootless rows including "Root Category" and "Brands", which the
+ * bar has never shown and which are not department wording anyone chose.
+ * When IK moves to the shared bar, delete this and resolve through
+ * `resolveNavItems` exactly as `template/` and Chefs Depot do.
+ */
+const IK_NAV_DEPARTMENT_COUNT = 7;
 
 function getPageNumbers(current: number, total: number): (number | "...")[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
@@ -68,9 +82,14 @@ export default async function ProductsPage({
   const [{ products, total }, memberPricingEnabled, megaMenu] = await Promise.all([
     productsPromise,
     getFeatureFlag("member_pricing_enabled"),
-    getMegaMenu().catch(() => ({ departments: [] })),
+    getMegaMenu().catch(() => ({ departments: [] as MegaMenuNode[] })),
   ]);
   const totalPages = Math.ceil(total / 24);
+
+  // The same seven the bar above shows — see IK_NAV_DEPARTMENT_COUNT.
+  const barDepartments: CategoryTile[] = megaMenu.departments
+    .slice(0, IK_NAV_DEPARTMENT_COUNT)
+    .map((d) => ({ id: d.id, name: d.name, slug: d.slug, image_url: d.image_url }));
 
   // Departments are a way IN to the tree, so a department the viewer may not
   // open must not be offered: `assertCategoryVisible` 404s a category outside a
@@ -79,8 +98,8 @@ export default async function ProductsPage({
   // category restriction, which is every shopper today.
   const departments =
     accessibleCategoryIds === null
-      ? megaMenu.departments
-      : megaMenu.departments.filter((d) => accessibleCategoryIds.includes(d.id));
+      ? barDepartments
+      : barDepartments.filter((d) => accessibleCategoryIds.includes(d.id));
   const memberPriceMap = await getListingMemberPrices(products);
 
   const filterParam = activeFilter !== "all" ? `&filter=${activeFilter}` : "";

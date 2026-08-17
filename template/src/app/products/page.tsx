@@ -1,8 +1,9 @@
-import { getProducts, getFeatureFlag, getMegaMenu, productService, CHANNEL_ID } from "@/lib/store";
+import { getProducts, getFeatureFlag, getMegaMenu, getMegaMenuNav, getMegaMenuHidden, productService, CHANNEL_ID } from "@/lib/store";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { getCatalogScope } from "@/lib/catalog-scope";
-import { CategoryTiles } from "@/components/category/CategoryTiles";
+import { CategoryTiles, type CategoryTile } from "@/components/category/CategoryTiles";
+import { flattenTree, resolveNavItems } from "@/lib/mega-menu";
 import Link from "next/link";
 
 function getPageNumbers(current: number, total: number): (number | "...")[] {
@@ -65,12 +66,37 @@ export default async function ProductsPage({
             onSale: fetchOptions.onSale,
           });
 
-  const [{ products, total }, memberPricingEnabled, megaMenu] = await Promise.all([
+  const [{ products, total }, memberPricingEnabled, megaMenu, megaNav, hiddenDepartments] = await Promise.all([
     productsPromise,
     getFeatureFlag("member_pricing_enabled"),
     getMegaMenu().catch(() => ({ departments: [] })),
+    getMegaMenuNav().catch(() => []),
+    getMegaMenuHidden().catch(() => []),
   ]);
   const totalPages = Math.ceil(total / 24);
+
+  // The strip IS the department bar's own list. It is composed by the same
+  // shared, unit-tested `resolveNavItems` the header calls with the same two
+  // inputs — the Navigation editor's items (order + extras) and the per-
+  // department off switch `mega_menu_hidden_categories` — so the two rows on
+  // this screen cannot disagree about what the departments are or what they are
+  // called. A department switched off the MENU is off here too; it keeps its
+  // page and stays reachable from /categories, the homepage blocks and search,
+  // which is what the portal screen promises. (Card 9wau4Tx9, Steve 2026-08-10.)
+  const byId = flattenTree(megaMenu.departments);
+  const barDepartments: CategoryTile[] = resolveNavItems({
+    departments: megaMenu.departments,
+    items: megaNav,
+    hiddenCategoryIds: hiddenDepartments,
+  })
+    .flatMap((item) => {
+      if (item.type !== "category" || item.categoryId == null) return [];
+      const node = byId.get(item.categoryId);
+      if (!node) return [];
+      // The bar shortens its label to keep one row ("Cooking"); a tile has the
+      // width for the editor's / category's full wording.
+      return [{ id: node.id, name: item.label || node.name, slug: node.slug, image_url: node.image_url }];
+    });
 
   // Departments are a way IN to the tree, so a department the viewer may not
   // open must not be offered: `assertCategoryVisible` 404s a category outside a
@@ -79,8 +105,8 @@ export default async function ProductsPage({
   // category restriction, which is every shopper today.
   const departments =
     accessibleCategoryIds === null
-      ? megaMenu.departments
-      : megaMenu.departments.filter((d) => accessibleCategoryIds.includes(d.id));
+      ? barDepartments
+      : barDepartments.filter((d) => accessibleCategoryIds.includes(d.id));
   const memberPriceMap = await getListingMemberPrices(products);
 
   const filterParam = activeFilter !== "all" ? `&filter=${activeFilter}` : "";

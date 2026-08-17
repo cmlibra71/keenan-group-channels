@@ -1,19 +1,22 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Package, ChevronRight } from "lucide-react";
+import { isAllowedImageUrl } from "@/lib/image-origin";
 
 /**
  * "Shop by Category" — the way INTO the category tree from a flat product
  * listing. One image tile per department, linking to its category page.
  *
- * Rows come from the same `getMegaMenu().departments` the header nav bar is
- * built from, so the tiles and the menu always agree, and the call is free:
- * the header has already resolved it this request (React `cache()` on top of a
- * 30-minute `unstable_cache`).
+ * The rows handed in are the DEPARTMENT BAR's own resolved list (see
+ * `products/page.tsx`), so this strip and the menu above it cannot disagree.
  *
- * A department with no image gets the grey placeholder box with the package
- * icon — the same placeholder the product card and `/categories` already use
- * (card gRLRF8yu, Steve 2026-08-10: the grey box stays) — never a broken tile.
+ * A department with no usable image gets the grey placeholder box with the
+ * package icon — the same placeholder the product card and `/categories`
+ * already use (card gRLRF8yu, Steve 2026-08-10: the grey box stays) — never a
+ * broken tile. "Usable" is checked against the image proxy's own allowlist:
+ * `/api/image` 403s anything outside our S3 buckets, and a 403 renders as the
+ * browser's broken-image glyph, which is exactly the tile this card was asked
+ * not to ship.
  */
 export type CategoryTile = {
   id: number;
@@ -54,7 +57,7 @@ export function CategoryTiles({
             className="group overflow-hidden rounded-lg border border-zinc-200 bg-white transition-all hover:border-zinc-400 hover:shadow-sm"
           >
             <div className="relative aspect-[4/3] overflow-hidden bg-zinc-100">
-              {category.image_url ? (
+              {category.image_url && isAllowedImageUrl(category.image_url) ? (
                 <Image
                   src={category.image_url}
                   alt={category.name}
