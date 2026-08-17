@@ -16,6 +16,7 @@ import {
   parseRangeParam,
   priceBandWindow,
   rangeParamFor,
+  sliderTravel,
   type AttributeFacet,
 } from "@/lib/category-attributes";
 
@@ -228,7 +229,17 @@ function RailContent({ groups, clearParams }: { groups: FacetGroupDef[]; clearPa
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const hasAny = clearParams.some((p) => searchParams.get(p));
+  // "Clear all" acts on every attribute param actually ON THE URL, not only the
+  // ones this category's facets happen to name. An attribute the other filters
+  // left with no values has no facet to be listed from, and a Clear all that
+  // leaves the filter on is a visibly-enabled button that does nothing at all
+  // (NfYe3P3G). `ClearFiltersButton`, the authored rail's copy, already reads
+  // the URL this way; this is the sealed rail catching up.
+  const allClearParams = [
+    ...clearParams,
+    ...[...searchParams.keys()].filter((k) => k.startsWith("f_") && !clearParams.includes(k)),
+  ];
+  const hasAny = allClearParams.some((p) => searchParams.get(p));
 
   return (
     <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
@@ -238,7 +249,7 @@ function RailContent({ groups, clearParams }: { groups: FacetGroupDef[]; clearPa
           <button
             onClick={() => {
               const next = new URLSearchParams(searchParams.toString());
-              [...clearParams, "page"].forEach((p) => next.delete(p));
+              [...allClearParams, "page"].forEach((p) => next.delete(p));
               router.replace(`${pathname}?${next.toString()}`, { scroll: false });
             }}
             className="text-xs font-semibold text-teal-600 hover:text-teal-700"
@@ -296,21 +307,20 @@ function RangeFacet({
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
 
-  // A range input can only stop on the step grid measured from `min`, so a top
-  // that is not on that grid is UNREACHABLE — the thumb parks one step short,
-  // which reads as "up to $59,020" and would quietly drop the dearest products.
-  // The travel is therefore rounded UP to the next step; the extra sliver costs
-  // nothing because a thumb at the end applies no bound at all.
-  const span = range.max - range.min;
-  const step = span > 2000 ? 50 : span > 200 ? 10 : span > 20 ? 1 : 0.1;
-  const top = range.min + Math.ceil(span / step) * step;
-  const travel = { min: range.min, max: top };
-
   // A legacy band token (?price=lt1000) is shown as the window it covers, so
   // the thumbs never sit at full travel while the grid is actually narrowed.
   const raw = searchParams.get(param);
   const applied =
     parseRangeParam(raw) ?? (range.money ? priceBandWindow(parsePriceBands(raw)) : undefined);
+
+  // The travel is the 1st-99th percentile of what the OTHER filters left, so an
+  // applied window can fall entirely outside it — `sliderTravel` widens it to
+  // contain the window rather than let both thumbs clamp to one end and
+  // contradict the chip next to them. It also rounds the top up to the step
+  // grid: a range input can only stop on steps measured from `min`, so a top
+  // off that grid parks the thumb one step short and drops the dearest products.
+  const travel = sliderTravel(range, applied);
+  const step = travel.step;
   const lo = Math.max(travel.min, Math.min(travel.max, applied?.min ?? travel.min));
   const hi = Math.min(travel.max, Math.max(travel.min, applied?.max ?? travel.max));
   const [draft, setDraft] = useState<[number, number]>([lo, hi]);

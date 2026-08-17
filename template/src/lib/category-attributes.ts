@@ -89,6 +89,52 @@ export function rangeParamFor(
   return formatRangeParam({ min: atMin ? undefined : window.min, max: atMax ? undefined : window.max });
 }
 
+/**
+ * The slider's TRAVEL, widened where it has to be to CONTAIN the window that is
+ * actually applied — plus the step grid the two range inputs move on.
+ *
+ * The travel handed in is the 1st–99th percentile of the values left after the
+ * OTHER filters, so an applied window can fall wholly outside it: on Chefs
+ * Depot, `?f_doors=2-door&price=lt1000` left a $1,600–$14,750 travel with an
+ * "under $1,000" window, and both thumbs clamped to the travel minimum — the
+ * slider read "$1,600 – $1,600" beneath a chip saying "Under $1,000". A control
+ * positively misrepresenting the state is the thing the price-band rule exists
+ * to stop, so the travel moves to fit the window instead.
+ *
+ * An OPEN side of the window is drawn by parking that thumb ON the travel end
+ * (which writes no bound at all), so that end must lie OUTSIDE the window: a
+ * window with no floor pushes the travel down to zero rather than up to the
+ * window's own ceiling.
+ *
+ * The top is rounded UP to the step grid because a range input can only stop on
+ * steps measured from `min`: a top off the grid is unreachable, the thumb parks
+ * one step short, and the dearest products are quietly dropped.
+ */
+export function sliderTravel(
+  range: { min: number; max: number },
+  applied?: RangeWindow
+): { min: number; max: number; step: number } {
+  let low = range.min;
+  let high = range.max;
+  if (applied) {
+    if (applied.min !== undefined) {
+      low = Math.min(low, applied.min);
+      high = Math.max(high, applied.min);
+    }
+    if (applied.max !== undefined) {
+      low = Math.min(low, applied.max);
+      high = Math.max(high, applied.max);
+    }
+    if (applied.min === undefined && applied.max !== undefined && applied.max <= low)
+      low = Math.min(0, range.min);
+    if (applied.max === undefined && applied.min !== undefined && applied.min >= high)
+      high = applied.min + Math.max(range.max - range.min, 1);
+  }
+  const span = high - low;
+  const step = span > 2000 ? 50 : span > 200 ? 10 : span > 20 ? 1 : 0.1;
+  return { min: low, max: low + Math.ceil(span / step) * step, step };
+}
+
 /** Human form of a window, for a chip: "600–900mm", "up to 900mm". */
 export function formatRangeLabel(range: RangeWindow, unit?: string): string {
   const suffix = unit ?? "";

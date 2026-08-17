@@ -10,6 +10,7 @@ import {
   parseRangeParam,
   priceBandWindow,
   rangeParamFor,
+  sliderTravel,
   type AttributeFacet,
 } from "./category-attributes";
 
@@ -92,4 +93,53 @@ test("a legacy price band still has a window the slider can show", () => {
   assert.equal(priceBandWindow([]), undefined);
   // Both ends open is not a window the slider can draw — the chips carry it.
   assert.equal(priceBandWindow(["lt1000", "gt3000"]), undefined);
+});
+
+test("the travel leaves an ordinary window exactly where it is", () => {
+  // Nothing to widen: the window sits inside the percentile travel, so the low
+  // thumb parks on the travel end (no lower bound) and the high thumb on 900.
+  const t = sliderTravel({ min: 400, max: 1200 }, { max: 900 });
+  assert.equal(t.min, 400);
+  assert.ok(t.max >= 1200);
+});
+
+test("a window BELOW the travel drags the travel down to meet it", () => {
+  // The live defect: Chefs Depot ?f_doors=2-door&price=lt1000 — travel $1,600
+  // to $14,750 (the 2-door shelf's 1st-99th percentile), window "under $1,000".
+  // Both thumbs used to clamp to $1,600, so the slider read "$1,600 - $1,600"
+  // under a chip saying "Under $1,000".
+  const t = sliderTravel({ min: 1600, max: 14750 }, { max: 1000 });
+  assert.equal(t.min, 0, "an open floor is drawn at zero, not at the window top");
+  assert.ok(t.max >= 14750);
+  const lo = Math.max(t.min, Math.min(t.max, t.min));
+  const hi = Math.min(t.max, Math.max(t.min, 1000));
+  assert.equal(lo, 0);
+  assert.equal(hi, 1000);
+  assert.notEqual(lo, hi, "the two thumbs must not sit on top of each other");
+});
+
+test("a window ABOVE the travel drags the travel up to meet it", () => {
+  const t = sliderTravel({ min: 400, max: 1200 }, { min: 2000 });
+  assert.ok(t.max > 2000, "the open ceiling has to sit above the window floor");
+  assert.equal(t.min, 400);
+});
+
+test("a two-sided window below the travel is contained without reaching zero", () => {
+  const t = sliderTravel({ min: 1600, max: 14750 }, { min: 200, max: 1000 });
+  assert.equal(t.min, 200);
+  assert.ok(t.max >= 14750);
+});
+
+test("the travel top always lands on the step grid", () => {
+  for (const range of [
+    { min: 0, max: 14750 },
+    { min: 400, max: 1201 },
+    { min: 1.05, max: 9.7 },
+    { min: 12, max: 143 },
+  ]) {
+    const t = sliderTravel(range);
+    assert.ok(t.max >= range.max, "the travel may only widen, never narrow");
+    const steps = (t.max - t.min) / t.step;
+    assert.ok(Math.abs(steps - Math.round(steps)) < 1e-6, `${t.max} is off the step grid`);
+  }
 });
