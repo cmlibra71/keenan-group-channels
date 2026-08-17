@@ -70,7 +70,7 @@ export default async function RootLayout({
     const [pricesIncludeTax, cookieStore, financeRates] = await Promise.all([
       getFeatureFlag("prices_include_tax"),
       cookies(),
-          // This storefront's weekly-rent rates (card 6GBlDtwf). Mounted in BOTH
+      // This storefront's weekly-rent rates (card 6GBlDtwf). Mounted in BOTH
       // layout branches because the SilverChef panel is a sealed client native
       // inside authored trees, which the portal renders through /render/* too.
       financeRatesForChannel(),
@@ -81,7 +81,7 @@ export default async function RootLayout({
         <body className="min-h-screen bg-surface-primary text-text-body antialiased">
           <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
             <FinanceRatesProvider rates={financeRates}>
-              <CartQuoteCountsProvider>{children}</CartQuoteCountsProvider>
+                <CartQuoteCountsProvider>{children}</CartQuoteCountsProvider>
             </FinanceRatesProvider>
           </GstProvider>
         </body>
@@ -140,11 +140,11 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         </noscript>
         <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
           <FinanceRatesProvider rates={financeRates}>
-          <CartQuoteCountsProvider>
-            <Header storeName={storeName} logoUrl={logoUrl} logoAlt={logoAlt} />
-            <main className="flex-1">{children}</main>
-            <Footer storeName={storeName} subscriptionsEnabled={subscriptionsEnabled} config={footerConfig} />
-          </CartQuoteCountsProvider>
+            <CartQuoteCountsProvider>
+              <Header storeName={storeName} logoUrl={logoUrl} logoAlt={logoAlt} />
+              <main className="flex-1">{children}</main>
+              <Footer storeName={storeName} subscriptionsEnabled={subscriptionsEnabled} config={footerConfig} />
+            </CartQuoteCountsProvider>
           </FinanceRatesProvider>
         </GstProvider>
         {/* GA4 gtag — direct, alongside GTM. Both share window.dataLayer (standard

@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { resolveFinanceSettings, type FinanceRates } from "@keenan/services/finance";
-import { getChannelSetting } from "@/lib/store";
+import { getChannelSettings } from "@/lib/store";
 
 // ============================================================================
 // This storefront's weekly-rent RATES (card 6GBlDtwf).
@@ -14,8 +14,9 @@ import { getChannelSetting } from "@/lib/store";
 //
 // It exists as its OWN reader rather than through `getCheckoutSettings` because
 // the product page needs the rates on every product view and does not otherwise
-// want the payment methods, the countries and the minimum-order settings. Cached
-// per request, so mounting the provider in the root layout costs one round trip.
+// want the payment methods, the countries and the minimum-order settings. Both
+// keys are read in a single batched query and the whole thing is cached per
+// request, so mounting the provider in the root layout costs one round trip.
 // ============================================================================
 
 export const FINANCE_SILVERCHEF_RATE_SETTING_KEY = "finance_silverchef_rate";
@@ -23,9 +24,17 @@ export const FINANCE_SKOPE_RATE_SETTING_KEY = "finance_skope_rate";
 
 /** The rates this storefront quotes at, or the ones that shipped. Never throws. */
 export const financeRatesForChannel = cache(async (): Promise<FinanceRates> => {
-  const [standardRate, skopeRate] = await Promise.all([
-    getChannelSetting(FINANCE_SILVERCHEF_RATE_SETTING_KEY),
-    getChannelSetting(FINANCE_SKOPE_RATE_SETTING_KEY),
+  // ONE round trip, not one per rate: this runs in the ROOT LAYOUT, so it is on
+  // the critical path of every page on the site — home, category, cart and all —
+  // for a panel that only appears on product pages. An absent key is absent from
+  // the map, which `resolveFinanceSettings` reads as "unset" and answers with the
+  // rate that shipped.
+  const rows = await getChannelSettings([
+    FINANCE_SILVERCHEF_RATE_SETTING_KEY,
+    FINANCE_SKOPE_RATE_SETTING_KEY,
   ]);
-  return resolveFinanceSettings({ standardRate, skopeRate }).rates;
+  return resolveFinanceSettings({
+    standardRate: rows[FINANCE_SILVERCHEF_RATE_SETTING_KEY],
+    skopeRate: rows[FINANCE_SKOPE_RATE_SETTING_KEY],
+  }).rates;
 });

@@ -55,11 +55,11 @@ export default async function CheckoutPage() {
   // LQM9FQYe): stop the shopper with the sign-in step instead of the form. The
   // cart is untouched, so signing in from here drops them straight back onto a
   // priced basket. placeOrder enforces the SAME rule server-side — this is only
-  // what we show.
+  // what we show. Chefs Depot leaves the setting off and keeps guest checkout.
   if (checkoutNeedsSignIn(requireAccount, !!session)) {
     return (
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-3xl font-bold text-zinc-900 mb-8">Checkout</h1>
+        <h1 className="page-title mb-8">Checkout</h1>
         <CheckoutSignInGate />
       </div>
     );
@@ -323,26 +323,26 @@ export default async function CheckoutPage() {
         itemNames={(cart.items as Array<Record<string, unknown>>).map((i) => String(i.product_name ?? i.name ?? ""))}
         items={cart.items as Array<Record<string, unknown>>}
       />
-      <h1 className="text-3xl font-bold text-zinc-900 mb-8">Checkout</h1>
+      <h1 className="page-title mb-8">Checkout</h1>
 
       {isMember && memberSavings > 0 && (
-        <div className="mb-6 flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-          <Crown className="h-4 w-4 text-green-600 shrink-0" />
-          <span className="text-sm text-green-800">
+        <div className="mb-6 flex items-center gap-2 bg-brand-tint border border-brand-light/40 rounded-lg px-4 py-3">
+          <Crown className="h-4 w-4 text-brand shrink-0" />
+          <span className="text-sm text-brand-deep">
             You&apos;re saving ${memberSavings.toFixed(2)} with your membership on this order
           </span>
         </div>
       )}
 
       {showMemberBanner && estimatedSavings > 0 && (
-        <div className="mb-6 flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-          <div className="flex items-center gap-2 text-sm text-amber-800">
-            <Crown className="h-4 w-4 text-amber-600 shrink-0" />
+        <div className="mb-6 flex items-center justify-between bg-member-bg border border-member/40 rounded-lg px-4 py-3">
+          <div className="flex items-center gap-2 text-sm text-member-text">
+            <Crown className="h-4 w-4 text-member-text shrink-0" />
             Members save up to ${estimatedSavings.toFixed(2)} on this order.
           </div>
           <Link
             href="/membership"
-            className="inline-flex items-center gap-1 text-sm font-semibold text-amber-700 hover:text-amber-800 shrink-0"
+            className="inline-flex items-center gap-1 text-sm font-semibold text-member-text hover:text-member-text shrink-0"
           >
             Join now
             <ArrowRight className="h-3.5 w-3.5" />

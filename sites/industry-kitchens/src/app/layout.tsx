@@ -49,7 +49,7 @@ export default async function RootLayout({
     const [pricesIncludeTax, cookieStore, financeRates] = await Promise.all([
       getFeatureFlag("prices_include_tax"),
       cookies(),
-          // This storefront's weekly-rent rates (card 6GBlDtwf). Mounted in BOTH
+      // This storefront's weekly-rent rates (card 6GBlDtwf). Mounted in BOTH
       // layout branches because the SilverChef panel is a sealed client native
       // inside authored trees, which the portal renders through /render/* too.
       financeRatesForChannel(),
@@ -60,7 +60,7 @@ export default async function RootLayout({
         <body className="min-h-screen bg-white text-zinc-900 antialiased">
           <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
             <FinanceRatesProvider rates={financeRates}>
-              <CartQuoteCountsProvider>{children}</CartQuoteCountsProvider>
+                <CartQuoteCountsProvider>{children}</CartQuoteCountsProvider>
             </FinanceRatesProvider>
           </GstProvider>
         </body>
@@ -103,18 +103,18 @@ export default async function RootLayout({
       <body className="min-h-screen flex flex-col bg-white text-zinc-900 antialiased">
         <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
           <FinanceRatesProvider rates={financeRates}>
-          <CartQuoteCountsProvider>
-            <Header
-              storeName={storeName}
-              logoUrl={logoUrl}
-              logoAlt={logoAlt}
-              nav={headerNav}
-              config={headerConfig}
-            />
-            <main className="flex-1">{children}</main>
-            <Footer storeName={storeName} config={footerConfig} />
-            <SpecialistButton phone={headerConfig.phone} />
-          </CartQuoteCountsProvider>
+            <CartQuoteCountsProvider>
+              <Header
+                storeName={storeName}
+                logoUrl={logoUrl}
+                logoAlt={logoAlt}
+                nav={headerNav}
+                config={headerConfig}
+              />
+              <main className="flex-1">{children}</main>
+              <Footer storeName={storeName} config={footerConfig} />
+              <SpecialistButton phone={headerConfig.phone} />
+            </CartQuoteCountsProvider>
           </FinanceRatesProvider>
         </GstProvider>
         <GoogleAnalytics measurementId={ga4MeasurementId} />
