@@ -1,7 +1,8 @@
-import { getProducts, getFeatureFlag, productService, CHANNEL_ID } from "@/lib/store";
+import { getProducts, getFeatureFlag, getMegaMenu, productService, CHANNEL_ID } from "@/lib/store";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { getCatalogScope } from "@/lib/catalog-scope";
+import { CategoryTiles } from "@/components/category/CategoryTiles";
 import Link from "next/link";
 
 function getPageNumbers(current: number, total: number): (number | "...")[] {
@@ -64,11 +65,22 @@ export default async function ProductsPage({
             onSale: fetchOptions.onSale,
           });
 
-  const [{ products, total }, memberPricingEnabled] = await Promise.all([
+  const [{ products, total }, memberPricingEnabled, megaMenu] = await Promise.all([
     productsPromise,
     getFeatureFlag("member_pricing_enabled"),
+    getMegaMenu().catch(() => ({ departments: [] })),
   ]);
   const totalPages = Math.ceil(total / 24);
+
+  // Departments are a way IN to the tree, so a department the viewer may not
+  // open must not be offered: `assertCategoryVisible` 404s a category outside a
+  // restricted contact's allow-list, and the list is matched exactly (no
+  // subtree expansion — see @keenan/services catalogScope.ts). null = no
+  // category restriction, which is every shopper today.
+  const departments =
+    accessibleCategoryIds === null
+      ? megaMenu.departments
+      : megaMenu.departments.filter((d) => accessibleCategoryIds.includes(d.id));
   const memberPriceMap = await getListingMemberPrices(products);
 
   const filterParam = activeFilter !== "all" ? `&filter=${activeFilter}` : "";
@@ -77,6 +89,9 @@ export default async function ProductsPage({
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
       <h1 className="text-3xl font-bold text-zinc-900 mb-6">{pageTitle}</h1>
+
+      {/* Shop by category — the way into the tree from this flat listing */}
+      <CategoryTiles categories={departments} />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-8">
