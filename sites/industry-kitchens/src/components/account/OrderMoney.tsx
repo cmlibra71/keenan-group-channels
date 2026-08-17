@@ -43,8 +43,11 @@ export function OrderMoney({
  *
  * `rows` may legitimately be EMPTY, and then the Order Total stands on its own.
  * That is `orderTotalRows` refusing to break down an order it cannot reconcile
- * (153 Industry Kitchens imports carry a real total with no usable subtotal and
- * lines that do not reach it). The total itself is never in doubt — it is the
+ * (171 Industry Kitchens imports carry a real total with no usable subtotal:
+ * 99 whose lines are all priced at zero, and 72 whose lines are worth more than
+ * the total charged. 68 of the 171 are reachable from a customer's own Order
+ * History; re-measured against production 2026-08-17). The total is never in
+ * doubt, though — it is the
  * stored `total_inc_tax`, the column Order History prints — so the customer still
  * reads the same figure on both screens, just without a breakdown beneath it.
  *

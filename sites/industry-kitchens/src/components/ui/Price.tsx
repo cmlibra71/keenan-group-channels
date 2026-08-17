@@ -38,10 +38,13 @@ export function Price({
   // The sign belongs OUTSIDE the dollar sign: "-$22.00", never "$-22.00". Splitting
   // the formatted string leaves the minus attached to the dollars, which is how a
   // refunded order's total and a discount row came to read "$-1,008.52".
-  const negative = num < 0;
+  //
+  // The sign is decided on what is PRINTED, not on the raw number: a residual of
+  // -0.004 rounds to "0.00", and testing `num < 0` before rounding would print
+  // "-$0.00" — a minus sign in front of nothing, on a money screen.
   const formatted = formatter.format(Math.abs(num));
   const [dollars, cents] = formatted.split(".");
-  const sign = negative ? "-" : "";
+  const sign = num < 0 && formatted !== "0.00" ? "-" : "";
 
   // The label reflects the toggle when the amount follows it, else the stored basis.
   const gstLabel = (gst ? inclusive : pricesIncludeTax) ? "inc GST" : "ex GST";

@@ -469,7 +469,6 @@ export async function getSitemapProducts(
   }));
 }
 
-
 /**
  * Guest orders (no customer_id AND no contact_id) on this channel whose billing
  * email matches
@@ -616,6 +615,7 @@ export async function getLinkableProductPaths(productIds: number[]): Promise<Map
   }
   return out;
 }
+
 /**
  * Current buy costs for a set of order lines, keyed `${productId}:${variantId ?? 0}`.
  * Variant cost wins over the product cost (same precedence as the pricing

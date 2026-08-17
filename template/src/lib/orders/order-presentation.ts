@@ -484,9 +484,12 @@ export interface OrderTotalRow {
  * underneath as an "Adjustment", is the breakdown reading as broken.
  *
  * NO ROWS AT ALL is a legitimate answer, and the only honest one where the order
- * stored no subtotal and the lines cannot be reconciled to its total: 81 such
- * orders list no priced line to build a subtotal from, and 72 more list lines
- * worth MORE than the total they were charged. Printing the Order Total on its own
+ * stored no subtotal and the lines cannot be reconciled to its total. 171 orders
+ * land here (production, re-measured 2026-08-17 by running this predicate over all
+ * 33,908): 99 list lines that are ALL priced at zero, so there is no subtotal to
+ * build, and 72 list lines worth MORE than the total they were charged. Delivery
+ * tips none of them over on its own. 68 of the 171 are reachable from a signed-in
+ * customer's Order History. Printing the Order Total on its own
  * — the figure the customer was charged and the figure the Order History list
  * shows — says less than we would like, but everything it says is true.
  */

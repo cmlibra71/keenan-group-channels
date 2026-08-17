@@ -60,6 +60,7 @@
     "lib/account/profile-completeness.ts",
     "lib/account/profile-data.ts",
     "components/account/OrderMoney.tsx",
+    "components/ui/Price.tsx",
     "lib/actions/account-panel.ts",
     "lib/actions/account-security.ts",
     "lib/actions/auth.ts",
