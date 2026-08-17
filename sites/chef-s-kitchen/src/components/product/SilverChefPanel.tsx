@@ -22,6 +22,7 @@
 import { useProductPurchase } from "@keenan/services/product-page";
 import { useGst } from "@/lib/gst";
 import { productFinanceOffer } from "@/lib/finance/product-finance";
+import { useFinanceRates } from "@/lib/finance/finance-rates-context";
 
 export function SilverChefPanel() {
   const purchase = useProductPurchase();
@@ -30,6 +31,10 @@ export function SilverChefPanel() {
   // inclusive whatever the switch says (Product Brief §3), so flipping it must
   // not move the weekly figure.
   const { pricesIncludeTax } = useGst();
+  // This storefront's own rates (card 6GBlDtwf), resolved in the root layout.
+  // The same pair the checkout button quotes — one product must not carry two
+  // different weekly rents on two of our own screens.
+  const rates = useFinanceRates();
 
   const sku = purchase.activeVariant?.sku ?? purchase.product.sku;
   const offer = productFinanceOffer({
@@ -40,6 +45,7 @@ export function SilverChefPanel() {
     },
     sku,
     pricesIncludeTax,
+    rates,
   });
 
   // No price to rent: the buy box is already offering a quote instead.

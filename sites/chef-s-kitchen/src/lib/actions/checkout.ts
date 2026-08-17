@@ -537,12 +537,18 @@ export async function placeOrder(
   // sales desk that can't help.
   // The finance floor is part of "what this cart is offered", so both counts are
   // taken after it — exactly as the page renders them. Resolving them off the
-  // unfiltered list counted methods the shopper could not pick, so a sub-$1,000
-  // cart whose only surviving methods were SilverChef/Finance passed this gate
+  // unfiltered list counted methods the shopper could not pick, so a cart under
+  // the finance minimum whose only surviving methods were SilverChef/Finance
+  // passed this gate
   // with nothing actually offerable.
   const cartFinanceOffer = financeOfferForCart({
     lines: financeLinesFromCart(fullCart.items as never[], pricesIncludeTax),
     goodsTotalIncGst: subtotalIncTax,
+    // This storefront's own floor and rates (card 6GBlDtwf) — the SAME settings
+    // object the checkout page drew the offer from, because it is the same
+    // `getCheckoutSettings()` read. A floor resolved differently here would
+    // refuse an order the page invited.
+    settings: checkoutSettings.financeSettings,
   });
   const offerableMethods = filterFinanceMethods(
     filterPaymentMethodsForAccount(
@@ -588,8 +594,9 @@ export async function placeOrder(
 
   // ── SilverChef / Finance (card VAjaPj0t) ──────────────────────────────────
   // The authorization half of the checkout page's finance offer, resolved with
-  // the SAME function off the SAME goods total: a cart that has dropped under
-  // $1,000 inc GST since the page rendered is refused, never quietly financed.
+  // the SAME function off the SAME goods total AND the same per-storefront
+  // floor: a cart that has dropped under the finance minimum since the page
+  // rendered is refused, never quietly financed.
   // The application is validated HERE, before any order row is written — a
   // half-filled application must not leave a numbered order behind. It is
   // FILED after the order exists (it carries the order number).
@@ -599,7 +606,7 @@ export async function placeOrder(
   const financeOffer = isFinancePaymentMethod(effectivePaymentMethod) ? cartFinanceOffer : null;
   let financeApplication: Record<string, string> | null = null;
   if (financeOffer) {
-    if (!financeOffer.eligible) return { error: financeFloorError() };
+    if (!financeOffer.eligible) return { error: financeFloorError(financeOffer.minOrderIncGst) };
 
     financeApplication = financeApplicationValues((name) => formData.get(name) as string | null);
     // The funding type has to belong to the button AND to this basket — the

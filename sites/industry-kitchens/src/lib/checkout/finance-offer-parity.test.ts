@@ -65,6 +65,19 @@ test("both payment-availability call sites resolve the finance offer uncondition
         `count different methods for the same shopper — show no longer equals accept.`
     );
 
+    // …and off THIS STOREFRONT's floor and rates, not the shipped defaults
+    // (card 6GBlDtwf). `financeOfferForCart` defaults `settings` so an old caller
+    // still compiles, which means a call site that quietly drops the argument
+    // type-checks and then judges the cart against $1,000 while the other side
+    // judges it against the store's real floor — show stops equalling accept and
+    // nothing fails until a storefront changes its minimum.
+    assert.match(
+      code,
+      /settings:\s*checkoutSettings\.financeSettings/,
+      `${rel} must pass the channel's finance settings into financeOfferForCart, or it ` +
+        `judges the cart against the shipped $1,000 floor instead of this storefront's`
+    );
+
     // The counts must be taken in that same state, not off `!!offer?.eligible`
     // computed from a possibly-null conditional offer.
     assert.doesNotMatch(
