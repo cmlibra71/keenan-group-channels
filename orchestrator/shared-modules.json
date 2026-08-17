@@ -110,6 +110,8 @@
     "lib/contact-addresses.ts",
     "lib/contact-auth.ts",
     "lib/design-tokens.ts",
+    "lib/finance/finance-rates-context.tsx",
+    "lib/finance/finance-rates.ts",
     "lib/finance/product-finance.test.ts",
     "lib/finance/product-finance.ts",
     "lib/google-claims.test.ts",

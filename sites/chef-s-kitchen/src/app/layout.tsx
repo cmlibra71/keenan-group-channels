@@ -7,6 +7,8 @@ import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { GstProvider } from "@/lib/gst";
+import { FinanceRatesProvider } from "@/lib/finance/finance-rates-context";
+import { financeRatesForChannel } from "@/lib/finance/finance-rates";
 import { CartQuoteCountsProvider } from "@/lib/cart-quote-counts";
 import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
 import { siteBaseUrl } from "@/lib/seo";
@@ -65,23 +67,29 @@ export default async function RootLayout({
   // the design system behave identically — just no Header/Footer/GTM.
   const isCmsRender = (await headers()).get("x-cms-render") === "1";
   if (isCmsRender) {
-    const [pricesIncludeTax, cookieStore] = await Promise.all([
+    const [pricesIncludeTax, cookieStore, financeRates] = await Promise.all([
       getFeatureFlag("prices_include_tax"),
       cookies(),
+          // This storefront's weekly-rent rates (card 6GBlDtwf). Mounted in BOTH
+      // layout branches because the SilverChef panel is a sealed client native
+      // inside authored trees, which the portal renders through /render/* too.
+      financeRatesForChannel(),
     ]);
     const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
     return (
       <html lang="en" className={`${fraunces.variable} ${plexSans.variable} ${plexMono.variable}`}>
         <body className="min-h-screen bg-surface-primary text-text-body antialiased">
           <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
-            <CartQuoteCountsProvider>{children}</CartQuoteCountsProvider>
+            <FinanceRatesProvider rates={financeRates}>
+              <CartQuoteCountsProvider>{children}</CartQuoteCountsProvider>
+            </FinanceRatesProvider>
           </GstProvider>
         </body>
       </html>
     );
   }
 
-  const [{ site, channel }, subscriptionsEnabled, pricesIncludeTax, footerConfig, cookieStore, tokenVars, ga4MeasurementId] = await Promise.all([
+  const [{ site, channel }, subscriptionsEnabled, pricesIncludeTax, footerConfig, cookieStore, tokenVars, ga4MeasurementId, financeRates] = await Promise.all([
     getSiteConfig(),
     getFeatureFlag("subscriptions_enabled"),
     getFeatureFlag("prices_include_tax"),
@@ -89,6 +97,9 @@ export default async function RootLayout({
     cookies(),
     getPublishedTokenVars(),
     getGa4MeasurementId(),
+    // This storefront's weekly-rent rates (card 6GBlDtwf), resolved once per
+    // request and read by the product page's SilverChef panel.
+    financeRatesForChannel(),
   ]);
   const storeName = site?.siteName || channel?.name || "Store";
   const logoUrl = site?.logoUrl || null;
@@ -128,11 +139,13 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
           />
         </noscript>
         <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
+          <FinanceRatesProvider rates={financeRates}>
           <CartQuoteCountsProvider>
             <Header storeName={storeName} logoUrl={logoUrl} logoAlt={logoAlt} />
             <main className="flex-1">{children}</main>
             <Footer storeName={storeName} subscriptionsEnabled={subscriptionsEnabled} config={footerConfig} />
           </CartQuoteCountsProvider>
+          </FinanceRatesProvider>
         </GstProvider>
         {/* GA4 gtag — direct, alongside GTM. Both share window.dataLayer (standard
             coexistence); the ecommerce funnel fires via gtag from the components. */}

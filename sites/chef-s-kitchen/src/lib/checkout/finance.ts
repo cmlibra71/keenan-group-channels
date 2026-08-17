@@ -17,6 +17,13 @@
 // under the floor between render and submit is refused, not quietly financed.
 // The arithmetic and the field list live in @keenan/services so the product
 // page and the quote figure cannot compute them differently.
+//
+// The floor and both rates are PER STOREFRONT now (card 6GBlDtwf): they arrive
+// on `checkoutSettings.financeSettings` and are carried INSIDE the offer, so the
+// refusal wording and the weekly figures cannot be worked out against a
+// different floor from the one the offer was decided on. Unset = the shipped
+// $1,000 / 5.5% / 3.625%, so nothing moves on either site until someone changes
+// it.
 // ============================================================================
 
 // PURE subpath only. `@keenan/services/services` would drag the whole service
@@ -24,8 +31,8 @@
 // CheckoutForm and 500 the checkout.
 import { gstSplit } from "@keenan/services/calc";
 import {
+  DEFAULT_FINANCE_SETTINGS,
   FINANCE_METHOD_ID,
-  FINANCE_MIN_ORDER_INC_GST,
   FINANCE_APPLICATION_FORM_KEY,
   FINANCE_APPLICATION_INTRO,
   FINANCE_ATTACHMENT_PROMPTS,
@@ -41,14 +48,16 @@ import {
   silverchefWeeklyRent,
   skopeWeeklyRent,
   type FinanceLine,
+  type FinanceSettings,
   type FormFieldDef,
 } from "@keenan/services/finance";
 
 export {
+  DEFAULT_FINANCE_SETTINGS,
   FINANCE_APPLICATION_FORM_KEY,
-  FINANCE_MIN_ORDER_INC_GST,
   isFinancePaymentMethod,
 };
+export type { FinanceSettings };
 
 /** Cart rows as this module reads them (a subset of cartService.getWithItems). */
 export interface FinanceCartLine {
@@ -75,6 +84,13 @@ export interface FinanceOffer {
   skopeWeekly: number | null;
   /** True when every priced line is a SKOPE SKU, so SKOPE funding is on offer. */
   skopeOnly: boolean;
+  /**
+   * The floor THIS storefront was judged against, inc GST (card 6GBlDtwf).
+   * Carried on the offer so `financeFloorError` quotes the figure the shopper
+   * was actually refused on — a refusal that names a different number from the
+   * one the gate used is a support call.
+   */
+  minOrderIncGst: number;
   formKey: string;
   intro: string;
   fields: FormFieldDef[];
@@ -106,14 +122,22 @@ export function financeLinesFromCart(
 /**
  * The offer for one cart. `goodsTotalIncGst` is the GOODS total — delivery is
  * deliberately excluded from the weekly figure (Steve, card H7IJD8ym: "on the
- * goods total only"), and it is also what the $1,000 floor is measured on, so
- * the offer cannot appear and disappear as a postcode changes the freight.
+ * goods total only"), and it is also what the floor is measured on, so the offer
+ * cannot appear and disappear as a postcode changes the freight.
+ *
+ * `settings` is the STOREFRONT's own floor and rates
+ * (`checkoutSettings.financeSettings`, card 6GBlDtwf). It defaults to the
+ * shipped figures so a caller that has not been given them still behaves as it
+ * did before the setting existed — but both real call sites pass the channel's,
+ * and they must pass the SAME one or show stops equalling accept.
  */
 export function financeOfferForCart(input: {
   lines: readonly FinanceLine[];
   goodsTotalIncGst: number;
+  settings?: FinanceSettings;
 }): FinanceOffer {
-  const eligible = financeAvailable(input.goodsTotalIncGst);
+  const settings = input.settings ?? DEFAULT_FINANCE_SETTINGS;
+  const eligible = financeAvailable(input.goodsTotalIncGst, settings.minOrderIncGst);
   // SKOPE Funding is a DIFFERENT offer from SilverChef's, not a cheaper rate
   // inside it: the live IK site quotes them separately ("Rent per Week: $X" vs
   // "Own Me $X a week") and the funding type is labelled "Skope Brands only".
@@ -122,9 +146,10 @@ export function financeOfferForCart(input: {
   const skopeOnly = eligible && isSkopeOnly(input.lines);
   return {
     eligible,
-    silverchefWeekly: eligible ? silverchefWeeklyRent(input.lines) : 0,
-    skopeWeekly: skopeOnly ? skopeWeeklyRent(input.lines) : null,
+    silverchefWeekly: eligible ? silverchefWeeklyRent(input.lines, settings.rates) : 0,
+    skopeWeekly: skopeOnly ? skopeWeeklyRent(input.lines, settings.rates) : null,
     skopeOnly,
+    minOrderIncGst: settings.minOrderIncGst,
     formKey: FINANCE_APPLICATION_FORM_KEY,
     intro: FINANCE_APPLICATION_INTRO,
     fields: financeApplicationFields().filter((f) => f.name !== "order_number"),
@@ -243,9 +268,14 @@ export function newUploadToken(): string {
   )}-${hex(12)}`;
 }
 
-/** The refusal a cart under the floor gets, in the shopper's words. */
-export function financeFloorError(): string {
-  return `Finance is available on orders of $${FINANCE_MIN_ORDER_INC_GST.toLocaleString(
+/**
+ * The refusal a cart under the floor gets, in the shopper's words.
+ *
+ * Takes the floor from the OFFER that refused it, so the sentence can never
+ * quote $1,000 at a storefront whose floor is $2,500 (card 6GBlDtwf).
+ */
+export function financeFloorError(minOrderIncGst: number): string {
+  return `Finance is available on orders of $${minOrderIncGst.toLocaleString(
     "en-AU"
   )} or more (including GST). Please choose another way to pay.`;
 }

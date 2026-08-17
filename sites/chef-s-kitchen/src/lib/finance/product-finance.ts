@@ -6,6 +6,9 @@
 // price" — the price that shopper is actually looking at, member/contract
 // price included — and SKOPE products use SKOPE's own calculator instead.
 //
+// The RATES are this storefront's own (card 6GBlDtwf) and arrive from context;
+// everything else below still holds.
+//
 // NOTHING IS RECALCULATED HERE. The rates, the arithmetic, the SKOPE test and
 // the money formatting all come from `@keenan/services/finance`, which the
 // checkout buttons (VAjaPj0t) and the quote/invoice figure (H7IJD8ym) already
@@ -30,10 +33,12 @@
 // 500s the product page.
 import { gstSplit } from "@keenan/services/calc";
 import {
+  DEFAULT_FINANCE_RATES,
   formatFinanceMoney,
   isSkopeSku,
   rateForLine,
   weeklyRent,
+  type FinanceRates,
 } from "@keenan/services/finance";
 
 /** Which funder is quoting, so the panel can wear the right identity. */
@@ -93,14 +98,25 @@ export function productFinanceOffer(input: {
   /** The SKU actually being bought — the VARIANT's when one is chosen. */
   sku?: string | null;
   pricesIncludeTax: boolean;
+  /**
+   * This storefront's own rates (card 6GBlDtwf), from `useFinanceRates()`. They
+   * MUST be the same pair the checkout button uses, or the shopper meets two of
+   * our own controls quoting different rents for one product. Defaulted to the
+   * shipped rates so a caller without the provider behaves as it always did.
+   */
+  rates?: FinanceRates;
 }): ProductFinanceOffer | null {
+  const rates = input.rates ?? DEFAULT_FINANCE_RATES;
   const visible = bestVisiblePrice(input.price);
   if (visible <= 0) return null;
 
   const priceIncGst = gstSplit(visible, input.pricesIncludeTax).incTax;
   // The rate CHOICE is the services module's too (`rateForLine` reads the SKU),
   // so "which products are SKOPE" has one answer across cart, checkout and page.
-  const weekly = weeklyRent(priceIncGst, rateForLine({ amountIncGst: priceIncGst, sku: input.sku }));
+  const weekly = weeklyRent(
+    priceIncGst,
+    rateForLine({ amountIncGst: priceIncGst, sku: input.sku }, rates)
+  );
   if (weekly <= 0) return null;
 
   const funder: ProductFinanceFunder = isSkopeSku(input.sku) ? "skope" : "silverchef";

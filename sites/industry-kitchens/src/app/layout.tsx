@@ -7,6 +7,8 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { SpecialistButton } from "@/components/layout/SpecialistButton";
 import { GstProvider } from "@/lib/gst";
+import { FinanceRatesProvider } from "@/lib/finance/finance-rates-context";
+import { financeRatesForChannel } from "@/lib/finance/finance-rates";
 import { CartQuoteCountsProvider } from "@/lib/cart-quote-counts";
 import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
 import { siteBaseUrl } from "@/lib/seo";
@@ -44,16 +46,22 @@ export default async function RootLayout({
   // styling behave identically — just no Header/Footer/SpecialistButton.
   const isCmsRender = (await headers()).get("x-cms-render") === "1";
   if (isCmsRender) {
-    const [pricesIncludeTax, cookieStore] = await Promise.all([
+    const [pricesIncludeTax, cookieStore, financeRates] = await Promise.all([
       getFeatureFlag("prices_include_tax"),
       cookies(),
+          // This storefront's weekly-rent rates (card 6GBlDtwf). Mounted in BOTH
+      // layout branches because the SilverChef panel is a sealed client native
+      // inside authored trees, which the portal renders through /render/* too.
+      financeRatesForChannel(),
     ]);
     const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
     return (
       <html lang="en">
         <body className="min-h-screen bg-white text-zinc-900 antialiased">
           <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
-            <CartQuoteCountsProvider>{children}</CartQuoteCountsProvider>
+            <FinanceRatesProvider rates={financeRates}>
+              <CartQuoteCountsProvider>{children}</CartQuoteCountsProvider>
+            </FinanceRatesProvider>
           </GstProvider>
         </body>
       </html>
@@ -70,6 +78,7 @@ export default async function RootLayout({
     cookieStore,
     tokenVars,
     ga4MeasurementId,
+    financeRates,
   ] = await Promise.all([
     getSiteConfig(),
     getFeatureFlag("subscriptions_enabled"),
@@ -80,6 +89,9 @@ export default async function RootLayout({
     cookies(),
     getPublishedTokenVars(),
     getGa4MeasurementId(),
+    // This storefront's weekly-rent rates (card 6GBlDtwf), resolved once per
+    // request and read by the product page's SilverChef panel.
+    financeRatesForChannel(),
   ]);
   const storeName = site?.siteName || channel?.name || "Store";
   const logoUrl = site?.logoUrl || null;
@@ -90,6 +102,7 @@ export default async function RootLayout({
     <html lang="en" style={(tokenVars ?? undefined) as React.CSSProperties | undefined}>
       <body className="min-h-screen flex flex-col bg-white text-zinc-900 antialiased">
         <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
+          <FinanceRatesProvider rates={financeRates}>
           <CartQuoteCountsProvider>
             <Header
               storeName={storeName}
@@ -102,6 +115,7 @@ export default async function RootLayout({
             <Footer storeName={storeName} config={footerConfig} />
             <SpecialistButton phone={headerConfig.phone} />
           </CartQuoteCountsProvider>
+          </FinanceRatesProvider>
         </GstProvider>
         <GoogleAnalytics measurementId={ga4MeasurementId} />
       </body>
