@@ -65,6 +65,7 @@ import {
   financeFloorError,
   financeLinesFromCart,
   financeOfferForCart,
+  filterFinanceMethods,
   fundingTypeError,
   isFinancePaymentMethod,
   weeklyAmountForMethod,
@@ -534,15 +535,31 @@ export async function placeOrder(
   // offers this shopper nothing, and that is the store's configuration, not a
   // restriction on their account — telling them otherwise sends them to ring a
   // sales desk that can't help.
-  const offerableMethods = filterPaymentMethodsForAccount(
-    checkoutSettings.customerPaymentMethods,
-    accountOptions?.allowedPaymentMethods ?? null,
-    accountOptions?.staffOnlyPaymentMethods ?? null
-  ).filter((m) => m.id !== "net_terms" || !!netTerms);
+  // The finance floor is part of "what this cart is offered", so both counts are
+  // taken after it — exactly as the page renders them. Resolving them off the
+  // unfiltered list counted methods the shopper could not pick, so a sub-$1,000
+  // cart whose only surviving methods were SilverChef/Finance passed this gate
+  // with nothing actually offerable.
+  const cartFinanceOffer = financeOfferForCart({
+    lines: financeLinesFromCart(fullCart.items as never[], pricesIncludeTax),
+    goodsTotalIncGst: subtotalIncTax,
+  });
+  const offerableMethods = filterFinanceMethods(
+    filterPaymentMethodsForAccount(
+      checkoutSettings.customerPaymentMethods,
+      accountOptions?.allowedPaymentMethods ?? null,
+      accountOptions?.staffOnlyPaymentMethods ?? null
+    ).filter((m) => m.id !== "net_terms" || !!netTerms),
+    cartFinanceOffer.eligible
+  );
   if (
     resolvePaymentAvailability(
-      checkoutSettings.customerPaymentMethods.length,
-      offerableMethods.length
+      filterFinanceMethods(checkoutSettings.customerPaymentMethods, cartFinanceOffer.eligible)
+        .length,
+      offerableMethods.length,
+      // A guest has no account, so the account wording would name something they
+      // have not got — they fall to the store state and the order is placed unpaid.
+      !!session
     ) === "account-restricted"
   ) {
     return { error: PAY_UNAVAILABLE_ACCOUNT_ORDER };
@@ -576,12 +593,10 @@ export async function placeOrder(
   // The application is validated HERE, before any order row is written — a
   // half-filled application must not leave a numbered order behind. It is
   // FILED after the order exists (it carries the order number).
-  const financeOffer = isFinancePaymentMethod(effectivePaymentMethod)
-    ? financeOfferForCart({
-        lines: financeLinesFromCart(fullCart.items as never[], pricesIncludeTax),
-        goodsTotalIncGst: subtotalIncTax,
-      })
-    : null;
+  // Same offer the availability gate above resolved, off the same cart and the
+  // same goods total — computed once so the gate and this check can never
+  // disagree about whether this basket clears the finance floor.
+  const financeOffer = isFinancePaymentMethod(effectivePaymentMethod) ? cartFinanceOffer : null;
   let financeApplication: Record<string, string> | null = null;
   if (financeOffer) {
     if (!financeOffer.eligible) return { error: financeFloorError() };
