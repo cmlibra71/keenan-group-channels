@@ -32,14 +32,28 @@ export type PaymentAvailability =
   | "account-restricted";
 
 /**
- * @param channelMethodCount how many methods the CHANNEL has enabled
- * @param offeredMethodCount how many survive this shopper's account filters
+ * Both counts must be taken over the SAME list, in the same state, or the count
+ * and the rendered options disagree and the shopper is told the wrong story:
+ * pass the customer-facing channel list and the list actually drawn on screen,
+ * each after the finance floor has been applied.
+ *
+ * @param channelMethodCount how many methods the CHANNEL offers a customer on this cart
+ * @param offeredMethodCount how many of those survive this shopper's own filters
+ * @param shopperIsSignedIn whether there is an account to attribute a restriction to
+ *        (a guest is false) — REQUIRED so every call site has to decide, the same
+ *        reason `staffOnly` is required on the account-policy functions
  */
 export function resolvePaymentAvailability(
   channelMethodCount: number,
-  offeredMethodCount: number
+  offeredMethodCount: number,
+  shopperIsSignedIn: boolean
 ): PaymentAvailability {
   if (offeredMethodCount > 0) return "available";
+  // Nothing offerable and NO account to blame. "Online payment isn't available on
+  // your account" names something a guest does not have, and refusing them is not
+  // an instruction anyone at the sales desk gave: fall to the store state, which
+  // places the order unpaid exactly as a store with nothing switched on does.
+  if (!shopperIsSignedIn) return "store-unconfigured";
   return channelMethodCount > 0 ? "account-restricted" : "store-unconfigured";
 }
 

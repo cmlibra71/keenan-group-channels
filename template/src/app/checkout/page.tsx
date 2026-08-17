@@ -97,20 +97,6 @@ export default async function CheckoutPage() {
     .filter((m) => m.id !== "net_terms" || !!netTerms)
     .map((m) => (m.id === "net_terms" && netTerms ? { ...m, netTermsDays: netTerms.netTermsDays } : m));
 
-  // Nothing left to offer means one of two very different things, and the customer
-  // must be told the right one: the STORE has no methods switched on (order still
-  // placed, invoiced later — unchanged), or this ACCOUNT may use none of the store's
-  // methods, in which case we refuse rather than book an unpaid order. placeOrder
-  // resolves the same two counts and refuses the same case (card N8kE8arY).
-  //
-  // "What the STORE offers" is the CUSTOMER-facing count, not the enabled count: a
-  // store whose only enabled method is staff-only offers a shopper nothing at all,
-  // and must say so rather than blame the shopper's account (card NmAfwrdE).
-  const paymentAvailability = resolvePaymentAvailability(
-    checkoutSettings.customerPaymentMethods.length,
-    entitledPaymentMethods.length
-  );
-
   const subtotal = parseFloat(cart.cart_amount ?? "0");
 
   // Brand free-shipping special (card 88Ay7UGA): any line from a promoted brand
@@ -143,21 +129,52 @@ export default async function CheckoutPage() {
   // Offered only above $1,000 inc GST, measured on the GOODS total so the offer
   // can't appear and disappear as a postcode changes the freight. placeOrder
   // re-resolves this with the SAME function before accepting the order — show
-  // equals accept. Nothing here is drawn when no finance method is enabled on
-  // the channel, so a storefront that doesn't offer finance pays nothing for it.
+  // equals accept.
+  //
+  // The offer is resolved for the CART, UNCONDITIONALLY, exactly as placeOrder
+  // resolves it. It used to be computed only when the account's ENTITLED list
+  // already held a finance method, and that made the two call sites disagree: on
+  // a channel that offers finance, for an account whose allow-list removes it,
+  // with a cart over $1,000, the page took its channel count with the finance
+  // floor CLOSED while placeOrder took the same count with it OPEN. The page
+  // could then read "store-unconfigured" (Place Order enabled, order booked
+  // unpaid) on an order placeOrder refused as "account-restricted". Same
+  // function, same total, same state, on both sides (card NmAfwrdE).
+  const financeOffer = financeOfferForCart({
+    lines: financeLinesFromCart(cart.items as never[], pricesIncludeTax),
+    goodsTotalIncGst: gstSplit(subtotal, pricesIncludeTax).incTax,
+  });
+  // …but nothing finance-shaped is DRAWN, and no application form is provisioned,
+  // unless a finance method actually survives to this shopper — a storefront that
+  // doesn't offer finance pays nothing for it.
   const financeMethodsEnabled = entitledPaymentMethods.some((m) => isFinancePaymentMethod(m.id));
-  const financeOffer = financeMethodsEnabled
-    ? financeOfferForCart({
-        lines: financeLinesFromCart(cart.items as never[], pricesIncludeTax),
-        goodsTotalIncGst: gstSplit(subtotal, pricesIncludeTax).incTax,
-      })
-    : null;
-  const paymentMethods = filterFinanceMethods(entitledPaymentMethods, !!financeOffer?.eligible);
+  const paymentMethods = filterFinanceMethods(entitledPaymentMethods, financeOffer.eligible);
+
+  // Nothing left to offer means one of two very different things, and the customer
+  // must be told the right one: the STORE has no methods switched on (order still
+  // placed, invoiced later — unchanged), or this ACCOUNT may use none of the store's
+  // methods, in which case we refuse rather than book an unpaid order. placeOrder
+  // resolves the same two counts and refuses the same case (card N8kE8arY).
+  //
+  // "What the STORE offers" is the CUSTOMER-facing count, not the enabled count: a
+  // store whose only enabled method is staff-only offers a shopper nothing at all,
+  // and must say so rather than blame the shopper's account (card NmAfwrdE).
+  //
+  // Both counts are taken AFTER the finance floor, and the offered one is the list
+  // actually rendered below: resolving it off `entitledPaymentMethods` counted
+  // methods the shopper cannot see, so a cart under $1,000 whose only surviving
+  // methods were SilverChef/Finance read "available" with an empty list and Place
+  // Order still enabled. The count and the rendered list must be the same list.
+  const paymentAvailability = resolvePaymentAvailability(
+    filterFinanceMethods(checkoutSettings.customerPaymentMethods, financeOffer.eligible).length,
+    paymentMethods.length,
+    !!session
+  );
   // The application form has to exist before its attachment uploads can be
   // accepted, and it is a shared definition rather than hand-made data — so it
   // is provisioned on first use. Never fatal: a checkout must not fail because
   // a form row couldn't be written.
-  if (financeOffer?.eligible) {
+  if (financeMethodsEnabled && financeOffer.eligible) {
     // Cached for a minute and shared with placeOrder — checkout is the critical
     // path and this row changes only when staff edit the form. Never throws.
     await financeApplicationForm();
@@ -349,7 +366,7 @@ export default async function CheckoutPage() {
         stripePublishableKey={stripePublishableKey}
         testMode={testSession}
         testModeCardUnavailable={cardUnavailableInTestSession}
-        finance={financeOffer}
+        finance={financeMethodsEnabled ? financeOffer : null}
       />
     </div>
   );

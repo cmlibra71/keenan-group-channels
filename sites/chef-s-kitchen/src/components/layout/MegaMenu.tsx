@@ -1,110 +1,91 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Menu, ChevronDown, Star } from "lucide-react";
-import type { MegaMenuNode, MegaMenuFeatured, HeaderNavItem } from "@/lib/store";
+import type { MegaMenuFeatured } from "@/lib/store";
+import {
+  flattenTree,
+  itemHref,
+  panelColumns,
+  panelExtras,
+  resolveNavItems,
+  shortNavLabel,
+  splitNavItems,
+  type MegaMenuNodeLike,
+  type MegaNavItem,
+} from "@/lib/mega-menu";
 import { MegaMenuShell } from "./MegaMenuShell";
 
 /**
- * Design-system nav bar (Green-700), driven by the Navigation editor
- * (`nav_structure.header`) with CSS-driven mega panels. Item types:
- *   - `categories`  → the gold "All Departments" entry (→ /categories)
- *   - `category`    → a department link with its auto mega panel (3 link
- *                     columns from the category tree + featured card)
- *   - anything else → a custom link, with an optional simple dropdown of
- *                     children
- * With no editor items the bar renders its built-in default: All Departments,
- * the first 6 departments, and Clearance. Pure server component — panels open
- * on hover and :focus-within, so it's keyboard operable without JS. Hidden
- * below lg (the MobileNavDrawer takes over).
+ * Design-system nav bar (Green-700) with CSS-driven mega panels.
+ *
+ * The bar POPULATES ITSELF: every top-level category is on it unless it has
+ * been switched off (`hiddenCategoryIds`), and each department's panel fills
+ * from the category tree. The Navigation editor's items (`nav_structure.header`)
+ * set the order and add the extras — the gold "All Departments" entry, the
+ * Clearance slot, custom links, and the information pages tucked inside a
+ * department's drop-down (an item's children). Composition lives in
+ * `@/lib/mega-menu` (shared with template/ and unit-tested); this file is
+ * presentation only.
+ *
+ * Pure server component — panels open on hover and :focus-within, so it is
+ * keyboard operable without JS. Hidden below lg (the MobileNavDrawer takes
+ * over, from the same resolved items).
  */
-/** Design nav uses short department labels ("Cooking", "Food Prep") so the
- *  bar stays single-line. */
-function shortNavLabel(name: string): string {
-  return name
-    .replace(/\s+Equipment$/i, "")
-    .replace(/\s*&\s*Chemicals$/i, "")
-    .replace(/Preparation$/i, "Prep")
-    .trim();
-}
-
-/** The bar's built-in structure — what renders when the Navigation editor has
- *  no header items, and what the editor seeds itself from. */
-function defaultNavItems(departments: MegaMenuNode[]): HeaderNavItem[] {
-  return [
-    { type: "categories", label: "All Departments" },
-    ...departments.slice(0, 6).map((d) => ({
-      type: "category" as const,
-      label: d.name,
-      categoryId: d.id,
-    })),
-    { type: "link" as const, label: "Clearance", url: "/clearance" },
-  ];
-}
-
-/** categoryId → node, across every depth of the tree. */
-function flattenTree(departments: MegaMenuNode[]): Map<number, MegaMenuNode> {
-  const byId = new Map<number, MegaMenuNode>();
-  const walk = (nodes: MegaMenuNode[]) => {
-    for (const n of nodes) {
-      byId.set(n.id, n);
-      if (n.children.length) walk(n.children);
-    }
-  };
-  walk(departments);
-  return byId;
-}
-
-function itemHref(item: HeaderNavItem, byId: Map<number, MegaMenuNode>): string {
-  if (item.type === "categories") return "/categories";
-  if (item.type === "category" && item.categoryId) {
-    const node = byId.get(item.categoryId);
-    if (node) return `/categories/${node.slug}`;
-  }
-  if (item.type === "page" && item.pageSlug) return `/pages/${item.pageSlug}`;
-  if (item.type === "blog") return "/blog";
-  return item.url || "#";
-}
-
 export function MegaMenu({
   departments,
   featured,
   items,
+  hiddenCategoryIds,
 }: {
-  departments: MegaMenuNode[];
+  departments: MegaMenuNodeLike[];
   featured: Record<string, MegaMenuFeatured>;
-  items?: HeaderNavItem[];
+  items?: MegaNavItem[];
+  hiddenCategoryIds?: number[];
 }) {
-  const navItems = items && items.length > 0 ? items : defaultNavItems(departments);
+  const navItems = resolveNavItems({ departments, items, hiddenCategoryIds });
   const byId = flattenTree(departments);
-
-  // The trailing run of childless plain links sits right of the spacer (the
-  // Clearance slot in the design) — but only when the bar has department
-  // items; an all-links nav (legacy custom nav) renders as one left group.
-  // Items with dropdown children always stay left (the right slot has none).
-  const hasDepts = navItems.some((n) => n.type === "categories" || n.type === "category");
-  let split = navItems.length;
-  if (hasDepts) {
-    while (split > 0) {
-      const prev = navItems[split - 1];
-      const isPlainLink =
-        prev.type !== "categories" && prev.type !== "category" && !(prev.children?.length);
-      if (!isPlainLink) break;
-      split--;
-    }
-  }
-  const leftItems = navItems.slice(0, split);
-  const rightItems = navItems.slice(split);
+  const { left, right } = splitNavItems(navItems);
 
   return (
     <MegaMenuShell className="hidden lg:block bg-brand-deep relative">
       <div className="container-page">
-        <ul className="flex items-stretch gap-0.5">
-          {leftItems.map((item, i) => renderItem(item, i, byId, featured))}
+        <ul data-nav-bar className="flex flex-nowrap items-stretch gap-0.5 overflow-hidden">
+          {left.map((item, i) => renderItem(item, i, byId, featured))}
+
+          {/* Overflow — shown by MegaMenuShell only when the bar runs out of row */}
+          <li
+            data-nav-more
+            style={{ display: "none" }}
+            className="group/nav relative shrink-0"
+          >
+            <button
+              type="button"
+              className="flex h-full items-center gap-1.5 whitespace-nowrap px-4 py-[13px] text-[13.5px] font-semibold text-[#EAF2EC] transition-colors duration-200 group-hover/nav:bg-black/20 group-hover/nav:text-white group-focus-within/nav:bg-black/20"
+              aria-haspopup="true"
+            >
+              More
+              <ChevronDown className="h-[11px] w-[11px] opacity-70" strokeWidth={2} />
+            </button>
+            <div className="mega-panel invisible absolute right-0 top-full z-[110] min-w-[220px] rounded-b-card border border-black/5 bg-white py-2 opacity-0 shadow-hover transition-all delay-0 duration-150 group-hover/nav:visible group-hover/nav:opacity-100 group-hover/nav:delay-[150ms] group-focus-within/nav:visible group-focus-within/nav:opacity-100">
+              {left.map((item, i) => (
+                <Link
+                  key={`m-${i}`}
+                  data-more-index={i}
+                  style={{ display: "none" }}
+                  href={itemHref(item, byId)}
+                  target={item.newTab ? "_blank" : undefined}
+                  className="block px-4 py-2 text-[13.5px] text-text-primary transition-colors hover:bg-brand-tint hover:text-brand-deep"
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          </li>
 
           <li className="flex-1" aria-hidden />
 
-          {rightItems.map((item, i) => (
-            <li key={`r-${i}`}>
+          {right.map((item, i) => (
+            <li key={`r-${i}`} data-nav-right className="shrink-0">
               <Link
                 href={itemHref(item, byId)}
                 target={item.newTab ? "_blank" : undefined}
@@ -124,14 +105,14 @@ export function MegaMenu({
 }
 
 function renderItem(
-  item: HeaderNavItem,
+  item: MegaNavItem,
   i: number,
-  byId: Map<number, MegaMenuNode>,
+  byId: Map<number, MegaMenuNodeLike>,
   featured: Record<string, MegaMenuFeatured>
 ) {
   if (item.type === "categories") {
     return (
-      <li key={`l-${i}`}>
+      <li key={`l-${i}`} data-nav-item className="shrink-0">
         <Link
           href="/categories"
           className="flex h-full items-center gap-2 whitespace-nowrap bg-member px-4 py-[13px] text-[13.5px] font-bold text-ink-900 transition-colors duration-200 hover:bg-member-bright"
@@ -146,20 +127,21 @@ function renderItem(
   if (item.type === "category" && item.categoryId) {
     const dept = byId.get(item.categoryId);
     if (!dept) return null; // hidden/deleted category — drop the item
+    const extras = panelExtras(item);
     return (
-      <li key={`l-${i}`} className="group/nav">
+      <li key={`l-${i}`} data-nav-item className="group/nav shrink-0">
         <Link
           href={`/categories/${dept.slug}`}
           className="flex h-full items-center gap-1.5 whitespace-nowrap px-4 py-[13px] text-[13.5px] font-semibold text-[#EAF2EC] transition-colors duration-200 group-hover/nav:bg-black/20 group-hover/nav:text-white group-focus-within/nav:bg-black/20"
         >
           {shortNavLabel(item.label || dept.name)}
-          {dept.children.length > 0 && (
+          {(dept.children.length > 0 || extras.length > 0) && (
             <ChevronDown className="h-[11px] w-[11px] opacity-70" strokeWidth={2} />
           )}
         </Link>
 
-        {dept.children.length > 0 && (
-          <MegaPanel dept={dept} feat={featured[String(dept.id)]} />
+        {(dept.children.length > 0 || extras.length > 0) && (
+          <MegaPanel dept={dept} feat={featured[String(dept.id)]} extras={extras} byId={byId} />
         )}
       </li>
     );
@@ -168,7 +150,7 @@ function renderItem(
   // Custom link (link / page / blog), with an optional simple dropdown.
   const children = item.children ?? [];
   return (
-    <li key={`l-${i}`} className="group/nav relative">
+    <li key={`l-${i}`} data-nav-item className="group/nav relative shrink-0">
       <Link
         href={itemHref(item, byId)}
         target={item.newTab ? "_blank" : undefined}
@@ -197,17 +179,20 @@ function renderItem(
   );
 }
 
-function MegaPanel({ dept, feat }: { dept: MegaMenuNode; feat?: MegaMenuFeatured }) {
+function MegaPanel({
+  dept,
+  feat,
+  extras,
+  byId,
+}: {
+  dept: MegaMenuNodeLike;
+  feat?: MegaMenuFeatured;
+  extras: MegaNavItem[];
+  byId: Map<number, MegaMenuNodeLike>;
+}) {
   // 3 link columns: depth-1 children become column groups, balanced across
   // columns; their children are the links (the group itself when childless).
-  const groups = dept.children;
-  const columns: MegaMenuNode[][] = [[], [], []];
-  const weights = [0, 0, 0];
-  for (const g of groups) {
-    const i = weights.indexOf(Math.min(...weights));
-    columns[i].push(g);
-    weights[i] += g.children.length + 2;
-  }
+  const columns = panelColumns(dept.children);
 
   // The panel is full-bleed and drops straight over the page below the bar (the
   // breadcrumb sits ~50px under it), so two guards keep it from stealing clicks
@@ -256,28 +241,46 @@ function MegaPanel({ dept, feat }: { dept: MegaMenuNode; feat?: MegaMenuFeatured
             </div>
           ))}
 
-          {/* Featured panel — self-start so it stays a compact card (image + copy)
-              instead of stretching to the full mega-menu row height. */}
-          <div className="flex flex-col self-start overflow-hidden rounded-card bg-brand-tint">
-            <div className="relative grid h-[120px] place-items-center bg-gradient-to-br from-brand-mid to-brand-deep">
-              {(feat?.image_url ?? dept.image_url) && (
-                <Image src={(feat?.image_url ?? dept.image_url)!} alt="" fill sizes="240px" className="object-cover" />
-              )}
+          <div className="flex flex-col gap-4 self-start">
+            {/* Featured panel — self-start so it stays a compact card (image + copy)
+                instead of stretching to the full mega-menu row height. */}
+            <div className="flex flex-col overflow-hidden rounded-card bg-brand-tint">
+              <div className="relative grid h-[120px] place-items-center bg-gradient-to-br from-brand-mid to-brand-deep">
+                {(feat?.image_url ?? dept.image_url) && (
+                  <Image src={(feat?.image_url ?? dept.image_url)!} alt="" fill sizes="240px" className="object-cover" />
+                )}
+              </div>
+              <div className="p-3.5">
+                <b className="mb-0.5 block text-sm text-text-primary">
+                  {feat?.heading ?? `Shop ${dept.name}`}
+                </b>
+                <p className="mb-2.5 text-xs text-steel-500">
+                  {feat?.body ?? "Member pricing across the full range."}
+                </p>
+                <Link
+                  href={feat?.cta_href ?? `/categories/${dept.slug}`}
+                  className="btn-primary btn-sm"
+                >
+                  {feat?.cta_text ?? "Shop now"}
+                </Link>
+              </div>
             </div>
-            <div className="p-3.5">
-              <b className="mb-0.5 block text-sm text-text-primary">
-                {feat?.heading ?? `Shop ${dept.name}`}
-              </b>
-              <p className="mb-2.5 text-xs text-steel-500">
-                {feat?.body ?? "Member pricing across the full range."}
-              </p>
-              <Link
-                href={feat?.cta_href ?? `/categories/${dept.slug}`}
-                className="btn-primary btn-sm"
-              >
-                {feat?.cta_text ?? "Shop now"}
-              </Link>
-            </div>
+
+            {/* Information pages tucked inside this department by the editor */}
+            {extras.length > 0 && (
+              <div className="border-t border-border pt-3">
+                {extras.map((extra, j) => (
+                  <Link
+                    key={j}
+                    href={itemHref(extra, byId)}
+                    target={extra.newTab ? "_blank" : undefined}
+                    className="block py-[5px] text-[13px] font-medium text-ink-700 transition-colors duration-200 hover:text-accent"
+                  >
+                    {extra.label}
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
