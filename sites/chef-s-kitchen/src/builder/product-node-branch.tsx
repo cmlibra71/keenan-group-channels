@@ -13,6 +13,7 @@ import { cmsFunctionService } from "@keenan/services/services";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { withSilverChefNode } from "@/builder/silverchef-node";
+import { withImageNoticeNode } from "@/builder/product-image-notice";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 
 // ============================================================================
@@ -114,7 +115,11 @@ export async function renderProductNodeBranch({
   // renders from a stored tree, so a panel that must appear on every product on
   // both sites cannot wait for two templates to be hand-edited. Idempotent by
   // node id, and nothing is written back to the stored tree.
-  const nodeTree = withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE);
+  // The "images are illustrative" banner (card 82HgV23q) is PLACED here for the same
+  // reason: it has to be able to appear on any product on either site, and both sites
+  // render this page from a stored tree. Idempotent by node id; renders nothing unless
+  // the product carries the tick, so every other product page is unchanged.
+  const nodeTree = withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE));
 
   const namedStyles = await getNamedStyles().catch(() => ({}));
   const components = (await (draft ? getDraftComponents() : getComponents()).catch(

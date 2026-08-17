@@ -38,6 +38,8 @@
     "builder/home-node-branch.tsx",
     "builder/live-gst.ts",
     "builder/master-leaves.tsx",
+    "builder/product-image-notice.test.ts",
+    "builder/product-image-notice.ts",
     "builder/product-node-branch.tsx",
     "builder/seeds/product.ts",
     "builder/silverchef-node.test.ts",
