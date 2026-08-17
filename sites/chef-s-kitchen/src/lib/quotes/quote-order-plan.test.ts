@@ -72,6 +72,36 @@ describe("planOrderFromPaidQuote — GST", () => {
     assert.equal(plan.order.total_ex_tax, "100.0000");
   });
 
+  test("a store credit bills what the customer's quote asked for, at the order's rate", () => {
+    // Card vkYOSmJj. A credit is money already paid: the quote page and the Pay
+    // button both read `payableInc`, so the order books exactly that. It is split
+    // at the order's own GST rate, the same way an amended order treats a credit.
+    const plan = planOrderFromPaidQuote(
+      baseQuote({
+        base_amount: "82187.0000",
+        quote_amount: "72387.0000",
+        shipping_cost: "200.0000",
+        store_credit_amount: "10000.0000",
+      }),
+      CTX
+    );
+    assert.equal(plan.order.total_inc_tax, "80625.7000");
+    assert.equal(plan.order.total_ex_tax, "73296.0909");
+    assert.equal(plan.order.total_tax, "7329.6091");
+    // The order's own figures reconcile at 10%, and the credit is still recorded.
+    assert.equal(
+      (Number(plan.order.total_ex_tax) + Number(plan.order.total_tax)).toFixed(4),
+      plan.order.total_inc_tax
+    );
+    assert.equal(plan.order.store_credit_amount, "10000.0000");
+  });
+
+  test("a quote with no store credit books the plain inclusive total", () => {
+    const plan = planOrderFromPaidQuote(baseQuote(), CTX);
+    assert.equal(plan.order.total_inc_tax, "110.0000");
+    assert.equal(plan.order.store_credit_amount, "0");
+  });
+
   test("a GST-free tax class charges no GST", () => {
     const plan = planOrderFromPaidQuote(baseQuote(), { gstRate: 0 });
     assert.equal(plan.order.total_tax, "0.0000");
