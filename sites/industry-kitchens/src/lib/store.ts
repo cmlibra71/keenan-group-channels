@@ -130,6 +130,26 @@ export const getChannelSetting = async (key: string): Promise<unknown> => {
   }
 };
 
+/**
+ * Several channel settings in ONE round trip.
+ *
+ * `getChannelSetting` validates the channel and then selects, so N keys cost 2N
+ * queries. This layout resolves settings on EVERY page of the site, and speed is
+ * a stakeholder-visible feature (Tim, 7 Aug demo) — a caller wanting a fixed set
+ * of keys asks once. A key with no row is absent from the map, exactly as
+ * `getChannelSetting` returns null for it; a failed read is an empty map, so a
+ * settings outage degrades to "nothing configured" rather than to an error page.
+ */
+export const getChannelSettings = async (
+  keys: readonly string[]
+): Promise<Record<string, unknown>> => {
+  try {
+    return await channelSettingsService.getValuesByKeys(CHANNEL_ID, keys);
+  } catch {
+    return {};
+  }
+};
+
 export type { MegaMenuNode, MegaMenuFeatured, ContentPage } from "@keenan/services";
 
 // Contact-keyed active subscription (identity unification: the session subject

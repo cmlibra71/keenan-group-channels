@@ -73,3 +73,44 @@ test("the money is formatted, GST inclusive, to the cent", () => {
   assert.ok(offer);
   assert.match(offer.amount, /^\$[\d,]+\.\d{2}$/);
 });
+
+// ── The storefront's own rates (card 6GBlDtwf) ─────────────────────────────
+
+test("the product panel quotes at this storefront's rate, not the shipped one", () => {
+  const offer = productFinanceOffer({
+    price: { displayPrice: 11000 },
+    sku: "RC-1",
+    pricesIncludeTax: true,
+    rates: { standard: 0.06, skope: 0.03625 },
+  });
+  // 11000 x 6% x 12 / 52
+  assert.equal(offer?.weekly, 152.31);
+  assert.equal(offer?.text, "Rent per Week: $152.31");
+});
+
+test("a SKOPE product quotes at this storefront's SKOPE rate", () => {
+  const offer = productFinanceOffer({
+    price: { displayPrice: 11000 },
+    sku: "SKO-1",
+    pricesIncludeTax: true,
+    rates: { standard: 0.06, skope: 0.04 },
+  });
+  assert.equal(offer?.funder, "skope");
+  // 11000 x 4% x 12 / 52
+  assert.equal(offer?.weekly, 101.54);
+});
+
+test("no rates given is exactly what shipped", () => {
+  const shipped = productFinanceOffer({
+    price: { displayPrice: 11000 },
+    sku: "RC-1",
+    pricesIncludeTax: true,
+  });
+  const explicit = productFinanceOffer({
+    price: { displayPrice: 11000 },
+    sku: "RC-1",
+    pricesIncludeTax: true,
+    rates: { standard: 0.055, skope: 0.03625 },
+  });
+  assert.deepEqual(shipped, explicit);
+});
