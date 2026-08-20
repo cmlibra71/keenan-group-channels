@@ -6,6 +6,11 @@
 // price" — the price that shopper is actually looking at, member/contract
 // price included — and SKOPE products use SKOPE's own calculator instead.
 //
+// WHICH products are SKOPE got wider on 2026-08-19 (Steve, same card): a SKU
+// that starts with "SKOPE", and the product's BRAND, count as well as the live
+// site's "SKO-" test. The brand is passed in from the route because the SKU
+// alone missed 23 machines coded SKOPE-… and 76 more whose code says nothing.
+//
 // The RATES are this storefront's own (card 6GBlDtwf) and arrive from context;
 // everything else below still holds.
 //
@@ -35,7 +40,7 @@ import { gstSplit } from "@keenan/services/calc";
 import {
   DEFAULT_FINANCE_RATES,
   formatFinanceMoney,
-  isSkopeSku,
+  isSkopeProduct,
   rateForLine,
   weeklyRent,
   type FinanceRates,
@@ -97,6 +102,13 @@ export function productFinanceOffer(input: {
   price: ProductPriceInput;
   /** The SKU actually being bought — the VARIANT's when one is chosen. */
   sku?: string | null;
+  /**
+   * The product's brand name, where the route holds one (it always does on a
+   * product page). Half of the SKOPE test since Steve widened it on 2026-08-19:
+   * a SKOPE-branded fridge whose code says nothing still rents at SKOPE's
+   * factor. Omitted ⇒ the SKU decides on its own, which is the old behaviour.
+   */
+  brand?: string | null;
   pricesIncludeTax: boolean;
   /**
    * This storefront's own rates (card 6GBlDtwf), from `useFinanceRates()`. They
@@ -115,11 +127,13 @@ export function productFinanceOffer(input: {
   // so "which products are SKOPE" has one answer across cart, checkout and page.
   const weekly = weeklyRent(
     priceIncGst,
-    rateForLine({ amountIncGst: priceIncGst, sku: input.sku }, rates)
+    rateForLine({ amountIncGst: priceIncGst, sku: input.sku, brand: input.brand }, rates)
   );
   if (weekly <= 0) return null;
 
-  const funder: ProductFinanceFunder = isSkopeSku(input.sku) ? "skope" : "silverchef";
+  const funder: ProductFinanceFunder = isSkopeProduct({ sku: input.sku, brand: input.brand })
+    ? "skope"
+    : "silverchef";
   const amount = formatFinanceMoney(weekly);
   return {
     funder,

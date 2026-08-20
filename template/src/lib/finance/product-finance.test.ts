@@ -34,6 +34,45 @@ test("a SKOPE SKU rents at SKOPE's rate, under SKOPE's own words", () => {
   assert.equal(offer.text, `Own Me ${offer.amount} a week`);
 });
 
+test("a SKU that STARTS with SKOPE is a SKOPE machine too (Steve, 2026-08-19)", () => {
+  // Steve's own example on the card. The live site's `SKO-` rule never matched
+  // it, so this fridge quoted SilverChef's 5.5% until now.
+  const offer = productFinanceOffer({
+    price: { displayPrice: 5000 },
+    sku: "SKOPE-TCE1000N",
+    pricesIncludeTax: true,
+  });
+  assert.ok(offer);
+  assert.equal(offer.funder, "skope");
+  assert.equal(offer.weekly, weeklyRent(5000, SKOPE_WEEKLY_RATE));
+});
+
+test("a SKOPE-BRANDED product rents at SKOPE's rate even when its code says nothing", () => {
+  const offer = productFinanceOffer({
+    price: { displayPrice: 5000 },
+    sku: "BB380X-2SW",
+    brand: "SKOPE",
+    pricesIncludeTax: true,
+  });
+  assert.ok(offer);
+  assert.equal(offer.funder, "skope");
+  assert.equal(offer.weekly, weeklyRent(5000, SKOPE_WEEKLY_RATE));
+  assert.equal(offer.text, `Own Me ${offer.amount} a week`);
+});
+
+test("a brand we hold never pushes a SKO- machine back onto SilverChef", () => {
+  // Skope distributes Irinox; those products carry SKO- codes and rent at
+  // SKOPE's factor today. Steve said "as well", so nothing loses the rate.
+  const offer = productFinanceOffer({
+    price: { displayPrice: 5000 },
+    sku: "SKO-MF250.2",
+    brand: "IRINOX",
+    pricesIncludeTax: true,
+  });
+  assert.ok(offer);
+  assert.equal(offer.funder, "skope");
+});
+
 test("everything else is SilverChef, under SilverChef's words", () => {
   const offer = productFinanceOffer({ price: { displayPrice: 5000 }, sku: "RC-1", pricesIncludeTax: true });
   assert.ok(offer);
