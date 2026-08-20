@@ -7,8 +7,25 @@ export const MIN_QUERY_LENGTH = 2;
 
 export const MAX_LIMIT = 50;
 export const DEFAULT_LIMIT = 20;
-/** Typeahead never pages; this is generous and still bounds enumeration. */
-export const MAX_OFFSET = 200;
+
+/**
+ * How deep this endpoint will ever reach, in index POSITIONS.
+ *
+ * The header suggestion dropdown now pages (G3gpxN0k), so "typeahead never
+ * pages" is no longer true and the old flat `MAX_OFFSET = 200` no longer
+ * describes the bound that matters. The bound that matters is the same
+ * anti-enumeration ceiling `/search` enforces: `MAX_RESULTS` in
+ * `lib/search-results.ts` (8 x 40). Kept as a literal rather than an import so
+ * this module stays free of cross-module resolution — `search-suggestions.test.ts`
+ * asserts the two agree, so they cannot drift apart silently.
+ *
+ * `offset + limit` is clamped to it below, which makes the reachable window
+ * EXACTLY 320 rows per query where the old pair (offset <= 200, limit <= 50)
+ * reached 250.
+ */
+export const MAX_RESULT_WINDOW = 320;
+/** Deepest first row. The window clamp below does the rest. */
+export const MAX_OFFSET = MAX_RESULT_WINDOW - 1;
 
 /** Sort expressions the public endpoint will pass to Meilisearch. */
 export const ALLOWED_SORT = ["price:asc", "price:desc", "createdAt:desc"] as const;
@@ -60,7 +77,8 @@ export type PublicSearchParams = {
  * filter expression straight through, which made the whole catalogue
  * enumerable by anyone who could type a URL. No caller has ever used it — every
  * consumer (SearchTypeahead in all three trees, plus IK's HeaderSearch) sends
- * exactly `?q=…&limit=8` — so the parameter is DROPPED rather than sanitised.
+ * only `q`, `limit` and `offset` — so the parameter is DROPPED rather than
+ * sanitised.
  * Sanitising a filter grammar is a losing game; not having one is not.
  *
  * If structured filtering is needed later, add explicit `brand` / `category`
@@ -68,11 +86,18 @@ export type PublicSearchParams = {
  */
 export function parsePublicSearchParams(sp: URLSearchParams): PublicSearchParams {
   const q = (sp.get("q") || "").trim();
+  const offset = clampInt(sp.get("offset"), 0, MAX_OFFSET, 0);
+  // The window, not just its start: a request at offset 319 may still ask for
+  // 50 rows, and without this clamp the reachable depth would be 369, not 320.
+  const limit = Math.min(
+    clampInt(sp.get("limit"), 1, MAX_LIMIT, DEFAULT_LIMIT),
+    MAX_RESULT_WINDOW - offset
+  );
   return {
     q,
     tooShort: q.length < MIN_QUERY_LENGTH,
-    limit: clampInt(sp.get("limit"), 1, MAX_LIMIT, DEFAULT_LIMIT),
-    offset: clampInt(sp.get("offset"), 0, MAX_OFFSET, 0),
+    limit,
+    offset,
     sort: allowlist(sp.get("sort"), ALLOWED_SORT),
     facets: allowlist(sp.get("facets"), ALLOWED_FACETS),
   };

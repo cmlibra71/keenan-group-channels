@@ -40,6 +40,38 @@ test("the variant SKU wins, because that is what identifies a SKOPE line", () =>
   assert.equal(lines[0].sku, "SKO-99");
 });
 
+test("the BRAND rides onto the line, so the cart agrees with the product page", () => {
+  // Since Steve widened the SKOPE test (2026-08-19) the brand is half of it.
+  // `getWithItems` joins `brands` for exactly this.
+  const lines = financeLinesFromCart(
+    [cartLine({ product_sku: "BB380X-2SW", brand_name: "SKOPE" } as never)],
+    false
+  );
+  assert.equal(lines[0].brand, "SKOPE");
+});
+
+test("a SKOPE-branded basket is a SKOPE basket even when no code says SKO-", () => {
+  const offer = financeOfferForCart({
+    lines: financeLinesFromCart(
+      [cartLine({ list_price: "5000", product_sku: "BB380X-2SW", brand_name: "SKOPE" } as never)],
+      true
+    ),
+    goodsTotalIncGst: 5000,
+  });
+  assert.equal(offer.skopeOnly, true);
+  assert.ok(offer.skopeWeekly && offer.skopeWeekly > 0);
+});
+
+test("a SKOPE-coded machine is one too, whichever way its code is written", () => {
+  for (const sku of ["SKO-BME1200", "SKOPE-TCE1000N"]) {
+    const offer = financeOfferForCart({
+      lines: financeLinesFromCart([cartLine({ list_price: "5000", product_sku: sku } as never)], true),
+      goodsTotalIncGst: 5000,
+    });
+    assert.equal(offer.skopeOnly, true, sku);
+  }
+});
+
 test("under $1,000 inc GST there is no offer and no weekly figure", () => {
   const offer = financeOfferForCart({ lines: [{ amountIncGst: 999.99 }], goodsTotalIncGst: 999.99 });
   assert.equal(offer.eligible, false);

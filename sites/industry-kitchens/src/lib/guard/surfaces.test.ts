@@ -4,9 +4,15 @@ import {
   classifyActionSurface,
   classifySurface,
   isCredentialPath,
+  isPagedSearchRequest,
   SURFACE_LIMITS,
   type SurfaceClass,
 } from "./surfaces.ts";
+import {
+  MAX_SUGGESTIONS,
+  SUGGESTIONS_PER_PAGE,
+  suggestionRequestUrl,
+} from "../search-suggestions.ts";
 
 const CASES: [string, SurfaceClass][] = [
   // Operational routes that must never be guarded.
@@ -153,4 +159,70 @@ test("the credential budget is far above a human and below a stuffing run", () =
   const limit = SURFACE_LIMITS.credential;
   assert.ok(limit.burstMax >= 10, "a shopper retrying a form must not trip it");
   assert.ok(limit.max <= 100, "must still be reachable by an attacker in minutes");
+});
+
+// ── The header suggestion dropdown's scroll load (G3gpxN0k) ────────────────
+
+test("a later /api/search window is recognised as a scroll load", () => {
+  assert.equal(isPagedSearchRequest("/api/search", "40"), true);
+  assert.equal(isPagedSearchRequest("/api/search/", "280"), true, "trailing slash");
+});
+
+test("the FIRST window keeps its full weight", () => {
+  // NOT because an enumerator would only ever repeat the first window — it can
+  // buy the discount with `offset=1` and lose only row #1. Leaving the cheapest
+  // possible request (`?q=x`, no offset) undiscounted is simply what keeps the
+  // ledger below in range; that ledger is the property, this is the mechanism.
+  assert.equal(isPagedSearchRequest("/api/search", null), false);
+  assert.equal(isPagedSearchRequest("/api/search", "0"), false);
+  assert.equal(isPagedSearchRequest("/api/search", ""), false);
+  assert.equal(isPagedSearchRequest("/api/search", "-40"), false);
+  assert.equal(isPagedSearchRequest("/api/search", "abc"), false);
+});
+
+test("the discount reaches no path but /api/search", () => {
+  for (const path of ["/search", "/api/address/suggest", "/categories/ovens", "/", "/api"]) {
+    assert.equal(isPagedSearchRequest(path, "40"), false, path);
+  }
+});
+
+test("a full scroll of the dropdown cannot rate-limit itself", () => {
+  // Eight requests against a burst allowance of eight is exactly the failure
+  // the discount exists to stop, so this asserts the arithmetic, not the intent.
+  const CHUNK_WEIGHT = 1 / 3; // SEARCH_CHUNK_WEIGHT in ./index.ts
+  let spent = 0;
+  for (let offset = 0; offset < MAX_SUGGESTIONS; offset += SUGGESTIONS_PER_PAGE) {
+    const query = suggestionRequestUrl("oven", offset).split("?")[1];
+    const offsetRaw = new URLSearchParams(query).get("offset");
+    spent += isPagedSearchRequest("/api/search", offsetRaw) ? CHUNK_WEIGHT : 1;
+  }
+  assert.ok(spent < SURFACE_LIMITS.search.burstMax, `spent ${spent}`);
+  assert.ok(spent > 3 && spent < 4, `one full walk should cost ~3.3, got ${spent}`);
+});
+
+test("the discounted surface is still the tightest on the site", () => {
+  // The relaxation is recorded with its arithmetic in the behaviour register.
+  // If either budget moves, this is the check that should fail first.
+  //
+  // Checked BOTH ways round, because the two weights compound differently: a
+  // deep /api/search request carrying a session cookie pays SEARCH_CHUNK_WEIGHT
+  // *and* SESSION_WEIGHT (1/9), where a category page pays only SESSION_WEIGHT
+  // (1/3). That is a 3x swing in /api/search's favour, so the ordering has to be
+  // asserted with the cookie and not only without it.
+  const CHUNK_WEIGHT = 1 / 3;
+  const SESSION = 1 / 3; // SESSION_WEIGHT in ./index.ts
+  const API_SEARCH_ROWS = 50; // MAX_LIMIT in lib/search-params.ts
+  const SEARCH_PAGE_ROWS = 320; // one cumulative /search render at the ceiling
+  const CATEGORY_ROWS = 24 * 8; // one cumulative category page
+
+  for (const cookie of [1, SESSION]) {
+    const apiSearchRows = (SURFACE_LIMITS.search.max / (CHUNK_WEIGHT * cookie)) * API_SEARCH_ROWS;
+    const searchPageRows = (SURFACE_LIMITS.search.max / cookie) * SEARCH_PAGE_ROWS;
+    const categoryRows = (SURFACE_LIMITS.listing.max / cookie) * CATEGORY_ROWS;
+    assert.ok(
+      apiSearchRows < searchPageRows && apiSearchRows < categoryRows,
+      `/api/search ${apiSearchRows} must stay under /search ${searchPageRows} ` +
+        `and a category page ${categoryRows} (session weight ${cookie})`
+    );
+  }
 });
