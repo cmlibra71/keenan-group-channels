@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { draftMode, headers } from "next/headers";
+import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { ChevronRight, Package } from "lucide-react";
@@ -10,6 +11,7 @@ import {
   getSubcategories,
   getCategoryBreadcrumbs,
   getFeatureFlag,
+  getCmsCategoryPage,
   getCmsTemplate,
 } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
@@ -22,6 +24,43 @@ import { FilterRail, FilterChips, SortSelect } from "@/components/category/Filte
 import { RichContent } from "@/components/content/RichContent";
 import { CategorySeo } from "@/components/category/CategorySeo";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
+
+/**
+ * Category search metadata, in the ranking both live sites use (xvz6pXB4).
+ *
+ * This storefront's own PUBLISHED wording wins: the portal's Category page SEO screen is
+ * where per-site search wording is written and reviewed, and a reviewer there has to be
+ * able to trust that what they publish is what Google sees. A CMS category page's
+ * hand-typed meta is the next fallback, then the category record's own fields.
+ *
+ * `seo_page_title` and `page_title` are DIFFERENT fields on purpose and must stay that
+ * way: `page_title` is the on-page heading, and a search title above the product grid
+ * reads as a mistake. This block lives in the template as well as in both sites so a site
+ * forked from here does not silently lose the ranking.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const category = await getCategoryBySlug(slug);
+  if (!category) return {};
+  const cms = await getCmsCategoryPage(category.id).catch(() => null);
+  const meta = (cms?.page_meta ?? {}) as { meta_title?: string; meta_description?: string };
+  const cat = category as {
+    name: string;
+    page_title?: string | null;
+    meta_description?: string | null;
+    seo_page_title?: string | null;
+    seo_meta_description?: string | null;
+  };
+  return {
+    title: cat.seo_page_title || meta.meta_title || cat.page_title || cat.name,
+    description:
+      cat.seo_meta_description || meta.meta_description || cat.meta_description || undefined,
+  };
+}
 
 const PER_PAGE = 24;
 const MAX_PAGES = 8; // "Load more" renders cumulatively; hard cap keeps queries sane.

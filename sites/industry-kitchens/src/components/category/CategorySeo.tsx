@@ -48,7 +48,12 @@ export function CategorySeo({
   if (!introHtml && items.length === 0) return null;
 
   return (
-    <section className="border-t border-zinc-200" aria-labelledby="category-seo-heading">
+    <section
+      className="border-t border-zinc-200"
+      {...(items.length > 0
+        ? { "aria-labelledby": "category-seo-heading" }
+        : { "aria-label": `About ${categoryName}` })}
+    >
       {/* THE BLOCK OWNS ITS OWN CONTAINER, exactly as the Chefs Depot one does. The node
           branch returns an authored tree and the block is appended AFTER it, outside any
           page container, so a block relying on a parent's gutter runs edge to edge —
@@ -71,8 +76,8 @@ export function CategorySeo({
             {categoryName} — Common Questions
           </h2>
           <div className="divide-y divide-zinc-200 border-y border-zinc-200">
-            {items.map((item) => (
-              <details key={item.question} className="group py-4">
+            {items.map((item, index) => (
+              <details key={`${index}-${item.question}`} className="group py-4">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[15px] font-semibold text-zinc-900">
                   {item.question}
                   <span className="text-zinc-500 transition-transform duration-200 group-open:rotate-45">

@@ -50,20 +50,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ revalidated: true });
   }
 
-  // Per-storefront SEO wording published from the portal (xvz6pXB4). Only the brand or
-  // category ROW changed, so these purge the data tag they touch and RETURN — the broad
-  // `channel-${id}` purge below is a hard expiry that forces a mega-menu and category-tree
-  // recompute on Industry Kitchens' ~4.5k categories, and a bulk publish would fire one per
-  // storefront each time. Nav and settings read neither of these fields.
-  if (kind === "brand_seo") {
-    purge("brands");
-    return NextResponse.json({ revalidated: true });
-  }
+  // kind "category_seo" is the portal publishing a category page's per-storefront SEO
+  // wording (xvz6pXB4), which a reviewer works through in bulk. Only the category ROW
+  // changed, and category reads carry their own "categories" tag — so purge that and leave
+  // the broad channel tag alone, for the same reason "product" and "brand_seo" do. There is
+  // no narrower tag to fire: `getCategoryBySlug` is tagged `channel-${id}` + "categories"
+  // and nothing else.
   if (kind === "category_seo") {
     purge("categories");
-    if (typeof categoryId === "number") {
-      purge(`channel-${channelId}-category-${categoryId}`);
-    }
     return NextResponse.json({ revalidated: true });
   }
 

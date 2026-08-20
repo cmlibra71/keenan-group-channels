@@ -60,7 +60,12 @@ export function CategorySeo({
   if (!introHtml && items.length === 0) return null;
 
   return (
-    <section className="section-bordered" aria-labelledby="category-seo-heading">
+    <section
+      className="section-bordered"
+      {...(items.length > 0
+        ? { "aria-labelledby": "category-seo-heading" }
+        : { "aria-label": `About ${categoryName}` })}
+    >
       <div className="container-page section-padding">
         {introHtml && (
           <RichContent
@@ -79,8 +84,8 @@ export function CategorySeo({
               {categoryName} — Common Questions
             </h2>
             <div className="divide-y divide-border border-y border-border">
-              {items.map((item) => (
-                <details key={item.question} className="group py-4">
+              {items.map((item, index) => (
+                <details key={`${index}-${item.question}`} className="group py-4">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[15px] font-semibold text-text-primary">
                     {item.question}
                     <span className="text-accent transition-transform duration-200 group-open:rotate-45">
