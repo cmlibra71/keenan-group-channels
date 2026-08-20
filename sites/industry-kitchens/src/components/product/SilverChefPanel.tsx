@@ -86,11 +86,13 @@ export function SilverChefPanel() {
       <div className="min-w-0">
         <p className="text-sm font-semibold text-text-primary">{offer.text}</p>
         {/* Straight to the form (Steve's card: the button opens the finance
-            form). `/silverchef/apply` is a coded route on both sites, so this
-            works whether that site's SilverChef information page is the CMS
-            one (Industry Kitchens) or the coded fallback (Chefs Depot). */}
+            form), and to THIS funder's form — a Skope offer opens Skope
+            Funding's application, never SilverChef's (Steve, 2026-08-20). Both
+            are coded routes on both sites, so this works whether that site's
+            SilverChef information page is the CMS one (Industry Kitchens) or
+            the coded fallback (Chefs Depot). */}
         <a
-          href="/silverchef/apply"
+          href={offer.applyPath}
           className="mt-0.5 inline-flex items-center gap-1 text-sm text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
         >
           Apply for Finance <span aria-hidden="true">&rsaquo;</span>

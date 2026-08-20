@@ -39,7 +39,10 @@
 import { gstSplit } from "@keenan/services/calc";
 import {
   DEFAULT_FINANCE_RATES,
+  FINANCE_METHOD_ID,
+  FUNDING_TYPES,
   formatFinanceMoney,
+  fundingTypesForMethod,
   isSkopeProduct,
   rateForLine,
   weeklyRent,
@@ -48,6 +51,44 @@ import {
 
 /** Which funder is quoting, so the panel can wear the right identity. */
 export type ProductFinanceFunder = "silverchef" | "skope";
+
+/**
+ * Where "Apply for Finance" goes, PER FUNDER.
+ *
+ * Steve, 2026-08-20 on this card: "clicking on the SKOPE funding link that
+ * appears on the product page takes you to the Silverchef finance application
+ * page". It did — the link was hardcoded — so a fridge quoted at Skope's factor
+ * under a "Skope Funding" heading handed the customer to SilverChef's
+ * application. A customer may never be handed to the wrong financier, so the
+ * funder that quoted the figure is the funder whose application opens.
+ *
+ * Both are CODED routes on both storefronts (`/pages/<slug>` is the CMS
+ * namespace, so neither can ever collide with a page staff author).
+ */
+export const FINANCE_APPLY_PATH: Record<ProductFinanceFunder, string> = {
+  silverchef: "/silverchef/apply",
+  skope: "/skope-funding/apply",
+};
+
+/**
+ * The funding types one funder's application offers.
+ *
+ * Same split the CHECKOUT already makes between its two buttons
+ * (`fundingTypesForMethod`, card VAjaPj0t) — the Skope application is the
+ * `finance` button's application, so it offers Skope Funding and the
+ * traditional option and never SilverChef's own types. The SilverChef page
+ * keeps the whole list: somebody applying before they have chosen equipment has
+ * not ruled anything out, which is the behaviour that shipped.
+ *
+ * Used by the PAGE (what is rendered) and by the server action (what is
+ * accepted), so a posted funding type from the other funder's list is refused
+ * rather than filed under the wrong financier.
+ */
+export function financeApplyFundingTypes(funder: ProductFinanceFunder): string[] {
+  return funder === "skope"
+    ? fundingTypesForMethod(FINANCE_METHOD_ID)
+    : FUNDING_TYPES.map((t) => t.label);
+}
 
 export interface ProductFinanceOffer {
   funder: ProductFinanceFunder;
@@ -59,6 +100,8 @@ export interface ProductFinanceOffer {
   text: string;
   /** The price the figure was worked out from, GST inclusive. */
   priceIncGst: number;
+  /** THIS funder's application form — never the other one's. */
+  applyPath: string;
 }
 
 export interface ProductPriceInput {
@@ -141,5 +184,6 @@ export function productFinanceOffer(input: {
     amount,
     text: funder === "skope" ? `Own Me ${amount} a week` : `Rent per Week: ${amount}`,
     priceIncGst,
+    applyPath: FINANCE_APPLY_PATH[funder],
   };
 }

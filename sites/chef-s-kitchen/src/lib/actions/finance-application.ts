@@ -8,6 +8,11 @@ import {
   FINANCE_APPLICATION_FORM_KEY,
   FUNDING_TYPES,
 } from "@keenan/services/services";
+import {
+  FINANCE_APPLY_PATH,
+  financeApplyFundingTypes,
+  type ProductFinanceFunder,
+} from "@/lib/finance/product-finance";
 import { fileFinanceApplication } from "@/lib/checkout/finance-application";
 import { financeApplicationForm } from "@/lib/checkout/finance-form";
 import { SILVERCHEF_METHOD_ID, FINANCE_METHOD_ID } from "@keenan/services/finance";
@@ -16,7 +21,7 @@ import { getSession } from "@/lib/auth";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
 
 // ============================================================================
-// Applying for finance from the SilverChef page (card 6f47rFeT).
+// Applying for finance from a funder's own application page (card 6f47rFeT).
 //
 // The product page's "Apply for Finance" has to open a form that actually
 // files an application. That machinery already exists for the checkout
@@ -28,6 +33,13 @@ import { resolveAccountOptions } from "@/lib/checkout/account-options";
 // The one thing the checkout gets for free and a public page does not is a
 // human on the other end, so the spam gates from `lib/actions/forms.ts` are
 // repeated here: honeypot, dwell time, and the same per-IP sliding windows.
+//
+// TWO FUNDERS, TWO APPLICATIONS (Steve, 2026-08-20). A Skope offer opens Skope
+// Funding's own page, so the funder travels with the submission: it decides
+// which funding types are accepted and which page path is recorded on the
+// enquiry. It is never trusted for anything that could cross a customer to the
+// wrong financier on its own — the payment method is still read off the funding
+// type the applicant actually chose.
 // ============================================================================
 
 export interface FinanceApplicationSubmitResult {
@@ -37,8 +49,6 @@ export interface FinanceApplicationSubmitResult {
   notified?: boolean;
 }
 
-const FUNDING_TYPE_LABELS = FUNDING_TYPES.map((t) => t.label);
-
 export async function submitFinanceApplication(input: {
   /** Answers keyed by the form's own field names (no `finance_` prefix). */
   values: Record<string, string>;
@@ -47,6 +57,9 @@ export async function submitFinanceApplication(input: {
   hp?: string;
   /** Client mount timestamp (ms) for the dwell check. */
   t?: number;
+  /** Whose application page this was — SilverChef's unless a Skope offer sent
+   *  them here. Defaults to SilverChef, which is what shipped. */
+  funder?: ProductFinanceFunder;
 }): Promise<FinanceApplicationSubmitResult> {
   const h = await headers();
   const ip = (h.get("x-forwarded-for")?.split(",")[0] || h.get("x-real-ip") || "").trim() || "unknown";
@@ -68,12 +81,15 @@ export async function submitFinanceApplication(input: {
   if (JSON.stringify(values).length > 20_000)
     return { success: false, error: "That application is too long to send." };
 
-  // The funding type must be one the business actually offers. There is no
-  // basket here, so — unlike the checkout — no button narrows the list and no
-  // SKOPE-only test applies: a person applying from the SilverChef page has not
-  // chosen their equipment yet.
+  // The funding type must be one THIS funder's page actually offers. There is
+  // no basket here, so — unlike the checkout — no SKOPE-only test applies: a
+  // person applying before they have chosen their equipment has not ruled
+  // anything out. The SilverChef page therefore keeps the whole list; the Skope
+  // page accepts only the funding types it renders, so a hand-posted
+  // "SilverChef - I do have an account" cannot be filed off it.
+  const funder: ProductFinanceFunder = input.funder === "skope" ? "skope" : "silverchef";
   const fundingType = values.funding_type ?? "";
-  if (fundingType && !FUNDING_TYPE_LABELS.includes(fundingType))
+  if (fundingType && !financeApplyFundingTypes(funder).includes(fundingType))
     return { success: false, error: "Please choose a funding type from the list." };
 
   // The STORED field contract is the authority on a complete application — the
@@ -104,8 +120,9 @@ export async function submitFinanceApplication(input: {
     // No order: this application comes before the equipment is chosen.
     paymentMethod: isSkopeFunding(fundingType) ? FINANCE_METHOD_ID : SILVERCHEF_METHOD_ID,
     // Where the application was actually filled in, so a staff member reading
-    // the enquiry can tell a pre-purchase application from a checkout one.
-    pagePath: "/silverchef/apply",
+    // the enquiry can tell a pre-purchase application from a checkout one — and
+    // which funder's page the customer was on when they filled it in.
+    pagePath: FINANCE_APPLY_PATH[funder],
     values,
     uploadToken: input.uploadToken ?? null,
     accountId,
