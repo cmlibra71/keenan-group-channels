@@ -66,6 +66,13 @@ export interface FinanceCartLine {
   sale_price: string | null;
   product_sku?: string | null;
   variant_sku?: string | null;
+  /**
+   * The line's BRAND. Half of the SKOPE test since Steve widened it (card
+   * 6f47rFeT, 2026-08-19), and the reason `getWithItems` joins `brands`: the
+   * product page reads the brand, so the checkout has to as well or one fridge
+   * carries two different weekly rents on two of our own screens.
+   */
+  brand_name?: string | null;
 }
 
 /** Everything the checkout needs to draw and validate the finance options. */
@@ -115,6 +122,7 @@ export function financeLinesFromCart(
     return {
       amountIncGst: gstSplit(lineTotal, pricesIncludeTax).incTax,
       sku: item.variant_sku ?? item.product_sku ?? null,
+      brand: item.brand_name ?? null,
     };
   });
 }

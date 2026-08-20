@@ -37,6 +37,9 @@ export function SilverChefPanel() {
   const rates = useFinanceRates();
 
   const sku = purchase.activeVariant?.sku ?? purchase.product.sku;
+  // The BRAND decides alongside the SKU since Steve widened the SKOPE test
+  // (2026-08-19): a SKOPE fridge coded `BB380X-2SW` says nothing in its SKU.
+  // A variant never has its own brand — the brand belongs to the product.
   const offer = productFinanceOffer({
     price: {
       displayPrice: purchase.displayPrice,
@@ -44,6 +47,7 @@ export function SilverChefPanel() {
       memberPrice: purchase.activeMemberPrice,
     },
     sku,
+    brand: purchase.product.brandName ?? null,
     pricesIncludeTax,
     rates,
   });
