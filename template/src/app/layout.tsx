@@ -7,6 +7,7 @@ import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { siteBaseUrl } from "@/lib/seo";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { ScrollReset } from "@/components/layout/ScrollReset";
 import { GstProvider } from "@/lib/gst";
 import { FinanceRatesProvider } from "@/lib/finance/finance-rates-context";
 import { financeRatesForChannel } from "@/lib/finance/finance-rates";
@@ -98,6 +99,7 @@ export default async function RootLayout({
               logoAlt={logoAlt}
               navCategories={topCategories.slice(0, 6)}
             />
+            <ScrollReset />
             <main className="flex-1">{children}</main>
             <Footer storeName={storeName} config={footerConfig} />
           </CartQuoteCountsProvider>
