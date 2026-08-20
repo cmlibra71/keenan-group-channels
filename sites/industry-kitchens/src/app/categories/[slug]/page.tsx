@@ -24,6 +24,7 @@ import { applyStorefrontFilters, enabledFilterIds } from "@/lib/storefront-filte
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
 import { RichContent } from "@/components/content/RichContent";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
+import { CategorySeo } from "@/components/category/CategorySeo";
 
 // Emit category SEO (CMS category-page meta if set, else the category record).
 export async function generateMetadata({
@@ -36,10 +37,21 @@ export async function generateMetadata({
   if (!category) return {};
   const cms = await getCmsCategoryPage(category.id).catch(() => null);
   const meta = (cms?.page_meta ?? {}) as { meta_title?: string; meta_description?: string };
-  const cat = category as { name: string; page_title?: string | null; meta_description?: string | null };
+  const cat = category as {
+    name: string;
+    page_title?: string | null;
+    meta_description?: string | null;
+    seo_page_title?: string | null;
+    seo_meta_description?: string | null;
+  };
+  // The storefront's own PUBLISHED wording wins (xvz6pXB4): the Category page SEO screen
+  // is where per-site search wording is written and reviewed, and a reviewer there has to
+  // be able to trust that what they publish is what Google sees. A CMS category page's
+  // hand-typed meta stays as the next fallback, then the category record's own fields.
   return {
-    title: meta.meta_title || cat.page_title || cat.name,
-    description: meta.meta_description || cat.meta_description || undefined,
+    title: cat.seo_page_title || meta.meta_title || cat.page_title || cat.name,
+    description:
+      cat.seo_meta_description || meta.meta_description || cat.meta_description || undefined,
   };
 }
 
@@ -163,6 +175,23 @@ export default async function CategoryPage({
   const aboveBlocks = region("above_listing");
   const belowBlocks = region("below_listing");
 
+  // Bottom-of-page SEO content for this storefront (xvz6pXB4). Absent unless somebody has
+  // PUBLISHED it: the overlay only reads approved rows, so a category with nothing
+  // published renders no block at all.
+  const seo = category as unknown as {
+    channel_seo_intro_html?: string;
+    channel_seo_faq?: { question: string; answer_html: string; answer_text: string }[];
+    channel_seo_faq_jsonld?: string;
+  };
+  const categorySeo = (
+    <CategorySeo
+      introHtml={seo.channel_seo_intro_html}
+      faq={seo.channel_seo_faq}
+      faqJsonLd={seo.channel_seo_faq_jsonld}
+      categoryName={category.name}
+    />
+  );
+
   const nextPageHref = (() => {
     const next = new URLSearchParams();
     if (sp.sub && filtersOn.has("sub")) next.set("sub", sp.sub);
@@ -202,7 +231,16 @@ export default async function CategoryPage({
       categorySlugFallback: slug,
       draft,
     });
-    if (nodeRendered) return nodeRendered;
+    // The authored tree owns the page, so the SEO block is appended AFTER it rather than
+    // squeezed inside: Steve asked for bottom-of-page content, and the foot of the page is
+    // the same place whichever branch drew the rest of it.
+    if (nodeRendered)
+      return (
+        <>
+          {nodeRendered}
+          {categorySeo}
+        </>
+      );
   }
 
   // ═══ CMS category-layout TEMPLATE path (kill switch: flag off → legacy) ═══
@@ -236,13 +274,15 @@ export default async function CategoryPage({
             draft={draft}
             context={context}
           />
+          {categorySeo}
         </div>
       );
     }
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    <>
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
       {/* ═══ Light header block ═══ */}
       <div className="mb-8 rounded-2xl bg-zinc-50 px-6 py-8 sm:px-8">
         {/* Breadcrumb */}
@@ -350,6 +390,14 @@ export default async function CategoryPage({
 
       {/* ═══ CMS: below-listing content (empty unless set) ═══ */}
       {belowBlocks.length > 0 && <BlockRenderer blocks={belowBlocks} draft={draft} />}
-    </div>
+
+      </div>
+
+      {/* ═══ Bottom-of-page SEO content (xvz6pXB4) — last thing on the page, and nothing at
+          all until a person has published it for this storefront. OUTSIDE the page
+          container: the block brings its own, so it lays out identically here and after
+          the authored node tree, which has no container to sit inside. ═══ */}
+      {categorySeo}
+    </>
   );
 }
