@@ -20,6 +20,7 @@ import { redirectIfMapped } from "@/lib/redirect-seam";
 import { applyStorefrontFilters, enabledFilterIds } from "@/lib/storefront-filters";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
 import { RichContent } from "@/components/content/RichContent";
+import { CategorySeo } from "@/components/category/CategorySeo";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 
 const PER_PAGE = 24;
@@ -131,6 +132,15 @@ export default async function CategoryPage({
   const shown = products.length;
   const hasMore = shown < total && page < MAX_PAGES;
 
+  // Bottom-of-page SEO content for this storefront (xvz6pXB4). Absent unless somebody has
+  // PUBLISHED it: the overlay only reads approved rows, so a category with nothing
+  // published renders no block at all.
+  const seo = category as unknown as {
+    channel_seo_intro_html?: string;
+    channel_seo_faq?: { question: string; answer_html: string; answer_text: string }[];
+    channel_seo_faq_jsonld?: string;
+  };
+
   const nextPageHref = (() => {
     const next = new URLSearchParams();
     if (sp.sub && filtersOn.has("sub")) next.set("sub", sp.sub);
@@ -180,7 +190,8 @@ export default async function CategoryPage({
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    <>
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
       {/* ═══ Light header block ═══ */}
       <div className="mb-8 rounded-2xl bg-zinc-50 px-6 py-8 sm:px-8">
         {/* Breadcrumb */}
@@ -282,6 +293,18 @@ export default async function CategoryPage({
           )}
         </div>
       </div>
-    </div>
+
+      </div>
+
+      {/* ═══ Bottom-of-page SEO content (xvz6pXB4) — last thing on the page, and nothing at
+          all until a person has published it for this storefront. OUTSIDE the page
+          container: the block brings its own. ═══ */}
+      <CategorySeo
+        introHtml={seo.channel_seo_intro_html}
+        faq={seo.channel_seo_faq}
+        faqJsonLd={seo.channel_seo_faq_jsonld}
+        categoryName={category.name}
+      />
+    </>
   );
 }
