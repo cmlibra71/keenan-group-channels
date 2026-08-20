@@ -28,6 +28,12 @@ import { FinanceApplicationForm } from "@/components/finance/FinanceApplicationF
 //
 // `order_number` is dropped: an application made before the equipment is chosen
 // has no order to name, and the field is optional in the stored contract.
+//
+// This is SILVERCHEF's application. A SKOPE-funded product quotes Skope's own
+// factor under a "Skope Funding" heading and opens `/skope-funding/apply`
+// instead (Steve, 2026-08-20) — a customer may never be handed to the wrong
+// financier. This page keeps the whole funding-type list, because somebody
+// applying before they have chosen equipment has not ruled anything out.
 // ============================================================================
 
 export const metadata: Metadata = {
@@ -64,6 +70,7 @@ export default async function FinanceApplyPage() {
           attachmentPrompts={[...FINANCE_ATTACHMENT_PROMPTS]}
           accountNumberTrigger={FUNDING_TYPE_HAS_SILVERCHEF_ACCOUNT}
           formKey={FINANCE_APPLICATION_FORM_KEY}
+          funder="silverchef"
         />
       </div>
     </div>
