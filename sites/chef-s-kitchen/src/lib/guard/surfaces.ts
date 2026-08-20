@@ -183,3 +183,26 @@ export function classifyActionSurface(pathname: string): SurfaceClass {
   if (surface === "exempt" || surface === "search") return surface;
   return "api";
 }
+
+/**
+ * True for a `GET /api/search` that is asking for a LATER window — the header
+ * suggestion dropdown's scroll load (G3gpxN0k).
+ *
+ * Same shape of judgement as the `/search` load-more action above, and the same
+ * reason: `/api/search` runs ONE Meilisearch query where a `/search` page render
+ * runs six, so charging a scroll load a full page view would have honest
+ * scrolling rate-limit ITSELF — a walk to the 320 ceiling is eight requests
+ * against a burst allowance of eight. Discounting it (see SEARCH_CHUNK_WEIGHT in
+ * ./index.ts) puts one full walk at about 3.3 of that allowance.
+ *
+ * Deliberately NOT the first window: that is the request an enumerator repeats
+ * with a fresh query every time, so it keeps its full weight, and the deep pages
+ * — which are useless without the first — are the only ones discounted. The
+ * ceiling itself is enforced server-side in `lib/search-params.ts`, never here.
+ */
+export function isPagedSearchRequest(pathname: string, offsetRaw: string | null): boolean {
+  if (canonical(pathname) !== "/api/search") return false;
+  if (!offsetRaw) return false;
+  const n = Number.parseInt(offsetRaw, 10);
+  return Number.isFinite(n) && n > 0;
+}

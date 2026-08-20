@@ -4,9 +4,15 @@ import {
   classifyActionSurface,
   classifySurface,
   isCredentialPath,
+  isPagedSearchRequest,
   SURFACE_LIMITS,
   type SurfaceClass,
 } from "./surfaces.ts";
+import {
+  MAX_SUGGESTIONS,
+  SUGGESTIONS_PER_PAGE,
+  suggestionRequestUrl,
+} from "../search-suggestions.ts";
 
 const CASES: [string, SurfaceClass][] = [
   // Operational routes that must never be guarded.
@@ -153,4 +159,50 @@ test("the credential budget is far above a human and below a stuffing run", () =
   const limit = SURFACE_LIMITS.credential;
   assert.ok(limit.burstMax >= 10, "a shopper retrying a form must not trip it");
   assert.ok(limit.max <= 100, "must still be reachable by an attacker in minutes");
+});
+
+// ── The header suggestion dropdown's scroll load (G3gpxN0k) ────────────────
+
+test("a later /api/search window is recognised as a scroll load", () => {
+  assert.equal(isPagedSearchRequest("/api/search", "40"), true);
+  assert.equal(isPagedSearchRequest("/api/search/", "280"), true, "trailing slash");
+});
+
+test("the FIRST window keeps its full weight", () => {
+  // It is the request an enumerator repeats with a fresh query every time; a
+  // deep page is worth nothing without it, so only the deep pages are discounted.
+  assert.equal(isPagedSearchRequest("/api/search", null), false);
+  assert.equal(isPagedSearchRequest("/api/search", "0"), false);
+  assert.equal(isPagedSearchRequest("/api/search", ""), false);
+  assert.equal(isPagedSearchRequest("/api/search", "-40"), false);
+  assert.equal(isPagedSearchRequest("/api/search", "abc"), false);
+});
+
+test("the discount reaches no path but /api/search", () => {
+  for (const path of ["/search", "/api/address/suggest", "/categories/ovens", "/", "/api"]) {
+    assert.equal(isPagedSearchRequest(path, "40"), false, path);
+  }
+});
+
+test("a full scroll of the dropdown cannot rate-limit itself", () => {
+  // Eight requests against a burst allowance of eight is exactly the failure
+  // the discount exists to stop, so this asserts the arithmetic, not the intent.
+  const CHUNK_WEIGHT = 1 / 3; // SEARCH_CHUNK_WEIGHT in ./index.ts
+  let spent = 0;
+  for (let offset = 0; offset < MAX_SUGGESTIONS; offset += SUGGESTIONS_PER_PAGE) {
+    const query = suggestionRequestUrl("oven", offset).split("?")[1];
+    const offsetRaw = new URLSearchParams(query).get("offset");
+    spent += isPagedSearchRequest("/api/search", offsetRaw) ? CHUNK_WEIGHT : 1;
+  }
+  assert.ok(spent < SURFACE_LIMITS.search.burstMax, `spent ${spent}`);
+  assert.ok(spent > 3 && spent < 4, `one full walk should cost ~3.3, got ${spent}`);
+});
+
+test("the discounted surface is still the tightest on the site", () => {
+  // The relaxation is recorded with its arithmetic in the behaviour register.
+  // If either budget moves, this is the check that should fail first.
+  const CHUNK_WEIGHT = 1 / 3;
+  const searchRows = (SURFACE_LIMITS.search.max / CHUNK_WEIGHT) * 50; // MAX_LIMIT
+  const listingRows = SURFACE_LIMITS.listing.max * 24 * 8; // cumulative category page
+  assert.ok(searchRows < listingRows, `${searchRows} must stay under ${listingRows}`);
 });
