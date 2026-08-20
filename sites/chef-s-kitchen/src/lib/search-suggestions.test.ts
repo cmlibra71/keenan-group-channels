@@ -7,6 +7,7 @@ import {
   isSuggestionsCapped,
   nextSuggestionOffset,
   remainingSuggestions,
+  showsSuggestionsCap,
   suggestionPageSize,
   suggestionRequestUrl,
 } from "./search-suggestions.ts";
@@ -47,6 +48,21 @@ test("capped is about the index holding more than the dropdown will show", () =>
   assert.equal(isSuggestionsCapped(1000), true);
   assert.equal(isSuggestionsCapped(MAX_SUGGESTIONS), false);
   assert.equal(isSuggestionsCapped(0), false);
+});
+
+test("the end-of-list sentence only prints over a list that really is 320 long", () => {
+  // The reader walked the whole way and the index holds more: true.
+  assert.equal(showsSuggestionsCap(MAX_SUGGESTIONS, 1000), true);
+  // A window FAILED at 80 rows. There is nothing more to fetch, but "Showing
+  // the first 320 results" over 80 rows is a lie, and it is the exact shape of
+  // the defect this predicate exists to stop.
+  assert.equal(showsSuggestionsCap(80, 1000), false);
+  assert.equal(showsSuggestionsCap(0, 1000), false, "a failed FIRST window");
+  // The index ran out at 90 even though the estimate said 1000.
+  assert.equal(showsSuggestionsCap(90, 1000), false);
+  // Everything the index held is on screen: nothing was withheld, so say nothing.
+  assert.equal(showsSuggestionsCap(MAX_SUGGESTIONS, MAX_SUGGESTIONS), false);
+  assert.equal(showsSuggestionsCap(12, 12), false);
 });
 
 test("the next offset is built from positions consumed, never rows rendered", () => {

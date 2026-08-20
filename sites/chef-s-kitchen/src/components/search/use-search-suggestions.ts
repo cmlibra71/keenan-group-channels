@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   hasMoreSuggestions,
-  isSuggestionsCapped,
   nextSuggestionOffset,
   remainingSuggestions,
+  showsSuggestionsCap,
   suggestionPageSize,
   suggestionRequestUrl,
 } from "@/lib/search-suggestions";
@@ -54,6 +54,12 @@ type SuggestionResponse = {
  *    Meilisearch's estimate of the whole set, and later windows adjust their own
  *    copy of it downward when scope drops rows — letting a later window rewrite
  *    it would make "view all N results" count down as the shopper scrolled.
+ *  - a FAILED window never ends the list unless it was the first one, and never
+ *    turns `capped` on. Both mistakes put a false sentence on a customer-facing
+ *    panel: one deletes the retry control and then claims 320 results were
+ *    shown over 80, the other claims we sell nothing matching when the request
+ *    simply did not come back (`/api/search` answers 503 when Meilisearch is
+ *    unavailable, and it has no Postgres fallback of its own).
  *
  * The caller keeps the debounce, the open/closed state and the keyboard.
  */
@@ -74,7 +80,10 @@ export function useSearchSuggestions() {
 
   const remaining = remainingSuggestions(loaded, total);
   const hasMore = !done && remaining > 0;
-  const capped = !hasMore && isSuggestionsCapped(total);
+  // Derived in the pure module, and NOT from `hasMore`: "there is nothing left
+  // to fetch" is not the same state as "the reader walked to the ceiling", and
+  // only the second makes the end-of-list sentence true.
+  const capped = showsSuggestionsCap(loaded, total);
 
   const fetchWindow = useCallback(async (query: string, offset: number) => {
     const requested = suggestionPageSize(offset);
@@ -131,11 +140,20 @@ export function useSearchSuggestions() {
       if ((err as Error).name === "AbortError") return;
       setFailed(true);
       if (first) {
+        // Nothing loaded at all. There is no list to keep open and no offset to
+        // resume from, so the list IS finished — the renderer's empty branch
+        // reads `failed` and says the search is unavailable rather than saying
+        // we hold nothing matching.
         setHits([]);
         setTotal(0);
+        progress.current.done = true;
+        setDone(true);
       }
-      progress.current.done = true;
-      setDone(true);
+      // A LATER window deliberately leaves `done` alone. Marking it done would
+      // switch `hasMore` off, and `hasMore` is what mounts the "Load more" row
+      // that carries both the retry and the failure message — so the failure
+      // would delete its own retry control and take the explanation with it.
+      // The `/search` feed does the same (SearchResultsFeed sets only `failed`).
     } finally {
       // Only the CURRENT request owns the spinners. If a newer one has already
       // taken over (a keystroke landing mid-scroll aborts the load in flight),
@@ -190,8 +208,16 @@ export function useSearchSuggestions() {
     loadingMore,
     hasMore,
     remaining,
-    /** The index holds more than the dropdown will ever show. */
+    /**
+     * The reader reached the 320 ceiling AND the index holds more. Only then is
+     * "Showing the first 320 results" a true sentence — see above.
+     */
     capped,
+    /**
+     * The last window failed. With `hits.length === 0` it means the FIRST window
+     * failed and the renderer must say search is unavailable, not "no results";
+     * otherwise the "Load more" row shows the message and stays clickable.
+     */
     failed,
     search,
     loadMore,

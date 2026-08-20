@@ -16,7 +16,7 @@ export const DEFAULT_LIMIT = 20;
  * describes the bound that matters. The bound that matters is the same
  * anti-enumeration ceiling `/search` enforces: `MAX_RESULTS` in
  * `lib/search-results.ts` (8 x 40). Kept as a literal rather than an import so
- * this module stays free of cross-module resolution — `search-params.test.ts`
+ * this module stays free of cross-module resolution — `search-suggestions.test.ts`
  * asserts the two agree, so they cannot drift apart silently.
  *
  * `offset + limit` is clamped to it below, which makes the reachable window

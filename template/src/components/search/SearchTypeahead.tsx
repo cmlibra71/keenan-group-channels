@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useId } from "react";
 import { useRouter } from "next/navigation";
 import { Search, X, Loader2 } from "lucide-react";
 import { useGst, adjustForGst } from "@/lib/gst";
@@ -22,6 +22,12 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
   // dropdown and Industry Kitchens' HeaderSearch page identically (G3gpxN0k).
   const suggestions = useSearchSuggestions();
   const { hits, total, loading, loadingMore, hasMore, remaining, capped, failed } = suggestions;
+
+  // Stable ids so the input can point at the listbox and at the row the
+  // keyboard is on — with a list this long, arrow-key travel is the only
+  // keyboard route to a deep row and a screen reader has to be able to follow it.
+  const listboxId = useId();
+  const optionId = (index: number) => `${listboxId}-option-${index}`;
 
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -87,8 +93,12 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
 
   // Load the next window as the foot of the LIST comes into view. The root is
   // the scrolling panel, not the page: the dropdown scrolls inside itself.
+  // `failed` is a guard, not decoration: after a window fails the sentinel is
+  // still sitting in view, so an observer left attached would retry on every
+  // scroll jiggle for as long as the outage lasts. The retry is the button.
   useEffect(() => {
-    if (!sentinelEl || !listEl || !hasMore || typeof IntersectionObserver === "undefined") return;
+    if (!sentinelEl || !listEl || !hasMore || failed) return;
+    if (typeof IntersectionObserver === "undefined") return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) loadMore();
@@ -97,7 +107,7 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
     );
     observer.observe(sentinelEl);
     return () => observer.disconnect();
-  }, [sentinelEl, listEl, hasMore, loadMore]);
+  }, [sentinelEl, listEl, hasMore, failed, loadMore]);
 
   // A window can be shorter than the panel (per-account visibility drops rows),
   // and the observer only fires on a CHANGE — so re-check once each load
@@ -129,7 +139,14 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
     router.push(`/products/${hit.urlPath || hit.id}`);
   }
 
-  const showViewAll = total > hits.length;
+  // The link OUT of the dropdown survives a full scroll. Keying it on
+  // `total > hits.length` used to delete it the moment the reader reached the
+  // end of a 41–320 result set — exactly the reader who has run out of dropdown
+  // and most needs the results page, with its facets and its sort. Industry
+  // Kitchens' bar has always rendered it unconditionally; both bars now do, and
+  // both drop the count once the whole set is on screen rather than claiming
+  // there are more.
+  const showCount = total > hits.length;
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (!isOpen || hits.length === 0) {
@@ -140,7 +157,7 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
       return;
     }
 
-    const totalItems = hits.length + (showViewAll ? 1 : 0);
+    const totalItems = hits.length + 1; // +1 for the pinned "view all" row
 
     switch (e.key) {
       case "ArrowDown":
@@ -190,6 +207,15 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
             if (hits.length > 0) setIsOpen(true);
           }}
           onKeyDown={handleKeyDown}
+          role="combobox"
+          aria-expanded={isOpen && hits.length > 0}
+          aria-controls={listboxId}
+          aria-autocomplete="list"
+          aria-activedescendant={
+            isOpen && activeIndex >= 0 && activeIndex < hits.length
+              ? optionId(activeIndex)
+              : undefined
+          }
           placeholder="Search products..."
           className="w-full pl-10 pr-10 py-3 rounded-lg border border-zinc-300 text-sm focus:border-zinc-500 focus:outline-none"
           autoFocus
@@ -220,10 +246,16 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
           style={panelMaxHeight ? { maxHeight: panelMaxHeight } : undefined}
           className="absolute z-50 mt-1 flex max-h-[70vh] w-full flex-col rounded-lg border border-zinc-200 bg-white shadow-lg overflow-hidden"
         >
-          <ul ref={setListEl} role="listbox" className="flex-1 overflow-y-auto overscroll-contain">
+          <ul
+            ref={setListEl}
+            id={listboxId}
+            role="listbox"
+            className="flex-1 overflow-y-auto overscroll-contain"
+          >
             {hits.map((hit, index) => (
               <li
                 key={`${hit.id}-${index}`}
+                id={optionId(index)}
                 role="option"
                 aria-selected={index === activeIndex}
                 data-active={index === activeIndex ? "true" : undefined}
@@ -236,9 +268,15 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
                 {/* Thumbnail */}
                 <div className="h-10 w-10 flex-shrink-0 rounded bg-zinc-100 overflow-hidden">
                   {hit.thumbnailUrl ? (
+                    // Lazy: a first window is 40 thumbnails and a full scroll is
+                    // 320, on every settled keystroke, and lazy loading works
+                    // inside a clipped scroll container.
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={hit.thumbnailUrl}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       className="h-full w-full object-cover"
                     />
                   ) : (
@@ -260,30 +298,37 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
                   </p>
                 </div>
 
-                {/* Price */}
-                <div className="flex-shrink-0 text-right">
-                  {hit.salePrice && hit.salePrice < hit.price ? (
-                    <>
-                      <p className="text-sm font-medium text-red-600">
-                        {formatPrice(hit.salePrice)}
-                      </p>
-                      <p className="text-xs text-zinc-400 line-through">
+                {/* Price. A product with no price is sold by quote, not for
+                    nothing: the tile (ProductCard `hasPrice`), the product page
+                    and Industry Kitchens' own bar all show no figure at all
+                    rather than "$0.00", so this one does too. */}
+                {hit.price > 0 && (
+                  <div className="flex-shrink-0 text-right">
+                    {hit.salePrice && hit.salePrice < hit.price ? (
+                      <>
+                        <p className="text-sm font-medium text-red-600">
+                          {formatPrice(hit.salePrice)}
+                        </p>
+                        <p className="text-xs text-zinc-400 line-through">
+                          {formatPrice(hit.price)}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm font-medium text-zinc-900">
                         {formatPrice(hit.price)}
                       </p>
-                    </>
-                  ) : (
-                    <p className="text-sm font-medium text-zinc-900">
-                      {formatPrice(hit.price)}
-                    </p>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
               </li>
             ))}
 
             {/* The observer's target IS the button, so a viewport or zoom the
                 observer cannot serve still has something real to click. */}
             {hasMore && (
-              <li ref={setSentinelEl} className="border-t border-zinc-100">
+              // Not an option — a listbox child that is not selectable must say
+              // so, or a screen reader counts the loader as a product.
+              <li ref={setSentinelEl} role="presentation" className="border-t border-zinc-100">
                 <button
                   type="button"
                   onClick={() => loadMore()}
@@ -303,38 +348,51 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
             {/* Same sentence the results page ends on — without it the list just
                 stops under a footer still offering "view all 1,000 results". */}
             {capped && (
-              <li className="border-t border-zinc-100 px-4 py-3 text-center text-xs text-zinc-500">
+              <li
+                role="presentation"
+                className="border-t border-zinc-100 px-4 py-3 text-center text-xs text-zinc-500"
+              >
                 Showing the first {MAX_SUGGESTIONS} results. Add another word to your search to
                 narrow it down.
               </li>
             )}
           </ul>
 
-          {/* View All Results */}
-          {showViewAll && (
-            <button
-              type="button"
-              className={`w-full flex-shrink-0 px-4 py-3 text-sm text-center font-medium text-zinc-600 hover:bg-zinc-50 border-t border-zinc-200 ${
-                activeIndex === hits.length ? "bg-zinc-50" : ""
-              }`}
-              onClick={() => navigateToSearch(query)}
-              onMouseEnter={() => setActiveIndex(hits.length)}
-            >
-              View all {total} results
-            </button>
-          )}
+          {/* View All Results — pinned below the scrolling list, and rendered
+              whatever the reader has scrolled past. */}
+          <button
+            type="button"
+            className={`w-full flex-shrink-0 px-4 py-3 text-sm text-center font-medium text-zinc-600 hover:bg-zinc-50 border-t border-zinc-200 ${
+              activeIndex === hits.length ? "bg-zinc-50" : ""
+            }`}
+            onClick={() => navigateToSearch(query)}
+            onMouseEnter={() => setActiveIndex(hits.length)}
+          >
+            View all {showCount ? `${total} ` : ""}results
+          </button>
         </div>
       )}
 
-      {/* No results message */}
+      {/* Nothing to show. Which of the two reasons it is matters: a request that
+          never came back is not the same as a catalogue that holds nothing, and
+          /api/search answers 503 whenever Meilisearch is unavailable (it has no
+          Postgres fallback of its own, so an outage is silence, not an empty
+          set). Saying "no results" there tells the shopper we do not sell what
+          we do sell — on the same page where /search would still list it. */}
       {isOpen && hits.length === 0 && query.length >= 2 && !loading && (
         <div
           ref={setPanel}
           className="absolute z-50 mt-1 w-full rounded-lg border border-zinc-200 bg-white shadow-lg p-4"
         >
-          <p className="text-sm text-zinc-500 text-center">
-            No results for &ldquo;{query}&rdquo;
-          </p>
+          {failed ? (
+            <p className="text-sm text-zinc-500 text-center" role="alert">
+              Search is temporarily unavailable. Please try again in a moment.
+            </p>
+          ) : (
+            <p className="text-sm text-zinc-500 text-center">
+              No results for &ldquo;{query}&rdquo;
+            </p>
+          )}
         </div>
       )}
     </div>

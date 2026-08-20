@@ -169,8 +169,10 @@ test("a later /api/search window is recognised as a scroll load", () => {
 });
 
 test("the FIRST window keeps its full weight", () => {
-  // It is the request an enumerator repeats with a fresh query every time; a
-  // deep page is worth nothing without it, so only the deep pages are discounted.
+  // NOT because an enumerator would only ever repeat the first window — it can
+  // buy the discount with `offset=1` and lose only row #1. Leaving the cheapest
+  // possible request (`?q=x`, no offset) undiscounted is simply what keeps the
+  // ledger below in range; that ledger is the property, this is the mechanism.
   assert.equal(isPagedSearchRequest("/api/search", null), false);
   assert.equal(isPagedSearchRequest("/api/search", "0"), false);
   assert.equal(isPagedSearchRequest("/api/search", ""), false);
@@ -201,8 +203,26 @@ test("a full scroll of the dropdown cannot rate-limit itself", () => {
 test("the discounted surface is still the tightest on the site", () => {
   // The relaxation is recorded with its arithmetic in the behaviour register.
   // If either budget moves, this is the check that should fail first.
+  //
+  // Checked BOTH ways round, because the two weights compound differently: a
+  // deep /api/search request carrying a session cookie pays SEARCH_CHUNK_WEIGHT
+  // *and* SESSION_WEIGHT (1/9), where a category page pays only SESSION_WEIGHT
+  // (1/3). That is a 3x swing in /api/search's favour, so the ordering has to be
+  // asserted with the cookie and not only without it.
   const CHUNK_WEIGHT = 1 / 3;
-  const searchRows = (SURFACE_LIMITS.search.max / CHUNK_WEIGHT) * 50; // MAX_LIMIT
-  const listingRows = SURFACE_LIMITS.listing.max * 24 * 8; // cumulative category page
-  assert.ok(searchRows < listingRows, `${searchRows} must stay under ${listingRows}`);
+  const SESSION = 1 / 3; // SESSION_WEIGHT in ./index.ts
+  const API_SEARCH_ROWS = 50; // MAX_LIMIT in lib/search-params.ts
+  const SEARCH_PAGE_ROWS = 320; // one cumulative /search render at the ceiling
+  const CATEGORY_ROWS = 24 * 8; // one cumulative category page
+
+  for (const cookie of [1, SESSION]) {
+    const apiSearchRows = (SURFACE_LIMITS.search.max / (CHUNK_WEIGHT * cookie)) * API_SEARCH_ROWS;
+    const searchPageRows = (SURFACE_LIMITS.search.max / cookie) * SEARCH_PAGE_ROWS;
+    const categoryRows = (SURFACE_LIMITS.listing.max / cookie) * CATEGORY_ROWS;
+    assert.ok(
+      apiSearchRows < searchPageRows && apiSearchRows < categoryRows,
+      `/api/search ${apiSearchRows} must stay under /search ${searchPageRows} ` +
+        `and a category page ${categoryRows} (session weight ${cookie})`
+    );
+  }
 });

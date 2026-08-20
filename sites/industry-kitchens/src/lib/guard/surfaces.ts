@@ -195,10 +195,20 @@ export function classifyActionSurface(pathname: string): SurfaceClass {
  * against a burst allowance of eight. Discounting it (see SEARCH_CHUNK_WEIGHT in
  * ./index.ts) puts one full walk at about 3.3 of that allowance.
  *
- * Deliberately NOT the first window: that is the request an enumerator repeats
- * with a fresh query every time, so it keeps its full weight, and the deep pages
- * — which are useless without the first — are the only ones discounted. The
- * ceiling itself is enforced server-side in `lib/search-params.ts`, never here.
+ * The first window is deliberately NOT discounted, and the property that
+ * justifies the split is the LEDGER, not a story about what an enumerator does
+ * (an enumerator would simply buy the discount with `offset=1` and lose row #1).
+ * It is that `/api/search` stays the tightest path on the site even after the
+ * discount: 150 deep requests per IP per 5 minutes at `MAX_LIMIT` 50 rows =
+ * 7,500 rows, against `/search`'s 16,000 and a category page's 28,800. Holding
+ * a session cookie compounds SESSION_WEIGHT (also 1/3) to 1/9 and lifts those to
+ * 22,500 / 48,000 / 86,400 respectively — the ordering survives, which is the
+ * whole test. `guard/surfaces.test.ts` fails first if a budget moves and it
+ * stops being true. Leaving the first window at full weight keeps the multiplier
+ * off the cheapest possible request (`?q=x`, no offset), which is what makes
+ * that arithmetic hold.
+ *
+ * The ceiling itself is enforced server-side in `lib/search-params.ts`, never here.
  */
 export function isPagedSearchRequest(pathname: string, offsetRaw: string | null): boolean {
   if (canonical(pathname) !== "/api/search") return false;

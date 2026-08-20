@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useId } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Loader2 } from "lucide-react";
 import { useGst, adjustForGst } from "@/lib/gst";
@@ -41,6 +41,12 @@ export function HeaderSearch({
   const suggestions = useSearchSuggestions();
   const { hits, total, loading, loadingMore, hasMore, remaining, capped, failed } = suggestions;
   const { search, loadMore, reset } = suggestions;
+
+  // Stable ids so the input can point at the listbox and at the row the
+  // keyboard is on — with a list this long, arrow-key travel is the only
+  // keyboard route to a deep row and a screen reader has to be able to follow it.
+  const listboxId = useId();
+  const optionId = (index: number) => `${listboxId}-option-${index}`;
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -87,8 +93,12 @@ export function HeaderSearch({
 
   // Load the next window as the foot of the LIST comes into view. The root is
   // the scrolling panel, not the page: the dropdown scrolls inside itself.
+  // `failed` is a guard, not decoration: after a window fails the sentinel is
+  // still sitting in view, so an observer left attached would retry on every
+  // scroll jiggle for as long as the outage lasts. The retry is the button.
   useEffect(() => {
-    if (!sentinelEl || !listEl || !hasMore || typeof IntersectionObserver === "undefined") return;
+    if (!sentinelEl || !listEl || !hasMore || failed) return;
+    if (typeof IntersectionObserver === "undefined") return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) loadMore();
@@ -97,7 +107,7 @@ export function HeaderSearch({
     );
     observer.observe(sentinelEl);
     return () => observer.disconnect();
-  }, [sentinelEl, listEl, hasMore, loadMore]);
+  }, [sentinelEl, listEl, hasMore, failed, loadMore]);
 
   // A window can be shorter than the panel (per-account visibility drops rows),
   // and the observer only fires on a CHANGE — so re-check once each load
@@ -167,6 +177,15 @@ export function HeaderSearch({
           onKeyDown={onKeyDown}
           placeholder={placeholder}
           aria-label="Search"
+          role="combobox"
+          aria-expanded={isOpen && hits.length > 0}
+          aria-controls={listboxId}
+          aria-autocomplete="list"
+          aria-activedescendant={
+            isOpen && activeIndex >= 0 && activeIndex < hits.length
+              ? optionId(activeIndex)
+              : undefined
+          }
           autoComplete="off"
           className="min-w-0 flex-1 rounded-l-md border border-r-0 border-zinc-300 px-4 py-2.5 text-sm text-zinc-800 placeholder:text-zinc-400 focus:outline-none focus:border-[#D94B2B]"
         />
@@ -195,6 +214,7 @@ export function HeaderSearch({
             <>
               <ul
                 ref={setListEl}
+                id={listboxId}
                 role="listbox"
                 className="flex-1 overflow-y-auto overscroll-contain"
               >
@@ -203,6 +223,7 @@ export function HeaderSearch({
                   return (
                     <li
                       key={`${hit.id}-${index}`}
+                      id={optionId(index)}
                       role="option"
                       aria-selected={index === activeIndex}
                       data-active={index === activeIndex ? "true" : undefined}
@@ -214,10 +235,15 @@ export function HeaderSearch({
                     >
                       <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded bg-zinc-100">
                         {hit.thumbnailUrl ? (
+                          // Lazy: a first window is 40 thumbnails and a full
+                          // scroll is 320, on every settled keystroke, and lazy
+                          // loading works inside a clipped scroll container.
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={hit.thumbnailUrl}
                             alt=""
+                            loading="lazy"
+                            decoding="async"
                             className="h-full w-full object-contain"
                           />
                         ) : (
@@ -263,7 +289,10 @@ export function HeaderSearch({
                 {/* The observer's target IS the button, so a viewport or zoom
                     the observer cannot serve still has something real to click. */}
                 {hasMore && (
-                  <li ref={setSentinelEl} className="border-t border-zinc-100">
+                  // Not an option — a listbox child that is not selectable
+                  // must say so, or a screen reader counts the loader as a
+                  // product.
+                  <li ref={setSentinelEl} role="presentation" className="border-t border-zinc-100">
                     <button
                       type="button"
                       onClick={() => loadMore()}
@@ -283,12 +312,23 @@ export function HeaderSearch({
                 {/* Same sentence the results page ends on — without it the list
                     just stops under a footer still offering "view all" more. */}
                 {capped && (
-                  <li className="border-t border-zinc-100 px-4 py-2.5 text-center text-xs text-zinc-500">
+                  <li
+                    role="presentation"
+                    className="border-t border-zinc-100 px-4 py-2.5 text-center text-xs text-zinc-500"
+                  >
                     Showing the first {MAX_SUGGESTIONS} results. Add another word to your search to
                     narrow it down.
                   </li>
                 )}
               </ul>
+              {/* The link OUT of the dropdown survives a full scroll — it is
+                  never keyed on `total > hits.length`, which would delete it
+                  the moment the reader reached the end of a 41–320 result set,
+                  i.e. exactly the reader who has run out of dropdown and most
+                  needs the results page and its facets. Only the COUNT drops
+                  once the whole set is on screen. Chefs Depot's bar
+                  (components/search/SearchTypeahead.tsx) does the same; the two
+                  bars must not disagree about this. */}
               <button
                 type="button"
                 onClick={() => goToSearch(query)}
@@ -300,6 +340,16 @@ export function HeaderSearch({
                 View all {total > hits.length ? `${total} ` : ""}results
               </button>
             </>
+          ) : failed ? (
+            /* A request that never came back is not a catalogue that holds
+               nothing. /api/search answers 503 whenever Meilisearch is
+               unavailable and has no Postgres fallback of its own, so an
+               outage is silence — and "no results" would tell the shopper we
+               do not sell what we do sell, on the same page where /search
+               would still list it. */
+            <p className="px-4 py-4 text-center text-sm text-zinc-500" role="alert">
+              Search is temporarily unavailable. Please try again in a moment.
+            </p>
           ) : (
             <p className="px-4 py-4 text-center text-sm text-zinc-500">
               No results for &ldquo;{query}&rdquo;

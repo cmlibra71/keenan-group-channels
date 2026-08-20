@@ -79,11 +79,13 @@ const SESSION_WEIGHT = 1 / 3;
  * The header suggestion dropdown scrolls the same way and reaches the same
  * ceiling (G3gpxN0k), but through `GET /api/search` rather than a server
  * action, so the same discount applies to its LATER windows — see
- * `isPagedSearchRequest`. Its first window is charged in full: that is the
- * request an enumerator repeats with a fresh query, and a deep page is worth
- * nothing without it. Worst case behind the discount is 150 deep requests per
+ * `isPagedSearchRequest`. Its first window is charged in full, and what makes
+ * that safe is the LEDGER rather than any claim about which request an
+ * enumerator repeats: worst case behind the discount is 150 deep requests per
  * IP per 5 minutes at 50 rows each = 7,500 rows, against /search's 16,000 and a
- * category page's 28,800 — /api/search stays the tightest surface on the site.
+ * category page's 28,800. A session cookie compounds SESSION_WEIGHT below (also
+ * 1/3) to 1/9, lifting those to 22,500 / 48,000 / 86,400 — the ordering holds
+ * either way, so /api/search stays the tightest surface on the site.
  */
 const SEARCH_CHUNK_WEIGHT = 1 / 3;
 

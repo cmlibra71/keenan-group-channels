@@ -41,6 +41,22 @@ export function isSuggestionsCapped(total: number): boolean {
 }
 
 /**
+ * Whether to print "Showing the first 320 results…" at the foot of the list.
+ *
+ * Two conditions, and the first one is the one that is easy to get wrong: the
+ * reader must have actually WALKED to the ceiling. "There is nothing more to
+ * fetch" is a different state and it is reached by two things that make the
+ * sentence false — a window that FAILED partway (the list stops at 80 rows), and
+ * an index that ran out early (Meilisearch's `estimatedTotalHits` is an
+ * estimate, and a Chefs Depot search for "oven" reports 1000 whatever is really
+ * there). Printing it in either case puts a false sentence on a customer-facing
+ * panel over a list that plainly is not 320 rows long.
+ */
+export function showsSuggestionsCap(loaded: number, total: number): boolean {
+  return loaded >= MAX_SUGGESTIONS && isSuggestionsCapped(total);
+}
+
+/**
  * Where the next request starts.
  *
  * Built from POSITIONS CONSUMED, never from rows rendered. `/api/search`
