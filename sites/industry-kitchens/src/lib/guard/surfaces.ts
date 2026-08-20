@@ -183,3 +183,36 @@ export function classifyActionSurface(pathname: string): SurfaceClass {
   if (surface === "exempt" || surface === "search") return surface;
   return "api";
 }
+
+/**
+ * True for a `GET /api/search` that is asking for a LATER window — the header
+ * suggestion dropdown's scroll load (G3gpxN0k).
+ *
+ * Same shape of judgement as the `/search` load-more action above, and the same
+ * reason: `/api/search` runs ONE Meilisearch query where a `/search` page render
+ * runs six, so charging a scroll load a full page view would have honest
+ * scrolling rate-limit ITSELF — a walk to the 320 ceiling is eight requests
+ * against a burst allowance of eight. Discounting it (see SEARCH_CHUNK_WEIGHT in
+ * ./index.ts) puts one full walk at about 3.3 of that allowance.
+ *
+ * The first window is deliberately NOT discounted, and the property that
+ * justifies the split is the LEDGER, not a story about what an enumerator does
+ * (an enumerator would simply buy the discount with `offset=1` and lose row #1).
+ * It is that `/api/search` stays the tightest path on the site even after the
+ * discount: 150 deep requests per IP per 5 minutes at `MAX_LIMIT` 50 rows =
+ * 7,500 rows, against `/search`'s 16,000 and a category page's 28,800. Holding
+ * a session cookie compounds SESSION_WEIGHT (also 1/3) to 1/9 and lifts those to
+ * 22,500 / 48,000 / 86,400 respectively — the ordering survives, which is the
+ * whole test. `guard/surfaces.test.ts` fails first if a budget moves and it
+ * stops being true. Leaving the first window at full weight keeps the multiplier
+ * off the cheapest possible request (`?q=x`, no offset), which is what makes
+ * that arithmetic hold.
+ *
+ * The ceiling itself is enforced server-side in `lib/search-params.ts`, never here.
+ */
+export function isPagedSearchRequest(pathname: string, offsetRaw: string | null): boolean {
+  if (canonical(pathname) !== "/api/search") return false;
+  if (!offsetRaw) return false;
+  const n = Number.parseInt(offsetRaw, 10);
+  return Number.isFinite(n) && n > 0;
+}
