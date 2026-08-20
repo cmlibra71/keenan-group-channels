@@ -397,8 +397,9 @@ export async function placeOrder(
   // is charged, no card is taken, and our team quotes it and collects payment afterwards.
   const heldForSpecialised = holdsPayment(deliveryServiceType);
 
-  // Shipping calculation
-  let shippingIncTax = 0;
+  // Shipping calculation. The rate card states EX-GST figures and GST is added on top of
+  // them — a $30 flat rate is $33 inc (Tim, card twwZMnMY). Never back GST out of the rate.
+  let shippingRateExTax = 0;
   const checkoutSettings = await getCheckoutSettings();
   const isMember = !!(session && await getActiveSubscriptionForContact(session.contactId));
 
@@ -424,7 +425,7 @@ export async function placeOrder(
   if (heldForSpecialised) {
     // Held for a human quote — charging a table rate for a job we've just been told the table
     // can't price would be a made-up number on a real invoice.
-    shippingIncTax = 0;
+    shippingRateExTax = 0;
   } else if (
     qualifiesForFreeDelivery({
       enabled: checkoutSettings.freeShippingEnabled,
@@ -435,7 +436,7 @@ export async function placeOrder(
     })
   ) {
     // Free delivery: a member over the threshold, or a brand special on this cart
-    shippingIncTax = 0;
+    shippingRateExTax = 0;
   } else {
     // Calculate from shipping rate cards (zone-based table rates: by order value, weight or
     // item count depending on the matched zone — card Wxjp8wpg).
@@ -449,7 +450,7 @@ export async function placeOrder(
         weightIncomplete: cartFreight ? cartFreight.has_unweighed_lines : true,
       });
       if (shippingResult.success) {
-        shippingIncTax = shippingResult.cost;
+        shippingRateExTax = shippingResult.cost;
       } else if (shippingResult.rate_card_name) {
         // A rate card IS configured for this channel but this address doesn't
         // price against it (unknown postcode, or somewhere we don't deliver).
@@ -470,12 +471,13 @@ export async function placeOrder(
     } catch (e) {
       // Rate lookup unavailable (DB blip) — don't strand a paying customer.
       console.error("[placeOrder] shipping rate lookup failed (non-fatal, $0 freight):", e);
-      shippingIncTax = 0;
+      shippingRateExTax = 0;
     }
   }
-  // Shipping is always specified as inc-tax amount; roll it into the order total.
-  const { shipping, total } = withShipping(subtotal, shippingIncTax);
+  // The rate is ex-GST; withShipping adds GST on top and rolls it into the order total.
+  const { shipping, total } = withShipping(subtotal, shippingRateExTax);
   const shippingExTax = shipping.exTax;
+  const shippingIncTax = shipping.incTax;
   const shippingTax = shipping.tax;
   const totalIncTax = total.incTax;
   const totalExTax = total.exTax;
