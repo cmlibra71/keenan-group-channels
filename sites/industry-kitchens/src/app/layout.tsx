@@ -5,6 +5,7 @@ import { getPublishedTokenVars } from "@/lib/design-tokens";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { ScrollReset } from "@/components/layout/ScrollReset";
 import { SpecialistButton } from "@/components/layout/SpecialistButton";
 import { GstProvider } from "@/lib/gst";
 import { FinanceRatesProvider } from "@/lib/finance/finance-rates-context";
@@ -111,6 +112,7 @@ export default async function RootLayout({
                 nav={headerNav}
                 config={headerConfig}
               />
+              <ScrollReset />
               <main className="flex-1">{children}</main>
               <Footer storeName={storeName} config={footerConfig} />
               <SpecialistButton phone={headerConfig.phone} />

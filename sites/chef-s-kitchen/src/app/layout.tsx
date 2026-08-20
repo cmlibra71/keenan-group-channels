@@ -6,6 +6,7 @@ import { getPublishedTokenVars } from "@/lib/design-tokens";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { ScrollReset } from "@/components/layout/ScrollReset";
 import { GstProvider } from "@/lib/gst";
 import { FinanceRatesProvider } from "@/lib/finance/finance-rates-context";
 import { financeRatesForChannel } from "@/lib/finance/finance-rates";
@@ -142,6 +143,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
           <FinanceRatesProvider rates={financeRates}>
             <CartQuoteCountsProvider>
               <Header storeName={storeName} logoUrl={logoUrl} logoAlt={logoAlt} />
+              <ScrollReset />
               <main className="flex-1">{children}</main>
               <Footer storeName={storeName} subscriptionsEnabled={subscriptionsEnabled} config={footerConfig} />
             </CartQuoteCountsProvider>
