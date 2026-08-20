@@ -20,6 +20,11 @@ import { ProductGrid } from "@/components/product/ProductGrid";
 import { assertCategoryVisible } from "@/lib/catalog-scope";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import { applyStorefrontFilters, enabledFilterIds } from "@/lib/storefront-filters";
+import {
+  attributeParam,
+  parseAttributeSelections,
+} from "@keenan/services/services";
+import { parsePriceBands, parseRangeParam } from "@/lib/category-attributes";
 import { renderCategoryNodeBranch, type CategoryListingPricing } from "@/builder/category-node-branch";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
 import { RichContent } from "@/components/content/RichContent";
@@ -66,6 +71,8 @@ type SearchParams = {
   stock?: string;
   sort?: string;
   page?: string;
+  /** Per-category attribute filters arrive as `f_<code>` (C8G4f4U8). */
+  [param: string]: string | undefined;
 };
 
 const parseIds = (v?: string) =>
@@ -122,9 +129,22 @@ export default async function CategoryPage({
   const storefrontFilters = await getStorefrontFilters();
   const filtersOn = enabledFilterIds(storefrontFilters);
 
-  const priceBands = (filtersOn.has("price") ? (sp.price?.split(",").filter(Boolean) ?? []) : []).filter((b) =>
-    ["lt1000", "1000to3000", "gt3000"].includes(b)
-  ) as ("lt1000" | "1000to3000" | "gt3000")[];
+  // Price is one facet with two notations: the slider writes `?price=1000-3000`
+  // and the three legacy band tokens are still honoured, so a bookmark and the
+  // authored Site Builder rail (which binds the bands) keep working. Both are
+  // dropped when the facet is switched off — a switched-off facet must stop
+  // FILTERING, not merely displaying (NfYe3P3G).
+  const rawPrice = filtersOn.has("price") ? sp.price : undefined;
+  const priceBands = parsePriceBands(rawPrice) as ("lt1000" | "1000to3000" | "gt3000")[];
+  const priceRange = priceBands.length === 0 ? parseRangeParam(rawPrice) : undefined;
+
+  // Attribute selections are read against the REGISTRY, not against the facets
+  // this category happens to offer — the facets are a result of the very query
+  // these selections go into. An attribute the category does not offer simply
+  // matches nothing extra, because the products that would satisfy it are the
+  // ones carrying the value.
+  const attributeSelections = parseAttributeSelections(sp as Record<string, string | undefined>);
+  const attributeParams = Object.keys(attributeSelections).map(attributeParam);
   // Availability is no longer a shopper-facing facet at all: "In stock" was
   // retired first and Clearance followed (clearance products are browsed via the
   // dedicated /clearance page). ANY ?stock= value — a bookmarked
@@ -157,6 +177,8 @@ export default async function CategoryPage({
       subcategoryIds: filtersOn.has("sub") ? parseIds(sp.sub) : [],
       brandIds: filtersOn.has("brand") ? parseIds(sp.brand) : [],
       priceBands,
+      priceRange,
+      attributes: attributeSelections,
       // No `availability` — the shopper can no longer filter on it (the option
       // stays in the data layer, unused by this route).
       sort,
@@ -206,6 +228,10 @@ export default async function CategoryPage({
     if (sp.sub && filtersOn.has("sub")) next.set("sub", sp.sub);
     if (sp.brand && filtersOn.has("brand")) next.set("brand", sp.brand);
     if (sp.price && filtersOn.has("price")) next.set("price", sp.price);
+    for (const param of attributeParams) {
+      const value = sp[param];
+      if (value) next.set(param, value);
+    }
     if (sp.sort) next.set("sort", sp.sort);
     next.set("page", String(page + 1));
     return `/categories/${slug}?${next.toString()}`;
@@ -236,6 +262,9 @@ export default async function CategoryPage({
         sub: filtersOn.has("sub") ? (sp.sub?.split(",").filter(Boolean) ?? []) : [],
         brand: filtersOn.has("brand") ? (sp.brand?.split(",").filter(Boolean) ?? []) : [],
         price: filtersOn.has("price") ? (sp.price?.split(",").filter(Boolean) ?? []) : [],
+        // Attribute windows and ticked values, so an authored rail can show
+        // them as selected and the toolbar chips can name them.
+        attributes: attributeSelections,
         // Always empty: availability is no longer a filter, and a ?stock= value
         // never reaches here (it is redirected away above). Keeping the key
         // explicit stops the authored rail's `selected` state and its active-

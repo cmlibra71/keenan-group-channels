@@ -69,6 +69,8 @@
     "lib/auth.ts",
     "lib/cart-quote-counts.tsx",
     "lib/cart.ts",
+    "lib/category-attributes.test.ts",
+    "lib/category-attributes.ts",
     "lib/channel.ts",
     "lib/checkout/account-options-policy.test.ts",
     "lib/checkout/account-options-policy.ts",
