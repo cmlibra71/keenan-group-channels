@@ -16,6 +16,7 @@ import {
 } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
 import { getListingMemberPrices } from "@/lib/member";
+import { categoryRobots } from "@/lib/seo";
 import { renderCategoryNodeBranch } from "@/builder/category-node-branch";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { assertCategoryVisible } from "@/lib/catalog-scope";
@@ -40,6 +41,9 @@ export async function generateMetadata({
   return {
     title: meta.meta_title || cat.page_title || cat.name,
     description: meta.meta_description || cat.meta_description || undefined,
+    // A category kept out of search (include_in_search = false) says so to
+    // crawlers as well as to the menu, /categories and the sitemap.
+    robots: categoryRobots(category as { include_in_search?: boolean | null }),
   };
 }
 
