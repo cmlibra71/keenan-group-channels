@@ -397,8 +397,9 @@ export async function placeOrder(
   // is charged, no card is taken, and our team quotes it and collects payment afterwards.
   const heldForSpecialised = holdsPayment(deliveryServiceType);
 
-  // Shipping calculation
-  let shippingIncTax = 0;
+  // Shipping calculation. The rate card states EX-GST figures and GST is added on top of
+  // them — a $30 flat rate is $33 inc (Tim, card twwZMnMY). Never back GST out of the rate.
+  let shippingRateExTax = 0;
   const checkoutSettings = await getCheckoutSettings();
   const isMember = !!(session && await getActiveSubscriptionForContact(session.contactId));
 
@@ -424,7 +425,7 @@ export async function placeOrder(
   if (heldForSpecialised) {
     // Held for a human quote — charging a table rate for a job we've just been told the table
     // can't price would be a made-up number on a real invoice.
-    shippingIncTax = 0;
+    shippingRateExTax = 0;
   } else if (
     qualifiesForFreeDelivery({
       enabled: checkoutSettings.freeShippingEnabled,
@@ -435,7 +436,7 @@ export async function placeOrder(
     })
   ) {
     // Free delivery: a member over the threshold, or a brand special on this cart
-    shippingIncTax = 0;
+    shippingRateExTax = 0;
   } else {
     // Calculate from shipping rate cards (zone-based table rates: by order value, weight or
     // item count depending on the matched zone — card Wxjp8wpg).
@@ -449,7 +450,7 @@ export async function placeOrder(
         weightIncomplete: cartFreight ? cartFreight.has_unweighed_lines : true,
       });
       if (shippingResult.success) {
-        shippingIncTax = shippingResult.cost;
+        shippingRateExTax = shippingResult.cost;
       } else if (shippingResult.rate_card_name) {
         // A rate card IS configured for this channel but this address doesn't
         // price against it (unknown postcode, or somewhere we don't deliver).
@@ -470,12 +471,13 @@ export async function placeOrder(
     } catch (e) {
       // Rate lookup unavailable (DB blip) — don't strand a paying customer.
       console.error("[placeOrder] shipping rate lookup failed (non-fatal, $0 freight):", e);
-      shippingIncTax = 0;
+      shippingRateExTax = 0;
     }
   }
-  // Shipping is always specified as inc-tax amount; roll it into the order total.
-  const { shipping, total } = withShipping(subtotal, shippingIncTax);
+  // The rate is ex-GST; withShipping adds GST on top and rolls it into the order total.
+  const { shipping, total } = withShipping(subtotal, shippingRateExTax);
   const shippingExTax = shipping.exTax;
+  const shippingIncTax = shipping.incTax;
   const shippingTax = shipping.tax;
   const totalIncTax = total.incTax;
   const totalExTax = total.exTax;
@@ -537,12 +539,18 @@ export async function placeOrder(
   // sales desk that can't help.
   // The finance floor is part of "what this cart is offered", so both counts are
   // taken after it — exactly as the page renders them. Resolving them off the
-  // unfiltered list counted methods the shopper could not pick, so a sub-$1,000
-  // cart whose only surviving methods were SilverChef/Finance passed this gate
+  // unfiltered list counted methods the shopper could not pick, so a cart under
+  // the finance minimum whose only surviving methods were SilverChef/Finance
+  // passed this gate
   // with nothing actually offerable.
   const cartFinanceOffer = financeOfferForCart({
     lines: financeLinesFromCart(fullCart.items as never[], pricesIncludeTax),
     goodsTotalIncGst: subtotalIncTax,
+    // This storefront's own floor and rates (card 6GBlDtwf) — the SAME settings
+    // object the checkout page drew the offer from, because it is the same
+    // `getCheckoutSettings()` read. A floor resolved differently here would
+    // refuse an order the page invited.
+    settings: checkoutSettings.financeSettings,
   });
   const offerableMethods = filterFinanceMethods(
     filterPaymentMethodsForAccount(
@@ -588,8 +596,9 @@ export async function placeOrder(
 
   // ── SilverChef / Finance (card VAjaPj0t) ──────────────────────────────────
   // The authorization half of the checkout page's finance offer, resolved with
-  // the SAME function off the SAME goods total: a cart that has dropped under
-  // $1,000 inc GST since the page rendered is refused, never quietly financed.
+  // the SAME function off the SAME goods total AND the same per-storefront
+  // floor: a cart that has dropped under the finance minimum since the page
+  // rendered is refused, never quietly financed.
   // The application is validated HERE, before any order row is written — a
   // half-filled application must not leave a numbered order behind. It is
   // FILED after the order exists (it carries the order number).
@@ -599,7 +608,7 @@ export async function placeOrder(
   const financeOffer = isFinancePaymentMethod(effectivePaymentMethod) ? cartFinanceOffer : null;
   let financeApplication: Record<string, string> | null = null;
   if (financeOffer) {
-    if (!financeOffer.eligible) return { error: financeFloorError() };
+    if (!financeOffer.eligible) return { error: financeFloorError(financeOffer.minOrderIncGst) };
 
     financeApplication = financeApplicationValues((name) => formData.get(name) as string | null);
     // The funding type has to belong to the button AND to this basket — the

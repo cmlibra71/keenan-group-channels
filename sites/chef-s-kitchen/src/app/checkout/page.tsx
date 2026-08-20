@@ -126,8 +126,9 @@ export default async function CheckoutPage() {
   const gstAmount = Math.round(gstSplit(subtotal, pricesIncludeTax).tax * 100) / 100;
 
   // ── SilverChef / Finance (card VAjaPj0t) ──────────────────────────────────
-  // Offered only above $1,000 inc GST, measured on the GOODS total so the offer
-  // can't appear and disappear as a postcode changes the freight. placeOrder
+  // Offered only above this storefront's finance minimum (inc GST, default
+  // $1,000), measured on the GOODS total so the offer can't appear and disappear
+  // as a postcode changes the freight. placeOrder
   // re-resolves this with the SAME function before accepting the order — show
   // equals accept.
   //
@@ -140,9 +141,15 @@ export default async function CheckoutPage() {
   // could then read "store-unconfigured" (Place Order enabled, order booked
   // unpaid) on an order placeOrder refused as "account-restricted". Same
   // function, same total, same state, on both sides (card NmAfwrdE).
+  //
+  // The floor and the two rates are this STOREFRONT's own (card 6GBlDtwf), read
+  // with the rest of the checkout settings. placeOrder resolves the same offer
+  // off the same settings — a floor that differed between the two would break
+  // show-equals-accept just as surely as a different total would.
   const financeOffer = financeOfferForCart({
     lines: financeLinesFromCart(cart.items as never[], pricesIncludeTax),
     goodsTotalIncGst: gstSplit(subtotal, pricesIncludeTax).incTax,
+    settings: checkoutSettings.financeSettings,
   });
   // …but nothing finance-shaped is DRAWN, and no application form is provisioned,
   // unless a finance method actually survives to this shopper — a storefront that

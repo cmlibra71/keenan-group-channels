@@ -22,6 +22,7 @@
 import { useProductPurchase } from "@keenan/services/product-page";
 import { useGst } from "@/lib/gst";
 import { productFinanceOffer } from "@/lib/finance/product-finance";
+import { useFinanceRates } from "@/lib/finance/finance-rates-context";
 
 export function SilverChefPanel() {
   const purchase = useProductPurchase();
@@ -30,8 +31,15 @@ export function SilverChefPanel() {
   // inclusive whatever the switch says (Product Brief §3), so flipping it must
   // not move the weekly figure.
   const { pricesIncludeTax } = useGst();
+  // This storefront's own rates (card 6GBlDtwf), resolved in the root layout.
+  // The same pair the checkout button quotes — one product must not carry two
+  // different weekly rents on two of our own screens.
+  const rates = useFinanceRates();
 
   const sku = purchase.activeVariant?.sku ?? purchase.product.sku;
+  // The BRAND decides alongside the SKU since Steve widened the SKOPE test
+  // (2026-08-19): a SKOPE fridge coded `BB380X-2SW` says nothing in its SKU.
+  // A variant never has its own brand — the brand belongs to the product.
   const offer = productFinanceOffer({
     price: {
       displayPrice: purchase.displayPrice,
@@ -39,7 +47,9 @@ export function SilverChefPanel() {
       memberPrice: purchase.activeMemberPrice,
     },
     sku,
+    brand: purchase.product.brandName ?? null,
     pricesIncludeTax,
+    rates,
   });
 
   // No price to rent: the buy box is already offering a quote instead.
@@ -76,11 +86,13 @@ export function SilverChefPanel() {
       <div className="min-w-0">
         <p className="text-sm font-semibold text-text-primary">{offer.text}</p>
         {/* Straight to the form (Steve's card: the button opens the finance
-            form). `/silverchef/apply` is a coded route on both sites, so this
-            works whether that site's SilverChef information page is the CMS
-            one (Industry Kitchens) or the coded fallback (Chefs Depot). */}
+            form), and to THIS funder's form — a Skope offer opens Skope
+            Funding's application, never SilverChef's (Steve, 2026-08-20). Both
+            are coded routes on both sites, so this works whether that site's
+            SilverChef information page is the CMS one (Industry Kitchens) or
+            the coded fallback (Chefs Depot). */}
         <a
-          href="/silverchef/apply"
+          href={offer.applyPath}
           className="mt-0.5 inline-flex items-center gap-1 text-sm text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
         >
           Apply for Finance <span aria-hidden="true">&rsaquo;</span>

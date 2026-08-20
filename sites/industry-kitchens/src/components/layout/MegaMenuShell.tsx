@@ -8,8 +8,9 @@ import { useState } from "react";
  * navigation the header stays mounted with the cursor still over the bar, so a
  * panel would otherwise stay open. On any link click we set `data-suppressed`,
  * which force-hides every `.mega-panel` descendant (overriding hover) until the
- * pointer leaves the bar. Keeping this isolated lets MegaMenu stay a server
- * component.
+ * pointer leaves the bar — and collapses it to zero height with it, so a
+ * suppressed panel adds no page height either (card Qt0yPLCl). Keeping this
+ * isolated lets MegaMenu stay a server component.
  */
 export function MegaMenuShell({
   className = "",
@@ -31,7 +32,7 @@ export function MegaMenuShell({
         }
       }}
       onMouseLeave={() => setSuppressed(false)}
-      className={`${className} [&[data-suppressed]_.mega-panel]:!invisible [&[data-suppressed]_.mega-panel]:!opacity-0`}
+      className={`${className} [&[data-suppressed]_.mega-panel]:!invisible [&[data-suppressed]_.mega-panel]:!h-0 [&[data-suppressed]_.mega-panel]:!opacity-0`}
     >
       {children}
     </nav>
