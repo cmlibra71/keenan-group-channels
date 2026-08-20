@@ -36,6 +36,13 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
   // The panel is anchored under the input, so its ceiling is the space left on
   // screen — a flat vh cap runs the pinned footer off the bottom on a phone.
   const panelMaxHeight = useDropdownMaxHeight(panelEl);
+  // ONE stable ref callback for the panel. An inline arrow would be a new
+  // function every render, which makes React detach (null) and re-attach it on
+  // every commit — an avoidable extra render each time a window lands.
+  const setPanel = useCallback((el: HTMLDivElement | null) => {
+    dropdownRef.current = el;
+    setPanelEl(el);
+  }, []);
 
   const { search, loadMore, reset } = suggestions;
 
@@ -209,10 +216,7 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
           it is one click away however far down the list they are. */}
       {isOpen && hits.length > 0 && (
         <div
-          ref={(el) => {
-            dropdownRef.current = el;
-            setPanelEl(el);
-          }}
+          ref={setPanel}
           style={panelMaxHeight ? { maxHeight: panelMaxHeight } : undefined}
           className="absolute z-50 mt-1 flex max-h-[70vh] w-full flex-col rounded-lg border border-zinc-200 bg-white shadow-lg overflow-hidden"
         >
@@ -325,7 +329,7 @@ export function SearchTypeahead({ defaultValue }: { defaultValue?: string }) {
       {/* No results message */}
       {isOpen && hits.length === 0 && query.length >= 2 && !loading && (
         <div
-          ref={dropdownRef}
+          ref={setPanel}
           className="absolute z-50 mt-1 w-full rounded-lg border border-zinc-200 bg-white shadow-lg p-4"
         >
           <p className="text-sm text-zinc-500 text-center">
