@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   filterFinanceMethods,
   financeApplicationValues,
+  financeFloorError,
   financeLinesFromCart,
   financeOfferForCart,
   fundingTypeError,
@@ -106,6 +107,73 @@ test("no other method ever carries a weekly figure", () => {
   const offer = financeOfferForCart({ lines: [{ amountIncGst: 8377 }], goodsTotalIncGst: 8377 });
   assert.equal(weeklyBadgeForMethod("bank_transfer", offer), null);
   assert.equal(weeklyAmountForMethod("bank_transfer", offer), null);
+});
+
+// ── The floor and the rates belong to the STOREFRONT (card 6GBlDtwf) ───────
+// Unset keeps $1,000 / 5.5% / 3.625%, so nothing moves on either site until
+// someone changes it. What is stored is customer-facing money, so an unusable
+// value has to read as the default and never as zero.
+
+test("a storefront's own floor decides the offer, not the shipped $1,000", () => {
+  const settings = { minOrderIncGst: 2500, rates: { standard: 0.055, skope: 0.03625 } };
+  const under = financeOfferForCart({
+    lines: [{ amountIncGst: 2000 }],
+    goodsTotalIncGst: 2000,
+    settings,
+  });
+  assert.equal(under.eligible, false, "$2,000 cleared a $2,500 floor");
+  assert.equal(weeklyBadgeForMethod("silverchef", under), null);
+
+  const over = financeOfferForCart({
+    lines: [{ amountIncGst: 2500 }],
+    goodsTotalIncGst: 2500,
+    settings,
+  });
+  assert.equal(over.eligible, true);
+  assert.equal(over.minOrderIncGst, 2500);
+});
+
+test("the refusal quotes the floor the shopper was actually refused on", () => {
+  const offer = financeOfferForCart({
+    lines: [{ amountIncGst: 2000 }],
+    goodsTotalIncGst: 2000,
+    settings: { minOrderIncGst: 2500, rates: { standard: 0.055, skope: 0.03625 } },
+  });
+  assert.equal(
+    financeFloorError(offer.minOrderIncGst),
+    "Finance is available on orders of $2,500 or more (including GST). Please choose another way to pay."
+  );
+  // The default storefront still says exactly what it said before.
+  const shipped = financeOfferForCart({ lines: [{ amountIncGst: 10 }], goodsTotalIncGst: 10 });
+  assert.equal(shipped.minOrderIncGst, 1000);
+  assert.equal(
+    financeFloorError(shipped.minOrderIncGst),
+    "Finance is available on orders of $1,000 or more (including GST). Please choose another way to pay."
+  );
+});
+
+test("a storefront's own rates drive both weekly figures", () => {
+  const settings = { minOrderIncGst: 1000, rates: { standard: 0.06, skope: 0.04 } };
+  const offer = financeOfferForCart({
+    lines: [{ amountIncGst: 8377, sku: "SKO-1" }],
+    goodsTotalIncGst: 8377,
+    settings,
+  });
+  // 8377 x 0.06 x 12 / 52 and 8377 x 0.04 x 12 / 52
+  assert.equal(offer.silverchefWeekly, 115.99);
+  assert.equal(offer.skopeWeekly, 77.33);
+  assert.equal(weeklyBadgeForMethod("silverchef", offer)?.text, "Rent per Week: $115.99");
+});
+
+test("an unusable stored floor can never finance a small basket", () => {
+  for (const junk of [0, -1, Number.NaN]) {
+    const offer = financeOfferForCart({
+      lines: [{ amountIncGst: 12 }],
+      goodsTotalIncGst: 12,
+      settings: { minOrderIncGst: junk, rates: { standard: 0.055, skope: 0.03625 } },
+    });
+    assert.equal(offer.eligible, false, `floor ${junk} financed a $12 basket`);
+  }
 });
 
 test("the two buttons carry different funding types", () => {
