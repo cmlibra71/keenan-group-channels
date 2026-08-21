@@ -28,6 +28,18 @@ import {
   resolveKitChoices,
   type KitChoice,
 } from "@/lib/product-kit";
+import { contactService, customerAddressService } from "@/lib/store";
+import { saveCheckoutAddressForContact } from "@/lib/contact-addresses";
+import {
+  QUOTE_REQUEST_PROBLEM_MESSAGE,
+  mayFileQuoteAddressInBook,
+  quoteAddressBookRow,
+  quoteShippingAddressFromSaved,
+  quoteShippingAddressSnapshot,
+  validateQuoteRequest,
+  type QuoteRequestForm,
+  type SavedQuoteAddress,
+} from "@/lib/quotes/quote-request";
 
 // QuoteService returns snake_case rows (transformRow convention).
 type QuoteRow = { id: number; uuid: string; contact_id?: number | null; [key: string]: unknown };
@@ -219,7 +231,109 @@ export async function getQuote() {
   return quoteService.getWithItems(quote.id);
 }
 
-export async function submitQuote(notes?: string) {
+/**
+ * Who is signed in, for the delivery address's "ask for" name. Best effort: a lookup
+ * that fails costs a name on the address, never the quote request.
+ */
+async function contactName(contactId: number): Promise<{ firstName: string; lastName: string }> {
+  try {
+    const c = (await contactService.getById(contactId)) as Record<string, unknown> | null;
+    return {
+      firstName: ((c?.first_name as string) ?? "").trim(),
+      lastName: ((c?.last_name as string) ?? "").trim(),
+    };
+  } catch {
+    return { firstName: "", lastName: "" };
+  }
+}
+
+/**
+ * The customer's saved delivery addresses, for the quote request form's dropdown.
+ *
+ * Same read the checkout uses (`listForContact` also covers legacy customer-keyed
+ * rows through the migration's contact_id backfill), reduced to the fields the
+ * dropdown and the snapshot need — a whole-row read would ship the default flags and
+ * timestamps into a client component for no reason.
+ */
+export async function getQuoteDeliveryAddresses(): Promise<SavedQuoteAddress[]> {
+  const session = await getSession();
+  if (!session) return [];
+  try {
+    const rows = (await customerAddressService.listForContact(session.contactId)) as Record<
+      string,
+      unknown
+    >[];
+    return rows.slice(0, 20).map((a) => ({
+      id: a.id as number,
+      firstName: (a.first_name ?? "") as string,
+      lastName: (a.last_name ?? "") as string,
+      company: (a.company ?? "") as string,
+      phone: (a.phone ?? "") as string,
+      address1: (a.address1 ?? "") as string,
+      address2: (a.address2 ?? "") as string,
+      city: (a.city ?? "") as string,
+      stateOrProvince: (a.state_or_province ?? "") as string,
+      postalCode: (a.postal_code ?? "") as string,
+      country: (a.country ?? "") as string,
+      countryCode: (a.country_code ?? "AU") as string,
+    }));
+  } catch (e) {
+    // No address book is a normal state (a brand-new customer). The form falls back
+    // to "enter a new address", which is the only option they had anyway.
+    console.error("[getQuoteDeliveryAddresses] read failed (non-fatal):", e);
+    return [];
+  }
+}
+
+function mayFileAddressForRole(perms: {
+  isB2B: boolean;
+  accountId: number | null;
+  can: (code: string) => boolean;
+}): boolean {
+  if (!perms.isB2B || perms.accountId === null) return true;
+  return (
+    perms.can("add_shipping_address_in_checkout") && perms.can("add_billing_address_in_checkout")
+  );
+}
+
+/**
+ * May THIS customer's typed address be filed in their address book?
+ *
+ * The checkout's rule, unchanged: a B2B contact whose role forbids adding an address
+ * does not get one saved, and because one saved address can become the contact's
+ * default BILLING as well as shipping (the first one always does), it takes BOTH
+ * codes — exactly as `placeOrder` does on the single-page checkout. It is asked here
+ * so the drawer can stop PRINTING a promise we then quietly do not keep.
+ *
+ * Fails open on a lookup error, like every other role read on a customer path: the
+ * worst case is an address saved for someone who could have added one anyway.
+ */
+export async function canSaveQuoteAddress(): Promise<boolean> {
+  const session = await getSession();
+  if (!session) return false;
+  try {
+    return mayFileAddressForRole(await getContactPermissions(session.contactId));
+  } catch (e) {
+    console.error("[canSaveQuoteAddress] role read failed (non-fatal):", e);
+    return true;
+  }
+}
+
+/**
+ * Send the quote request (card 9tbz3sBF).
+ *
+ * Zoey's own form asks for a Quote Name (required), Quote Comments and a Delivery
+ * Address, and so do we. The rules are `validateQuoteRequest`, applied HERE as well
+ * as on the button: the action is callable directly, and a stale tab must not be
+ * able to file a nameless, address-less request that a rep then has to chase.
+ *
+ * The address is snapshotted onto `quotes.shipping_address` rather than looked up
+ * later, because a quote's Ship-To is its own frozen copy (card iJfNIFn9) — the
+ * customer editing their address book next month must not silently redirect a quote
+ * already with a rep. A newly typed address is also filed in the address book, which
+ * is Steve's "yes we should also save that address".
+ */
+export async function submitQuote(form: QuoteRequestForm) {
   const uuid = await getQuoteUuid();
   if (!uuid) return { error: "No quote" };
 
@@ -240,18 +354,78 @@ export async function submitQuote(notes?: string) {
     };
   }
 
-  // Attach customer identity + notes. The quote stays in `quote_pending`
-  // (Zoey lifecycle): the sales team reviews it in the portal and sends
-  // pricing back via markSent → quote_available. The submitted_at attribute
-  // distinguishes a customer-submitted request from an in-progress draft
-  // (both share the quote_pending status).
+  // The saved addresses are re-read on the server: the posted id is checked against
+  // what this contact ACTUALLY has, so a tampered form cannot attach someone else's
+  // address to a quote.
+  const savedAddresses = await getQuoteDeliveryAddresses();
+  // The SAME rules the button applied, including the Australian state and postcode
+  // rules the checkout enforces (cards 18PbOwaG / xqWftDcL) — this action writes the
+  // quote's Ship-To, which becomes the order's Ship-To, which is where freight is
+  // priced, so a free-text "Victoria" or a 5-digit postcode is refused here too.
+  const problem = validateQuoteRequest(form, savedAddresses);
+  if (problem) return { error: QUOTE_REQUEST_PROBLEM_MESSAGE[problem] };
+
+  const chosen = form.addressId === "new" ? null : savedAddresses.find((a) => a.id === form.addressId);
+  // A blank name on a delivery address reads as nobody to ask for on site, so it falls
+  // back to whoever is signed in. Only read when a NEW address is being typed.
+  const signedInName = chosen
+    ? { firstName: "", lastName: "" }
+    : await contactName(session.contactId);
+  const newAddress = chosen
+    ? null
+    : {
+        ...form.newAddress,
+        firstName: form.newAddress.firstName.trim() || signedInName.firstName,
+        lastName: form.newAddress.lastName.trim() || signedInName.lastName,
+      };
+  const shippingAddress = chosen
+    ? quoteShippingAddressFromSaved(chosen)
+    : quoteShippingAddressSnapshot(newAddress!);
+
+  // Attach customer identity, the name, their comment and the delivery address. The
+  // quote stays in `quote_pending` (Zoey lifecycle): the sales team reviews it in the
+  // portal and sends pricing back via markSent → quote_available. The submitted_at
+  // attribute distinguishes a customer-submitted request from an in-progress draft
+  // (both share the quote_pending status) and is what LOCKS the request — the panel
+  // starts a fresh quote afterwards, so there is nothing left to edit (Steve: address
+  // changes after submission are by phone or email).
   const existingAttributes = (quote.attributes ?? {}) as Record<string, unknown>;
   await quoteService.update(quote.id, {
     contactId: session.contactId,
     email: session.email,
-    customerNotes: notes || null,
+    quoteName: form.quoteName.trim(),
+    customerNotes: form.comments.trim() || null,
+    shippingAddress,
     attributes: { ...existingAttributes, submitted_at: new Date().toISOString() },
   });
+
+  // File a newly typed address for next time. Wrapped whole: a request that reached
+  // the sales team must never fail because the address book could not be updated.
+  //
+  // Two gates, both the checkout's own, both stated on the drawer so we never print a
+  // promise we do not keep:
+  //  * the B2B role — BOTH `add_shipping_address_in_checkout` and
+  //    `add_billing_address_in_checkout`, because the first address a contact saves
+  //    becomes their default BILLING as well as shipping (`defaultsForNewAddress`);
+  //  * the country — the address book is AU only (`sf-checkout`, cards 18PbOwaG /
+  //    xqWftDcL), so a NZ delivery address is used for this quote and not filed.
+  //
+  // What is filed is `quoteAddressBookRow`, i.e. the NORMALISED state, so the saved
+  // row and the quote's Ship-To carry the same value and neither is chipped
+  // "Needs details" the next time the customer reaches the checkout.
+  if (newAddress) {
+    try {
+      if (mayFileAddressForRole(perms) && mayFileQuoteAddressInBook(newAddress)) {
+        await saveCheckoutAddressForContact(
+          session.contactId,
+          quoteAddressBookRow({ ...newAddress, country: String(shippingAddress.country ?? "") })
+        );
+      }
+    } catch (e) {
+      console.error("[submitQuote] address book save failed (non-fatal):", e);
+    }
+  }
+
   await clearQuoteUuid();
 
   refresh(); // acting user's view refreshes; shared data cache stays intact
@@ -263,8 +437,8 @@ export async function getQuotesForCustomer() {
   if (!session) return { error: "Not logged in", quotes: [] };
 
   // Contact-keyed (identity unification). Mirrors the old listForCustomer
-  // semantics: this channel's quotes for the subject, hiding in-progress
-  // drafts (quote_pending), newest first.
+  // semantics: this channel's quotes for the subject, hiding the in-progress
+  // basket-shaped draft (quote_pending, never submitted), newest first.
   const result = await quoteService.list({
     page: 1,
     limit: 100,
@@ -277,8 +451,20 @@ export async function getQuotesForCustomer() {
   });
   // …and a staff-only Draft is not the customer's quote at all, whoever's contact
   // the portal's "Duplicate to Draft" hung it off.
+  //
+  // A SUBMITTED request is kept even though it is still `quote_pending`: the customer
+  // has just named it, been told "You can track your quotes in My Account" and handed
+  // a "View My Quotes" button (card 9tbz3sBF), so the quote they named has to be in
+  // the list. `attributes.submitted_at` is what `submitQuote` stamps and is the only
+  // thing separating a sent request from the basket-shaped draft the panel is holding.
+  // Same rule as the /account/quotes page — the two must not disagree.
   const contactQuotes = withoutStaffOnlyDrafts(
-    (result.data as Array<{ status?: string | null }>).filter((q) => q.status !== "quote_pending")
+    (
+      result.data as Array<{
+        status?: string | null;
+        attributes?: { submitted_at?: unknown } | null;
+      }>
+    ).filter((q) => q.status !== "quote_pending" || Boolean(q.attributes?.submitted_at))
   );
   return { quotes: contactQuotes };
 }

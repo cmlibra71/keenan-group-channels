@@ -34,6 +34,7 @@ import {
 } from "@/lib/quotes/price-visibility";
 import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
 import { isStaffOnlyDraft } from "@/lib/quotes/draft-visibility";
+import { stripStaffOnlyFields } from "@/lib/quotes/staff-only-fields";
 import { quoteGstTotals, isMoneyRow } from "@/lib/quotes/quote-gst";
 import { resolveQuoteGstRate } from "@/lib/quotes/quote-gst-rate";
 import { quoteStatusLabel } from "@/lib/quotes/quote-status-label";
@@ -75,6 +76,8 @@ interface QuoteDetail {
   channel_id: number;
   contact_id: number | null;
   quote_number: string | null;
+  /** The name the customer gave the request when they sent it (card 9tbz3sBF). */
+  quote_name: string | null;
   quote_amount: string | null;
   // Basis of the stored total (a Zoey-ingested total already includes GST) plus
   // every component that reconciles to it — see quoteGstTotals.
@@ -144,7 +147,17 @@ export default async function QuoteDetailPage({
   const session = await getSession();
   if (!session) redirect(signInRedirect(`/account/quotes/${quoteId}`));
 
-  const raw = (await quoteService.getWithItems(quoteId)) as QuoteDetail | null;
+  // `getWithItems` is a SELECT * and this is a CUSTOMER surface, so the staff-only
+  // column comes straight back off with the read. `internal_notes` is where reps are
+  // now invited to type "for our team only" (card 9tbz3sBF split the single "Customer
+  // Notes" box into a customer note and an internal one), and a dev build serialises
+  // every awaited value into the page — so it is dropped here, before anything can
+  // render or serialise it, rather than merely left un-rendered (Product Brief; same
+  // shape of leak as card BIig1Zo1).
+  const loaded = (await quoteService.getWithItems(quoteId)) as
+    | (QuoteDetail & { internal_notes?: string | null })
+    | null;
+  const raw: QuoteDetail | null = loaded ? stripStaffOnlyFields(loaded) : null;
   // Only the owning contact, on this channel, may view a quote.
   // Only the owning contact, on this channel, may view a quote — UNLESS their B2B
   // account role grants `view_company_quotes`, in which case any quote belonging to
@@ -365,6 +378,11 @@ export default async function QuoteDetailPage({
           {quoteStatusLabel(status)}
         </span>
       </div>
+      {/* What the customer called this quote when they asked for it — the name
+          reads back here as well as in the list (Steve, card 9tbz3sBF). */}
+      {quote.quote_name && (
+        <p className="text-base font-medium text-zinc-900 mb-1">{quote.quote_name}</p>
+      )}
       <p className="text-sm text-zinc-500 mb-8">
         {quote.created_at ? `Requested ${new Date(quote.created_at).toLocaleDateString()}` : ""}
         {quote.expires_at ? ` · Valid until ${new Date(quote.expires_at).toLocaleDateString()}` : ""}
@@ -575,11 +593,25 @@ export default async function QuoteDetailPage({
         )}
       </div>
 
-      {/* Customer notes */}
+      {/* The customer's own comment, read back to them (Steve, card 9tbz3sBF,
+          answer #3 "Yes they should"). */}
       {quote.customer_notes && (
         <div className="mt-6">
-          <h2 className="text-sm font-semibold text-zinc-900 mb-1">Your notes</h2>
+          <h2 className="text-sm font-semibold text-zinc-900 mb-1">Quote comments</h2>
           <p className="text-sm text-zinc-600 whitespace-pre-wrap">{quote.customer_notes}</p>
+        </div>
+      )}
+
+      {/* Where this quote is being delivered. Read-only by design: a submitted
+          request is locked, and an address change is a phone call or an email
+          (Steve, card 9tbz3sBF: "They need to phone or email for that"). */}
+      {addressSummary && (
+        <div className="mt-6">
+          <h2 className="text-sm font-semibold text-zinc-900 mb-1">Delivery address</h2>
+          <p className="text-sm text-zinc-600">{addressSummary}</p>
+          <p className="mt-1 text-xs text-zinc-500">
+            To change this address, call or email us and we&apos;ll update the quote.
+          </p>
         </div>
       )}
 
