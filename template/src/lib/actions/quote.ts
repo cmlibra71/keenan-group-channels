@@ -599,6 +599,20 @@ export async function acceptQuote(quoteId: number) {
   revalidatePath("/account/quotes");
   return {
     success: true,
+    // Where the customer is sent now that the acceptance is done (card 87IkgD2H,
+    // Tim 2026-08-19). It is the PORTAL's acknowledgement page — the same one the
+    // emailed quote link lands on — and it is one page rather than two on purpose:
+    // it carries the SilverChef offer, and that figure is computed once in the
+    // portal's shared finance module. Re-building it here would mean a second rent
+    // calculation on a storefront that cannot reach that module, which is the very
+    // gap `sf-account-quotes` records rather than papering over.
+    //
+    // `from=account` says the reader is signed in HERE, which is the only thing it
+    // decides: the countdown goes to this storefront's /account rather than its
+    // front page, and the wording names the pro-forma this path has just emailed.
+    // Nothing is unlocked by it — the quote's uuid is the credential, exactly as
+    // it is for the emailed link.
+    acknowledgementUrl: acceptanceAcknowledgementUrl(q.uuid),
     ...(requiresAdminApproval
       ? {
           message:
@@ -606,6 +620,18 @@ export async function acceptQuote(quoteId: number) {
         }
       : {}),
   };
+}
+
+/**
+ * The portal acknowledgement page for a quote this customer has just accepted, or
+ * null for a quote carrying no uuid (nothing in production, but the column is
+ * nullable and a missing acknowledgement must degrade to "stay here and refresh",
+ * never to a broken link).
+ */
+function acceptanceAcknowledgementUrl(uuid: string | null | undefined): string | null {
+  if (!uuid) return null;
+  const base = (process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/$/, "");
+  return `${base}/q/${encodeURIComponent(uuid)}/accepted?from=account`;
 }
 
 // ── Customer edits their own quote (card FPfvaYLp) ───────────────────────────
