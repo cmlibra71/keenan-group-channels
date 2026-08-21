@@ -17,6 +17,7 @@ import {
 import { CUSTOMER_REFERENCE_MAX_LENGTH } from "@/lib/checkout/customer-reference";
 import { Price } from "@/components/ui/Price";
 import { backorderMessage } from "@keenan/services/backorder";
+import { gstSplit } from "@keenan/services/calc";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
 import { FinanceApplicationPanel } from "@/components/checkout/FinanceApplicationPanel";
 import {
@@ -337,7 +338,8 @@ export function CheckoutForm({
   const [postalCodeValue, setPostalCodeValue] = useState("");
   const isAu = country === "AU";
 
-  // Shipping calculation state
+  // Shipping calculation state. `shippingCost` holds the rate card's own figure, which is
+  // EX GST — see the summary block below, where GST is added on top of it (card twwZMnMY).
   const [shippingCost, setShippingCost] = useState<number | null>(null);
   const [shippingLoading, setShippingLoading] = useState(false);
   const [shippingError, setShippingError] = useState<string | null>(null);
@@ -578,6 +580,20 @@ export function CheckoutForm({
   // Note this is NOT the "store has nothing switched on" case, which still places the
   // order with payment status "pending" (payment-methods register entry).
   const paymentUnavailable = paymentAvailability === "account-restricted";
+
+  // The delivery charge the rate card returns is EX GST and GST is added on top of it — a $30
+  // flat rate is $33 to pay (Tim, card twwZMnMY). The summary therefore shows the ex-GST rate on
+  // the Shipping row, the SAME basis as the Subtotal above it, and rolls its GST into the GST
+  // row, so the three rows still add up to the Total. Reading the rate as GST-inclusive is what
+  // billed a $30 delivery as $27.27 + $2.73 and under-charged every Chefs Depot order by 10%.
+  // The split comes from the shared `gstSplit`, never a hand-written /1.1 (services CONTEXT D4).
+  const shippingChargedExTax = heldForSpecialised ? 0 : shippingCost ?? 0;
+  const shippingSplit = gstSplit(shippingChargedExTax, false);
+  // On a GST-inclusive channel every other figure on this panel is inc, so the row is too.
+  const shippingRowAmount = pricesIncludeTax ? shippingSplit.incTax : shippingSplit.exTax;
+  const summaryGstAmount = gstAmount + shippingSplit.tax;
+  const summaryTotal =
+    (pricesIncludeTax ? subtotal : subtotal + gstAmount) + shippingSplit.incTax;
 
   return (
     <form
@@ -1184,9 +1200,9 @@ export function CheckoutForm({
               <div className="flex justify-between text-sm mt-2">
                 <span className="text-steel-500">GST {pricesIncludeTax ? "(included)" : "(10%)"}</span>
                 {pricesIncludeTax ? (
-                  <Price amount={gstAmount} className="font-medium text-steel-400" />
+                  <Price amount={summaryGstAmount} className="font-medium text-steel-400" />
                 ) : (
-                  <Price amount={gstAmount} className="font-medium" />
+                  <Price amount={summaryGstAmount} className="font-medium" />
                 )}
               </div>
               <div className="flex justify-between text-sm mt-2">
@@ -1198,7 +1214,7 @@ export function CheckoutForm({
                 ) : shippingLoading ? (
                   <span className="font-medium text-steel-400 animate-pulse">Calculating...</span>
                 ) : shippingCost !== null && shippingCost > 0 ? (
-                  <Price amount={shippingCost} className="font-medium" />
+                  <Price amount={shippingRowAmount} className="font-medium" />
                 ) : shippingCost === 0 ? (
                   <span className="font-medium text-brand">FREE</span>
                 ) : shippingError ? (
@@ -1217,12 +1233,7 @@ export function CheckoutForm({
               <div className="flex justify-between text-base font-semibold mt-4 pt-4 border-t border-steel-200">
                 <span>Total</span>
                 <span>
-                  <Price
-                    amount={
-                      (pricesIncludeTax ? subtotal : subtotal + gstAmount) +
-                      (heldForSpecialised ? 0 : shippingCost ?? 0)
-                    }
-                  />
+                  <Price amount={summaryTotal} />
                   {heldForSpecialised && (
                     <span className="ml-1 text-xs font-normal text-steel-500">+ delivery</span>
                   )}

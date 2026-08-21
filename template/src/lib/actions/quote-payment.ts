@@ -20,6 +20,8 @@ import {
   wantsStripeTestMode,
   resolveEmailBranding,
   resolveOrderNotificationRecipients,
+  excludePurchaser,
+  resolveOrderBusinessName,
   sendOrderConfirmationEmail,
   sendOrderStaffNotificationEmail,
   productImageService,
@@ -146,9 +148,13 @@ export async function payQuote(
     await getHidePriceStatuses()
   );
   // The SAME split the quote page prints — the customer pays the figure they read.
+  // On a quote carrying a STORE CREDIT that figure is `payableInc`, not `incTax`
+  // (card vkYOSmJj): the credit is money already paid, so it settles the
+  // GST-inclusive total without reducing the GST. `incTax` here would charge the
+  // customer the credit back and disagree with the quote the portal emailed them.
   const view = quoteGstTotals(resolveQuoteTotal(quote) ?? 0, quote, gstRate);
-  const deposit = resolveQuoteDeposit(readQuoteDeposit(quote.attributes), view.incTax);
-  const amountDue = deposit ? deposit.due_now : Math.round(view.incTax * 100) / 100;
+  const deposit = resolveQuoteDeposit(readQuoteDeposit(quote.attributes), view.payableInc);
+  const amountDue = deposit ? deposit.due_now : Math.round(view.payableInc * 100) / 100;
 
   // ── Which methods this store, and this account, actually allow ──────────
   // Read EXACTLY as checkout reads them, and authorise against the same
@@ -408,7 +414,7 @@ export async function payQuote(
 
   // ── Side effects: none of these may fail the payment ────────────────────
   if (plan.freightPending) {
-    await alertOrdersTeamNoFreight(created, quote, view.incTax).catch((e) =>
+    await alertOrdersTeamNoFreight(created, quote, view.payableInc).catch((e) =>
       console.error("[payQuote] no-freight alert failed (non-fatal):", e)
     );
   }
@@ -434,12 +440,19 @@ export async function payQuote(
     order: created,
     quote,
     paymentMethod,
-    totalInc: view.incTax,
+    // The order's own inclusive total, which after a store credit is what was
+    // actually charged (card vkYOSmJj) — the emails must not name a figure the
+    // order does not carry.
+    totalInc: view.payableInc,
     deposit,
     freightPending: plan.freightPending,
     netTermsDays: paymentMethod === "net_terms" && netTerms ? netTerms.netTermsDays : null,
     isTestMode,
     email: session.email ?? null,
+    billingAddress: plan.order.billing_address,
+    // Same pair the checkout hands the resolver: the shopper's own account when
+    // they have one, else whatever the quote was raised against.
+    accountId: perms.accountId ?? numberOrNull(plan.order.account_id) ?? netTerms?.accountId ?? null,
   }).catch((e) => console.error("[payQuote] emails failed (non-fatal):", e));
 
   revalidatePath(`/account/quotes/${quote.id}`);
@@ -472,6 +485,25 @@ async function alertOrdersTeamNoFreight(
   });
 }
 
+/** A planned order carries `account_id` untyped; only a real id may be read as one. */
+function numberOrNull(v: unknown): number | null {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/**
+ * The buyer's own name out of an order's billing address — what the staff alert
+ * prints in its Customer row, and what stops an account merely NAMED after that
+ * person being printed underneath as their "business".
+ */
+function personNameFrom(addr: Record<string, unknown> | null | undefined): string | null {
+  const part = (k: string, alt: string) => {
+    const v = addr?.[k] ?? addr?.[alt];
+    return typeof v === "string" ? v.trim() : "";
+  };
+  return `${part("first_name", "firstName")} ${part("last_name", "lastName")}`.trim() || null;
+}
+
 /**
  * Customer confirmation + staff "new order" alert, the same pair a cart order
  * sends. Card orders skip this: the portal's Stripe webhook sends them once the
@@ -488,6 +520,10 @@ async function sendQuoteOrderEmails(args: {
   netTermsDays: number | null;
   isTestMode: boolean;
   email: string | null;
+  /** The order's billing address — where a business name is carried when one is. */
+  billingAddress: Record<string, unknown> | null;
+  /** The account this is being bought for, when the buyer belongs to one. */
+  accountId: number | null;
 }): Promise<void> {
   const { order, quote, paymentMethod, totalInc, deposit, freightPending, isTestMode } = args;
   const to = args.email;
@@ -546,14 +582,37 @@ async function sendQuoteOrderEmails(args: {
 
   await sendOrderConfirmationEmail({ to, ...params });
 
-  const recipients = await resolveOrderNotificationRecipients(CHANNEL_ID).catch(() => []);
+  // "A person gets ONE email per order": the customer confirmation went out just
+  // above, so a staff address that is also the buyer's is dropped here — the same
+  // rule the cart checkout and the portal's card-order alert keep (card LgCYBeDT).
+  const recipients = excludePurchaser(
+    await resolveOrderNotificationRecipients(CHANNEL_ID).catch(() => []),
+    to
+  );
   if (recipients.length > 0) {
+    // Who bought it, and which business they bought it for — card yK25KBID asked
+    // for both by name, and this sender (an accepted quote paid by bank transfer
+    // or net terms) is the fifth one; an alert holding nothing but an email
+    // address is the complaint the card was written about. Resolved by the same
+    // reader every other sender uses, so no two of them can name a different
+    // business for one buyer.
+    const customerName = personNameFrom(args.billingAddress);
+    const company = await resolveOrderBusinessName({
+      billingAddress: args.billingAddress,
+      accountId: args.accountId,
+      customerName,
+    });
     await sendOrderStaffNotificationEmail({
+      // Records the send on the order's history panel, exactly like the customer
+      // confirmation above and the cart checkout's alert. Without it a
+      // quote-paid order's staff alert leaves no trace in the portal.
+      orderId: order.id,
       to: recipients,
       orderNumber: order.order_number,
       orderUrl: `${(process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/$/, "")}/dashboard/orders/${order.id}`,
       customerEmail: to,
-      customerName: null,
+      customerName,
+      company,
       total: totalInc.toFixed(2),
       deposit: deposit
         ? {

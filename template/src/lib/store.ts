@@ -24,6 +24,7 @@ import {
   accountService,
   contactService,
   orderService,
+  shipmentService,
   orderItemService,
   orderShippingAddressService,
   subscriptionPlanService,
@@ -45,6 +46,7 @@ import {
 } from "@keenan/services";
 import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
+import type { MegaNavItem } from "./mega-menu";
 import {
   STOREFRONT_FILTERS_SETTING_KEY,
   normalizeStorefrontFilters,
@@ -127,6 +129,26 @@ export const getChannelSetting = async (key: string): Promise<unknown> => {
     return setting.setting_value;
   } catch {
     return null;
+  }
+};
+
+/**
+ * Several channel settings in ONE round trip.
+ *
+ * `getChannelSetting` validates the channel and then selects, so N keys cost 2N
+ * queries. This layout resolves settings on EVERY page of the site, and speed is
+ * a stakeholder-visible feature (Tim, 7 Aug demo) — a caller wanting a fixed set
+ * of keys asks once. A key with no row is absent from the map, exactly as
+ * `getChannelSetting` returns null for it; a failed read is an empty map, so a
+ * settings outage degrades to "nothing configured" rather than to an error page.
+ */
+export const getChannelSettings = async (
+  keys: readonly string[]
+): Promise<Record<string, unknown>> => {
+  try {
+    return await channelSettingsService.getValuesByKeys(CHANNEL_ID, keys);
+  } catch {
+    return {};
   }
 };
 
@@ -355,6 +377,48 @@ export const getHeaderNav = unstable_cache(
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
 );
 
+/** The department bar's own items (Navigation editor → `nav_structure.header`):
+ *  the ORDER and the EXTRAS. Departments the editor does not mention are added
+ *  automatically by `resolveNavItems` (card 9wau4Tx9). */
+export const getMegaMenuNav = unstable_cache(
+  async (): Promise<MegaNavItem[]> => {
+    const nav = await getJsonSetting<{ header?: unknown } | null>("nav_structure", null);
+    return normalizeNavItems(nav?.header);
+  },
+  [`mega-menu-nav-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
+/** Departments switched off in the portal (Storefront > Navigation > Mega menu).
+ *  Kept OUT of getMegaMenu: that department tree also feeds homepage category
+ *  blocks and /categories, and this switch is about the MENU only. */
+export const getMegaMenuHidden = unstable_cache(
+  async (): Promise<number[]> => {
+    const value = await getJsonSetting<unknown>("mega_menu_hidden_categories", []);
+    return Array.isArray(value) ? value.filter((v): v is number => typeof v === "number") : [];
+  },
+  [`mega-menu-hidden-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
+/** Saved items carry a type; anything hand-written or older is read as a link
+ *  so one odd row cannot take the header down. */
+function normalizeNavItems(value: unknown): MegaNavItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((i): i is Record<string, unknown> => !!i && typeof i === "object")
+    .map((i) => ({
+      type: (i.type as MegaNavItem["type"]) ?? "link",
+      label: typeof i.label === "string" ? i.label : "",
+      url: typeof i.url === "string" ? i.url : undefined,
+      categoryId: typeof i.categoryId === "number" ? i.categoryId : undefined,
+      pageSlug: typeof i.pageSlug === "string" ? i.pageSlug : undefined,
+      newTab: i.newTab === true,
+      children: normalizeNavItems(i.children),
+    }))
+    .filter((i) => i.label);
+}
+
 export const getHomepageSpotlights = unstable_cache(
   async (): Promise<HomepageSpotlight[]> => {
     const rows = (await categoryService.listHomepageSpotlights?.(CHANNEL_ID)) as
@@ -446,17 +510,130 @@ export async function getGuestOrdersForEmail(
   const rows = await sql<{ id: number; order_number: string; status: string; total_inc_tax: string; created_at: string | Date | null }[]>`
     SELECT id, order_number, status, total_inc_tax, created_at
     FROM orders
-    WHERE customer_id IS NULL
+    WHERE ${guestOrderForEmailCondition(sql, target)}
+    ORDER BY id DESC
+    LIMIT 50`;
+  return rows;
+}
+
+/**
+ * THE guest-order rule, as one SQL fragment: a channel order with no customer and
+ * no contact whose billing email resolves to the same inbox as `normalizedEmail`.
+ *
+ * Deliberately shared by {@link getGuestOrdersForEmail} (the history list) and
+ * {@link isGuestOrderForEmail} (the per-order access gate). Two copies of this
+ * CASE expression would drift, and a drift here is not cosmetic: a looser copy
+ * WIDENS who can read an order, a tighter one 404s an order the list is showing.
+ */
+function guestOrderForEmailCondition(
+  sql: NonNullable<ReturnType<typeof getCommerceClient>>,
+  normalizedEmail: string
+) {
+  return sql`customer_id IS NULL
       AND contact_id IS NULL
       AND channel_id = ${CHANNEL_ID}
       AND CASE
         WHEN split_part(lower(billing_address->>'email'), '@', 2) IN ('gmail.com','googlemail.com')
         THEN regexp_replace(split_part(split_part(lower(billing_address->>'email'), '@', 1), '+', 1), '\\.', '', 'g')
         ELSE split_part(split_part(lower(billing_address->>'email'), '@', 1), '+', 1)
-      END || '@' || split_part(lower(billing_address->>'email'), '@', 2) = ${target}
-    ORDER BY id DESC
-    LIMIT 50`;
-  return rows;
+      END || '@' || split_part(lower(billing_address->>'email'), '@', 2) = ${normalizedEmail}`;
+}
+
+/**
+ * True when THIS order is a guest order on this channel that belongs to `email`'s
+ * inbox — the single-row form of {@link getGuestOrdersForEmail}, for the order
+ * detail page's access gate.
+ *
+ * Not expressed as "is it in the list?": the list is capped at 50 rows, so a
+ * shopper with a long guest history would be 404'd on their own older orders.
+ * Same normalisation, no cap, one order.
+ */
+export async function isGuestOrderForEmail(orderId: number, email: string): Promise<boolean> {
+  const sql = getCommerceClient();
+  if (!sql || !email || !Number.isFinite(orderId)) return false;
+  const target = normalizeEmailForMatch(email);
+  if (!target) return false;
+  const rows = await sql<{ id: number }[]>`
+    SELECT id FROM orders
+    WHERE id = ${orderId}
+      AND ${guestOrderForEmailCondition(sql, target)}
+    LIMIT 1`;
+  return rows.length > 0;
+}
+
+/**
+ * The payment term agreed with the account an order bills to, in days, or `null`
+ * when no term is on record.
+ *
+ * Orders placed through the storefront stamp the term they were quoted; orders
+ * created elsewhere (and most of the historical ones) do not, and the account is
+ * then the only place the real term lives. Both routes to it are tried in one
+ * round trip — the order's own `account_id`, then the account behind the order's
+ * contact — because on this channel most net-terms orders carry a contact but no
+ * account id.
+ *
+ * `accounts.net_terms_days` defaults to 0, which means "no term recorded", not
+ * "due immediately" — hence the `> 0` test. A null answer must stay null: the
+ * page says the invoice follows on the agreed terms rather than quoting a number
+ * the business never agreed.
+ */
+export async function getAccountNetTermsDays(
+  accountId: number | null | undefined,
+  contactId: number | null | undefined
+): Promise<number | null> {
+  const sql = getCommerceClient();
+  if (!sql) return null;
+  const account = Number.isFinite(accountId) ? Number(accountId) : 0;
+  const contact = Number.isFinite(contactId) ? Number(contactId) : 0;
+  if (account <= 0 && contact <= 0) return null;
+  try {
+    const rows = await sql<{ days: number | null; rank: number }[]>`
+      SELECT a.net_terms_days AS days, 1 AS rank
+        FROM accounts a
+       WHERE a.id = ${account}
+      UNION ALL
+      SELECT a.net_terms_days AS days, 2 AS rank
+        FROM contacts c
+        JOIN accounts a ON a.id = c.account_id
+       WHERE c.id = ${contact}
+      ORDER BY rank`;
+    for (const row of rows) {
+      const days = Number(row.days);
+      if (Number.isFinite(days) && days > 0) return Math.round(days);
+    }
+  } catch {
+    // Best-effort: no term on record reads the same as a lookup that failed.
+  }
+  return null;
+}
+
+/**
+ * Storefront URLs for the products a customer may still open, keyed by product id.
+ *
+ * An order keeps its line items forever, but the product behind a line can be
+ * retired or pulled from this channel — linking to it would land the customer on
+ * a 404 inside their own order history. Same channel-visibility join the sitemap
+ * uses ({@link getSitemapProducts}); anything absent renders as plain text.
+ */
+export async function getLinkableProductPaths(productIds: number[]): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  const sql = getCommerceClient();
+  const ids = [...new Set(productIds.filter((id) => Number.isFinite(id)))];
+  if (!sql || ids.length === 0) return out;
+  const rows = await sql<{ id: number; url_path: string | null }[]>`
+    SELECT p.id, p.url_path
+    FROM product_channel_assignments a
+    JOIN products p ON p.id = a.product_id
+    WHERE a.channel_id = ${CHANNEL_ID}
+      AND a.is_visible = true
+      AND p.is_visible = true
+      AND p.id = ANY(${ids})`;
+  for (const row of rows) {
+    // Product routes are keyed by url_path, falling back to the numeric id
+    // (mirrors ProductGrid: `slug={product.urlPath || String(product.id)}`).
+    out.set(Number(row.id), row.url_path || String(row.id));
+  }
+  return out;
 }
 
 /**
@@ -530,6 +707,7 @@ export {
   contactService,
   customerAddressService,
   orderService,
+  shipmentService,
   orderItemService,
   orderShippingAddressService,
   subscriptionPlanService,

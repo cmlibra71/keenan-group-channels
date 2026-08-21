@@ -76,15 +76,29 @@ test("buildLineItems: sale_price wins over list_price", () => {
   assert.equal(round(subtotal.exTax), 80);
 });
 
-test("withShipping rolls inc-tax shipping into the total", () => {
+test("withShipping adds GST on top of the ex-GST rate", () => {
   const subtotal = { exTax: 200, incTax: 220, tax: 20 };
-  const { shipping, total } = withShipping(subtotal, 11);
-  // 11 inc-tax shipping -> 10 ex, 1 tax
+  const { shipping, total } = withShipping(subtotal, 10);
+  // A $10 rate is $10 ex + $1 GST = $11 to pay — never $9.09 + $0.91.
   assert.equal(round(shipping.exTax), 10);
   assert.equal(round(shipping.tax), 1);
+  assert.equal(round(shipping.incTax), 11);
   assert.equal(round(total.incTax), 231);
   assert.equal(round(total.exTax), 210);
   assert.equal(round(total.tax), 21);
+});
+
+test("withShipping: the $30 floor rate bills $30 ex / $33 inc (card twwZMnMY)", () => {
+  // The live defect: a Chefs Depot invoice printed Shipping & Handling $27.27 against a $30
+  // flat rate, because the rate was read as GST-inclusive and divided by 1.1.
+  const subtotal = { exTax: 320, incTax: 352, tax: 32 };
+  const { shipping, total } = withShipping(subtotal, 30);
+  assert.equal(round(shipping.exTax), 30);
+  assert.equal(round(shipping.tax), 3);
+  assert.equal(round(shipping.incTax), 33);
+  assert.equal(round(total.exTax), 350);
+  assert.equal(round(total.tax), 35);
+  assert.equal(round(total.incTax), 385);
 });
 
 test("withShipping with zero shipping leaves the total at subtotal", () => {

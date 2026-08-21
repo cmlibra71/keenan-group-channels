@@ -13,6 +13,8 @@ const facets = (): StorefrontFacets => ({
   brands: [{ id: 7, name: "Rational", count: 3 }],
   price: [{ key: "lt1000", count: 2 }],
   availability: [{ key: "in_stock", count: 9 }],
+  priceRange: { min: 170, max: 59040 },
+  attributes: [{ code: "doors" }],
 });
 
 test("nothing saved = the rail's previous behaviour", () => {
@@ -87,4 +89,29 @@ test("applyStorefrontFilters with the defaults changes nothing but the config", 
   assert.deepEqual(out.brands, before.brands);
   assert.deepEqual(out.price, before.price);
   assert.deepEqual(out.filters, DEFAULT_STOREFRONT_FILTERS);
+});
+
+test("switching Price off takes its SLIDER with it, not just the bands", () => {
+  // The bands and the slider are two controls for ONE facet (C8G4f4U8). Leaving
+  // the travel behind would put the section straight back on the rail of a site
+  // that switched Price off, and a switched-off facet must stop filtering, not
+  // merely displaying (NfYe3P3G).
+  const config = normalizeStorefrontFilters({
+    filters: [
+      { id: "sub", label: "Sub-category", enabled: true, collapsed: false, sortOrder: 0 },
+      { id: "brand", label: "Brand", enabled: true, collapsed: false, sortOrder: 1 },
+      { id: "price", label: "Price (ex GST)", enabled: false, collapsed: false, sortOrder: 2 },
+    ],
+  });
+  const out = applyStorefrontFilters(facets(), config);
+  assert.equal(out.price.length, 0);
+  assert.equal(out.priceRange, null);
+});
+
+test("per-category attributes are not touched by the rail configuration", () => {
+  // They are decided from the data, not from the portal screen — the three
+  // configurable facets are the only ones NfYe3P3G governs.
+  const out = applyStorefrontFilters(facets(), DEFAULT_STOREFRONT_FILTERS);
+  assert.deepEqual(out.attributes, [{ code: "doors" }]);
+  assert.deepEqual(out.priceRange, { min: 170, max: 59040 });
 });

@@ -12,6 +12,8 @@ import { loadJsSandbox, computeCallResults, guardBuyControls, guardBuyControlsIn
 import { cmsFunctionService } from "@keenan/services/services";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
+import { withSilverChefNode } from "@/builder/silverchef-node";
+import { withImageNoticeNode } from "@/builder/product-image-notice";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 
 // ============================================================================
@@ -108,6 +110,16 @@ export async function renderProductNodeBranch({
     nodesDoc?.builder_kind === "nodes" && nodesDoc.node_tree
       ? (nodesDoc.node_tree as typeof SEED_PRODUCT_TREE)
       : null;
+  // The SilverChef / Skope Funding weekly panel (card 6f47rFeT) is PLACED here
+  // rather than authored, for the same reason the kit block is: this page
+  // renders from a stored tree, so a panel that must appear on every product on
+  // both sites cannot wait for two templates to be hand-edited. Idempotent by
+  // node id, and nothing is written back to the stored tree.
+  // The "images are illustrative" banner (card 82HgV23q) is PLACED here for the same
+  // reason: it has to be able to appear on any product on either site, and both sites
+  // render this page from a stored tree. Idempotent by node id; renders nothing unless
+  // the product carries the tick, so every other product page is unchanged.
+  //
   // The buy row's per-product refusals are applied to the TREE, not just to the payload flags the
   // tree binds to. Card 7vu2iEEZ: the three live buy rows express "no Add to Cart" three different
   // ways (Chefs Depot desktop hides a live/greyed pair, its phone bar greys the twin, Industry
@@ -116,8 +128,9 @@ export async function renderProductNodeBranch({
   // forbids outright, because CXnP1lrL removed every string that could have explained one. The
   // pass is pure and never touches a tile (a tile names the product it buys); it runs here rather
   // than being written into the stored trees so there is nothing to undo on a rollback and a site
-  // that re-authors its buy row keeps the behaviour.
-  const nodeTree = guardBuyControls(storedTree ?? SEED_PRODUCT_TREE);
+  // that re-authors its buy row keeps the behaviour. It wraps the PLACED nodes as well as the
+  // stored ones, so a buy control introduced by a future placed node is guarded too.
+  const nodeTree = guardBuyControls(withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE)));
 
   const namedStyles = await getNamedStyles().catch(() => ({}));
   const components = guardBuyControlsInComponents(

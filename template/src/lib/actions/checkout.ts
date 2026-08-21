@@ -6,7 +6,7 @@ import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogS
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { hasTestCheckoutSession } from "@/lib/checkout/test-session";
-import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, siteAccessProfileService, type EmailLineItem } from "@keenan/services";
+import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveOrderBusinessName, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, siteAccessProfileService, loadOrderContactForOrder, type EmailLineItem } from "@keenan/services";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, type BelowCostLine } from "@/lib/checkout/order-draft";
 import { backorderFactsForProducts } from "@/lib/cart/backorder-facts";
 import { canPurchaseQuantity } from "@keenan/services/backorder";
@@ -67,6 +67,7 @@ import {
   financeFloorError,
   financeLinesFromCart,
   financeOfferForCart,
+  filterFinanceMethods,
   fundingTypeError,
   isFinancePaymentMethod,
   weeklyAmountForMethod,
@@ -431,8 +432,9 @@ export async function placeOrder(
   // is charged, no card is taken, and our team quotes it and collects payment afterwards.
   const heldForSpecialised = holdsPayment(deliveryServiceType);
 
-  // Shipping calculation
-  let shippingIncTax = 0;
+  // Shipping calculation. The rate card states EX-GST figures and GST is added on top of
+  // them — a $30 flat rate is $33 inc (Tim, card twwZMnMY). Never back GST out of the rate.
+  let shippingRateExTax = 0;
   const checkoutSettings = await getCheckoutSettings();
   const isMember = !!(session && await getActiveSubscriptionForContact(session.contactId));
 
@@ -458,7 +460,7 @@ export async function placeOrder(
   if (heldForSpecialised) {
     // Held for a human quote — charging a table rate for a job we've just been told the table
     // can't price would be a made-up number on a real invoice.
-    shippingIncTax = 0;
+    shippingRateExTax = 0;
   } else if (
     qualifiesForFreeDelivery({
       enabled: checkoutSettings.freeShippingEnabled,
@@ -469,7 +471,7 @@ export async function placeOrder(
     })
   ) {
     // Free delivery: a member over the threshold, or a brand special on this cart
-    shippingIncTax = 0;
+    shippingRateExTax = 0;
   } else {
     // Calculate from shipping rate cards (zone-based table rates: by order value, weight or
     // item count depending on the matched zone — card Wxjp8wpg).
@@ -483,7 +485,7 @@ export async function placeOrder(
         weightIncomplete: cartFreight ? cartFreight.has_unweighed_lines : true,
       });
       if (shippingResult.success) {
-        shippingIncTax = shippingResult.cost;
+        shippingRateExTax = shippingResult.cost;
       } else if (shippingResult.rate_card_name) {
         // A rate card IS configured for this channel but this address doesn't
         // price against it (unknown postcode, or somewhere we don't deliver).
@@ -504,12 +506,13 @@ export async function placeOrder(
     } catch (e) {
       // Rate lookup unavailable (DB blip) — don't strand a paying customer.
       console.error("[placeOrder] shipping rate lookup failed (non-fatal, $0 freight):", e);
-      shippingIncTax = 0;
+      shippingRateExTax = 0;
     }
   }
-  // Shipping is always specified as inc-tax amount; roll it into the order total.
-  const { shipping, total } = withShipping(subtotal, shippingIncTax);
+  // The rate is ex-GST; withShipping adds GST on top and rolls it into the order total.
+  const { shipping, total } = withShipping(subtotal, shippingRateExTax);
   const shippingExTax = shipping.exTax;
+  const shippingIncTax = shipping.incTax;
   const shippingTax = shipping.tax;
   const totalIncTax = total.incTax;
   const totalExTax = total.exTax;
@@ -569,15 +572,37 @@ export async function placeOrder(
   // offers this shopper nothing, and that is the store's configuration, not a
   // restriction on their account — telling them otherwise sends them to ring a
   // sales desk that can't help.
-  const offerableMethods = filterPaymentMethodsForAccount(
-    checkoutSettings.customerPaymentMethods,
-    accountOptions?.allowedPaymentMethods ?? null,
-    accountOptions?.staffOnlyPaymentMethods ?? null
-  ).filter((m) => m.id !== "net_terms" || !!netTerms);
+  // The finance floor is part of "what this cart is offered", so both counts are
+  // taken after it — exactly as the page renders them. Resolving them off the
+  // unfiltered list counted methods the shopper could not pick, so a cart under
+  // the finance minimum whose only surviving methods were SilverChef/Finance
+  // passed this gate
+  // with nothing actually offerable.
+  const cartFinanceOffer = financeOfferForCart({
+    lines: financeLinesFromCart(fullCart.items as never[], pricesIncludeTax),
+    goodsTotalIncGst: subtotalIncTax,
+    // This storefront's own floor and rates (card 6GBlDtwf) — the SAME settings
+    // object the checkout page drew the offer from, because it is the same
+    // `getCheckoutSettings()` read. A floor resolved differently here would
+    // refuse an order the page invited.
+    settings: checkoutSettings.financeSettings,
+  });
+  const offerableMethods = filterFinanceMethods(
+    filterPaymentMethodsForAccount(
+      checkoutSettings.customerPaymentMethods,
+      accountOptions?.allowedPaymentMethods ?? null,
+      accountOptions?.staffOnlyPaymentMethods ?? null
+    ).filter((m) => m.id !== "net_terms" || !!netTerms),
+    cartFinanceOffer.eligible
+  );
   if (
     resolvePaymentAvailability(
-      checkoutSettings.customerPaymentMethods.length,
-      offerableMethods.length
+      filterFinanceMethods(checkoutSettings.customerPaymentMethods, cartFinanceOffer.eligible)
+        .length,
+      offerableMethods.length,
+      // A guest has no account, so the account wording would name something they
+      // have not got — they fall to the store state and the order is placed unpaid.
+      !!session
     ) === "account-restricted"
   ) {
     return { error: PAY_UNAVAILABLE_ACCOUNT_ORDER };
@@ -606,20 +631,19 @@ export async function placeOrder(
 
   // ── SilverChef / Finance (card VAjaPj0t) ──────────────────────────────────
   // The authorization half of the checkout page's finance offer, resolved with
-  // the SAME function off the SAME goods total: a cart that has dropped under
-  // $1,000 inc GST since the page rendered is refused, never quietly financed.
+  // the SAME function off the SAME goods total AND the same per-storefront
+  // floor: a cart that has dropped under the finance minimum since the page
+  // rendered is refused, never quietly financed.
   // The application is validated HERE, before any order row is written — a
   // half-filled application must not leave a numbered order behind. It is
   // FILED after the order exists (it carries the order number).
-  const financeOffer = isFinancePaymentMethod(effectivePaymentMethod)
-    ? financeOfferForCart({
-        lines: financeLinesFromCart(fullCart.items as never[], pricesIncludeTax),
-        goodsTotalIncGst: subtotalIncTax,
-      })
-    : null;
+  // Same offer the availability gate above resolved, off the same cart and the
+  // same goods total — computed once so the gate and this check can never
+  // disagree about whether this basket clears the finance floor.
+  const financeOffer = isFinancePaymentMethod(effectivePaymentMethod) ? cartFinanceOffer : null;
   let financeApplication: Record<string, string> | null = null;
   if (financeOffer) {
-    if (!financeOffer.eligible) return { error: financeFloorError() };
+    if (!financeOffer.eligible) return { error: financeFloorError(financeOffer.minOrderIncGst) };
 
     financeApplication = financeApplicationValues((name) => formData.get(name) as string | null);
     // The funding type has to belong to the button AND to this basket — the
@@ -1161,6 +1185,12 @@ export async function placeOrder(
       // words staff wrote while the admin preview shows them.
       wording: branding?.wording ?? null,
       testMode: isTestMode,
+      // Who to talk to about this order (card 6mAn2B9O). `sendOrderConfirmationEmail`
+      // would resolve this itself from `orderId`, but the B2B loop below sends one
+      // copy per account recipient off this same object — resolving it once here
+      // means one query for the whole send instead of one per copy, and every copy
+      // is guaranteed to name the same person.
+      contact: await loadOrderContactForOrder(order.id).catch(() => null),
     };
 
     await sendOrderConfirmationEmail({ to: email, ...confirmationParams });
@@ -1207,6 +1237,19 @@ export async function placeOrder(
       // branding the customer confirmation email uses) — not the Keenan default.
       const branding = await resolveEmailBranding(CHANNEL_ID).catch(() => undefined);
       const portalBase = (process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/$/, "");
+      // The customer's BUSINESS, where we already hold one (card yK25KBID). This
+      // checkout asks for no company and none is being added (Chris, 2026-08-11),
+      // so on a storefront order it comes from the shopper's own ACCOUNT — the
+      // same resolver the portal's card-order alert uses, so the two senders can
+      // never name different businesses for the same buyer.
+      const company = await resolveOrderBusinessName({
+        billingAddress: billingAddress as unknown as Record<string, unknown>,
+        accountId: perms.accountId ?? netTerms?.accountId ?? null,
+        // So an account merely named after this shopper — 7,330 of 20,356 live
+        // memberships are, because a sole trader opens theirs under their own
+        // name — is not printed straight back at staff as their "business".
+        customerName: `${firstName} ${lastName}`.trim() || null,
+      });
       await sendOrderStaffNotificationEmail({
         // Records the send on the order's history panel, exactly like the
         // customer confirmation above — without it a storefront order's staff
@@ -1218,6 +1261,7 @@ export async function placeOrder(
         orderUrl: `${portalBase}/dashboard/orders/${order.id}`,
         customerEmail: email,
         customerName: `${firstName} ${lastName}`.trim() || null,
+        company,
         total: String(totalIncTax),
         paymentMethod: effectivePaymentMethod,
         storeName,
