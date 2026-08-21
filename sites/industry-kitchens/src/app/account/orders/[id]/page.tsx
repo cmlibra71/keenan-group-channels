@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ChevronLeft, Package } from "lucide-react";
-import { ApiError } from "@keenan/services";
+import { ApiError, loadOrderContactForOrder } from "@keenan/services";
 import { getSession } from "@/lib/auth";
 import { signInRedirect } from "@/lib/account-redirect";
 import {
@@ -35,6 +35,7 @@ import { OrderMoney, OrderTotals } from "@/components/account/OrderMoney";
 import { PaymentSection } from "./payment-section";
 import { ShipmentsSection } from "./shipments-section";
 import { AccountShell } from "@/components/account/AccountShell";
+import { RepContactPanel } from "@/components/account/RepContactPanel";
 
 export const metadata = {
   title: "Order",
@@ -244,8 +245,14 @@ export default async function OrderDetailPage({
     ...new Set(items.map((i) => i.product_id).filter((v): v is number => typeof v === "number")),
   ];
 
-  const [thumbs, linkablePaths, checkoutSettings, shipmentPage, accountNetTermsDays] =
-    await Promise.all([
+  const [
+    thumbs,
+    linkablePaths,
+    checkoutSettings,
+    shipmentPage,
+    accountNetTermsDays,
+    orderContact,
+  ] = await Promise.all([
       productImageService.getThumbnailsForProducts(productIds) as Promise<
         { product_id: number; url_thumbnail: string | null; url_standard: string | null }[]
       >,
@@ -266,6 +273,14 @@ export default async function OrderDetailPage({
       isNetTermsMethod(order.payment_method)
         ? getAccountNetTermsDays(order.account_id, order.contact_id)
         : Promise.resolve(null),
+      // Who to talk to about this order (card 6mAn2B9O). The SAME resolver the
+      // customer's quote pages use, asked of the ORDER's own rep and its own
+      // channel — the rep's mobile where we hold one, else this storefront's
+      // customer-service desk, never the other business's number. It resolves the
+      // rendered name/email/phone in there so the rep id never travels through
+      // this page's data (card BIig1Zo1). Best effort: a contact panel must not be
+      // able to 500 an order.
+      loadOrderContactForOrder(orderId).catch(() => null),
     ]);
 
   // May this person settle the balance by card, and with what control? THE one
@@ -507,6 +522,15 @@ export default async function OrderDetailPage({
         shipments={shipments}
         items={items.map((i) => ({ id: i.id, name: i.name }))}
       />
+
+      {/* ── Who to talk to ──────────────────────────────────────────────────
+          The Payment section can end on "please contact us", and until now the
+          page said that with nothing to contact anybody by (card 6mAn2B9O). */}
+      {orderContact && (
+        <div className="mt-8">
+          <RepContactPanel contact={orderContact} heading="Who to talk to" />
+        </div>
+      )}
     </AccountShell>
   );
 }
