@@ -7,6 +7,7 @@ import { WarrantyDirectory } from "@/components/product/WarrantyDirectory";
 import { GstToggle } from "@/components/layout/GstToggle";
 import { SilverChefPanel } from "@/components/product/SilverChefPanel";
 import { ProductImageNotice } from "@/components/product/ProductImageNotice";
+import { usableBrandLogo } from "@/lib/brand-logo-url";
 
 // ============================================================================
 // Industry Kitchens' sealed product-page leaves.
@@ -38,6 +39,12 @@ export interface ProductNativesArgs {
 
 export function productNatives({ payload, variantImageUrl, data }: ProductNativesArgs): NativeComponents {
   const product = (payload.product ?? {}) as Record<string, unknown>;
+  // Card tSrCcnvx (Tim, 2026-08-19): a missing or broken photo falls back to the
+  // brand's logo. `payload.brand` is the same slice the brand-logo link above the
+  // title already binds (`enrichProductPayload`), so no extra read is needed and
+  // the two can never disagree about which logo this product's brand has.
+  const brand = (payload.brand ?? null) as { imageUrl?: string | null; name?: string | null } | null;
+  const brandLogoUrl = usableBrandLogo(brand?.imageUrl);
 
   return {
     "product-gallery": () => (
@@ -46,6 +53,8 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
         productName={String(product.name ?? "")}
         variantImageUrl={variantImageUrl}
         videos={(product.videos ?? []) as never}
+        brandLogoUrl={brandLogoUrl}
+        brandName={brand?.name ?? null}
       />
     ),
     "warranty-directory": () => <WarrantyDirectory />,
