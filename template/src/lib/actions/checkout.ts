@@ -6,7 +6,7 @@ import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogS
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { hasTestCheckoutSession } from "@/lib/checkout/test-session";
-import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveOrderBusinessName, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, siteAccessProfileService, type EmailLineItem } from "@keenan/services";
+import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveOrderBusinessName, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, siteAccessProfileService, loadOrderContactForOrder, type EmailLineItem } from "@keenan/services";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, memberSavings, type BelowCostLine } from "@/lib/checkout/order-draft";
 import { getLineCosts } from "@/lib/store";
 import { sendStaffNotification } from "@/lib/staff-email";
@@ -1150,6 +1150,12 @@ export async function placeOrder(
       // words staff wrote while the admin preview shows them.
       wording: branding?.wording ?? null,
       testMode: isTestMode,
+      // Who to talk to about this order (card 6mAn2B9O). `sendOrderConfirmationEmail`
+      // would resolve this itself from `orderId`, but the B2B loop below sends one
+      // copy per account recipient off this same object — resolving it once here
+      // means one query for the whole send instead of one per copy, and every copy
+      // is guaranteed to name the same person.
+      contact: await loadOrderContactForOrder(order.id).catch(() => null),
     };
 
     await sendOrderConfirmationEmail({ to: email, ...confirmationParams });
