@@ -23,6 +23,8 @@ import { ProductImageGallery, type ProductImage as GalleryImage } from "@/compon
 import { ProductKitNative } from "@/components/product/ProductKitNative";
 import type { ProductKit } from "@/lib/product-kit";
 import { GstToggle } from "@/components/layout/GstToggle";
+import { SilverChefPanel } from "@/components/product/SilverChefPanel";
+import { ProductImageNotice } from "@/components/product/ProductImageNotice";
 
 export function productNatives({ payload, variantImageUrl, data }: ProductNativesArgs): NativeComponents {
   const product = (payload.product ?? {}) as Record<string, unknown>;
@@ -52,5 +54,17 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
       if (!kit) return null;
       return <ProductKitNative kit={kit} productId={Number(product.id)} />;
     },
+    // SilverChef / Skope Funding weekly rental panel (card 6f47rFeT). Sealed
+    // because the figure follows the LIVE purchase state — variant choice,
+    // member/contract price — and an authored tree cannot call the finance
+    // calculator. It renders nothing for a product with no price.
+    "silverchef-panel": () => <SilverChefPanel />,
+    // "Images are for illustrative purposes only" (card 82HgV23q). Sealed rather than
+    // authored because the supplied panel colour is not a token on either site, and a
+    // colour class invented in a STORED tree has no rule in the deployed stylesheet.
+    // Renders null unless this product carries the tick.
+    "product-image-notice": () => (
+      <ProductImageNotice show={product.imageIsIllustrative === true} />
+    ),
   };
 }

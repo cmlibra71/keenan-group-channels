@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { redirectIfMapped } from "@/lib/redirect-seam";
 import { draftMode, headers } from "next/headers";
 import type { Metadata } from "next";
 import { getContentPage, getCmsPage, getCmsTemplate, getFeatureFlag, getNamedStyles, getComponents, getDraftComponents, getChannelSetting, CHANNEL_ID } from "@/lib/store";
@@ -6,6 +7,7 @@ import { getMemberContext } from "@/lib/member";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { composeContentPagePayload } from "@keenan/services/builder";
 import { RichContent } from "@/components/content/RichContent";
+import { chooseContentPageTree } from "@/lib/content-page-tree";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BuilderContentPage } from "@/builder/BuilderContentPage";
 import { cmsFunctionService } from "@keenan/services/services";
@@ -53,32 +55,31 @@ export default async function ContentPage({
     // The page's own authored tree (custom pages converted to the Site Builder).
     const ownTree = (cms as { node_tree?: unknown }).node_tree as NodeTree | null;
 
-    // ═══ Shared POLICY LAYOUT — 'policy' pages (terms, privacy, returns,
-    // shipping, contact, warranty) render through ONE node template; the page
-    // supplies the data ({{page.heading}}, {{page.body_html}}…). Edit the
-    // template once → every policy page updates. Gated: flag for live, or
-    // draft mode when an authored layout draft exists. ═══
+    // ═══ Which design this page renders — the rule lives in one pure module
+    // (lib/content-page-tree.ts) with its own tests. In short: a page's OWN
+    // published tree always wins, policy pages included, because publishing is
+    // the only thing that reaches the storefront and it is a person's deliberate
+    // act. The SHARED policy layout — one template EVERY policy page is drawn
+    // through — still waits for node_policy_template_enabled, since switching it
+    // on restyles the whole set at once (card BNtsJACK). ═══
+    const choice = chooseContentPageTree({
+      pageKind,
+      hasOwnTree: Boolean(ownTree),
+      policyLayoutEnabled:
+        pageKind === "policy" && !ownTree
+          ? Boolean(await getFeatureFlag("node_policy_template_enabled"))
+          : false,
+      draft,
+    });
     let tree: NodeTree | null = null;
-    let treeKind: "policy" | "custom" = "custom";
-    if (pageKind === "policy") {
-      const flag = await getFeatureFlag("node_policy_template_enabled");
-      if (flag || draft) {
-        if (ownTree) {
-          tree = ownTree;
-          treeKind = "policy";
-        } else {
-          const layout = (await getCmsTemplate("policy_layout", draft).catch(() => null)) as {
-            node_tree?: unknown;
-          } | null;
-          const layoutTree = (layout?.node_tree as NodeTree | null) ?? null;
-          if (layoutTree) {
-            tree = layoutTree;
-            treeKind = "policy";
-          }
-        }
-      }
-    } else if (ownTree) {
+    const treeKind = choice.kind;
+    if (choice.source === "page") {
       tree = ownTree;
+    } else if (choice.source === "policy_layout") {
+      const layout = (await getCmsTemplate("policy_layout", draft).catch(() => null)) as {
+        node_tree?: unknown;
+      } | null;
+      tree = (layout?.node_tree as NodeTree | null) ?? null;
     }
 
     // ═══ Site Builder node-tree path — renders through the shared BuilderTree
@@ -135,7 +136,12 @@ export default async function ContentPage({
   }
 
   const page = await getContentPage(slug);
-  if (!page) notFound();
+  if (!page) {
+    // A renamed content page, or a legacy Zoey address that used to be one,
+    // redirects rather than bare-404ing. (card EVvRDnZt)
+    await redirectIfMapped(`/pages/${slug}`);
+    notFound();
+  }
 
   return (
     <article className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-12 sm:py-16">

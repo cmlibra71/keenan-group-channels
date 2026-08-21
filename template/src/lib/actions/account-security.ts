@@ -118,6 +118,12 @@ export async function requestPasswordReset(
         customerName: displayName(candidate),
         branding,
         testMode,
+        // We already know exactly who this is and which storefront asked, so the send lands on
+        // the right person's Contact history without the portal having to match by address
+        // (card utA2Ebnp) — which is the difference between honouring the one-row-per-site rule
+        // and guessing for the ~100 addresses two records share.
+        contactId: candidate.id,
+        channelId: CHANNEL_ID,
       });
     } catch (e) {
       // Never reveal a send/DB failure to the caller — stay neutral.

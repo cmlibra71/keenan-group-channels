@@ -204,11 +204,13 @@ export default async function QuotesPage() {
                     <span className="flex items-baseline gap-1">
                       <Price
                         amount={
+                          // What is left TO pay: a store credit is money already
+                          // paid, so it settles the inclusive total (card vkYOSmJj).
                           quoteGstTotals(
                             resolveQuoteTotal(quote)!,
                             quote,
                             rateFor(quote.tax_class_id)
-                          ).incTax
+                          ).payableInc
                         }
                         className="font-semibold text-text-primary"
                       />

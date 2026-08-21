@@ -12,6 +12,8 @@ import { loadJsSandbox, computeCallResults } from "@keenan/services/builder";
 import { cmsFunctionService } from "@keenan/services/services";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
+import { withSilverChefNode } from "@/builder/silverchef-node";
+import { withImageNoticeNode } from "@/builder/product-image-notice";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 
 // ============================================================================
@@ -108,7 +110,16 @@ export async function renderProductNodeBranch({
     nodesDoc?.builder_kind === "nodes" && nodesDoc.node_tree
       ? (nodesDoc.node_tree as typeof SEED_PRODUCT_TREE)
       : null;
-  const nodeTree = storedTree ?? SEED_PRODUCT_TREE;
+  // The SilverChef / Skope Funding weekly panel (card 6f47rFeT) is PLACED here
+  // rather than authored, for the same reason the kit block is: this page
+  // renders from a stored tree, so a panel that must appear on every product on
+  // both sites cannot wait for two templates to be hand-edited. Idempotent by
+  // node id, and nothing is written back to the stored tree.
+  // The "images are illustrative" banner (card 82HgV23q) is PLACED here for the same
+  // reason: it has to be able to appear on any product on either site, and both sites
+  // render this page from a stored tree. Idempotent by node id; renders nothing unless
+  // the product carries the tick, so every other product page is unchanged.
+  const nodeTree = withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE));
 
   const namedStyles = await getNamedStyles().catch(() => ({}));
   const components = (await (draft ? getDraftComponents() : getComponents()).catch(

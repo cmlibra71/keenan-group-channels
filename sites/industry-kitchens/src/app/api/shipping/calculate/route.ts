@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { summariseLinesFreight, cartService } from "@keenan/services";
+import { gstSplit } from "@keenan/services/calc";
 import { calculateShipping } from "@/lib/store";
 import { getCartUuid } from "@/lib/cart";
 
@@ -53,7 +54,18 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await calculateShipping(postcode, subtotal, measures);
-    return NextResponse.json(result);
+    // `cost` is the rate card's own figure, which is EX GST (Tim, card twwZMnMY): a $30 flat
+    // rate is $33 to pay. Both bases are named in the response so no caller has to guess —
+    // reading the raw rate as inc-GST is exactly the defect this card fixed, and it under-charged
+    // every Chefs Depot delivery by 10%. The split comes from the shared `gstSplit`, never a
+    // hand-written `* 1.1` (services CONTEXT D4).
+    const split = gstSplit(result.cost ?? 0, false);
+    return NextResponse.json({
+      ...result,
+      cost_ex_tax: split.exTax,
+      cost_tax: split.tax,
+      cost_inc_tax: split.incTax,
+    });
   } catch (error) {
     console.error("Shipping calculation error:", error);
     return NextResponse.json(

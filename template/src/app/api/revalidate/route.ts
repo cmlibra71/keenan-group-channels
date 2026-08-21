@@ -50,6 +50,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ revalidated: true });
   }
 
+  // kind "category_seo" is the portal publishing a category page's per-storefront SEO
+  // wording (xvz6pXB4), which a reviewer works through in bulk. Only the category ROW
+  // changed, and category reads carry their own "categories" tag — so purge that and leave
+  // the broad channel tag alone, for the same reason "product" and "brand_seo" do. There is
+  // no narrower tag to fire: `getCategoryBySlug` is tagged `channel-${id}` + "categories"
+  // and nothing else.
+  if (kind === "category_seo") {
+    purge("categories");
+    return NextResponse.json({ revalidated: true });
+  }
+
   // kind "brand_seo" is the portal publishing a brand page's per-storefront SEO wording
   // (xvz6pXB4), which a reviewer works through in bulk. Only the brand ROW changed, and
   // brand reads carry their own "brands" tag — so purge that and leave the broad channel

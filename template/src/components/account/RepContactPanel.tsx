@@ -10,6 +10,13 @@ import type { QuoteContact } from "@keenan/services";
  * page, the emailed link and the rep's own inbox can never disagree about who
  * owns a customer's quote.
  *
+ * A named rep who holds no mobile of their own gets this storefront's own
+ * customer-service number underneath, labelled as the desk (card 6mAn2B9O, Tim
+ * 2026-08-16: "All our reps have a mobile number - Or if no rep - Use 1800
+ * number"). It is never printed as the rep's own line, and never hardcoded here:
+ * it is read from the record's OWN channel, so a Chefs Depot page can never show
+ * Industry Kitchens' number.
+ *
  * A line with no value is not rendered. On Chefs Depot no quote has a rep and no
  * rep has a phone number, so what a customer reads today is Customer Service,
  * cs@chefsdepot.com.au, and the storefront's general number once it is set.
@@ -21,7 +28,7 @@ export function RepContactPanel({
   contact: QuoteContact;
   heading?: string;
 }) {
-  if (!contact.email && !contact.phone) return null;
+  if (!contact.email && !contact.phone && !contact.deskPhone) return null;
 
   return (
     <div className="rounded-lg border border-border p-4">
@@ -51,6 +58,20 @@ export function RepContactPanel({
               >
                 {contact.phone}
               </a>
+            </p>
+          )}
+          {!contact.phone && contact.deskPhone && (
+            <p className="flex items-start gap-1.5 text-sm">
+              <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted" />
+              <span>
+                <a
+                  href={`tel:${contact.deskPhone.replace(/[^\d+]/g, "")}`}
+                  className="whitespace-nowrap text-accent hover:underline"
+                >
+                  {contact.deskPhone}
+                </a>
+                <span className="block text-xs text-text-muted">Customer service</span>
+              </span>
             </p>
           )}
         </div>

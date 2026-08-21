@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { redirectIfMapped } from "@/lib/redirect-seam";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
@@ -30,7 +31,11 @@ export default async function BrandCategoryPage({
     getFeatureFlag("member_pricing_enabled"),
   ]);
 
-  if (!brand) notFound();
+  if (!brand) {
+    // A renamed brand address redirects rather than bare-404ing. (card EVvRDnZt)
+    await redirectIfMapped(`/brands/${slug}/${path.join("/")}`);
+    notFound();
+  }
 
   // If we can't resolve the category, fall back to brand-only products. This
   // gives the URL a sensible landing instead of 404.
