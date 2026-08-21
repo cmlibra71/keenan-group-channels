@@ -1,15 +1,34 @@
 "use client";
 
-import { useEffect, useState, useTransition, useActionState, useCallback } from "react";
+import { useEffect, useState, useTransition, useActionState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { FileText, CheckCircle, User } from "lucide-react";
-import { getQuote, submitQuote } from "@/lib/actions/quote";
+import {
+  canSaveQuoteAddress,
+  getQuote,
+  getQuoteDeliveryAddresses,
+  submitQuote,
+} from "@/lib/actions/quote";
 import { loginFromPanel, registerFromPanel } from "@/lib/actions/account-panel";
 import { GoogleSignInButton } from "@/components/account/GoogleSignInButton";
+import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
 import { Price } from "@/components/ui/Price";
 import { QuoteItemsList, type QuoteItemRow } from "./QuoteItemsList";
 import { usePanelContext } from "@/components/ui/PanelContext";
 import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
+import {
+  AU_STATES,
+  EMPTY_QUOTE_REQUEST_ADDRESS,
+  QUOTE_NAME_MAX_LENGTH,
+  QUOTE_REQUEST_PROBLEM_MESSAGE,
+  mayFileQuoteAddressInBook,
+  normaliseAuState,
+  quoteAddressCountryCode,
+  savedAddressLabel,
+  validateQuoteRequest,
+  type QuoteRequestAddressFields,
+  type SavedQuoteAddress,
+} from "@/lib/quotes/quote-request";
 
 type QuoteData = Awaited<ReturnType<typeof getQuote>>;
 
@@ -26,23 +45,53 @@ export function QuotePanel() {
   const [isPending, startTransition] = useTransition();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [notes, setNotes] = useState("");
+  // The three things Zoey's own form asks for beyond the items (card 9tbz3sBF).
+  const [quoteName, setQuoteName] = useState("");
+  const [comments, setComments] = useState("");
+  const [savedAddresses, setSavedAddresses] = useState<SavedQuoteAddress[]>([]);
+  // Whether this customer's typed address will actually be FILED for next time. A
+  // B2B role can forbid it (the checkout's own gate), and we must not print the
+  // promise to someone we then silently skip.
+  const [canSaveAddress, setCanSaveAddress] = useState(false);
+  const [addressId, setAddressId] = useState<number | "new">("new");
+  const [newAddress, setNewAddress] = useState<QuoteRequestAddressFields>(
+    EMPTY_QUOTE_REQUEST_ADDRESS
+  );
+  const [error, setError] = useState<string | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [authView, setAuthView] = useState<"login" | "register">("login");
   const { setQuoteCount } = useCartQuoteCounts();
+  // The autocomplete attaches to the street input rather than owning it, so the
+  // customer can still type an address Google has never heard of.
+  const streetRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
       setSubmitted(false);
-      setNotes("");
+      setQuoteName("");
+      setComments("");
+      setNewAddress(EMPTY_QUOTE_REQUEST_ADDRESS);
+      setError(null);
       setNeedsLogin(false);
       setAuthView("login");
       startTransition(async () => {
-        const data = await getQuote();
+        const [data, addresses, maySave] = await Promise.all([
+          getQuote(),
+          getQuoteDeliveryAddresses(),
+          canSaveQuoteAddress(),
+        ]);
         setQuote(data);
+        applyAddresses(addresses);
+        setCanSaveAddress(maySave);
       });
     }
   }, [isOpen]);
+
+  /** Default to the customer's first saved address, Zoey-style; otherwise "new". */
+  function applyAddresses(addresses: SavedQuoteAddress[]) {
+    setSavedAddresses(addresses);
+    setAddressId(addresses[0]?.id ?? "new");
+  }
 
   const refreshQuote = useCallback(() => {
     startTransition(async () => {
@@ -61,16 +110,36 @@ export function QuotePanel() {
   }).length;
   const allPoa = items.length > 0 && poaCount === items.length;
 
+  const requestForm = { quoteName, comments, addressId, newAddress };
+  // Australia unless Google's autocomplete said otherwise (IK sells into NZ). Decides
+  // both the State control and whether the address book will take this address.
+  const isAuAddress = quoteAddressCountryCode(newAddress) === "AU";
+  const willSaveAddress = canSaveAddress && mayFileQuoteAddressInBook(newAddress);
+
+  /** Send the request. The server applies the SAME rules, so this is courtesy, not the gate. */
   function doSubmit() {
+    const problem = validateQuoteRequest(requestForm, savedAddresses);
+    if (problem) {
+      setError(QUOTE_REQUEST_PROBLEM_MESSAGE[problem]);
+      return;
+    }
+    setError(null);
     setIsSubmitting(true);
     startTransition(async () => {
-      const result = await submitQuote(notes || undefined);
+      const result = await submitQuote(requestForm);
       if (result.error === "login_required") {
         setNeedsLogin(true);
         setIsSubmitting(false);
         return;
       }
       setIsSubmitting(false);
+      // A refusal (a role that may not submit, a stale address) says so and leaves the
+      // form as it is. Reporting "Quote Submitted" over a failed write is how a request
+      // disappears without anybody noticing.
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
       setSubmitted(true);
       setQuote(null);
       // Badge zeroes instantly; the kept server refresh() re-seeds it identically.
@@ -79,13 +148,30 @@ export function QuotePanel() {
   }
 
   function handleAuthSuccess(_session: SessionInfo) {
-    // After successful auth, auto-retry submission
+    // Signing in from the panel means the customer's address book is only now
+    // readable, so it is loaded before the retry: a customer who typed an address
+    // while signed out keeps it (their pick is "new"), and one who has saved
+    // addresses is shown them rather than silently quoted to a typed duplicate.
     setNeedsLogin(false);
     setIsSubmitting(true);
     startTransition(async () => {
-      const result = await submitQuote(notes || undefined);
+      const [addresses, maySave] = await Promise.all([
+        getQuoteDeliveryAddresses(),
+        canSaveQuoteAddress(),
+      ]);
+      setSavedAddresses(addresses);
+      setCanSaveAddress(maySave);
+      const problem = validateQuoteRequest(requestForm, addresses);
+      if (problem) {
+        setIsSubmitting(false);
+        setAddressId(addresses[0]?.id ?? "new");
+        setError(QUOTE_REQUEST_PROBLEM_MESSAGE[problem]);
+        return;
+      }
+      const result = await submitQuote(requestForm);
       if (result.error) {
         setIsSubmitting(false);
+        setError(result.error === "login_required" ? "Please sign in again." : result.error);
         return;
       }
       setIsSubmitting(false);
@@ -167,19 +253,201 @@ export function QuotePanel() {
       <div className="flex-1 overflow-y-auto px-6 py-4">
         <QuoteItemsList items={items} onMutate={refreshQuote} />
 
-        {/* Customer notes */}
+        {/* Quote Name — compulsory, and it is what the customer sees this quote
+            called in My Account (Steve, card 9tbz3sBF). */}
         <div className="mt-6">
-          <label htmlFor="quote-notes" className="block text-sm font-medium text-zinc-700">
-            Notes for sales team (optional)
+          <label htmlFor="quote-name" className="block text-sm font-medium text-zinc-700">
+            Quote name <span className="text-red-600">*</span>
+          </label>
+          <input
+            id="quote-name"
+            type="text"
+            value={quoteName}
+            maxLength={QUOTE_NAME_MAX_LENGTH}
+            onChange={(e) => setQuoteName(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+            placeholder="e.g. Kitchen fit-out — Smith St"
+          />
+          <p className="mt-1 text-xs text-zinc-500">
+            You&apos;ll see this name against the quote in My Account.
+          </p>
+        </div>
+
+        {/* Quote Comments — the customer's own words. Our team keeps its own,
+            separate internal note, which the customer never sees. */}
+        <div className="mt-4">
+          <label htmlFor="quote-comments" className="block text-sm font-medium text-zinc-700">
+            Quote comments
           </label>
           <textarea
-            id="quote-notes"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            id="quote-comments"
+            value={comments}
+            onChange={(e) => setComments(e.target.value)}
             rows={3}
             className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
             placeholder="Any special requirements or questions..."
           />
+        </div>
+
+        {/* Delivery address — REQUIRED at quote stage (Steve, 2026-07-28). Pick a
+            saved one or type a new one, which we keep for next time. No billing
+            address is asked for at this stage. */}
+        <div className="mt-4">
+          <label htmlFor="quote-address" className="block text-sm font-medium text-zinc-700">
+            Delivery address <span className="text-red-600">*</span>
+          </label>
+          <select
+            id="quote-address"
+            value={addressId === "new" ? "new" : String(addressId)}
+            onChange={(e) =>
+              setAddressId(e.target.value === "new" ? "new" : Number(e.target.value))
+            }
+            className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+          >
+            {savedAddresses.map((a) => (
+              <option key={a.id} value={String(a.id)}>
+                {savedAddressLabel(a)}
+              </option>
+            ))}
+            <option value="new">Enter a new address…</option>
+          </select>
+
+          {addressId === "new" && (
+            <div className="mt-3 space-y-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  value={newAddress.firstName}
+                  onChange={(e) => setNewAddress({ ...newAddress, firstName: e.target.value })}
+                  placeholder="First name"
+                  autoComplete="given-name"
+                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+                />
+                <input
+                  type="text"
+                  value={newAddress.lastName}
+                  onChange={(e) => setNewAddress({ ...newAddress, lastName: e.target.value })}
+                  placeholder="Last name"
+                  autoComplete="family-name"
+                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+                />
+              </div>
+              <input
+                type="text"
+                value={newAddress.company}
+                onChange={(e) => setNewAddress({ ...newAddress, company: e.target.value })}
+                placeholder="Business name (optional)"
+                autoComplete="organization"
+                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+              />
+              <input
+                type="tel"
+                value={newAddress.phone}
+                onChange={(e) => setNewAddress({ ...newAddress, phone: e.target.value })}
+                placeholder="Phone for the driver (optional)"
+                autoComplete="tel"
+                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+              />
+              <div className="relative">
+                <input
+                  ref={streetRef}
+                  type="text"
+                  value={newAddress.address1}
+                  onChange={(e) => setNewAddress({ ...newAddress, address1: e.target.value })}
+                  placeholder="Street address *"
+                  autoComplete="address-line1"
+                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+                />
+                <AddressAutocomplete
+                  inputRef={streetRef}
+                  onSelect={(a) => {
+                    const code = (a.countryCode || "AU").toUpperCase();
+                    setNewAddress((prev) => ({
+                      ...prev,
+                      address1: a.address1,
+                      city: a.city,
+                      // Google hands back "Victoria" as often as "VIC"; the State
+                      // control only speaks codes, so normalise on the way in rather
+                      // than leaving the picker showing nothing selected.
+                      state: (code === "AU" ? normaliseAuState(a.state) : null) ?? a.state,
+                      postalCode: a.postalCode,
+                      countryCode: code,
+                    }));
+                  }}
+                />
+              </div>
+              <input
+                type="text"
+                value={newAddress.address2}
+                onChange={(e) => setNewAddress({ ...newAddress, address2: e.target.value })}
+                placeholder="Unit / level (optional)"
+                autoComplete="address-line2"
+                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+              />
+              <div className="grid grid-cols-3 gap-3">
+                <input
+                  type="text"
+                  value={newAddress.city}
+                  onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })}
+                  placeholder="Suburb *"
+                  autoComplete="address-level2"
+                  className="col-span-2 rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+                />
+                {/* An Australian state is PICKED, never typed: a free-text state
+                    ("Victoria", which is what Zoey's own form shows) matches no
+                    shipping zone and used to be billed as $0 delivery. Same list and
+                    same rule as the checkout (cards 18PbOwaG / xqWftDcL). Only a
+                    non-AU address — Google's autocomplete on a NZ street — keeps the
+                    free-text box, because we have no region list for anywhere else. */}
+                {isAuAddress ? (
+                  <select
+                    value={newAddress.state}
+                    onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })}
+                    autoComplete="address-level1"
+                    aria-label="State"
+                    className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+                  >
+                    <option value="">State *</option>
+                    {AU_STATES.map((s) => (
+                      <option key={s.code} value={s.code}>
+                        {s.code}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={newAddress.state}
+                    onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })}
+                    placeholder="Region *"
+                    autoComplete="address-level1"
+                    className="rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+                  />
+                )}
+              </div>
+              <input
+                type="text"
+                value={newAddress.postalCode}
+                onChange={(e) => setNewAddress({ ...newAddress, postalCode: e.target.value })}
+                placeholder="Postcode *"
+                autoComplete="postal-code"
+                inputMode={isAuAddress ? "numeric" : "text"}
+                maxLength={isAuAddress ? 4 : undefined}
+                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+              />
+              {/* Only promised when it is actually true: the address book is AU only,
+                  and a B2B role can forbid adding an address at all. */}
+              {willSaveAddress && (
+                <p className="text-xs text-zinc-500">
+                  We&apos;ll save this address to your account for next time.
+                </p>
+              )}
+            </div>
+          )}
+          <p className="mt-2 text-xs text-zinc-500">
+            Once you send this request the details are locked in — call or email us if
+            anything needs to change.
+          </p>
         </div>
       </div>
 
@@ -201,6 +469,11 @@ export function QuotePanel() {
         {allPoa && (
           <p className="text-xs text-zinc-500">
             Our sales team will price {poaCount !== 1 ? "these items" : "this item"} and get back to you.
+          </p>
+        )}
+        {error && (
+          <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
           </p>
         )}
         <div className="grid grid-cols-2 gap-3">

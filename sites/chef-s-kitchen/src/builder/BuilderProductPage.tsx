@@ -114,18 +114,38 @@ function ActionsBridge({
   // is the site's business — both sites now seal only widgets that carry their
   // own behaviour or data (the gallery either side, plus IK's warranty
   // directory) — so they come from the per-site ./product-natives under shared
-  // KEYS. The variant-image guard
-  // stays here because every site needs it: relative Zoey media paths would
-  // 403 the S3-only proxy, so they fall back to the product images.
+  // KEYS.
+  //
+  // Card 0CDcCYmO. This guard used to be the whole reason a variation never
+  // changed the picture: EVERY one of the 1,480 legacy variant rows holds a
+  // relative Zoey media PATH rather than a URL, so the test below rejected all
+  // of them and the gallery silently kept the product images while the price,
+  // the SKU and the option labels all switched. Resolution now happens once,
+  // server-side, in `resolveVariantImageUrl` (@keenan/services), so what
+  // arrives here is either an absolute https URL or null. The test stays as a
+  // last line of defence — an authored payload is data, and a relative value
+  // reaching the gallery would 403 the allowlisted proxy and render as a
+  // broken-image glyph, which is worse than falling back to the product
+  // images.
   const variantImg =
-    purchase.variantImageUrl && /^https?:\/\//i.test(purchase.variantImageUrl)
+    purchase.variantImageUrl && /^https:\/\//i.test(purchase.variantImageUrl)
       ? purchase.variantImageUrl
       : null;
-  const nativeComponents: NativeComponents = productNatives({
-    payload: payload as unknown as Record<string, unknown>,
-    variantImageUrl: variantImg,
-    data: nativeData ?? {},
-  });
+  // Memoised on the three values the natives actually close over. Without this
+  // every native is a FRESH component function on every render, which is a new
+  // component TYPE to React, so the gallery unmounts and remounts whenever
+  // anything on the page changes — losing its zoom state and re-running its
+  // mount work. It matters here because the gallery is exactly the leaf this
+  // card makes stateful about the chosen variation. (Card 0CDcCYmO.)
+  const nativeComponents: NativeComponents = React.useMemo(
+    () =>
+      productNatives({
+        payload: payload as unknown as Record<string, unknown>,
+        variantImageUrl: variantImg,
+        data: nativeData ?? {},
+      }),
+    [payload, variantImg, nativeData]
+  );
 
   // goBack drives the exploded back-to-products master's click Action — mirrors
   // the old BackButton native (history-back with a /products fallback).

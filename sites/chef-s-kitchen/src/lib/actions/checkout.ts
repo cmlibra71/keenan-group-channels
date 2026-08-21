@@ -30,6 +30,7 @@ import { normaliseCustomerReference } from "@/lib/checkout/customer-reference";
 import { setLastOrder } from "@/lib/checkout/last-order";
 import { canViewOrderConfirmation } from "@/lib/checkout/confirmation-access";
 import { siteBaseUrl } from "@/lib/seo";
+import type { ConfirmBillingDetails } from "@/lib/payments/stripe-gateways";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 import {
   ACCOUNT_REQUIRED_SETTING,
@@ -87,7 +88,22 @@ import {
 
 type PlaceOrderResult = {
   error?: string;
-  stripe?: { clientSecret: string; orderNumber: string };
+  stripe?: {
+    clientSecret: string;
+    orderNumber: string;
+    /**
+     * The buyer, for the browser to attach to the card it confirms
+     * (`billing_details`) — card b88eIfaS. Stripe Radar reads the customer's
+     * name, email and billing address there and we sent none, so every payment
+     * arrived anonymous ("Name: Not provided", "Customer email: Not provided",
+     * every billing/shipping/IP distance "Not available"). Derived server-side
+     * from the ORDER by @keenan/services, in the same call that stamped the
+     * intent's `shipping`, so the two halves cannot describe different people.
+     * It is NOT `receipt_email`: Stripe still sends the shopper nothing, which
+     * card EInDib45 exists to keep true.
+     */
+    billingDetails?: ConfirmBillingDetails | null;
+  };
 };
 
 export async function placeOrder(
@@ -775,7 +791,7 @@ export async function placeOrder(
         if (customerReference !== (existing.customer_po ?? null)) {
           await orderService.update(existing.id, { customerPo: customerReference });
         }
-        const { clientSecret } = await paymentService.createStripePaymentIntent(existing.id, {
+        const { clientSecret, billingDetails } = await paymentService.createStripePaymentIntent(existing.id, {
           amount: String(totalIncTax),
           description: `Order ${existing.order_number}`,
           customer_email: email,
@@ -786,7 +802,7 @@ export async function placeOrder(
         // Breadcrumb BEFORE handing off to the card form — see the fresh-order
         // branch below for why it can't wait for confirmStripePayment.
         await setLastOrder(existing.order_number, "stripe");
-        return { stripe: { clientSecret, orderNumber: existing.order_number } };
+        return { stripe: { clientSecret, orderNumber: existing.order_number, billingDetails } };
       }
     } catch (e) {
       console.error("[placeOrder] idempotency reuse check failed (non-fatal):", e);
@@ -1074,7 +1090,7 @@ export async function placeOrder(
   // happens via metadata stamped by paymentService.
   if (effectivePaymentMethod === "stripe") {
     try {
-      const { clientSecret } = await paymentService.createStripePaymentIntent(order.id, {
+      const { clientSecret, billingDetails } = await paymentService.createStripePaymentIntent(order.id, {
         amount: String(totalIncTax),
         description: `Order ${order.order_number}`,
         customer_email: email,
@@ -1098,7 +1114,7 @@ export async function placeOrder(
       // that ordering irrelevant. Harmless if the shopper abandons the card form
       // — the cart is still full, so the guard never fires.
       await setLastOrder(order.order_number, "stripe");
-      return { stripe: { clientSecret, orderNumber: order.order_number } };
+      return { stripe: { clientSecret, orderNumber: order.order_number, billingDetails } };
     } catch (err) {
       return { error: err instanceof Error ? err.message : "Failed to create payment." };
     }
