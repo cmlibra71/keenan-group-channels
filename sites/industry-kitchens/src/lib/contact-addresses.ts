@@ -62,6 +62,19 @@ async function clearDefaults(
   }
 }
 
+/**
+ * How many addresses the contact already has. Used by the address book to give
+ * a customer's FIRST address both default flags (card xqWftDcL) — the same rule
+ * checkout's "save this address" path applies, so the two ways of getting an
+ * address on file cannot disagree about what a first address means.
+ */
+export async function countAddressesForContact(contactId: number): Promise<number> {
+  const sql = client();
+  const rows = await sql<{ count: string }[]>`
+    SELECT count(*)::text AS count FROM customer_addresses WHERE contact_id = ${contactId}`;
+  return Number(rows[0]?.count ?? 0);
+}
+
 export async function createAddressForContact(
   contactId: number,
   d: ContactAddressData

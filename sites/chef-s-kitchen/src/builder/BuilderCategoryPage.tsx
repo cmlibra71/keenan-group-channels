@@ -120,10 +120,19 @@ export function BuilderCategoryPage({
         router.replace(`${pathname}?${next.toString()}`, { scroll: false });
         return { success: true };
       },
+      // Clears EVERY filter the listing can be narrowed by, not just the three
+      // configurable facets: the per-category attribute filters (C8G4f4U8) write
+      // `f_<code>` params, and an authored page conditions its Clear all on
+      // `listing.hasActiveFilters`, which counts them. Leaving them behind would
+      // render a visibly-enabled button that changes nothing at all — the exact
+      // "narrows with nothing on screen to clear it" failure NfYe3P3G forbids.
       clearFilters: () => {
-        const next = new URLSearchParams(searchParams.toString());
-        ["sub", "brand", "price", "stock", "page"].forEach((p) => next.delete(p));
-        router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+        const nextParams = new URLSearchParams(searchParams.toString());
+        for (const key of [...nextParams.keys()]) {
+          if (key.startsWith("f_")) nextParams.delete(key);
+        }
+        ["sub", "brand", "price", "stock", "page"].forEach((p) => nextParams.delete(p));
+        router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false });
         return { success: true };
       },
       // filter-controls master's sort <select> → ?sort= (same as SortSelect).

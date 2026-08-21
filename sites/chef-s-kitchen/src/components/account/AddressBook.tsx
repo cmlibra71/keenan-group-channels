@@ -28,12 +28,27 @@ export type Address = {
   isDefaultShipping: boolean;
 };
 
+/**
+ * The details the customer already gave us on the Profile card above, offered
+ * as the starting point for a NEW address (card xqWftDcL: "ability to copy
+ * available details from previous panel to prevent re-entry fatigue").
+ * Every field stays editable, and an address being EDITED keeps its own values.
+ */
+export type AddressPrefill = {
+  firstName: string;
+  lastName: string;
+  company: string;
+  phone: string;
+};
+
 export function AddressBook({
   addresses,
   googlePlacesEnabled = false,
+  prefill,
 }: {
   addresses: Address[];
   googlePlacesEnabled?: boolean;
+  prefill?: AddressPrefill;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState<number | "new" | null>(null);
@@ -113,6 +128,7 @@ export function AddressBook({
 
       {editing === "new" ? (
         <AddressForm
+          prefill={prefill}
           googlePlacesEnabled={googlePlacesEnabled}
           onCancel={() => setEditing(null)}
           onSaved={() => {
@@ -131,15 +147,22 @@ export function AddressBook({
 
 function AddressForm({
   initial,
+  prefill,
   googlePlacesEnabled,
   onCancel,
   onSaved,
 }: {
   initial?: Address;
+  prefill?: AddressPrefill;
   googlePlacesEnabled?: boolean;
   onCancel: () => void;
   onSaved: () => void;
 }) {
+  // An address being EDITED shows its own values; only a NEW one starts from the
+  // profile. The whole object is chosen, never merged field by field: an existing
+  // address whose company the customer deliberately cleared must stay cleared,
+  // not quietly re-acquire the profile's business name on the next edit.
+  const start = initial ?? prefill;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const address1Ref = useRef<HTMLInputElement>(null);
@@ -198,19 +221,19 @@ function AddressForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label className="field-label">First name</label>
-          <input name="firstName" type="text" defaultValue={initial?.firstName} className="mt-1 block w-full input" />
+          <input name="firstName" type="text" defaultValue={start?.firstName} className="mt-1 block w-full input" />
         </div>
         <div>
           <label className="field-label">Last name</label>
-          <input name="lastName" type="text" defaultValue={initial?.lastName} className="mt-1 block w-full input" />
+          <input name="lastName" type="text" defaultValue={start?.lastName} className="mt-1 block w-full input" />
         </div>
         <div>
           <label className="field-label">Company</label>
-          <input name="company" type="text" defaultValue={initial?.company} className="mt-1 block w-full input" />
+          <input name="company" type="text" defaultValue={start?.company} className="mt-1 block w-full input" />
         </div>
         <div>
           <label className="field-label">Phone</label>
-          <input name="phone" type="tel" defaultValue={initial?.phone} className="mt-1 block w-full input" />
+          <input name="phone" type="tel" defaultValue={start?.phone} className="mt-1 block w-full input" />
         </div>
       </div>
       <div className="relative">

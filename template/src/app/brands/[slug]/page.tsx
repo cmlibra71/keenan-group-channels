@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { redirectIfMapped } from "@/lib/redirect-seam";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -71,6 +72,8 @@ export default async function BrandPage({
     | null;
 
   if (!brand) {
+    // A renamed brand address redirects rather than bare-404ing. (card EVvRDnZt)
+    await redirectIfMapped(`/brands/${slug}`);
     notFound();
   }
 

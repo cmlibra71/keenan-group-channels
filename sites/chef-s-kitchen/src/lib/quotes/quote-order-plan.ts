@@ -19,7 +19,7 @@
  * same values either way.
  */
 import { gstSplit } from "@keenan/services/calc";
-import { quoteGstTotals, type QuoteGstInput } from "./quote-gst";
+import { quoteGstTotals, MONEY_EPSILON, type QuoteGstInput } from "./quote-gst";
 import { resolveQuoteTotal } from "./price-visibility";
 import { quoteFreightStillPending } from "./freight-pending";
 
@@ -204,6 +204,19 @@ export function planOrderFromPaidQuote(
   // freight a Zoey grand total carries with no shipping_cost of its own.
   const view = quoteGstTotals(resolveQuoteTotal(quote) ?? 0, quote, ctx.gstRate);
   const shippingT = split4(view.freightEx, ctx.gstRate, false);
+  // STORE CREDIT ON A CONVERTING QUOTE (card vkYOSmJj). `view.exTax/incTax` are
+  // what the quote CHARGES, before the credit; `payableInc` is what the
+  // customer's copy of the quote — and the Pay button above — asks them for, so
+  // that is what the order has to bill. It is split at the order's own GST rate,
+  // which is exactly how the ORDER surface already treats a credit when an order
+  // is amended (portal `recomputeAmendedTotals`: an inclusive settlement whose
+  // GST comes off proportionally), so the order it creates is the order the
+  // portal's `planOrderFromQuote` creates from the same quote. `store_credit_amount`
+  // still travels onto the order, so the credit itself is recorded.
+  const totalT =
+    view.creditInc > MONEY_EPSILON
+      ? split4(view.payableInc, ctx.gstRate, true)
+      : { ex: view.exTax.toFixed(4), inc: view.incTax.toFixed(4), tax: view.tax.toFixed(4) };
   const lineDiscount = num(quote.discount_amount);
   const coupon = num(quote.coupon_discount);
 
@@ -226,9 +239,9 @@ export function planOrderFromPaidQuote(
     discount_amount: (lineDiscount + coupon).toFixed(4),
     gift_certificate_amount: String(quote.gift_certificate_amount ?? "0"),
     store_credit_amount: String(quote.store_credit_amount ?? "0"),
-    total_ex_tax: view.exTax.toFixed(4),
-    total_inc_tax: view.incTax.toFixed(4),
-    total_tax: view.tax.toFixed(4),
+    total_ex_tax: totalT.ex,
+    total_inc_tax: totalT.inc,
+    total_tax: totalT.tax,
     billing_address: billing,
     customer_message: quote.customer_notes ?? null,
     internal_memo: buildInternalMemo(quote, items),

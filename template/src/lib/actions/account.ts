@@ -12,8 +12,10 @@ import {
   updateAddressForContact,
   deleteAddressForContact,
   setAddressDefaultForContact,
+  countAddressesForContact,
   type ContactAddressData,
 } from "@/lib/contact-addresses";
+import { defaultsForNewAddress } from "@/lib/checkout/save-address";
 import { getStripeProvider } from "@/lib/stripe";
 import { getContactPermissions } from "@/lib/role-permissions";
 import { normaliseAuState, isValidAuPostcode } from "@/lib/checkout/au-address";
@@ -123,7 +125,16 @@ function invalidAuAddress(input: AddressInput): Result | null {
   return null;
 }
 
-/** Edit the member's own profile (name, company, phone). Optional, non-blocking. */
+/**
+ * Edit the member's own profile.
+ *
+ * First name, last name and PHONE are required; the business name is not (card
+ * xqWftDcL: "Profile must have First name, Last name, Phone, Email — Business
+ * name is NOT mandatory"). Phone became required here and NOWHERE else on
+ * purpose: the sign-up form is unchanged, and no order is refused for want of a
+ * phone number — 56% of contacts carry none (prod, 2026-08-11), so gating
+ * checkout on it would refuse half our customers over a details page.
+ */
 export async function updateCustomerProfile(input: {
   firstName: string;
   lastName: string;
@@ -140,6 +151,12 @@ export async function updateCustomerProfile(input: {
   }
   const company = input.company?.trim() || "";
   const phone = input.phone?.trim() || "";
+  if (!phone) {
+    return {
+      success: false,
+      error: "Please add a phone number, so we can reach you about an order or a delivery.",
+    };
+  }
 
   try {
     // Contacts have no company column (identity unification) — company lives
@@ -182,7 +199,21 @@ export async function createCustomerAddress(input: AddressInput): Promise<Result
   const denied = await denyAddressAction(session.contactId, "add_bill_to_address", "adding");
   if (denied) return denied;
   try {
-    await createAddressForContact(session.contactId, toAddressData(input));
+    const data = toAddressData(input);
+    // A customer's FIRST address is their default billing AND shipping, ticks or
+    // no ticks — the same rule checkout's "save this address" path already
+    // applies (`defaultsForNewAddress`, card 18PbOwaG). Without it the very
+    // first address someone saves here can land with neither flag, and the page
+    // then asks them to set two defaults on the one address they just typed.
+    // A LATER address only takes a default the customer ticked, so nothing they
+    // already chose is displaced.
+    const existing = await countAddressesForContact(session.contactId);
+    if (existing === 0) {
+      const first = defaultsForNewAddress(existing);
+      data.isDefaultBilling = first.isDefaultBilling;
+      data.isDefaultShipping = first.isDefaultShipping;
+    }
+    await createAddressForContact(session.contactId, data);
     revalidatePath("/account/profile");
     return { success: true };
   } catch (err) {

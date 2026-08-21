@@ -173,6 +173,13 @@ export async function addToQuote(
       quantity: 1,
       listPrice,
       salePrice,
+      // WHO PUT THIS PRICE HERE: the customer did, off the catalogue, through
+      // `layerCartPrice` above. `price_source` is what decides whether a line is
+      // ever repriced again, and its old default said `manual` — a price a sales
+      // manager typed, which is never re-derived — so a customer's own line was
+      // frozen at the price it was added at for life (card laFQveZT). Say it out
+      // loud here; the service will not guess it for us.
+      priceSource: "customer",
       ...(lineAttributes ? { attributes: lineAttributes, customerNotes: lineNotes } : {}),
     });
   }
@@ -365,7 +372,6 @@ export async function acceptQuote(quoteId: number) {
     console.error("[acceptQuote] pro-forma email failed (non-fatal):", e);
   }
 
-
   // Everything that happens after an acceptance — the rep's email with the quote
   // PDF, the customer's confirmation, and the two freight gates that decide
   // whether this becomes an order (card 9XRQmaiz) — is ONE place, and that place
@@ -402,6 +408,7 @@ export async function acceptQuote(quoteId: number) {
   // acceptance would otherwise go completely unannounced, which is the one
   // outcome worse than a duplicate. Fall back to the older per-site alert.
   if (!followUpRan) await sendFallbackAcceptanceAlert(quoteId, q, requiresAdminApproval);
+
   revalidatePath(`/account/quotes/${quoteId}`);
   revalidatePath("/account/quotes");
   return {
@@ -563,6 +570,9 @@ export async function duplicateQuote(quoteId: number) {
         quantity: Number(it.quantity) || 1,
         listPrice: (it.list_price as string) ?? "0",
         salePrice: (it.sale_price as string) ?? null,
+        // The copy keeps the original line's provenance, and a line with none
+        // recorded is the customer's own (card laFQveZT).
+        priceSource: (it.price_source as string) || "customer",
       });
     } catch { /* skip a failing line */ }
   }

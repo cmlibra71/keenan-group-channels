@@ -4,7 +4,7 @@ import { Search, Crown } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
-import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, getHeaderNav, drawEntryService, CHANNEL_ID } from "@/lib/store";
+import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, getHeaderNav, getMegaMenuNav, getMegaMenuHidden, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 import { HeaderPanels } from "./HeaderPanels";
 import { MegaMenu } from "./MegaMenu";
@@ -28,11 +28,13 @@ export async function Header({
   // wrong loading the site"), and it re-runs on every refresh()
   // from a cart/quote mutation. Degrade gracefully (empty badge / nav) on a
   // transient DB failure instead of taking down the whole storefront.
-  const [cart, quote, megaMenu, headerNav] = await Promise.all([
+  const [cart, quote, megaMenu, headerNav, megaNav, hiddenDepartments] = await Promise.all([
     getCart().catch(() => null),
     getQuote().catch(() => null),
     getMegaMenu().catch(() => ({ departments: [], featured: {} })),
     getHeaderNav().catch(() => []),
+    getMegaMenuNav().catch(() => []),
+    getMegaMenuHidden().catch(() => []),
   ]);
   const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   // QuoteService.getWithItems types its items loosely (Record<string,unknown>) unlike
@@ -72,11 +74,32 @@ export async function Header({
     <>
       <header className="border-b border-zinc-200 bg-white sticky top-0 z-50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between">
-            {/* Logo */}
+          {/* min-height, not height: the masthead GROWS to hold the logo
+              (card kiJa7dug) rather than cropping or squashing it. 64px stays
+              the FLOOR so a small logo leaves the bar as it was. */}
+          <div className="flex min-h-16 items-center justify-between py-2">
+            {/* Logo — SIZED BY WIDTH, not by height (card kiJa7dug: at least
+                350px across on desktop). The Storefront > Logo setting can hold
+                any shape of artwork, so `h-auto` keeps each site's own aspect
+                ratio. The width/height props are Next's pre-load hint and
+                srcSet basis.
+
+                The mobile width is `min(150px, 25vw)`, NOT a flat 150px: this
+                Link is `shrink-0`, so on a 320px-wide screen (iPhone SE / a
+                640px window at 200% zoom) a 150px logo pushes the header's own
+                right-hand controls off the edge, and `html,body{overflow-x:hidden}`
+                means the shopper cannot scroll to them. `max-w-full` does NOT
+                catch that: it resolves against a shrink-wrapped parent, so it
+                constrains nothing. */}
             {logoUrl ? (
-              <Link href="/">
-                <Image src={logoUrl} alt={logoAlt || storeName} height={40} width={160} className="object-contain" />
+              <Link href="/" className="shrink-0">
+                <Image
+                  src={logoUrl}
+                  alt={logoAlt || storeName}
+                  height={120}
+                  width={350}
+                  className="h-auto w-[min(150px,25vw)] max-w-full object-contain sm:w-[200px] lg:w-[350px]"
+                />
               </Link>
             ) : (
               <Link href="/" className="text-xl font-bold text-zinc-900">
@@ -137,13 +160,22 @@ export async function Header({
                 <Search className="h-5 w-5" />
               </Link>
               <HeaderClient cartCount={cartCount} quoteCount={quoteCount} isMember={isMember} entryCount={entryCount} drawsEnabled={drawsEnabled} />
-              <MobileNavDrawer departments={megaMenu.departments} />
+              <MobileNavDrawer
+                departments={megaMenu.departments}
+                items={megaNav}
+                hiddenCategoryIds={hiddenDepartments}
+              />
             </div>
           </div>
         </div>
 
         {/* Department nav + mega panels — dark bar below the masthead */}
-        <MegaMenu departments={megaMenu.departments} featured={megaMenu.featured} />
+        <MegaMenu
+          departments={megaMenu.departments}
+          featured={megaMenu.featured}
+          items={megaNav}
+          hiddenCategoryIds={hiddenDepartments}
+        />
       </header>
 
       {/* The header's slide-out panels — rendered ONCE, outside <header>, so

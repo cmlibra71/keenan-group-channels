@@ -4,7 +4,7 @@ import { Search } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
-import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, getHeaderNav, drawEntryService, CHANNEL_ID } from "@/lib/store";
+import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, getHeaderNav, getMegaMenuHidden, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 import { HeaderPanels } from "./HeaderPanels";
 import { MegaMenu } from "./MegaMenu";
@@ -22,11 +22,12 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
   // wrong loading the site"), and it re-runs on every refresh()
   // from a cart/quote mutation. Degrade gracefully (empty badge / nav) on a
   // transient DB failure instead of taking down the whole storefront.
-  const [cart, quote, megaMenu, headerNav] = await Promise.all([
+  const [cart, quote, megaMenu, headerNav, hiddenDepartments] = await Promise.all([
     getCart().catch(() => null),
     getQuote().catch(() => null),
     getMegaMenu().catch(() => ({ departments: [], featured: {} })),
     getHeaderNav().catch(() => []),
+    getMegaMenuHidden().catch(() => []),
   ]);
   const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   // QuoteService.getWithItems types its items loosely (Record<string,unknown>) unlike
@@ -69,23 +70,50 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
         {/* Masthead — brand green */}
         <div className="bg-brand">
           <div className="container-page">
-            <div className="flex h-[72px] items-center gap-5 lg:h-[78px] lg:gap-6">
-              <MobileNavDrawer departments={megaMenu.departments} />
+            {/* min-height, not height: the masthead GROWS to hold the logo
+                (card kiJa7dug — Steve wants it at least 350px across on
+                desktop) rather than cropping or squashing the lockup. 72/78px
+                stays the FLOOR so a small logo leaves the bar as it was. */}
+            <div className="flex min-h-[72px] items-center gap-5 py-2 lg:min-h-[78px] lg:gap-6">
+              <MobileNavDrawer
+                departments={megaMenu.departments}
+                items={headerNav}
+                hiddenCategoryIds={hiddenDepartments}
+              />
 
               {/* Logo — the portal's Storefront > Logo setting when one is set
                   (same shape as Industry Kitchens), else the bundled white
                   wordmark that the design system draws on green. The masthead
                   is dark, so a logo uploaded on a solid light background shows
                   as a light block here; that is the uploaded asset, not this
-                  fallback. */}
+                  fallback.
+
+                  SIZED BY WIDTH, not by height (card kiJa7dug): "at least
+                  350px across" is a width, and the setting can hold any shape
+                  of artwork — CD's is a stacked lockup, IK's a wide wordmark —
+                  so a fixed height would give each of them a different width.
+                  `h-auto` keeps the real artwork's aspect ratio; the
+                  width/height props are only Next's pre-load hint and its
+                  srcSet basis (350 buys the 400w/800w sources a 350px box
+                  needs), the loaded image's own ratio wins after that.
+
+                  The mobile width is `min(150px, 25vw)`, NOT a flat 150px:
+                  this Link is `shrink-0`, so on a 320px-wide screen (iPhone SE
+                  / a 640px window at 200% zoom) a 150px logo pushed the CART
+                  control off the right edge — and `html,body{overflow-x:hidden}`
+                  meant the shopper could not scroll to it. `max-w-full` does
+                  NOT catch that: it resolves against a shrink-wrapped parent,
+                  so it constrains nothing. The vw term is what makes the logo
+                  give width back at the responsive floor. Re-measure the cart's
+                  right edge at 320px before raising it. */}
               <Link href="/" className="shrink-0" aria-label={storeName}>
                 <Image
                   src={logoUrl || "/brand/chefs-depot-logo-white.png"}
                   alt={logoAlt || storeName}
-                  height={48}
-                  width={166}
+                  height={269}
+                  width={350}
                   priority
-                  className="h-9 w-auto object-contain lg:h-12"
+                  className="h-auto w-[min(150px,25vw)] max-w-full object-contain sm:w-[200px] lg:w-[350px]"
                 />
               </Link>
 
@@ -107,9 +135,14 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
           </div>
         </div>
 
-        {/* Department nav — editor items (incl. mega-menu department items) when
-            set, else the bar's built-in default */}
-        <MegaMenu departments={megaMenu.departments} featured={megaMenu.featured} items={headerNav} />
+        {/* Department nav — every department by default, in the editor's order,
+            minus the ones switched off (card 9wau4Tx9) */}
+        <MegaMenu
+          departments={megaMenu.departments}
+          featured={megaMenu.featured}
+          items={headerNav}
+          hiddenCategoryIds={hiddenDepartments}
+        />
       </header>
 
       {/* The header's slide-out panels — rendered ONCE, outside <header>, so

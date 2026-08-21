@@ -54,12 +54,15 @@ export function ProfileEditForm({
           <input id="lastName" name="lastName" type="text" required defaultValue={lastName} className="mt-1 block w-full input" />
         </div>
         <div>
-          <label htmlFor="company" className="field-label">Business / company</label>
+          <label htmlFor="company" className="field-label">Business / company (optional)</label>
           <input id="company" name="company" type="text" defaultValue={company} className="mt-1 block w-full input" />
         </div>
         <div>
           <label htmlFor="phone" className="field-label">Phone</label>
-          <input id="phone" name="phone" type="tel" defaultValue={phone} className="mt-1 block w-full input" />
+          {/* Required here and nowhere else (card xqWftDcL): the server refuses a
+              blank one too, sign-up is unchanged, and no order is ever blocked on it. */}
+          <input id="phone" name="phone" type="tel" required defaultValue={phone} className="mt-1 block w-full input" />
+          <p className="mt-1 text-xs text-text-secondary">So we can reach you about an order or a delivery.</p>
         </div>
       </div>
       <div>

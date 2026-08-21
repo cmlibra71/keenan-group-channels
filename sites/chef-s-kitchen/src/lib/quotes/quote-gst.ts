@@ -22,6 +22,17 @@
  * portal's `src/lib/quotes/quote-gst.ts` rule — the emailed quote, the quote
  * PDF and these pages must never disagree about the amount payable.
  *
+ * STORE CREDIT IS SETTLEMENT, NOT A DISCOUNT (card vkYOSmJj). It is money the
+ * customer has already paid us, so it comes off the GST-INCLUSIVE total and
+ * never reduces the GST we charge: the sale is still the full sale and the tax
+ * on it is unchanged. This file used to model it as an ex-GST price reduction —
+ * because `recalculateTotals` subtracts it from the ex-GST component sum — which
+ * forgave 1/11th of the credit as GST ($1,000 on a $10,000 credit) and made this
+ * page, its Pay button and its pro-forma disagree with the quote the customer
+ * was emailed from the portal. The charge is therefore RECONSTRUCTED here as
+ * `total + store_credit_amount`, split for GST, and the credit is then deducted
+ * from the inclusive total as `payableInc`.
+ *
  * ONE KNOWN DIFFERENCE from the portal, deliberate: the portal resolves a
  * per-quote GST rate from `quotes.tax_class_id`; these pages take the rate as
  * an argument and their callers pass the same resolved rate (see
@@ -85,11 +96,22 @@ export interface QuoteGstTotals {
   incTax: number;
   /** `base_amount`, ex-GST — the sum of the lines shown above the summary. */
   subtotalEx: number;
-  /** Deductions, ex-GST. Zero when the quote carries none. */
+  /** Price reductions, ex-GST. Zero when the quote carries none. */
   discountEx: number;
   couponEx: number;
   giftEx: number;
-  creditEx: number;
+  /**
+   * `store_credit_amount` as GST-INCLUSIVE money already paid (0 when absent).
+   * A settlement against {@link QuoteGstTotals.incTax}, never a deduction from
+   * the taxable charge — see the file header.
+   */
+  creditInc: number;
+  /**
+   * What the customer actually pays: `incTax − creditInc`. Every "what you pay"
+   * figure on the storefront reads THIS — the Pay button, the deposit basis,
+   * the quote list total and the pro-forma.
+   */
+  payableInc: number;
   /**
    * Freight ex-GST: the quote's own `shipping_cost` plus whatever freight is
    * baked into the stored total without a column of its own.
@@ -109,15 +131,24 @@ function money(n: number): number {
  * ex-GST / GST / inc-GST figures the customer is shown, plus the components
  * that reconcile to it:
  *
- *   subtotalEx − discountEx − couponEx − giftEx − creditEx
+ *   subtotalEx − discountEx − couponEx − giftEx
  *     + freightEx + adjustmentEx  ===  exTax
+ *   exTax + tax                   ===  incTax
+ *   incTax − creditInc            ===  payableInc
  */
 export function quoteGstTotals(
   total: number,
   quote: QuoteGstInput,
   rate: number = GST_RATE
 ): QuoteGstTotals {
-  const split = gstSplit(total, quoteTotalIncludesGst(quote, total), rate);
+  // Store credit is settlement, so it is added BACK to reach the amount this
+  // quote actually CHARGES — `recalculateTotals` subtracted it from the stored
+  // total on the same basis as the components, so this recovers that basis
+  // exactly. Splitting the charge rather than the settled figure is what keeps
+  // the GST unreduced. The basis question is still asked of the STORED total,
+  // which is the number whose provenance we know.
+  const creditApplied = num(quote.store_credit_amount);
+  const split = gstSplit(total + creditApplied, quoteTotalIncludesGst(quote, total), rate);
   const linesInclusive = quote.tax_inclusive === true;
   const ex = (v: unknown): number => money(gstSplit(num(v), linesInclusive, rate).exTax);
 
@@ -125,11 +156,9 @@ export function quoteGstTotals(
   const discountEx = ex(quote.discount_amount);
   const couponEx = ex(quote.coupon_discount);
   const giftEx = ex(quote.gift_certificate_amount);
-  const creditEx = ex(quote.store_credit_amount);
   const shippingEx = ex(quote.shipping_cost);
 
-  const residual =
-    split.exTax - (subtotalEx - discountEx - couponEx - giftEx - creditEx + shippingEx);
+  const residual = split.exTax - (subtotalEx - discountEx - couponEx - giftEx + shippingEx);
 
   return {
     exTax: split.exTax,
@@ -139,7 +168,8 @@ export function quoteGstTotals(
     discountEx,
     couponEx,
     giftEx,
-    creditEx,
+    creditInc: money(creditApplied),
+    payableInc: money(split.incTax - creditApplied),
     freightEx: money(shippingEx + Math.max(residual, 0)),
     adjustmentEx: money(Math.min(residual, 0)),
   };
