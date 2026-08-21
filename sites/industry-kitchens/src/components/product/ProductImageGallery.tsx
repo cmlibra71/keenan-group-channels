@@ -41,7 +41,14 @@ export function ProductImageGallery({
     return [variantImage, ...images];
   }, [images, variantImageUrl, productName]);
 
+  // The chosen variation's photograph IS the displayed image, not merely an
+  // extra thumbnail: it sits at index 0 of `effectiveImages` and index 0 is
+  // what opens. Derived in the initialiser as well as in the effect below so a
+  // gallery that MOUNTS with a variation already chosen opens on that
+  // variation's picture, rather than painting the product thumbnail first and
+  // correcting itself a frame later. (Card 0CDcCYmO.)
   const [selectedIndex, setSelectedIndex] = useState(() => {
+    if (variantImageUrl) return 0;
     const thumbIdx = images.findIndex((img) => img.isThumbnail);
     return thumbIdx >= 0 ? thumbIdx : 0;
   });
