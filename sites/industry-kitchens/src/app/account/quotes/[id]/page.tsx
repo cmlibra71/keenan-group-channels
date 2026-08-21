@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import Image from "next/image";
 import { Package } from "lucide-react";
+import { loadQuoteLineDocuments, type QuoteLineDocument } from "@keenan/services";
 import { getSession } from "@/lib/auth";
 import { signInRedirect } from "@/lib/account-redirect";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
@@ -205,6 +206,16 @@ export default async function QuoteDetailPage({
     thumbs.map((t) => [t.product_id, t.url_thumbnail || t.url_standard])
   );
 
+  // The spec sheets for each LINE (card WcJCByE3): the product's own saved files
+  // plus anything the sales rep attached to that line and shared. One shared
+  // loader answers this for the portal, the emailed quote link, the printed copy
+  // and this page, so a customer is never shown a different list depending on
+  // where they opened their quote. Failure-tolerant — no documents is a quieter
+  // page, never a broken one.
+  const lineDocuments = await loadQuoteLineDocuments(quote.id, { audience: "customer" }).catch(
+    () => new Map<number, QuoteLineDocument[]>()
+  );
+
   // Show the real total whenever prices are visible — including $0.00 — but not a
   // stale zero on a quote whose lines carry money. See resolveQuoteTotal.
   const total = resolveQuoteTotal(quote);
@@ -218,8 +229,13 @@ export default async function QuoteDetailPage({
   // because that is the money the customer actually pays.
   const deposit = hidePrices
     ? null
-    : resolveQuoteDeposit(readQuoteDeposit(raw.attributes), gst.incTax);
-  const amountDue = deposit ? deposit.due_now : Math.round(gst.incTax * 100) / 100;
+    : resolveQuoteDeposit(readQuoteDeposit(raw.attributes), gst.payableInc);
+  // A store credit is money already paid, so what is charged is what is left TO
+  // pay — never the pre-credit charge (card vkYOSmJj). This is the same
+  // `payableInc` the portal's quote page, print copy, PDF and emailed quote all
+  // lead with, so the site's Pay button and the document the customer was sent
+  // can never name different money.
+  const amountDue = deposit ? deposit.due_now : Math.round(gst.payableInc * 100) / 100;
 
   // Payment methods are read EXACTLY as checkout reads them — the channel's
   // customer-facing list (enabled, minus channel staff-only), narrowed by the
@@ -443,6 +459,22 @@ export default async function QuoteDetailPage({
                     quantity={item.quantity}
                   />
                 )}
+                {(lineDocuments.get(item.id) ?? []).length > 0 && (
+                  <ul className="mt-1 space-y-0.5">
+                    {(lineDocuments.get(item.id) ?? []).map((doc) => (
+                      <li key={doc.key}>
+                        <a
+                          href={doc.file_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-zinc-600 hover:text-zinc-900 underline"
+                        >
+                          {doc.file_name}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {/* "Requires quote" is reserved for a quote whose pricing hasn't
                     been prepared yet — never for a priced line that happens to
                     come to $0.00. */}
@@ -481,7 +513,6 @@ export default async function QuoteDetailPage({
                 ["Discount", gst.discountEx],
                 ["Coupon", gst.couponEx],
                 ["Gift certificate", gst.giftEx],
-                ["Store credit", gst.creditEx],
               ] as const
             )
               .filter(([, amount]) => isMoneyRow(amount))
@@ -509,10 +540,36 @@ export default async function QuoteDetailPage({
               <dt className="text-zinc-600">GST</dt>
               <dd><Price amount={gst.tax} className="text-zinc-900" /></dd>
             </div>
+            {/* Store credit is money the customer has already paid, so it
+                settles the GST-inclusive total and leaves the GST above
+                untouched (card vkYOSmJj). Both rows appear only on a quote
+                that carries a credit, and "Amount to pay" is what the Pay
+                button charges. */}
             <div className="flex items-center justify-between border-t border-zinc-200 pt-1">
               <dt className="font-medium text-zinc-600">Quote Total (inc GST)</dt>
-              <dd><Price amount={gst.incTax} className="text-lg font-semibold text-zinc-900" /></dd>
+              <dd>
+                <Price
+                  amount={gst.incTax}
+                  className={isMoneyRow(gst.creditInc) ? "text-zinc-900" : "text-lg font-semibold text-zinc-900"}
+                />
+              </dd>
             </div>
+            {isMoneyRow(gst.creditInc) && (
+              <>
+                <div className="flex items-center justify-between">
+                  <dt className="text-zinc-600">Store credit</dt>
+                  <dd className="text-zinc-900">
+                    −<Price amount={gst.creditInc} className="text-zinc-900" />
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="font-medium text-zinc-600">Amount to pay (inc GST)</dt>
+                  <dd>
+                    <Price amount={gst.payableInc} className="text-lg font-semibold text-zinc-900" />
+                  </dd>
+                </div>
+              </>
+            )}
             {/* Deposit set by the sales rep on the quote — shown to the customer
                 here, and it is the amount the Pay button charges. */}
             {deposit && (
@@ -574,7 +631,7 @@ export default async function QuoteDetailPage({
           payState={payState}
           amountDue={formatMoney(amountDue, quote.currency_code)}
           amountKnown={!hidePrices && total !== null}
-          totalDue={formatMoney(gst.incTax, quote.currency_code)}
+          totalDue={formatMoney(gst.payableInc, quote.currency_code)}
           depositNote={
             deposit
               ? `${depositLabel(deposit)} of ${formatMoney(
