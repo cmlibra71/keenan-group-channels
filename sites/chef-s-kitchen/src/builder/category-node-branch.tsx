@@ -11,6 +11,7 @@ import {
 import { CHANNEL_ID } from "@/lib/channel";
 import { getMemberContext, applyAccountPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
+import type { AttributeSelections } from "@keenan/services/services";
 import {
   composeCategoryPagePayload,
   loadJsSandbox,
@@ -53,7 +54,14 @@ export interface CategoryNodeBranchArgs {
   /** Child categories for the tile strip; [] when the route has none. */
   subcategories?: Record<string, unknown>[];
   /** Current URL facet selections, comma-split, per param. */
-  selections: { sub: string[]; brand: string[]; price: string[]; stock: string[] };
+  selections: {
+    sub: string[];
+    brand: string[];
+    price: string[];
+    stock: string[];
+    /** Per-category attribute windows / ticked values (C8G4f4U8). */
+    attributes?: AttributeSelections;
+  };
   memberPricingEnabled: boolean;
   categorySlugFallback: string;
   /** draftMode() OR the `x-kg-json` parity header. */

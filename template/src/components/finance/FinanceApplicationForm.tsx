@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import type { FormFieldDef } from "@keenan/services/finance";
 import { newUploadToken } from "@/lib/checkout/finance";
 import { submitFinanceApplication } from "@/lib/actions/finance-application";
+import type { ProductFinanceFunder } from "@/lib/finance/product-finance";
 
 // ============================================================================
-// The finance application, on the SilverChef page (card 6f47rFeT).
+// The finance application, on a funder's own application page (card 6f47rFeT).
 //
 // THE QUESTIONS ARE NOT WRITTEN HERE — they are rendered from the stored field
 // contract (`@keenan/services` financeApplicationFields, card VAjaPj0t), the
@@ -17,6 +18,10 @@ import { submitFinanceApplication } from "@/lib/actions/finance-application";
 // Licence and Medicare photos are OPTIONAL, deliberately (VAjaPj0t): an
 // application is read by a person who can chase a photo, and the shopper may
 // not have their cards on the desk.
+//
+// `funder` says whose page this is. It travels to the server so the submission
+// is filed against the right financier and accepts only that funder's funding
+// types (Steve, 2026-08-20: a Skope offer must not open SilverChef's form).
 // ============================================================================
 
 const inputClass =
@@ -30,6 +35,7 @@ export function FinanceApplicationForm({
   attachmentPrompts,
   accountNumberTrigger,
   formKey,
+  funder = "silverchef",
 }: {
   fields: FormFieldDef[];
   intro: string;
@@ -37,6 +43,8 @@ export function FinanceApplicationForm({
   /** The one funding-type answer that asks for a SilverChef account number. */
   accountNumberTrigger: string;
   formKey: string;
+  /** Whose application this is. Defaults to SilverChef, which is what shipped. */
+  funder?: ProductFinanceFunder;
 }) {
   const mountedAt = useRef(Date.now());
   const uploadToken = useRef<string>("");
@@ -103,6 +111,7 @@ export function FinanceApplicationForm({
     try {
       const result = await submitFinanceApplication({
         values,
+        funder,
         uploadToken: uploadToken.current,
         hp: String(data.get("company_website_url") ?? ""),
         t: mountedAt.current,

@@ -9,6 +9,7 @@
 // The imperative shell (lib/actions/checkout.ts placeOrder) still owns all the
 // side-effects and the impure shipping-rate lookup; it sequences:
 //   build line items -> (impure) quote shipping off subtotal.exTax -> withShipping.
+//   The rate that lookup returns is EX-GST and withShipping adds GST on top of it.
 //
 // Tax arithmetic is delegated to @keenan/services `gstSplit` (the single source
 // of truth for GST math, shared with the pricing engine + cart totals — services
@@ -286,14 +287,24 @@ function round2(n: number): number {
 }
 
 /**
- * Splits a shipping amount (always specified inc-tax) and rolls it into the order
- * total. Returns the shipping split and the combined subtotal + shipping total.
+ * Splits a delivery charge and rolls it into the order total. Returns the shipping
+ * split and the combined subtotal + shipping total.
+ *
+ * The amount is EX-GST, because a shipping rate card states EX-GST figures and GST is
+ * added on top of them — $30.00 ex is $33.00 inc (Tim, card twwZMnMY; and the Product
+ * Brief's "freight CHARGED and freight COST are both ex GST wherever they meet"). This
+ * used to take an INC-tax amount and back the GST out of the rate, which billed a $30
+ * flat rate as $27.27 + $2.73 and under-charged every delivery by 10%.
+ *
+ * It is the same basis the portal already uses: a quote's `shipping_cost` is ex-GST and
+ * `quotes/convert.ts` splits it with `inclusive: false`, so a quote converted to an order
+ * and a storefront checkout now bill one rate card identically.
  */
 export function withShipping(
   subtotal: MoneySplit,
-  shippingIncTax: number
+  shippingExTax: number
 ): { shipping: MoneySplit; total: MoneySplit } {
-  const s = gstSplit(shippingIncTax, true);
+  const s = gstSplit(shippingExTax, false);
   const shipping: MoneySplit = { exTax: s.exTax, incTax: s.incTax, tax: s.tax };
   return {
     shipping,

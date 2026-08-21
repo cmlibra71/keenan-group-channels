@@ -9,7 +9,12 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { clientIpFromHeaders, ipBucketKey } from "../client-ip";
-import { classifyActionSurface, classifySurface, isCredentialPath } from "./surfaces";
+import {
+  classifyActionSurface,
+  classifySurface,
+  isCredentialPath,
+  isPagedSearchRequest,
+} from "./surfaces";
 import { classifyBot, isAllowlistedIp } from "./bots";
 import { createLimiter, type Verdict } from "./limiter";
 import { getSharedStore } from "./store";
@@ -66,12 +71,23 @@ const SESSION_WEIGHT = 1 / 3;
 /**
  * A /search load-more action runs ONE Meilisearch query; a /search PAGE render
  * runs six (results plus brand, category and three price-band counts). Charging
- * the action a third of a page view keeps it honestly on the `search` budget
+ * the load a third of a page view keeps it honestly on the `search` budget
  * while leaving a real shopper room to reach the bottom: one full continuous
- * scroll to the 320-result cap is one page render plus seven actions, about 3.3
+ * scroll to the 320-result cap is one page render plus seven loads, about 3.3
  * of the 8-request burst allowance, so scrolling can never rate-limit itself.
+ *
+ * The header suggestion dropdown scrolls the same way and reaches the same
+ * ceiling (G3gpxN0k), but through `GET /api/search` rather than a server
+ * action, so the same discount applies to its LATER windows — see
+ * `isPagedSearchRequest`. Its first window is charged in full, and what makes
+ * that safe is the LEDGER rather than any claim about which request an
+ * enumerator repeats: worst case behind the discount is 150 deep requests per
+ * IP per 5 minutes at 50 rows each = 7,500 rows, against /search's 16,000 and a
+ * category page's 28,800. A session cookie compounds SESSION_WEIGHT below (also
+ * 1/3) to 1/9, lifting those to 22,500 / 48,000 / 86,400 — the ordering holds
+ * either way, so /api/search stays the tightest surface on the site.
  */
-const SEARCH_ACTION_WEIGHT = 1 / 3;
+const SEARCH_CHUNK_WEIGHT = 1 / 3;
 
 let limiter: ReturnType<typeof createLimiter> | null = null;
 function getLimiter() {
@@ -216,7 +232,14 @@ export function guardRequest(req: NextRequest): NextResponse | null {
 
     let weight = 1;
     if (req.headers.get("next-router-prefetch")) weight *= PREFETCH_WEIGHT;
-    if (isAction && surface === "search") weight *= SEARCH_ACTION_WEIGHT;
+    if (isAction && surface === "search") weight *= SEARCH_CHUNK_WEIGHT;
+    else if (
+      !isAction &&
+      surface === "search" &&
+      isPagedSearchRequest(pathname, req.nextUrl.searchParams.get("offset"))
+    ) {
+      weight *= SEARCH_CHUNK_WEIGHT;
+    }
     if (req.cookies.get("session")) weight *= SESSION_WEIGHT;
 
     const verdict = getLimiter().check({ ipKey, surface, tier, weight });

@@ -6,6 +6,11 @@
 // price" — the price that shopper is actually looking at, member/contract
 // price included — and SKOPE products use SKOPE's own calculator instead.
 //
+// WHICH products are SKOPE got wider on 2026-08-19 (Steve, same card): a SKU
+// that starts with "SKOPE", and the product's BRAND, count as well as the live
+// site's "SKO-" test. The brand is passed in from the route because the SKU
+// alone missed 23 machines coded SKOPE-… and 76 more whose code says nothing.
+//
 // The RATES are this storefront's own (card 6GBlDtwf) and arrive from context;
 // everything else below still holds.
 //
@@ -34,8 +39,11 @@
 import { gstSplit } from "@keenan/services/calc";
 import {
   DEFAULT_FINANCE_RATES,
+  FINANCE_METHOD_ID,
+  FUNDING_TYPES,
   formatFinanceMoney,
-  isSkopeSku,
+  fundingTypesForMethod,
+  isSkopeProduct,
   rateForLine,
   weeklyRent,
   type FinanceRates,
@@ -43,6 +51,44 @@ import {
 
 /** Which funder is quoting, so the panel can wear the right identity. */
 export type ProductFinanceFunder = "silverchef" | "skope";
+
+/**
+ * Where "Apply for Finance" goes, PER FUNDER.
+ *
+ * Steve, 2026-08-20 on this card: "clicking on the SKOPE funding link that
+ * appears on the product page takes you to the Silverchef finance application
+ * page". It did — the link was hardcoded — so a fridge quoted at Skope's factor
+ * under a "Skope Funding" heading handed the customer to SilverChef's
+ * application. A customer may never be handed to the wrong financier, so the
+ * funder that quoted the figure is the funder whose application opens.
+ *
+ * Both are CODED routes on both storefronts (`/pages/<slug>` is the CMS
+ * namespace, so neither can ever collide with a page staff author).
+ */
+export const FINANCE_APPLY_PATH: Record<ProductFinanceFunder, string> = {
+  silverchef: "/silverchef/apply",
+  skope: "/skope-funding/apply",
+};
+
+/**
+ * The funding types one funder's application offers.
+ *
+ * Same split the CHECKOUT already makes between its two buttons
+ * (`fundingTypesForMethod`, card VAjaPj0t) — the Skope application is the
+ * `finance` button's application, so it offers Skope Funding and the
+ * traditional option and never SilverChef's own types. The SilverChef page
+ * keeps the whole list: somebody applying before they have chosen equipment has
+ * not ruled anything out, which is the behaviour that shipped.
+ *
+ * Used by the PAGE (what is rendered) and by the server action (what is
+ * accepted), so a posted funding type from the other funder's list is refused
+ * rather than filed under the wrong financier.
+ */
+export function financeApplyFundingTypes(funder: ProductFinanceFunder): string[] {
+  return funder === "skope"
+    ? fundingTypesForMethod(FINANCE_METHOD_ID)
+    : FUNDING_TYPES.map((t) => t.label);
+}
 
 export interface ProductFinanceOffer {
   funder: ProductFinanceFunder;
@@ -54,6 +100,8 @@ export interface ProductFinanceOffer {
   text: string;
   /** The price the figure was worked out from, GST inclusive. */
   priceIncGst: number;
+  /** THIS funder's application form — never the other one's. */
+  applyPath: string;
 }
 
 export interface ProductPriceInput {
@@ -97,6 +145,13 @@ export function productFinanceOffer(input: {
   price: ProductPriceInput;
   /** The SKU actually being bought — the VARIANT's when one is chosen. */
   sku?: string | null;
+  /**
+   * The product's brand name, where the route holds one (it always does on a
+   * product page). Half of the SKOPE test since Steve widened it on 2026-08-19:
+   * a SKOPE-branded fridge whose code says nothing still rents at SKOPE's
+   * factor. Omitted ⇒ the SKU decides on its own, which is the old behaviour.
+   */
+  brand?: string | null;
   pricesIncludeTax: boolean;
   /**
    * This storefront's own rates (card 6GBlDtwf), from `useFinanceRates()`. They
@@ -115,11 +170,13 @@ export function productFinanceOffer(input: {
   // so "which products are SKOPE" has one answer across cart, checkout and page.
   const weekly = weeklyRent(
     priceIncGst,
-    rateForLine({ amountIncGst: priceIncGst, sku: input.sku }, rates)
+    rateForLine({ amountIncGst: priceIncGst, sku: input.sku, brand: input.brand }, rates)
   );
   if (weekly <= 0) return null;
 
-  const funder: ProductFinanceFunder = isSkopeSku(input.sku) ? "skope" : "silverchef";
+  const funder: ProductFinanceFunder = isSkopeProduct({ sku: input.sku, brand: input.brand })
+    ? "skope"
+    : "silverchef";
   const amount = formatFinanceMoney(weekly);
   return {
     funder,
@@ -127,5 +184,6 @@ export function productFinanceOffer(input: {
     amount,
     text: funder === "skope" ? `Own Me ${amount} a week` : `Rent per Week: ${amount}`,
     priceIncGst,
+    applyPath: FINANCE_APPLY_PATH[funder],
   };
 }
