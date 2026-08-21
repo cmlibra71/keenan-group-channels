@@ -21,6 +21,7 @@
 import { gstSplit } from "@keenan/services/calc";
 import { quoteGstTotals, MONEY_EPSILON, type QuoteGstInput } from "./quote-gst";
 import { resolveQuoteTotal } from "./price-visibility";
+import { quoteFreightStillPending } from "./freight-pending";
 
 /** A snake_case quote row from `quoteService.getWithItems`. */
 export type PlannableQuote = Record<string, unknown> &
@@ -318,6 +319,6 @@ export function planOrderFromPaidQuote(
     // A quote with no freight is payable as it stands (only a handful of quotes
     // in the whole system carry any), but the orders team must be told and the
     // invoice must say "Plus Freight".
-    freightPending: Math.abs(view.freightEx) < 0.005,
+    freightPending: quoteFreightStillPending(quote, view.freightEx),
   };
 }

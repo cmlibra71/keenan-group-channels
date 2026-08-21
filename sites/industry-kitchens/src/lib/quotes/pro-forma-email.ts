@@ -13,6 +13,7 @@ import { resolveQuoteGstRate } from "@/lib/quotes/quote-gst-rate";
 import { resolveQuoteTotal } from "@/lib/quotes/price-visibility";
 import { readQuoteDeposit, resolveQuoteDeposit, depositLabel } from "@/lib/quotes/quote-deposit";
 import { PLUS_FREIGHT_NOTICE } from "@/lib/quotes/quote-payable";
+import { quoteFreightStillPending } from "@/lib/quotes/freight-pending";
 
 /**
  * The pro-forma a customer receives when they ACCEPT a quote without paying it.
@@ -69,7 +70,10 @@ export async function sendQuoteProForma(quote: QuoteRow, to: string | null): Pro
   // A store credit settles the inclusive total, so the deposit and the
   // headline are both taken from what is left TO pay (card vkYOSmJj).
   const deposit = resolveQuoteDeposit(readQuoteDeposit(quote.attributes), gst.payableInc);
-  const freightPending = !isMoneyRow(gst.freightEx);
+  // Same predicate as the portal's conversion gate (card 9XRQmaiz): a priced
+  // delivery LINE or a Pickup / Free delivery basis means delivery IS accounted
+  // for, so the pro-forma must not tell the customer it will be quoted separately.
+  const freightPending = quoteFreightStillPending(quote, gst.freightEx);
 
   const [{ site }, branding] = await Promise.all([
     getSiteConfig(),

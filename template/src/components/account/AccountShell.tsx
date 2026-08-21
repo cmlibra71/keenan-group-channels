@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { getFeatureFlag } from "@/lib/store";
 import { buildAccountNavItems } from "@/lib/account/account-nav-items";
+import { readStatementAccess } from "@/lib/account/statement-visibility";
 import { AccountNav } from "./AccountNav";
 
 /**
@@ -34,7 +35,11 @@ export const readAccountNavFlags = cache(async () => {
 });
 
 export async function AccountShell({ children }: { children: React.ReactNode }) {
-  const items = buildAccountNavItems(await readAccountNavFlags());
+  // Statement visibility is per-VIEWER (Manager / Billing contacts only, card k6pHXQBf), not a
+  // store flag; `readStatementAccess` is request-cached so the menu, the dashboard cards and the
+  // page itself share one answer and one lookup.
+  const [flags, statement] = await Promise.all([readAccountNavFlags(), readStatementAccess()]);
+  const items = buildAccountNavItems({ ...flags, statementVisible: statement.visible });
 
   return (
     <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8 lg:py-12">

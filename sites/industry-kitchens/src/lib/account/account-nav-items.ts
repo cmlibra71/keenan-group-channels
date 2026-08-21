@@ -31,6 +31,13 @@ export interface AccountNavFlags {
   subscriptionsEnabled: boolean;
   drawsEnabled: boolean;
   partnerOffersEnabled: boolean;
+  /**
+   * Card k6pHXQBf: the account STATEMENT is only for the account's Manager and Billing contacts,
+   * so unlike the three above this one is per-VIEWER rather than per-store. Absent means no —
+   * a customer who may not read the statement is never shown the menu item, exactly as a store
+   * with no membership programme is never shown Membership.
+   */
+  statementVisible?: boolean;
 }
 
 /**
@@ -57,6 +64,10 @@ export function buildAccountNavItems(flags: AccountNavFlags): AccountNavItem[] {
   }
   if (flags.partnerOffersEnabled) {
     items.push({ key: "partnerOffers", label: "Partner Offers", href: "/account/partner-offers" });
+  }
+
+  if (flags.statementVisible) {
+    items.push({ key: "statement", label: "Statement", href: "/account/statement" });
   }
 
   items.push({ key: "shop", label: "Continue Shopping", href: "/products" });

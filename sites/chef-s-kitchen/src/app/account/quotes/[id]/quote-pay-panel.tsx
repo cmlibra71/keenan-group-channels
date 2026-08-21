@@ -223,19 +223,11 @@ export function QuotePayPanel({
       )}
 
       {/* Delivery address. An agreed address on a quote is not the customer's to
-          change (Steve: staff can change it, customers can't) — it is shown, not
-          edited. A quote that never carried one takes a saved address instead. */}
-      {addressSummary ? (
-        <div className="mt-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
-            Delivery address
-          </p>
-          <p className="mt-1 text-sm text-text-secondary">{addressSummary}</p>
-          <p className="mt-1 text-xs text-text-muted">
-            To change this address, contact your sales rep.
-          </p>
-        </div>
-      ) : addressOptions.length > 0 ? (
+          change (Steve: staff can change it, customers can't) — the quote page above
+          states it in full, with how to get it changed, so this panel says nothing
+          when the quote has one. A legacy quote that never carried one still needs a
+          delivery address before it can be paid, so it takes a saved one here. */}
+      {addressSummary ? null : addressOptions.length > 0 ? (
         <div className="mt-4">
           <label
             htmlFor="quote-pay-address"
