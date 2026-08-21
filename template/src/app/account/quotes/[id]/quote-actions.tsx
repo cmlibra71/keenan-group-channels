@@ -73,7 +73,11 @@ export function QuoteActions({
               () => acceptQuote(quoteId),
               // Accepting without paying sends the pro-forma (card 0Wy0xHuq) —
               // say so, or the customer waits for something they think is coming.
-              "Quote accepted — we've emailed your pro-forma. You can pay it below."
+              // It says "below" nowhere any more: accepting now navigates to the
+              // portal's acknowledgement (card 87IkgD2H), so this line flashes for
+              // a frame on the way out and must not point at a place that has just
+              // stopped existing. The acknowledgement carries how to pay.
+              "Quote accepted — we've emailed your pro-forma."
             )
           }
           className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
