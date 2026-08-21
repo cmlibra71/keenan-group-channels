@@ -219,7 +219,18 @@ export function BuilderProductPage({
   /** Route-owned data for this site's sealed product natives. */
   nativeData?: Record<string, unknown>;
 }) {
-  const product = payload.product as unknown as PurchaseProduct;
+  // The BRAND rides into the purchase scope because the sealed SilverChef panel
+  // has to know whether this is a SKOPE machine, and since Steve widened that
+  // test (card 6f47rFeT, 2026-08-19) the brand answers it for the 76 SKOPE
+  // fridges whose SKU does not. The payload already carries the brand slice, so
+  // this costs no query — it only has to reach the provider.
+  const product = React.useMemo(
+    () => ({
+      ...(payload.product as unknown as PurchaseProduct),
+      brandName: payload.brand?.name ?? null,
+    }),
+    [payload]
+  );
   const enriched = React.useMemo(() => enrichProductPayload(payload, { sanitizeHtml }), [payload]);
   return (
     <ProductPurchaseProvider

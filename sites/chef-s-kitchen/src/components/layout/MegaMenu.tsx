@@ -66,7 +66,7 @@ export function MegaMenu({
               More
               <ChevronDown className="h-[11px] w-[11px] opacity-70" strokeWidth={2} />
             </button>
-            <div className="mega-panel invisible absolute right-0 top-full z-[110] min-w-[220px] rounded-b-card border border-black/5 bg-white py-2 opacity-0 shadow-hover transition-all delay-0 duration-150 group-hover/nav:visible group-hover/nav:opacity-100 group-hover/nav:delay-[150ms] group-focus-within/nav:visible group-focus-within/nav:opacity-100">
+            <div className="mega-panel invisible absolute h-0 overflow-hidden right-0 top-full z-[110] min-w-[220px] rounded-b-card border border-black/5 bg-white py-2 opacity-0 shadow-hover transition-all delay-0 duration-150 group-hover/nav:visible group-hover/nav:h-auto group-hover/nav:overflow-visible group-hover/nav:opacity-100 group-hover/nav:delay-[150ms] group-focus-within/nav:visible group-focus-within/nav:h-auto group-focus-within/nav:overflow-visible group-focus-within/nav:opacity-100">
               {left.map((item, i) => (
                 <Link
                   key={`m-${i}`}
@@ -162,7 +162,7 @@ function renderItem(
         )}
       </Link>
       {children.length > 0 && (
-        <div className="mega-panel invisible absolute left-0 top-full z-50 min-w-[220px] rounded-b-card border border-black/5 bg-white py-2 opacity-0 shadow-hover transition-all delay-0 duration-150 group-hover/nav:visible group-hover/nav:opacity-100 group-hover/nav:delay-[300ms] group-focus-within/nav:visible group-focus-within/nav:opacity-100">
+        <div className="mega-panel invisible absolute h-0 overflow-hidden left-0 top-full z-50 min-w-[220px] rounded-b-card border border-black/5 bg-white py-2 opacity-0 shadow-hover transition-all delay-0 duration-150 group-hover/nav:visible group-hover/nav:h-auto group-hover/nav:overflow-visible group-hover/nav:opacity-100 group-hover/nav:delay-[300ms] group-focus-within/nav:visible group-focus-within/nav:h-auto group-focus-within/nav:overflow-visible group-focus-within/nav:opacity-100">
           {children.map((child, j) => (
             <Link
               key={j}
@@ -201,14 +201,24 @@ function MegaPanel({
   // means un-hoverable, so the delayed transition is abandoned); and
   // pointer-events only on the white card, so the transparent gutters beside it
   // are click-through. Keyboard (:focus-within) opens with no delay.
+  //
+  // A CLOSED panel is ZERO HEIGHT (`h-0 overflow-hidden`), not merely invisible.
+  // `html, body { overflow-x: hidden }` (globals.css) makes BODY its own scroll
+  // container, so an absolutely positioned box hanging below the page still adds
+  // that much scrollable overflow inside it — and the Industry Kitchens Brands
+  // panel is 5,700px tall. On any page shorter than the panel (every /pages/*)
+  // the reader could wheel straight past the footer into empty space with the
+  // menu shut, which is what card Qt0yPLCl reported. The white card is capped at
+  // the viewport and scrolls inside itself, so an OPEN panel cannot hang below
+  // the fold and put the overflow back either.
   return (
     <div
-      className="mega-panel pointer-events-none invisible absolute left-0 right-0 top-full z-[110] translate-y-2 opacity-0 transition-all delay-0 duration-200
-                 group-hover/nav:visible group-hover/nav:translate-y-0 group-hover/nav:opacity-100 group-hover/nav:delay-[300ms]
-                 group-focus-within/nav:visible group-focus-within/nav:translate-y-0 group-focus-within/nav:opacity-100"
+      className="mega-panel pointer-events-none invisible absolute left-0 right-0 top-full z-[110] h-0 translate-y-2 overflow-hidden opacity-0 transition-all delay-0 duration-200
+                 group-hover/nav:visible group-hover/nav:h-auto group-hover/nav:translate-y-0 group-hover/nav:overflow-visible group-hover/nav:opacity-100 group-hover/nav:delay-[300ms]
+                 group-focus-within/nav:visible group-focus-within/nav:h-auto group-focus-within/nav:translate-y-0 group-focus-within/nav:overflow-visible group-focus-within/nav:opacity-100"
     >
       <div className="container-page">
-        <div className="pointer-events-none grid max-w-[1100px] grid-cols-[1fr_1fr_1fr_240px] gap-6 rounded-b-card border border-border border-t-[3px] border-t-member bg-white p-6 shadow-lg group-hover/nav:pointer-events-auto group-focus-within/nav:pointer-events-auto">
+        <div className="pointer-events-none grid max-w-[1100px] grid-cols-[1fr_1fr_1fr_240px] gap-6 max-h-[calc(100vh-14rem)] overflow-y-auto rounded-b-card border border-border border-t-[3px] border-t-member bg-white p-6 shadow-lg group-hover/nav:pointer-events-auto group-focus-within/nav:pointer-events-auto">
           {columns.map((col, i) => (
             <div key={i} className="space-y-5">
               {col.map((group) => (

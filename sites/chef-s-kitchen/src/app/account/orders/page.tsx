@@ -130,15 +130,19 @@ export default async function OrdersPage() {
           const totalItems = orderItemsList.reduce((sum, i) => sum + i.quantity, 0);
 
           return (
-            <div key={order.id} className="card-padded">
+            // The WHOLE order box opens the order, not just the number (card D045H6Zh):
+            // the number was a small target next to a large obviously-clickable-looking
+            // card, and the screenshot on that card is a customer meeting exactly that.
+            <Link
+              key={order.id}
+              href={`/account/orders/${order.id}`}
+              className="block border border-border rounded-card bg-white shadow-sm p-6 transition-shadow hover:shadow-md hover:border-border-strong"
+            >
               <div className="flex items-center justify-between mb-2">
                 <div>
-                  <Link
-                    href={`/account/orders/${order.id}`}
-                    className="font-semibold text-text-primary hover:underline"
-                  >
+                  <span className="font-semibold text-text-primary">
                     Order #{order.order_number}
-                  </Link>
+                  </span>
                   <span className="ml-3 text-sm text-text-secondary">
                     {order.created_at ? new Date(order.created_at).toLocaleDateString() : ""}
                   </span>
@@ -159,7 +163,7 @@ export default async function OrdersPage() {
               <p className="text-sm text-text-secondary">
                 {totalItems} item{totalItems !== 1 ? "s" : ""}
               </p>
-            </div>
+            </Link>
           );
         })}
       </div>

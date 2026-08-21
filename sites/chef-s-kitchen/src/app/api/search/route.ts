@@ -19,8 +19,8 @@ import { parsePublicSearchParams } from "@/lib/search-params";
  * boundary) rather than on the shared index or in `searchProducts()`, because the
  * admin dashboard legitimately reads `costPrice` from the warehouse index.
  *
- * Keep in step with the `SearchHit` interface in `components/search/SearchTypeahead.tsx`,
- * the only consumer.
+ * Keep in step with the `SuggestionHit` interface in
+ * `components/search/use-search-suggestions.ts`, the only consumer.
  */
 const PUBLIC_HIT_FIELDS = [
   "id",
@@ -67,7 +67,13 @@ export async function GET(request: NextRequest) {
   );
 
   if (tooShort) {
-    return NextResponse.json({ hits: [], query: q, estimatedTotalHits: 0 });
+    return NextResponse.json({
+      hits: [],
+      query: q,
+      estimatedTotalHits: 0,
+      offset,
+      consumed: 0,
+    });
   }
 
   try {
@@ -77,6 +83,13 @@ export async function GET(request: NextRequest) {
       sort,
       facets,
     });
+
+    // Result POSITIONS this window consumed, taken BEFORE catalogue scope drops
+    // anything. The suggestion dropdown pages on this, never on hits returned:
+    // scope is applied below, so a 40-row window can legitimately answer with 37
+    // hits, and paging on 37 would re-request the 3 that were just skipped.
+    // (`lib/search-suggestions.ts` owns that arithmetic; same rule as /search.)
+    const consumed = result.hits.length;
 
     // L2 — the Meilisearch index is SHARED by every shopper and cannot encode per-account
     // visibility, so the viewer's scope is applied HERE, to the hits already returned by the index.
@@ -103,11 +116,21 @@ export async function GET(request: NextRequest) {
     // Hits are viewer-scoped by applyCatalogScope above, so this response is
     // PER-USER and must never be stored in a shared cache. Do not "optimise"
     // this into a public max-age.
-    return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json(
+      { ...result, offset, consumed },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch {
     // Meilisearch unavailable — return empty results with 503
     return NextResponse.json(
-      { hits: [], query: q, estimatedTotalHits: 0, error: "Search temporarily unavailable" },
+      {
+        hits: [],
+        query: q,
+        estimatedTotalHits: 0,
+        offset,
+        consumed: 0,
+        error: "Search temporarily unavailable",
+      },
       { status: 503 }
     );
   }
