@@ -15,6 +15,7 @@ import {
   auAddressNeedsCorrection,
 } from "@/lib/checkout/au-address";
 import { CUSTOMER_REFERENCE_MAX_LENGTH } from "@/lib/checkout/customer-reference";
+import { cardConfirmParams } from "@/lib/payments/stripe-gateways";
 import { Price } from "@/components/ui/Price";
 import { gstSplit } from "@keenan/services/calc";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
@@ -288,7 +289,7 @@ export function CheckoutForm({
   useEffect(() => {
     if (!state?.stripe || stripeProcessing) return;
 
-    const { clientSecret, orderNumber } = state.stripe;
+    const { clientSecret, orderNumber, billingDetails } = state.stripe;
 
     async function confirmPayment() {
       if (!stripeRef.current || !cardElementRef.current) return;
@@ -297,9 +298,15 @@ export function CheckoutForm({
       setStripeError(null);
 
       try {
+        // The card the shopper just typed is confirmed WITH who they are — name,
+        // email and billing address on `billing_details`, which is where Stripe
+        // Radar reads them (card b88eIfaS). They come back from placeOrder,
+        // derived from the order that was just written, so what Stripe is told
+        // and what the order says are one derivation. This is not a receipt
+        // trigger: Stripe still sends the shopper nothing (EInDib45).
         const { error: stripeErr } = await stripeRef.current.confirmCardPayment(
           clientSecret,
-          { payment_method: { card: cardElementRef.current } }
+          cardConfirmParams(cardElementRef.current, billingDetails)
         );
 
         if (stripeErr) {
