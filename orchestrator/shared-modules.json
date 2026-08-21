@@ -5,6 +5,7 @@
     "app/account/orders/[id]/page.tsx",
     "app/account/orders/[id]/payment-section.tsx",
     "app/account/orders/[id]/shipments-section.tsx",
+    "app/account/statement/page.tsx",
     "app/api/address/details/route.ts",
     "app/api/address/suggest/route.ts",
     "app/api/blocks/manifest/route.ts",

@@ -7,6 +7,11 @@ import { getAccountStatement } from "@/lib/store";
 import { resolveStatementAccess, statementRefusalMessage } from "@/lib/account/statement-access";
 import { AccountShell } from "@/components/account/AccountShell";
 import { Price } from "@/components/ui/Price";
+import {
+  EYEBROW_CLASS,
+  PAGE_TITLE_CLASS,
+  PANEL_TITLE_CLASS,
+} from "@/lib/orders/order-page-styles";
 
 /**
  * The customer's own STATEMENT (card k6pHXQBf).
@@ -24,6 +29,22 @@ import { Price } from "@/components/ui/Price";
  * customer cannot be shown an Industry Kitchens invoice by any route through this page.
  */
 export const metadata = { title: "Statement" };
+
+// Chefs Depot's stylesheet defines the eyebrow, serif heading, padded card and primary button as
+// COMPONENT classes; Industry Kitchens' does not, and defining them there would restyle half that
+// site (`lib/orders/order-page-styles.ts` carries the same rule for the shared order page). This
+// page is shared byte-identically by every storefront, so it says the same thing in UTILITIES on
+// the cross-site design-token contract: the values reproduce Chefs Depot's own definitions
+// exactly, so CD looks unchanged and IK stops rendering its statement unstyled.
+
+/** Chefs Depot's padded card — a bordered white panel. */
+const CARD_CLASS = "border border-border rounded-card bg-white shadow-sm p-6";
+
+/** Chefs Depot's primary button — the one call to action a refused customer gets. */
+const BTN_PRIMARY_CLASS =
+  "inline-flex items-center justify-center gap-2 font-semibold text-sm px-[22px] py-3 " +
+  "rounded-btn transition-all duration-200 bg-accent text-white hover:bg-accent-hover " +
+  "hover:shadow-md hover:-translate-y-px";
 
 const PERIODS: { key: string; label: string; days: number | null }[] = [
   { key: "90", label: "Last 3 months", days: 90 },
@@ -69,10 +90,10 @@ function readableDate(value: string | null | undefined): string {
 function Refused({ message }: { message: string }) {
   return (
     <AccountShell>
-      <p className="eyebrow mb-3">STATEMENT</p>
-      <h1 className="text-3xl heading-serif text-text-primary mb-6">Account Statement</h1>
+      <p className={`${EYEBROW_CLASS} mb-3`}>STATEMENT</p>
+      <h1 className={`${PAGE_TITLE_CLASS} mb-6`}>Account Statement</h1>
       <p className="text-text-secondary">{message}</p>
-      <Link href="/account/orders" className="mt-6 inline-block btn-primary">
+      <Link href="/account/orders" className={`mt-6 ${BTN_PRIMARY_CLASS}`}>
         View your orders
       </Link>
     </AccountShell>
@@ -122,8 +143,8 @@ export default async function AccountStatementPage({
     <AccountShell>
       <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
         <div>
-          <p className="eyebrow mb-3">STATEMENT</p>
-          <h1 className="text-3xl heading-serif text-text-primary">Account Statement</h1>
+          <p className={`${EYEBROW_CLASS} mb-3`}>STATEMENT</p>
+          <h1 className={PAGE_TITLE_CLASS}>Account Statement</h1>
           <p className="mt-1 text-sm text-text-secondary">
             As at {readableDate(today)}. All amounts include GST.
           </p>
@@ -146,7 +167,7 @@ export default async function AccountStatementPage({
       </div>
 
       {/* Total outstanding + ageing */}
-      <section className="card-padded mb-8">
+      <section className={`${CARD_CLASS} mb-8`}>
         <p className="text-sm text-text-secondary">Total outstanding</p>
         <Price amount={aging.total} className="text-3xl font-semibold text-text-primary" />
         <p className="mt-1 text-sm text-text-secondary">
@@ -167,10 +188,13 @@ export default async function AccountStatementPage({
       {/* Unpaid invoices */}
       {outstanding.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-lg heading-serif text-text-primary mb-3">Outstanding invoices</h2>
+          <h2 className={`${PANEL_TITLE_CLASS} mb-3`}>Outstanding invoices</h2>
           <div className="space-y-3">
             {outstanding.map((r) => (
-              <div key={r.order_id} className="card-padded flex flex-wrap items-center justify-between gap-3">
+              <div
+                key={r.order_id}
+                className={`${CARD_CLASS} flex flex-wrap items-center justify-between gap-3`}
+              >
                 <div>
                   <div className="font-semibold text-text-primary">
                     {r.order_number ?? `Order ${r.order_id}`}
@@ -194,9 +218,7 @@ export default async function AccountStatementPage({
 
       {/* Full history */}
       <section>
-        <h2 className="text-lg heading-serif text-text-primary mb-3">
-          Invoices, payments and credits
-        </h2>
+        <h2 className={`${PANEL_TITLE_CLASS} mb-3`}>Invoices, payments and credits</h2>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
