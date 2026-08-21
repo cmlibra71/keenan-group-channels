@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Package, FileText, MapPin, LogOut, Crown, Trophy, Gift, ArrowRight, Calendar, Ticket, KeyRound } from "lucide-react";
+import { Package, FileText, MapPin, LogOut, Crown, Trophy, Gift, ArrowRight, Calendar, Ticket, KeyRound, Wallet } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { formatMemberSince } from "@/lib/member-date";
 import { contactService, getActiveSubscriptionForContact, getMemberSince, getUpcomingDraws, drawEntryService, CHANNEL_ID } from "@/lib/store";
@@ -8,6 +8,7 @@ import { safeNextPath, signInPrompt } from "@/lib/account-redirect";
 import { normaliseEmail, looksLikeEmail } from "@/lib/checkout/account-prompt";
 import { logout } from "@/lib/actions/auth";
 import { AccountShell, readAccountNavFlags } from "@/components/account/AccountShell";
+import { readStatementAccess } from "@/lib/account/statement-visibility";
 
 export const metadata = {
   title: "Account",
@@ -43,7 +44,7 @@ export default async function AccountPage({
   // The same request-cached flag read the account shell uses for its menu, so
   // the card grid and the menu can never disagree about which features exist,
   // and the three channel_settings lookups happen once per request, not twice.
-  const [customer, { subscriptionsEnabled, drawsEnabled, partnerOffersEnabled }] =
+  const [customer, { subscriptionsEnabled, drawsEnabled, partnerOffersEnabled }, statementAccess] =
     await Promise.all([
       contactService.getById(session.contactId) as Promise<{
         first_name: string;
@@ -51,6 +52,9 @@ export default async function AccountPage({
         email: string;
       } | null>,
       readAccountNavFlags(),
+      // Card k6pHXQBf — the statement card is shown only to the account's Manager / Billing
+      // contacts. Request-cached, so the menu beside this grid asked the same question once.
+      readStatementAccess(),
     ]);
 
   const activeSub = subscriptionsEnabled
@@ -262,6 +266,15 @@ export default async function AccountPage({
             <p className="text-sm text-text-secondary">View and track your quotes</p>
           </div>
         </Link>
+        {statementAccess.visible && (
+          <Link href="/account/statement" className="flex items-center gap-4 card-interactive">
+            <Wallet className="h-8 w-8 text-text-muted" />
+            <div>
+              <h3 className="font-semibold text-text-primary">Statement</h3>
+              <p className="text-sm text-text-secondary">What your account owes, and its history</p>
+            </div>
+          </Link>
+        )}
         {/* Non-member draws and partner offers */}
         {drawsEnabled && !activeSub && (
           <Link

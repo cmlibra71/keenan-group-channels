@@ -18,6 +18,7 @@ import {
   Menu,
   X,
   type LucideIcon,
+  Wallet,
 } from "lucide-react";
 import {
   isAccountNavItemCurrent,
@@ -42,6 +43,7 @@ const ICONS: Record<string, LucideIcon> = {
   security: KeyRound,
   orders: Package,
   quotes: FileText,
+  statement: Wallet,
   contact: Headset,
   membership: Crown,
   draws: Trophy,

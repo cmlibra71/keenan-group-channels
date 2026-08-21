@@ -43,6 +43,7 @@ import {
   shippingRateCalculator,
   shippingRateCardService,
   blogService,
+  loadAccountStatement,
 } from "@keenan/services";
 import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
@@ -160,6 +161,22 @@ export type { MegaMenuNode, MegaMenuFeatured, ContentPage } from "@keenan/servic
 // callers; storefront code should use this.
 export const getActiveSubscriptionForContact = (contactId: number) =>
   subscriptionService.getActiveForContact(contactId, CHANNEL_ID);
+
+/**
+ * This account's STATEMENT on THIS storefront (card k6pHXQBf).
+ *
+ * The channel is bound here and cannot be passed in. That is the whole guard behind Tim's rule
+ * (2026-08-10, in capitals): "THERE IS NEVER ANY CROSS OVER - THEY ARE SEPARATE BUSINESSES." A
+ * Chefs Depot page physically cannot ask for an Industry Kitchens statement, whatever it passes.
+ *
+ * The arithmetic — what is owed, how it ages, and the invoice/payment/credit history — is the same
+ * module the portal's Statement tab, printed copy and emailed copy use, so a customer reading
+ * their statement online and a staff member reading it in the portal see one document.
+ */
+export const getAccountStatement = (
+  accountId: number,
+  options: { from?: string | null; to?: string | null } = {}
+) => loadAccountStatement(accountId, CHANNEL_ID, options);
 
 /**
  * The date this PERSON became a member — the earliest subscription we hold for
