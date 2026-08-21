@@ -46,6 +46,7 @@ import { QuoteItemControls } from "./quote-item-controls";
 import { AccountShell } from "@/components/account/AccountShell";
 import { readQuoteDeposit, resolveQuoteDeposit, depositLabel } from "@/lib/quotes/quote-deposit";
 import { resolveQuotePayState } from "@/lib/quotes/quote-payable";
+import { quoteFreightStillPending } from "@/lib/quotes/freight-pending";
 import { QuotePayPanel, type PayMethod } from "./quote-pay-panel";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
 import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-policy";
@@ -353,7 +354,11 @@ export default async function QuoteDetailPage({
         expiresAt: raw.expires_at,
       })
     : NO_CUSTOMER_REQUESTS;
-  const freightPending = !isMoneyRow(gst.freightEx);
+  // "Plus Freight" only when the quote really carries no delivery: not a charge,
+  // not a PRICED delivery line, and not staff saying Pickup / Free delivery. The
+  // same question the portal's auto-conversion gate asks (card 9XRQmaiz), so this
+  // page and the order it becomes cannot contradict each other.
+  const freightPending = quoteFreightStillPending(raw, gst.freightEx);
 
   return (
     <AccountShell>

@@ -8,6 +8,11 @@ import { getSession } from "@/lib/auth";
 import { slidingWindowAllow } from "@/lib/rate-limit";
 import { resolveCustomerRequestState } from "@keenan/services";
 import {
+  resolveChannelStaffNotificationRecipients,
+  resolveEmailBranding,
+  sendQuoteStaffNotificationEmail,
+} from "@keenan/services";
+import {
   quoteHidesPrices,
   resolveQuoteAcceptState,
   isQuoteExpired,
@@ -531,12 +536,10 @@ export async function acceptQuote(quoteId: number) {
   // Lifecycle method, NOT a bare status update: stamps accepted_at and writes
   // the quote.accepted audit row. The generic update() fired no side effects,
   // which is why acceptances used to be invisible to staff.
-  // `markAccepted` is also the SINGLE sender of the "customer accepted a quote"
-  // staff alert (it fires on every acceptance path, including the magic link and
-  // the portal). The approval restriction is passed in so that one email still
-  // tells staff the conversion needs sign-off — this action must NOT send its
-  // own copy, or every configured recipient gets the acceptance twice.
-  await quoteService.markAccepted(quoteId, { requiresAdminApproval });
+  // `suppressStaffAlert`: the portal follow-up called below is the one sender of
+  // the acceptance email. Without it the service sends its own older alert too
+  // and every configured inbox gets two.
+  await quoteService.markAccepted(quoteId, { requiresAdminApproval, suppressStaffAlert: true });
 
   // Flag the acceptance so staff know this contact's conversions need sign-off
   // before the quote becomes an order. Best-effort — never fail the acceptance.
@@ -564,6 +567,43 @@ export async function acceptQuote(quoteId: number) {
   } catch (e) {
     console.error("[acceptQuote] pro-forma email failed (non-fatal):", e);
   }
+
+  // Everything that happens after an acceptance — the rep's email with the quote
+  // PDF, the customer's confirmation, and the two freight gates that decide
+  // whether this becomes an order (card 9XRQmaiz) — is ONE place, and that place
+  // is in the portal: it draws the PDF and the order from the portal's own quote
+  // money view, and a second copy of that arithmetic here would be a second
+  // place for a quote's money to be wrong. So the storefront asks the portal to
+  // run it, rather than behaving differently from the emailed quote link.
+  //
+  // Best-effort and never fatal: the customer has already been told their
+  // acceptance succeeded. The endpoint is idempotent, so a retry is safe.
+  //
+  // `customerAlreadyNotified` matters: this path has just sent the customer
+  // their pro-forma (card 0Wy0xHuq), which IS their acceptance confirmation.
+  // Without the flag they would get a second email about the same event, and a
+  // person gets ONE email per order (Product Brief).
+  //
+  // `suppressConversion` matters MORE. On THIS path the customer has just been
+  // emailed a pro-forma whose button is "Pay this quote" and which points back
+  // at this page. `converted_to_order` is a terminal pay state here
+  // (`quote-payable.ts`, card 0Wy0xHuq: accepting without paying leaves the
+  // money owed and the pro-forma exists to be paid), and neither storefront has
+  // an order-payment page. So converting the quote in the same request that
+  // emailed that button would hide the button and leave the customer with no way
+  // to pay at all. The order on this path is raised by the PAYMENT (`payQuote`),
+  // which is Tim's "accepting goes straight to payment" — the freight gates are
+  // still evaluated and the rep is still told where it stands.
+  const followUpRan = await runPortalAcceptanceFollowUp(q.uuid, {
+    customerAlreadyNotified: true,
+    suppressConversion: true,
+  });
+  // The follow-up is the ONE sender of the acceptance email, and `markAccepted`
+  // was told to stay quiet on that basis. If the portal could not be reached —
+  // most plausibly a deploy that put this build out ahead of the portal's — the
+  // acceptance would otherwise go completely unannounced, which is the one
+  // outcome worse than a duplicate. Fall back to the older per-site alert.
+  if (!followUpRan) await sendFallbackAcceptanceAlert(quoteId, q, requiresAdminApproval);
 
   revalidatePath(`/account/quotes/${quoteId}`);
   revalidatePath("/account/quotes");
@@ -891,4 +931,84 @@ export async function postQuoteMessage(quoteId: number, body: string): Promise<Q
 
   revalidatePath(`/account/quotes/${quoteId}`);
   return { success: true };
+}
+
+/**
+ * Ask the portal to run the acceptance follow-up for a quote we have just
+ * accepted (card 9XRQmaiz). The quote's own uuid is the credential — the same
+ * unguessable token this customer used to reach the quote — and the endpoint
+ * only ever acts on a quote that is ALREADY accepted, so it grants no authority
+ * the caller did not have.
+ *
+ * Never throws and never blocks: the acceptance itself has already succeeded.
+ * Returns whether the portal actually ran it, so the caller can fall back to the
+ * older alert rather than leave an acceptance unannounced.
+ *
+ * NOTE ON RATE LIMITING: this is a server-to-server call, so every storefront
+ * acceptance shares ONE source IP against the portal's `quote_link_action`
+ * per-IP budget (60 per 15 minutes). Comfortable at today's volume — a handful
+ * of acceptances a day — but it is the number to raise first if acceptances ever
+ * start being refused.
+ */
+async function runPortalAcceptanceFollowUp(
+  uuid: string | null | undefined,
+  options: { customerAlreadyNotified?: boolean; suppressConversion?: boolean } = {}
+): Promise<boolean> {
+  if (!uuid) return false;
+  const base = (process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/$/, "");
+  try {
+    const res = await fetch(`${base}/api/q/${encodeURIComponent(uuid)}/accepted-followup`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        customer_already_notified: options.customerAlreadyNotified === true,
+        suppress_conversion: options.suppressConversion === true,
+      }),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      console.error(`[acceptQuote] portal follow-up returned ${res.status} for quote ${uuid}`);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error("[acceptQuote] portal follow-up failed (non-fatal):", error);
+    return false;
+  }
+}
+
+/**
+ * The pre-9XRQmaiz staff alert, sent ONLY when the portal follow-up could not
+ * run. It is the same message `markAccepted` used to send and the same recipient
+ * list, so nothing is invented here — it exists so that the ordering of a deploy
+ * can never make an acceptance silent. Never throws.
+ */
+async function sendFallbackAcceptanceAlert(
+  quoteId: number,
+  quote: Record<string, unknown>,
+  requiresAdminApproval: boolean
+): Promise<void> {
+  try {
+    const recipients = await resolveChannelStaffNotificationRecipients(CHANNEL_ID, {
+      envFallback: process.env.QUOTE_NOTIFICATION_EMAIL,
+    });
+    if (recipients.length === 0) return;
+    const portalBase = (process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/$/, "");
+    const attrs = (quote.attributes ?? {}) as Record<string, unknown>;
+    await sendQuoteStaffNotificationEmail({
+      to: recipients,
+      event: "accepted",
+      quoteNumber: String(quote.quote_number ?? `#${quoteId}`),
+      quoteUrl: `${portalBase}/dashboard/quotes/${quoteId}`,
+      customerEmail: (quote.email as string | null) ?? null,
+      total: quote.quote_amount != null ? String(quote.quote_amount) : null,
+      currency: (quote.currency_code as string) || "AUD",
+      quoteName: (quote.quote_name as string | null) ?? null,
+      requiresAdminApproval,
+      branding: await resolveEmailBranding(CHANNEL_ID).catch(() => undefined),
+      testMode: attrs.test_mode === true,
+    });
+  } catch (error) {
+    console.error("[acceptQuote] fallback acceptance alert failed (non-fatal):", error);
+  }
 }
