@@ -85,16 +85,33 @@ export async function Header({
         <div className="border-b border-zinc-200">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-3 lg:gap-6 py-3">
-              {/* Logo */}
+              {/* Logo — SIZED BY WIDTH, not by height (card kiJa7dug: Steve
+                  wants the site logo at least 350px across on desktop). The
+                  row is padded, not fixed-height, so it grows to hold the
+                  artwork instead of cropping it. IK's mark keeps its OWN
+                  aspect ratio (`h-auto`) — it is not stretched to match Chefs
+                  Depot's stacked lockup. The width/height props are Next's
+                  pre-load hint and srcSet basis; the loaded image's own ratio
+                  wins.
+
+                  The mobile width is `min(150px, 25vw)`, NOT a flat 150px:
+                  this Link is `shrink-0`, so on a 320px-wide screen (iPhone SE
+                  / a 640px window at 200% zoom) a 150px logo pushed the compact
+                  phone/quote/cart/menu cluster off the right edge — and
+                  `html,body{overflow-x:hidden}` meant the shopper could not
+                  scroll to it. `max-w-full` does NOT catch that: it resolves
+                  against a shrink-wrapped parent, so it constrains nothing.
+                  Re-measure that cluster's right edge at 320px before raising
+                  it. */}
               <Link href="/" className="shrink-0">
                 {logoUrl ? (
                   <Image
                     src={logoUrl}
                     alt={logoAlt || storeName}
-                    width={188}
-                    height={64}
+                    width={350}
+                    height={187}
                     priority
-                    className="h-11 xl:h-14 w-auto object-contain"
+                    className="h-auto w-[min(150px,25vw)] max-w-full object-contain sm:w-[200px] lg:w-[350px]"
                   />
                 ) : (
                   <span className="text-xl font-bold text-[#D94B2B]">{storeName}</span>
