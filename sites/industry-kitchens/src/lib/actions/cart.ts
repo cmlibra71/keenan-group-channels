@@ -12,6 +12,16 @@ import { backorderFactsForProducts, backorderFactsForProduct } from "@/lib/cart/
 import { availableUnits, canPurchaseQuantity, resolveBackorderPolicy } from "@keenan/services/backorder";
 import { getSession } from "@/lib/auth";
 import { pickBestBulkUnit, layerCartPrice } from "@/lib/pricing/cart-pricing";
+import {
+  readProductAddons,
+  resolveAddonSelection,
+  addonSelectionKey,
+  readStoredAddons,
+  storedAddonsAsSelection,
+  withAddonSurcharge,
+  type AddonSelectionInput,
+  type ResolvedAddon,
+} from "@keenan/services/product-addons";
 
 async function getOrCreateCart() {
   const uuid = await getCartUuid();
@@ -139,6 +149,25 @@ async function resolveItemPricing(
 }
 
 /**
+ * The paid extras a shopper ticked, resolved against the PRODUCT'S OWN definition (card
+ * 0CDcCYmO).
+ *
+ * Nothing priced comes from the client: the page posts group/option KEYS and every amount is
+ * read back out of `products.metafields.addons` here. That is the same rule the bundle build
+ * follows (`addToQuote` re-resolves a kit against the product's own contents) and it is what
+ * stops a hand-made request inventing a free extra or a $1 machine.
+ */
+async function resolveAddonsForProduct(
+  productId: number,
+  selection: AddonSelectionInput | null | undefined
+): Promise<ResolvedAddon[]> {
+  if (!selection || Object.keys(selection).length === 0) return [];
+  const product = (await productService.getById(productId)) as { metafields?: unknown } | null;
+  if (!product) return [];
+  return resolveAddonSelection(readProductAddons(product.metafields), selection);
+}
+
+/**
  * The two per-product refusals (card 7vu2iEEZ), enforced HERE and not only in the page, because a
  * stale tab or a hand-posted action would otherwise book something staff switched off.
  *
@@ -157,28 +186,57 @@ async function refuseCartQuantity(productId: number, quantity: number): Promise<
   return null;
 }
 
-export async function addToCart(productId: number, variantId?: number | null, quantity: number = 1) {
+export async function addToCart(
+  productId: number,
+  variantId?: number | null,
+  quantity: number = 1,
+  /** The paid extras ticked on the product page (card 0CDcCYmO): group key -> option keys.
+   *  Keys only — every price is read back from the product's own definition here. */
+  addons?: AddonSelectionInput
+) {
   // "What we show is what we accept" — a product restricted away from this shopper is not addable,
   // even by poking the action directly (the listing/PDP guards are UX; THIS is the enforcement).
   if (!(await isProductVisibleToViewer(productId))) return { error: RESTRICTED_PRODUCT_ERROR };
 
   const cart = await getOrCreateCart();
 
-  // Check if this product/variant is already in the cart
-  const existing = await cartItemService.findByProductVariant(cart.id, productId, variantId) as {
+  const resolvedAddons = await resolveAddonsForProduct(productId, addons);
+  const selectionKey = addonSelectionKey(resolvedAddons);
+
+  // Is this product/variant WITH THESE EXTRAS already in the cart?
+  //
+  // A configuration is what identifies a line now, not the product alone: two Hallde machines
+  // with different blades are two lines, and adding the same configuration twice is one line
+  // of two. Matching on product+variant alone (which is all `findByProductVariant` can do)
+  // would fold a second configuration into the first and charge the first one's extras twice.
+  const full = await cartService.getWithItems(cart.id);
+  const existing = ((full?.items ?? []) as {
     id: number;
+    product_id: number;
+    variant_id: number | null;
     quantity: number;
-  } | null;
+    modifier_selections?: unknown;
+  }[]).find(
+    (i) =>
+      i.product_id === productId &&
+      (i.variant_id ?? null) === (variantId ?? null) &&
+      addonSelectionKey(readStoredAddons(i.modifier_selections)) === selectionKey
+  );
 
   const finalQty = existing ? existing.quantity + Math.max(1, quantity) : Math.max(1, quantity);
 
   const refusal = await refuseCartQuantity(productId, finalQty);
   if (refusal) return { error: refusal };
 
-  // Price for the FINAL quantity (so crossing a bulk tier re-prices the whole line).
+  // Price for the FINAL quantity (so crossing a bulk tier re-prices the whole line), then the
+  // extras on top — a bulk break is a discount off the PRODUCT and must never discount the
+  // accessories with it.
   let pricing: { listPrice: string; salePrice: string | null };
   try {
-    pricing = await resolveItemPricing(productId, variantId, finalQty);
+    pricing = withAddonSurcharge(
+      await resolveItemPricing(productId, variantId, finalQty),
+      resolvedAddons
+    );
   } catch {
     return { error: "Product not found" };
   }
@@ -188,6 +246,7 @@ export async function addToCart(productId: number, variantId?: number | null, qu
       quantity: finalQty,
       listPrice: pricing.listPrice,
       salePrice: pricing.salePrice,
+      modifierSelections: resolvedAddons,
     });
   } else {
     await cartItemService.createForParent(cart.id, {
@@ -196,6 +255,7 @@ export async function addToCart(productId: number, variantId?: number | null, qu
       quantity: finalQty,
       listPrice: pricing.listPrice,
       salePrice: pricing.salePrice,
+      modifierSelections: resolvedAddons,
     });
   }
 
@@ -227,7 +287,13 @@ export async function updateCartItem(itemId: number, quantity: number) {
     // getWithItems returns snake_case rows — read product_id / variant_id (reading
     // the camelCase keys yielded undefined, so re-pricing threw on every change).
     const item = full?.items.find((i: { id: number }) => i.id === itemId) as
-      | { id: number; product_id: number; variant_id: number | null; quantity: number }
+      | {
+          id: number;
+          product_id: number;
+          variant_id: number | null;
+          quantity: number;
+          modifier_selections?: unknown;
+        }
       | undefined;
 
     // Line already gone (raced with a concurrent remove) — nothing to update.
@@ -247,7 +313,18 @@ export async function updateCartItem(itemId: number, quantity: number) {
     // change — fall back to updating just the quantity, matching addToCart.
     let pricing: { listPrice: string; salePrice: string | null } | null = null;
     try {
-      pricing = await resolveItemPricing(item.product_id, item.variant_id, quantity);
+      // The line's own extras ride the new quantity too (card 0CDcCYmO). They are RE-RESOLVED
+      // from the product's current definition rather than read off the line, so an extra staff
+      // have re-priced or withdrawn moves here exactly as the catalogue price does — the stored
+      // picks are the record of WHAT was chosen, never of what it costs.
+      const lineAddons = await resolveAddonsForProduct(
+        item.product_id,
+        storedAddonsAsSelection(readStoredAddons(item.modifier_selections))
+      );
+      pricing = withAddonSurcharge(
+        await resolveItemPricing(item.product_id, item.variant_id, quantity),
+        lineAddons
+      );
     } catch {
       pricing = null;
     }
@@ -301,12 +378,23 @@ export async function repriceCartForSession(): Promise<{ repriced: number }> {
       quantity: number;
       list_price: string | null;
       sale_price: string | null;
+      modifier_selections?: unknown;
     }[];
 
     let repriced = 0;
     for (const item of items) {
       try {
-        const pricing = await resolveItemPricing(item.product_id, item.variant_id, item.quantity);
+        // Signing in re-prices the whole line, extras included (card 0CDcCYmO): the surcharge
+        // is part of what this line is charged, so a re-price that dropped it would show the
+        // shopper one price and charge another — the exact failure this pass exists to stop.
+        const lineAddons = await resolveAddonsForProduct(
+          item.product_id,
+          storedAddonsAsSelection(readStoredAddons(item.modifier_selections))
+        );
+        const pricing = withAddonSurcharge(
+          await resolveItemPricing(item.product_id, item.variant_id, item.quantity),
+          lineAddons
+        );
         const sameList = pricing.listPrice === item.list_price;
         const sameSale = (pricing.salePrice ?? null) === (item.sale_price ?? null);
         if (sameList && sameSale) continue;

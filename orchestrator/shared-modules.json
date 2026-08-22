@@ -43,6 +43,8 @@
     "builder/home-node-branch.tsx",
     "builder/live-gst.ts",
     "builder/master-leaves.tsx",
+    "builder/product-addons-node.test.ts",
+    "builder/product-addons-node.ts",
     "builder/product-image-notice.test.ts",
     "builder/product-image-notice.ts",
     "builder/product-node-branch.tsx",

@@ -101,7 +101,10 @@ export const PriceWidget: WidgetComponent = ({ attrs }) => {
 export const BulkPricingWidget: WidgetComponent = () => {
   const purchase = useProductPurchaseOptional();
   if (!purchase) return null;
-  const { product, displayPrice } = purchase;
+  // The product's OWN price, without any paid extras the shopper has ticked (card
+  // 0CDcCYmO). A quantity break is a discount off the MACHINE, so working a percent tier
+  // off a price that already carries $480 of blades would quietly discount the blades too.
+  const { product, displayBasePrice: displayPrice } = purchase;
   if (product.bulkPricing.length === 0 || displayPrice <= 0) return null;
   return (
     <div className="mt-4">
@@ -215,6 +218,9 @@ export const AddToCartWidget: WidgetComponent = ({ attrs }) => {
   return (
     <AddToCartButton
       productId={product.id}
+      // The ticked extras travel with the click (card 0CDcCYmO) — their price is already
+      // in the displayed price, and the server re-resolves it from the product itself.
+      addons={purchase.selectedAddons}
       variantId={cartVariantId}
       quantity={quantity}
       size={attrs.size === "sm" ? "sm" : undefined}
@@ -316,6 +322,9 @@ export const MobileBuyBarWidget: WidgetComponent = () => {
         productId={product.id}
         variantId={cartVariantId}
         quantity={quantity}
+        // The mobile bar buys the same configuration the panel above it shows — the ticked
+        // extras are already in the price beside this button (card 0CDcCYmO).
+        addons={purchase.selectedAddons}
         size="sm"
         disabled={purchasingDisabled || !allOptionsSelected}
       />

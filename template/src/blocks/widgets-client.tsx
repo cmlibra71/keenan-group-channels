@@ -104,7 +104,10 @@ export const PriceWidget: WidgetComponent = () => {
 export const BulkPricingWidget: WidgetComponent = () => {
   const purchase = useProductPurchaseOptional();
   if (!purchase) return null;
-  const { product, displayPrice } = purchase;
+  // The product's OWN price, without any paid extras the shopper has ticked (card
+  // 0CDcCYmO). A quantity break is a discount off the MACHINE, so working a percent tier
+  // off a price that already carries $480 of blades would quietly discount the blades too.
+  const { product, displayBasePrice: displayPrice } = purchase;
   if (product.bulkPricing.length === 0 || displayPrice <= 0) return null;
   return (
     <div className="mt-4">
@@ -174,6 +177,7 @@ export const AddToCartWidget: WidgetComponent = () => {
     restrictAddToCart,
     purchasingDisabled,
     allOptionsSelected,
+    selectedAddons,
   } = purchase;
   // A product staff switched off for cart, or set to refuse out-of-stock buys, shows NO button at
   // all rather than a greyed one — there is no availability wording left on this site to explain a
@@ -188,6 +192,9 @@ export const AddToCartWidget: WidgetComponent = () => {
     <AddToCartButton
       productId={product.id}
       variantId={cartVariantId}
+      // The ticked extras travel with the click (card 0CDcCYmO) — their price is already
+      // in `displayPrice` above, and the server re-resolves it from the product itself.
+      addons={selectedAddons}
       disabled={purchasingDisabled || !allOptionsSelected}
     />
   );

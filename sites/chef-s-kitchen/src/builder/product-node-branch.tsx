@@ -13,6 +13,7 @@ import { cmsFunctionService } from "@keenan/services/services";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { withSilverChefNode } from "@/builder/silverchef-node";
+import { withAddonsNode } from "@/builder/product-addons-node";
 import { withImageNoticeNode } from "@/builder/product-image-notice";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 
@@ -130,7 +131,14 @@ export async function renderProductNodeBranch({
   // than being written into the stored trees so there is nothing to undo on a rollback and a site
   // that re-authors its buy row keeps the behaviour. It wraps the PLACED nodes as well as the
   // stored ones, so a buy control introduced by a future placed node is guarded too.
-  const nodeTree = guardBuyControls(withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE)));
+  // Card 0CDcCYmO — the paid-extras panel is placed the same way and for the same reason
+  // (an authored tree cannot hold the shopper's picks or add their money to the price). It
+  // goes ABOVE the buy buttons: ticking an extra changes what Add to Cart will charge, so
+  // the shopper has to meet them first. Applied after the SilverChef pass so the live order
+  // reads price -> weekly rent -> extras -> buy; neither pass can displace the other.
+  const nodeTree = guardBuyControls(
+    withAddonsNode(withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE)))
+  );
 
   const namedStyles = await getNamedStyles().catch(() => ({}));
   const components = guardBuyControlsInComponents(

@@ -25,6 +25,7 @@ import type { ProductKit } from "@/lib/product-kit";
 import { GstToggle } from "@/components/layout/GstToggle";
 import { SilverChefPanel } from "@/components/product/SilverChefPanel";
 import { ProductImageNotice } from "@/components/product/ProductImageNotice";
+import { ProductAddons } from "@/components/product/ProductAddons";
 
 export function productNatives({ payload, variantImageUrl, data }: ProductNativesArgs): NativeComponents {
   const product = (payload.product ?? {}) as Record<string, unknown>;
@@ -63,6 +64,11 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // authored because the supplied panel colour is not a token on either site, and a
     // colour class invented in a STORED tree has no rule in the deployed stylesheet.
     // Renders null unless this product carries the tick.
+    // Paid add-on extras (card 0CDcCYmO). Sealed because the shopper's picks ARE live
+    // purchase state — they move the headline price, the weekly finance figure and what
+    // Add to Cart sends — and an authored tree can hold neither state nor money. Renders
+    // nothing for a product with no extras, so the node is safe on every product page.
+    "product-addons": () => <ProductAddons />,
     "product-image-notice": () => (
       <ProductImageNotice show={product.imageIsIllustrative === true} />
     ),

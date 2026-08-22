@@ -19,6 +19,7 @@
 
 import { gstSplit } from "@keenan/services/calc";
 import { backorderedUnits, type StockFacts } from "@keenan/services/backorder";
+import { addonsAsOrderOptions, readStoredAddons } from "@keenan/services/product-addons";
 
 export type PaymentStatus = "pending" | "awaiting_payment" | "pending_payment" | "net_terms";
 
@@ -64,6 +65,9 @@ export type CartLineInput = {
   quantity: number;
   list_price: string;
   sale_price: string | null;
+  /** Paid extras this line was configured with (card 0CDcCYmO) — their price is already
+   *  inside `sale_price`/`list_price`; this is the RECORD of what was chosen. */
+  modifier_selections?: unknown;
 };
 
 /** A line item ready for orderItemService.createManyForParent (camelCase contract). */
@@ -95,6 +99,15 @@ export type OrderLineDraft = {
    * every order placed before this shipped.
    */
   backorderedQuantity?: number;
+  /**
+   * The paid extras this line was configured with (card 0CDcCYmO), as
+   * `{ "Slicers": "Slicer 4mm (+$245.00)" }` — the shape the portal's order lines table
+   * already renders under the product name. The MONEY is in the line's own prices; this is
+   * the only record on the order of what the customer actually chose, so warehouse, invoice
+   * and any later refund can see it. Omitted (never `{}`) on a line with no extras, so an
+   * order placed before this shipped is indistinguishable from one with none.
+   */
+  productOptions?: Record<string, string>;
 };
 
 export type MoneySplit = { exTax: number; incTax: number; tax: number };
@@ -127,12 +140,15 @@ export function buildLineItems(items: CartLineInput[], pricesIncludeTax: boolean
     subIncTax += lineCalc.incTax;
     itemsTotal += item.quantity;
 
+    const addonOptions = addonsAsOrderOptions(readStoredAddons(item.modifier_selections));
+
     return {
       productId: item.product_id,
       variantId: item.variant_id,
       name: item.product_name,
       sku: item.product_sku,
       quantity: item.quantity,
+      ...(Object.keys(addonOptions).length > 0 ? { productOptions: addonOptions } : {}),
       basePrice: String(unitPrice),
       priceExTax: String(unitCalc.exTax),
       priceIncTax: String(unitCalc.incTax),

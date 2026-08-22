@@ -13,6 +13,7 @@ import {
   type PurchaseProduct,
 } from "@keenan/services/product-page";
 import { addToCart } from "@/lib/actions/cart";
+import type { AddonSelectionInput } from "@keenan/services/product-addons";
 import { addToQuote } from "@/lib/actions/quote";
 import { submitReview } from "@/lib/actions/reviews";
 import { useGst } from "@/lib/gst";
@@ -62,8 +63,15 @@ function ActionsBridge({
   const { setCartCount, setQuoteCount } = useCartQuoteCounts();
   const { open } = useHeaderPanels();
   const countingAddToCart = React.useCallback(
-    async (pid: number, variantId: number | null, quantity: number) => {
-      const res = await addToCart(pid, variantId, quantity);
+    async (
+      pid: number,
+      variantId: number | null,
+      quantity: number,
+      // The shopper's ticked extras (card 0CDcCYmO). Keys only — every price is read
+      // back from the product's own definition inside the action.
+      addons?: AddonSelectionInput
+    ) => {
+      const res = await addToCart(pid, variantId, quantity, addons);
       if (res && "cartCount" in res && typeof res.cartCount === "number") {
         setCartCount(res.cartCount);
         open("cart");

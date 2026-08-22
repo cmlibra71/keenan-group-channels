@@ -13,6 +13,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { AddToCartButton } from "./AddToCartButton";
+import { ProductAddons } from "./ProductAddons";
 import { AddToQuoteButton } from "./AddToQuoteButton";
 import { OptionSelector } from "./OptionSelector";
 import { Price } from "@/components/ui/Price";
@@ -48,6 +49,8 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
     purchasingDisabled,
     allOptionsSelected,
     cartVariantId,
+    selectedAddons,
+    displayBasePrice,
   } = useProductPurchase();
 
   const { id: productId, options, optionValues, bulkPricing } = product;
@@ -96,7 +99,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
       </div>
 
       {/* Bulk Pricing Tiers */}
-      {bulkPricing.length > 0 && displayPrice > 0 && (
+      {bulkPricing.length > 0 && displayBasePrice > 0 && (
         <div className="mt-4">
           <h3 className="text-sm font-semibold text-text-body mb-2">Bulk Pricing</h3>
           <div className="overflow-hidden rounded-[12px] border border-border">
@@ -111,7 +114,9 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
                 {bulkPricing.map((rule) => {
                   const amount = parseFloat(rule.amount);
                   const tierPrice = rule.type === "percent"
-                    ? displayPrice * (1 - amount / 100)
+                    // The MACHINE's price, never one carrying the shopper's ticked extras: a
+                    // quantity break discounts the product, not the accessories (card 0CDcCYmO).
+                    ? displayBasePrice * (1 - amount / 100)
                     : amount;
                   return (
                     <tr key={rule.id} className="text-text-body">
@@ -160,6 +165,10 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
         />
       )}
 
+      {/* Paid extras (card 0CDcCYmO) — above the buy row, because ticking one changes what
+          Add to Cart will charge. Renders nothing for a product with none. */}
+      <ProductAddons />
+
       {/* ═══ Qty + dual CTAs (design buy row) ═══ */}
       <div className="mt-6 flex flex-wrap items-stretch gap-3">
         {canBuyNow && (
@@ -188,6 +197,10 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
             <>
               <AddToCartButton
                 productId={productId}
+                // Card 0CDcCYmO — this renderer is the fallback if the product design is switched
+                // off, so it carries the ticked extras too; dropping them would charge the bare
+                // product price for a configuration the shopper priced on screen.
+                addons={selectedAddons}
                 variantId={cartVariantId}
                 quantity={quantity}
                 productName={product.name}
@@ -242,6 +255,10 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
           </div>
           <AddToCartButton
             productId={productId}
+            // Card 0CDcCYmO — this renderer is the fallback if the product design is switched
+            // off, so it carries the ticked extras too; dropping them would charge the bare
+            // product price for a configuration the shopper priced on screen.
+            addons={selectedAddons}
             variantId={cartVariantId}
             quantity={quantity}
             productName={product.name}

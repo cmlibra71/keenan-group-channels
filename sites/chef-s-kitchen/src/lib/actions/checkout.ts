@@ -7,6 +7,7 @@ import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { hasTestCheckoutSession } from "@/lib/checkout/test-session";
 import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveOrderBusinessName, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, siteAccessProfileService, loadOrderContactForOrder, type EmailLineItem } from "@keenan/services";
+import { addonSurcharge, readStoredAddons } from "@keenan/services/product-addons";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, type BelowCostLine } from "@/lib/checkout/order-draft";
 import { backorderFactsForProducts } from "@/lib/cart/backorder-facts";
 import { canPurchaseQuantity } from "@keenan/services/backorder";
@@ -297,7 +298,16 @@ export async function placeOrder(
             const pricingVariantId = variantId || (await productVariantService.listForParent(item.product_id, { page: 1, limit: 1, sort: "id", direction: "asc" }))?.data[0]?.id;
             if (pricingVariantId) {
               const pricing = await getEffectivePrice(pricingVariantId as number, CHANNEL_ID, null);
-              item.sale_price = pricing.salePrice || null;
+              // The line's paid extras stay ON the recomputed price (card 0CDcCYmO). The
+              // membership expiring changes what the MACHINE costs, not what its accessories
+              // cost, and `getEffectivePrice` knows nothing about them — dropping them here
+              // would charge for a configuration at the bare product's price. (The other
+              // branch needs no such fix: clearing sale_price falls back to list_price, which
+              // already carries the surcharge.)
+              const surcharge = addonSurcharge(readStoredAddons(item.modifier_selections));
+              item.sale_price = pricing.salePrice
+                ? (Number(pricing.salePrice) + surcharge).toFixed(2)
+                : null;
             }
           }
           if (item.sale_price !== oldPrice) {

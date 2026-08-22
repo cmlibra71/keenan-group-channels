@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { addToCart } from "@/lib/actions/cart";
+import type { AddonSelectionInput } from "@keenan/services/product-addons";
 import { useCartQuoteCounts, useHeaderPanels } from "@/lib/cart-quote-counts";
 import { trackAddedToCart } from "@/components/analytics/klaviyo";
 import { ga4AddToCart } from "@/components/analytics/ga4";
@@ -18,6 +19,7 @@ export function AddToCartButton({
   sku,
   brandName,
   categoryName,
+  addons,
 }: {
   productId: number;
   variantId?: number | null;
@@ -31,6 +33,9 @@ export function AddToCartButton({
   sku?: string | null;
   brandName?: string;
   categoryName?: string;
+  /** Paid extras the shopper ticked (card 0CDcCYmO), group key -> option keys. Keys only:
+   *  the server re-reads every price from the product's own definition. */
+  addons?: AddonSelectionInput;
 }) {
   const [isPending, startTransition] = useTransition();
   const { setCartCount } = useCartQuoteCounts();
@@ -38,7 +43,7 @@ export function AddToCartButton({
 
   function handleClick() {
     startTransition(async () => {
-      const res = await addToCart(productId, variantId, quantity ?? 1);
+      const res = await addToCart(productId, variantId, quantity ?? 1, addons);
       // The action returns the fresh count — the header badge updates without
       // any route re-render (no-op on the provider-less /render/* surface).
       // Same success branch pops the cart panel out showing what was just
