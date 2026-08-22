@@ -1,30 +1,15 @@
 "use server";
 
 import { revalidatePath, refresh } from "next/cache";
-import { quoteService, quoteItemService, productService, productVariantService, CHANNEL_ID, shouldSuppressCatalogSalePrice } from "@/lib/store";
-import { wantsStripeTestMode } from "@keenan/services";
-import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
-import { getSession } from "@/lib/auth";
-import { slidingWindowAllow } from "@/lib/rate-limit";
-import { resolveCustomerRequestState } from "@keenan/services";
+import { quoteService, quoteItemService, productService, productVariantService, CHANNEL_ID, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import {
+  wantsStripeTestMode,
   resolveChannelStaffNotificationRecipients,
   resolveEmailBranding,
   sendQuoteStaffNotificationEmail,
 } from "@keenan/services";
-import {
-  quoteHidesPrices,
-  resolveQuoteAcceptState,
-  isQuoteExpired,
-} from "@/lib/quotes/price-visibility";
-import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
-import { isStaffOnlyDraft, withoutStaffOnlyDrafts } from "@/lib/quotes/draft-visibility";
-import {
-  isCustomerEditableStatus,
-  quoteAllowsItemEdits,
-} from "@/lib/quotes/customer-editable";
-import { getContactPermissions } from "@/lib/role-permissions";
-import { isProductVisibleToViewer, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
+import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
+import { getSession } from "@/lib/auth";
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
 import {
   describeKitChoices,
@@ -33,6 +18,22 @@ import {
   resolveKitChoices,
   type KitChoice,
 } from "@/lib/product-kit";
+import { slidingWindowAllow } from "@/lib/rate-limit";
+import { resolveCustomerRequestState } from "@keenan/services";
+import {
+  quoteHidesPrices,
+  resolveQuoteAcceptState,
+  isQuoteExpired,
+} from "@/lib/quotes/price-visibility";
+import { getHidePriceStatuses } from "@/lib/quotes/hide-price-statuses";
+import {
+  isCustomerEditableStatus,
+  quoteAllowsItemEdits,
+} from "@/lib/quotes/customer-editable";
+import { isStaffOnlyDraft, withoutStaffOnlyDrafts } from "@/lib/quotes/draft-visibility";
+import { acceptanceAcknowledgementUrl } from "@/lib/quotes/acknowledgement-url";
+import { getContactPermissions } from "@/lib/role-permissions";
+import { isProductVisibleToViewer, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { contactService, customerAddressService } from "@/lib/store";
 import { saveCheckoutAddressForContact } from "@/lib/contact-addresses";
 import {
@@ -155,10 +156,10 @@ export async function addToQuote(
 
   const quote = await getOrCreateQuote();
 
-  // Pre-link quote to customer if logged in. Best-effort convenience only — it must
-  // never block adding the item. A stale/invalid session (e.g. a deleted customer)
-  // would otherwise throw an FK ValidationError and 500 the whole add-to-quote,
-  // leaving the quote empty with no feedback.
+  // Pre-link quote to the contact if logged in. Best-effort convenience only — it
+  // must never block adding the item. A stale/invalid session (e.g. a deleted
+  // contact) would otherwise throw an FK ValidationError and 500 the whole
+  // add-to-quote, leaving the quote empty with no feedback.
   const session = await getSession();
   if (session && !quote.contact_id) {
     try {
@@ -298,17 +299,6 @@ export async function getQuoteDeliveryAddresses(): Promise<SavedQuoteAddress[]> 
   }
 }
 
-function mayFileAddressForRole(perms: {
-  isB2B: boolean;
-  accountId: number | null;
-  can: (code: string) => boolean;
-}): boolean {
-  if (!perms.isB2B || perms.accountId === null) return true;
-  return (
-    perms.can("add_shipping_address_in_checkout") && perms.can("add_billing_address_in_checkout")
-  );
-}
-
 /**
  * May THIS customer's typed address be filed in their address book?
  *
@@ -321,6 +311,17 @@ function mayFileAddressForRole(perms: {
  * Fails open on a lookup error, like every other role read on a customer path: the
  * worst case is an address saved for someone who could have added one anyway.
  */
+function mayFileAddressForRole(perms: {
+  isB2B: boolean;
+  accountId: number | null;
+  can: (code: string) => boolean;
+}): boolean {
+  if (!perms.isB2B || perms.accountId === null) return true;
+  return (
+    perms.can("add_shipping_address_in_checkout") && perms.can("add_billing_address_in_checkout")
+  );
+}
+
 export async function canSaveQuoteAddress(): Promise<boolean> {
   const session = await getSession();
   if (!session) return false;
@@ -482,16 +483,6 @@ export async function getQuotesForCustomer() {
   return { quotes: contactQuotes };
 }
 
-// ============================================================================
-// Customer quote lifecycle - ported from template/ 2026-08-04.
-//
-// These were missing here entirely, which is the real content of the seam
-// audit's "IK quote gap": not a broken notification, but NO WAY FOR AN IK
-// CUSTOMER TO ACCEPT A QUOTE. Ported verbatim so the two sites cannot drift
-// again - every dependency (role permissions, rate limit, staff email)
-// already existed here, unused.
-// ============================================================================
-
 // Customer self-service: accept a finalised quote (B2B). Only a priced, sent,
 // in-date quote (quote_available) can be accepted.
 export async function acceptQuote(quoteId: number) {
@@ -615,6 +606,12 @@ export async function acceptQuote(quoteId: number) {
 
   revalidatePath(`/account/quotes/${quoteId}`);
   revalidatePath("/account/quotes");
+
+  // This storefront's own site row, for the acknowledgement host below. Cached
+  // per request and best-effort: an acceptance that has already succeeded must
+  // never fail because we could not read a URL, and a null simply falls back.
+  const { site } = await getSiteConfig().catch(() => ({ site: null }));
+
   return {
     success: true,
     // Where the customer is sent now that the acceptance is done (card 87IkgD2H,
@@ -630,7 +627,7 @@ export async function acceptQuote(quoteId: number) {
     // front page, and the wording names the pro-forma this path has just emailed.
     // Nothing is unlocked by it — the quote's uuid is the credential, exactly as
     // it is for the emailed link.
-    acknowledgementUrl: acceptanceAcknowledgementUrl(q.uuid),
+    acknowledgementUrl: acceptanceAcknowledgementUrl(q.uuid, site),
     ...(requiresAdminApproval
       ? {
           message:
@@ -638,18 +635,6 @@ export async function acceptQuote(quoteId: number) {
         }
       : {}),
   };
-}
-
-/**
- * The portal acknowledgement page for a quote this customer has just accepted, or
- * null for a quote carrying no uuid (nothing in production, but the column is
- * nullable and a missing acknowledgement must degrade to "stay here and refresh",
- * never to a broken link).
- */
-function acceptanceAcknowledgementUrl(uuid: string | null | undefined): string | null {
-  if (!uuid) return null;
-  const base = (process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/$/, "");
-  return `${base}/q/${encodeURIComponent(uuid)}/accepted?from=account`;
 }
 
 // ── Customer edits their own quote (card FPfvaYLp) ───────────────────────────

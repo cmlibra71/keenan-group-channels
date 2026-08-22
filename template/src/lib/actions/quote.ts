@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath, refresh } from "next/cache";
-import { quoteService, quoteItemService, productService, productVariantService, CHANNEL_ID, shouldSuppressCatalogSalePrice } from "@/lib/store";
+import { quoteService, quoteItemService, productService, productVariantService, CHANNEL_ID, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import {
   wantsStripeTestMode,
   resolveChannelStaffNotificationRecipients,
@@ -31,6 +31,7 @@ import {
   quoteAllowsItemEdits,
 } from "@/lib/quotes/customer-editable";
 import { isStaffOnlyDraft, withoutStaffOnlyDrafts } from "@/lib/quotes/draft-visibility";
+import { acceptanceAcknowledgementUrl } from "@/lib/quotes/acknowledgement-url";
 import { getContactPermissions } from "@/lib/role-permissions";
 import { isProductVisibleToViewer, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { contactService, customerAddressService } from "@/lib/store";
@@ -605,6 +606,12 @@ export async function acceptQuote(quoteId: number) {
 
   revalidatePath(`/account/quotes/${quoteId}`);
   revalidatePath("/account/quotes");
+
+  // This storefront's own site row, for the acknowledgement host below. Cached
+  // per request and best-effort: an acceptance that has already succeeded must
+  // never fail because we could not read a URL, and a null simply falls back.
+  const { site } = await getSiteConfig().catch(() => ({ site: null }));
+
   return {
     success: true,
     // Where the customer is sent now that the acceptance is done (card 87IkgD2H,
@@ -620,7 +627,7 @@ export async function acceptQuote(quoteId: number) {
     // front page, and the wording names the pro-forma this path has just emailed.
     // Nothing is unlocked by it — the quote's uuid is the credential, exactly as
     // it is for the emailed link.
-    acknowledgementUrl: acceptanceAcknowledgementUrl(q.uuid),
+    acknowledgementUrl: acceptanceAcknowledgementUrl(q.uuid, site),
     ...(requiresAdminApproval
       ? {
           message:
@@ -628,18 +635,6 @@ export async function acceptQuote(quoteId: number) {
         }
       : {}),
   };
-}
-
-/**
- * The portal acknowledgement page for a quote this customer has just accepted, or
- * null for a quote carrying no uuid (nothing in production, but the column is
- * nullable and a missing acknowledgement must degrade to "stay here and refresh",
- * never to a broken link).
- */
-function acceptanceAcknowledgementUrl(uuid: string | null | undefined): string | null {
-  if (!uuid) return null;
-  const base = (process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/$/, "");
-  return `${base}/q/${encodeURIComponent(uuid)}/accepted?from=account`;
 }
 
 // ── Customer edits their own quote (card FPfvaYLp) ───────────────────────────
