@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { CategoryChildSlim } from "@keenan/services";
 import { getProducts, getFeatureFlag, getSubcategories } from "@/lib/store";
 import { getListingPricing } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
@@ -14,7 +15,11 @@ export const metadata = {
   description: "Last units and end-of-line stock — secure yours while they last.",
 };
 
-type FilterOption = { id: number; name: string; slug: string };
+// The rows `getSubcategories` returns, narrowed to what this page reads. Named
+// rather than re-declared so it cannot drift from the seam: the service
+// snake-cases its keys, and a hand-written camelCase shape here is what left
+// the subcategory tiles blank on the category pages (card 7LjU5UDE).
+type FilterOption = Pick<CategoryChildSlim, "id" | "name" | "slug">;
 
 export default async function ClearancePage({
   searchParams,
@@ -27,7 +32,7 @@ export default async function ClearancePage({
   // Only show the 3 subtypes (Warehouse Clearance, Special Offer, Scratch & Dent).
   // The parent "Clearance Sale" category is effectively an umbrella applied to
   // every clearance item, so listing it alongside "All Clearance" would be redundant.
-  const filterOptions = (await getSubcategories(CLEARANCE_ROOT_ID)) as FilterOption[];
+  const filterOptions: FilterOption[] = await getSubcategories(CLEARANCE_ROOT_ID);
 
   const activeFilter = filterOptions.find((f) => f.slug === type) ?? null;
 
