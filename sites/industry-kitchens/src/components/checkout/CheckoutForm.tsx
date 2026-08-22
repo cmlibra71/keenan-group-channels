@@ -17,6 +17,7 @@ import {
 import { CUSTOMER_REFERENCE_MAX_LENGTH } from "@/lib/checkout/customer-reference";
 import { cardConfirmParams } from "@/lib/payments/stripe-gateways";
 import { Price } from "@/components/ui/Price";
+import { backorderMessage } from "@keenan/services/backorder";
 import { gstSplit } from "@keenan/services/calc";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
 import { FinanceApplicationPanel } from "@/components/checkout/FinanceApplicationPanel";
@@ -67,6 +68,9 @@ type CartItem = {
   product_id?: number;
   product_sku?: string | null;
   variant_sku?: string | null;
+  /** Back-order facts carried by readCart (card 7vu2iEEZ). See CartItemsList for why. */
+  available_units?: number | null;
+  backorder_policy?: string | null;
 };
 
 type Country = {
@@ -1166,12 +1170,30 @@ export function CheckoutForm({
                 const price = item.sale_price
                   ? parseFloat(item.sale_price)
                   : parseFloat(item.list_price);
+                // The same back-order note as the cart, repeated at the point of paying: a
+                // shopper who came straight from the product page to checkout has not seen the
+                // cart, and nothing else on this site mentions availability (card CXnP1lrL).
+                const backorderNote = backorderMessage(
+                  {
+                    inventoryTracking: item.available_units == null ? "none" : "product",
+                    inventoryLevel: item.available_units ?? null,
+                    backorderPolicy: item.backorder_policy ?? null,
+                  },
+                  item.quantity
+                );
                 return (
-                  <div key={i} className="py-2 flex justify-between text-sm">
-                    <span className="text-zinc-600">
-                      {item.product_name} &times; {item.quantity}
-                    </span>
-                    <Price amount={price * item.quantity} className="font-medium" />
+                  <div key={i} className="py-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-zinc-600">
+                        {item.product_name} &times; {item.quantity}
+                      </span>
+                      <Price amount={price * item.quantity} className="font-medium" />
+                    </div>
+                    {backorderNote && (
+                      <p className="mt-1.5 rounded border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs text-sky-800">
+                        {backorderNote}
+                      </p>
+                    )}
                   </div>
                 );
               })}

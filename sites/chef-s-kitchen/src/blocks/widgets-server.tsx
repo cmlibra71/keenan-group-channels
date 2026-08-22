@@ -48,6 +48,11 @@ function cardPurchaseProduct(p: AnyRecord): PurchaseProduct {
     salePrice: (p.salePrice as string) ?? null,
     inventoryLevel: (p.inventoryLevel as number) ?? 0,
     inventoryTracking: (p.inventoryTracking as string) ?? "none",
+    // Per-product buying controls (card 7vu2iEEZ). Unset reads as today's behaviour.
+    backorderPolicy: (p.backorderPolicy as string) ?? null,
+    restrictAddToQuote: p.restrictAddToQuote === true,
+    restrictAddToCart: p.restrictAddToCart === true,
+    hidePrice: p.hidePrice === true,
     availability: (p.availability as string) ?? "available",
     descriptionShort: null,
     images: [],

@@ -7,6 +7,7 @@ import {
   withShipping,
   findBelowCostLines,
   withLineCosts,
+  withBackorderedQuantities,
   memberSavings,
   type CartLineInput,
 } from "./order-draft.ts";
@@ -233,4 +234,65 @@ test("memberSavings: on a GST-inclusive channel the stored price IS the inc-GST 
   const s = memberSavings([line({ list_price: "110", sale_price: "88" })], true);
   assert.equal(s.savedIncTax, 22);
   assert.equal(s.savedExTax, 20);
+});
+
+test("withBackorderedQuantities stamps only the units that were not on the shelf", () => {
+  // Card 7vu2iEEZ. Stamped ONCE at order time: stock moves nightly, so a derived answer would
+  // quietly rewrite what the order says the customer was told.
+  const lines = buildLineItems(
+    [
+      // wants 2, none on hand → both on back order (Tim's own example)
+      { product_id: 1, variant_id: null, product_name: "Oven", product_sku: "A", quantity: 2, list_price: "100", sale_price: null },
+      // wants 5, 3 on hand → 2 short
+      { product_id: 2, variant_id: null, product_name: "Knife", product_sku: "B", quantity: 5, list_price: "10", sale_price: null },
+      // fully in stock → no stamp at all, so "none" stays distinguishable from "never worked out"
+      { product_id: 3, variant_id: null, product_name: "Tray", product_sku: "C", quantity: 1, list_price: "10", sale_price: null },
+      // untracked → never on back order
+      { product_id: 4, variant_id: null, product_name: "Cloth", product_sku: "D", quantity: 9, list_price: "5", sale_price: null },
+      // set to refuse out-of-stock buys → the order should never have got here, and is not stamped
+      { product_id: 5, variant_id: null, product_name: "Mixer", product_sku: "E", quantity: 3, list_price: "50", sale_price: null },
+    ] as CartLineInput[],
+    false
+  ).lineItems;
+
+  const stamped = withBackorderedQuantities(
+    lines,
+    new Map([
+      [1, { inventoryTracking: "product", inventoryLevel: 0, backorderPolicy: null }],
+      [2, { inventoryTracking: "product", inventoryLevel: 3, backorderPolicy: "allow_notify" }],
+      [3, { inventoryTracking: "product", inventoryLevel: 4, backorderPolicy: "allow_notify" }],
+      [4, { inventoryTracking: "none", inventoryLevel: 0, backorderPolicy: null }],
+      [5, { inventoryTracking: "product", inventoryLevel: 0, backorderPolicy: "deny" }],
+    ])
+  );
+
+  assert.equal(stamped[0].backorderedQuantity, 2);
+  assert.equal(stamped[1].backorderedQuantity, 2);
+  assert.equal(stamped[2].backorderedQuantity, undefined);
+  assert.equal(stamped[3].backorderedQuantity, undefined);
+  assert.equal(stamped[4].backorderedQuantity, undefined);
+});
+
+test("withBackorderedQuantities stamps a line the shopper was never told about", () => {
+  // "allow_silent" hides the note from the shopper — it does NOT hide the fact from the
+  // warehouse or the sales desk, who still have to know the goods are not here.
+  const lines = buildLineItems(
+    [{ product_id: 7, variant_id: null, product_name: "Fridge", product_sku: "F", quantity: 4, list_price: "900", sale_price: null }] as CartLineInput[],
+    false
+  ).lineItems;
+  const stamped = withBackorderedQuantities(
+    lines,
+    new Map([[7, { inventoryTracking: "product", inventoryLevel: 1, backorderPolicy: "allow_silent" }]])
+  );
+  assert.equal(stamped[0].backorderedQuantity, 3);
+});
+
+test("withBackorderedQuantities leaves a line whose product it could not read alone", () => {
+  // The stock lookup is best-effort at checkout: an order must never fail to place over it, and
+  // an unstamped line reads as "we never worked it out" rather than "nothing was on back order".
+  const lines = buildLineItems(
+    [{ product_id: 8, variant_id: null, product_name: "Pan", product_sku: "G", quantity: 2, list_price: "20", sale_price: null }] as CartLineInput[],
+    false
+  ).lineItems;
+  assert.equal(withBackorderedQuantities(lines, new Map())[0].backorderedQuantity, undefined);
 });
