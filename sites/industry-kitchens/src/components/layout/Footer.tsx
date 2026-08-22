@@ -13,6 +13,10 @@ export type FooterLink = { label: string; href: string };
 export type FooterColumn = {
   heading: string;
   links: FooterLink[];
+  /** A second headed group stacked under the column's own links. The portal's
+   *  Navigation editor writes it when a footer link holds links of its own
+   *  (card aveLhTwr); a storefront that ignored it would silently drop every
+   *  link staff put under that heading. */
   extraHeading?: string;
   extraLinks?: FooterLink[];
 };
@@ -162,7 +166,7 @@ export function Footer({
               <h4 className="text-sm font-bold uppercase tracking-wide text-zinc-900">
                 {col.heading}
               </h4>
-              <LinkList links={col.links} />
+              <LinkList links={col.links ?? []} />
               {col.extraHeading && col.extraLinks && col.extraLinks.length > 0 && (
                 <>
                   <h4 className="mt-6 text-sm font-bold uppercase tracking-wide text-zinc-900">
