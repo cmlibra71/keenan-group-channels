@@ -28,6 +28,7 @@ import {
   isNetTermsMethod,
 } from "@/lib/orders/order-presentation";
 import { orderDocumentName } from "@/lib/orders/order-document-name";
+import { optionSummary } from "@/lib/orders/line-options";
 import { customerOrderStage } from "@/lib/orders/order-status-label";
 import { readCustomerOrderNotes } from "@/lib/orders/customer-order-notes";
 import { EYEBROW_CLASS, PAGE_TITLE_CLASS, PANEL_TITLE_CLASS } from "@/lib/orders/order-page-styles";
@@ -176,22 +177,6 @@ function formatDate(value: string | Date | null | undefined): string {
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
-}
-
-/** Variant / option wording on a line, from the checkout's product_options snapshot. */
-function optionSummary(raw: unknown): string {
-  if (!Array.isArray(raw)) return "";
-  return raw
-    .map((entry) => {
-      if (!entry || typeof entry !== "object") return "";
-      const o = entry as Record<string, unknown>;
-      const name = String(o.display_name ?? o.name ?? "").trim();
-      const value = String(o.display_value ?? o.value ?? "").trim();
-      if (!value) return "";
-      return name ? `${name}: ${value}` : value;
-    })
-    .filter(Boolean)
-    .join(" · ");
 }
 
 export default async function OrderDetailPage({

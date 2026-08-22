@@ -50,6 +50,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
     allOptionsSelected,
     cartVariantId,
     selectedAddons,
+    addonGroupsUnanswered,
     displayBasePrice,
   } = useProductPurchase();
 
@@ -212,7 +213,12 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
                 <AddToQuoteButton
                   productId={productId}
                   variantId={cartVariantId}
-                  disabled={useGroupedMode && !allOptionsSelected}
+                  // A required extras group greys this button too (the provider folds it into
+                  // allOptionsSelected) and the group carries its own "Choose one".
+                  disabled={(useGroupedMode && !allOptionsSelected) || addonGroupsUnanswered.length > 0}
+                  // Card 0CDcCYmO. The extras panel sits above BOTH buttons: pressing this one
+                  // keeps the configuration, so the rep prices what the customer was looking at.
+                  addons={selectedAddons}
                 />
               )}
             </>
@@ -220,8 +226,10 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
             <AddToQuoteButton
               productId={productId}
               variantId={cartVariantId}
-              disabled={(useGroupedMode && !allOptionsSelected) || !kitReady}
+              disabled={(useGroupedMode && !allOptionsSelected) || !kitReady || addonGroupsUnanswered.length > 0}
               kitChoices={kitChoices}
+              // Card 0CDcCYmO — the picks travel with whichever button is pressed.
+              addons={selectedAddons}
               label="Add to Quote — request pricing"
             />
           )}

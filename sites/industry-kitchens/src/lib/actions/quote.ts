@@ -5,6 +5,13 @@ import { quoteService, quoteItemService, productService, productVariantService, 
 import { wantsStripeTestMode } from "@keenan/services";
 import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
 import { getSession } from "@/lib/auth";
+import {
+  readProductAddons,
+  resolveAddonSelection,
+  describeAddonSelection,
+  unansweredAddonGroups,
+  type AddonSelectionInput,
+} from "@keenan/services/product-addons";
 import { slidingWindowAllow } from "@/lib/rate-limit";
 import { resolveCustomerRequestState } from "@keenan/services";
 import {
@@ -79,8 +86,19 @@ async function countQuoteItems(quoteId: number): Promise<number> {
 export async function addToQuote(
   productId: number,
   variantId?: number | null,
-  kitChoices?: KitChoice[] | null
+  kitChoices?: KitChoice[] | null,
+  /**
+   * The paid extras ticked on the product page (card 0CDcCYmO): group key -> option keys.
+   *
+   * KEYS ONLY — every label and price is read back from the product's own definition here,
+   * exactly as the cart does it, so a hand-made request can neither invent an extra nor
+   * price one. They do NOT move this line's money: a quote line is priced by a rep, and
+   * `addToQuote` deliberately applies no member or quantity tier either. What they do is
+   * travel, so the rep can see the configuration the customer was looking at.
+   */
+  addons?: AddonSelectionInput | null
 ) {
+
   // getById returns snake_case — read sale_price (reading salePrice was undefined,
   // so quotes silently used RRP instead of the catalog sale price).
   // Same visibility gate as the cart: a product restricted away from this shopper can't be quoted.
@@ -130,6 +148,31 @@ export async function addToQuote(
     lineNotes = describeKitContents(kit);
   }
 
+  // ── Paid add-on extras (card 0CDcCYmO) ────────────────────────────────────────────────────
+  // The extras panel sits above BOTH buy buttons and tells the shopper the price updates as
+  // they tick, so pressing Add to Quote must not throw the configuration away: the rep would
+  // receive a bare machine and never learn which blades were wanted. The picks travel exactly
+  // as a BUNDLE build does — re-resolved here against the product's own definition, recorded on
+  // the line and written into the line note the quote editor already prints — and they move NO
+  // money, because a quote line is priced by a rep on review (the same reason member and
+  // quantity tiers are left off above).
+  const addonDefinition = readProductAddons(product.metafields);
+  const resolvedAddons = resolveAddonSelection(addonDefinition, addons);
+  // A required single-choice group is a question about the MACHINE, not about the cart, so it
+  // is asked on this button too — and asked HERE rather than only in the page, because a stale
+  // tab or a hand-posted action would otherwise quote a configuration nobody answered.
+  const unansweredGroups = unansweredAddonGroups(addonDefinition, addons);
+  if (unansweredGroups.length > 0) {
+    return {
+      error: `Please choose ${unansweredGroups.join(" and ")} before adding this to a quote.`,
+    };
+  }
+  const addonNote = describeAddonSelection(resolvedAddons);
+  if (resolvedAddons.length > 0) {
+    lineAttributes = { ...(lineAttributes ?? {}), addon_selection: resolvedAddons };
+    lineNotes = [lineNotes, addonNote].filter(Boolean).join("\n") || null;
+  }
+
   let listPrice = product.price;
   let catalogSalePrice: string | null = product.sale_price;
 
@@ -175,16 +218,36 @@ export async function addToQuote(
     id: number;
     quantity: number;
     customer_notes?: string | null;
+    attributes?: unknown;
   } | null;
 
   if (existing) {
-    // A quote may hold only ONE line per product+variant, so re-configuring a bundle REPLACES the
-    // captured configuration on the line the customer already has (and does not stack a second
-    // quantity onto a different build). Everything else keeps counting up as before.
-    const reconfigured = kit?.kind === "bundle" && lineNotes !== existing.customer_notes;
+    // A quote may hold only ONE line per product+variant, so re-configuring a line REPLACES the
+    // captured configuration on the one the customer already has (and does not stack a second
+    // quantity onto a different build). That now covers the paid extras as well as a bundle
+    // build: ticking different blades and pressing the button again is a re-configuration, not
+    // a second machine. Everything else keeps counting up as before.
+    const existingAttributes =
+      existing.attributes && typeof existing.attributes === "object" && !Array.isArray(existing.attributes)
+        ? (existing.attributes as Record<string, unknown>)
+        : {};
+    const hadAddons = Array.isArray(existingAttributes.addon_selection)
+      ? (existingAttributes.addon_selection as unknown[]).length > 0
+      : false;
+    const isConfigured = kit?.kind === "bundle" || resolvedAddons.length > 0 || hadAddons;
+    const reconfigured = isConfigured && lineNotes !== (existing.customer_notes ?? null);
+    // Clearing every extra is a re-configuration too, and it has to REMOVE the record — a line
+    // priced as a bare machine that still lists $725 of blades is exactly the stale record the
+    // cart half of this card refuses.
+    const nextAttributes =
+      lineAttributes || (hadAddons && resolvedAddons.length === 0)
+        ? // MERGED into the existing bag, never over it: `attributes` has other owners
+          // (quotes.md `quote-editor`), and a bundle re-configuration used to replace it whole.
+          { ...existingAttributes, ...(lineAttributes ?? {}), ...(resolvedAddons.length === 0 ? { addon_selection: null } : {}) }
+        : null;
     await quoteItemService.updateForParent(quote.id, existing.id, {
       quantity: reconfigured ? existing.quantity : existing.quantity + 1,
-      ...(lineAttributes ? { attributes: lineAttributes, customerNotes: lineNotes } : {}),
+      ...(nextAttributes ? { attributes: nextAttributes, customerNotes: lineNotes } : {}),
     });
   } else {
     await quoteItemService.createForParent(quote.id, {

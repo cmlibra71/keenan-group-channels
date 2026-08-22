@@ -18,6 +18,7 @@ import {
   addonSelectionKey,
   readStoredAddons,
   storedAddonsAsSelection,
+  unansweredAddonGroups,
   withAddonSurcharge,
   type AddonSelectionInput,
   type ResolvedAddon,
@@ -168,6 +169,28 @@ async function resolveAddonsForProduct(
 }
 
 /**
+ * A REQUIRED single-choice extras group nobody answered — refused HERE, not only in the page.
+ *
+ * The provider greys the buy button while such a group is unanswered, but the Product Brief's
+ * rule is that a refusal lives in the action as well ("or a stale form still writes the order"),
+ * which is exactly what `refuseCartQuantity` above does for the two per-product switches. It
+ * costs one read that is only taken when the product actually carries extras.
+ *
+ * Returns the message to refuse with, or null.
+ */
+async function refuseUnansweredAddons(
+  productId: number,
+  selection: AddonSelectionInput | null | undefined
+): Promise<string | null> {
+  const product = (await productService.getById(productId)) as { metafields?: unknown } | null;
+  const definition = readProductAddons(product?.metafields);
+  if (!definition) return null;
+  const missing = unansweredAddonGroups(definition, selection);
+  if (missing.length === 0) return null;
+  return `Please choose ${missing.join(" and ")} before adding this to your cart.`;
+}
+
+/**
  * The two per-product refusals (card 7vu2iEEZ), enforced HERE and not only in the page, because a
  * stale tab or a hand-posted action would otherwise book something staff switched off.
  *
@@ -203,25 +226,53 @@ export async function addToCart(
   const resolvedAddons = await resolveAddonsForProduct(productId, addons);
   const selectionKey = addonSelectionKey(resolvedAddons);
 
+  // A required extras group the shopper never answered is refused here as well as in the page
+  // (Product Brief §3), the same way the two per-product switches are. Only taken when the
+  // product carries extras at all.
+  const addonRefusal = await refuseUnansweredAddons(productId, addons);
+  if (addonRefusal) return { error: addonRefusal };
+
   // Is this product/variant WITH THESE EXTRAS already in the cart?
   //
   // A configuration is what identifies a line now, not the product alone: two Hallde machines
   // with different blades are two lines, and adding the same configuration twice is one line
   // of two. Matching on product+variant alone (which is all `findByProductVariant` can do)
   // would fold a second configuration into the first and charge the first one's extras twice.
-  const full = await cartService.getWithItems(cart.id);
-  const existing = ((full?.items ?? []) as {
+  type CartLineRow = {
     id: number;
     product_id: number;
     variant_id: number | null;
     quantity: number;
     modifier_selections?: unknown;
-  }[]).find(
-    (i) =>
-      i.product_id === productId &&
-      (i.variant_id ?? null) === (variantId ?? null) &&
-      addonSelectionKey(readStoredAddons(i.modifier_selections)) === selectionKey
-  );
+  };
+  const matchesThisConfiguration = (i: CartLineRow) =>
+    i.product_id === productId &&
+    (i.variant_id ?? null) === (variantId ?? null) &&
+    addonSelectionKey(readStoredAddons(i.modifier_selections)) === selectionKey;
+
+  // The ordinary add — no extras ticked, which is every product but a handful — takes the
+  // single-row lookup it always took rather than the cart's four-table join. Speed on this path
+  // is stakeholder-visible (Tim, 7 Aug demo) and this action runs on every Add to Cart on both
+  // storefronts. It falls through to the full read the moment the cheap answer could be wrong:
+  // `findByProductVariant` is LIMIT 1 with no ordering, so if the row it happens to return is a
+  // CONFIGURED line, a plain line of the same product may still be sitting behind it.
+  let existing: CartLineRow | undefined;
+  if (selectionKey === "") {
+    const cheap = (await cartItemService.findByProductVariant(
+      cart.id,
+      productId,
+      variantId
+    )) as CartLineRow | null;
+    if (!cheap) existing = undefined;
+    else if (readStoredAddons(cheap.modifier_selections).length === 0) existing = cheap;
+    else {
+      const full = await cartService.getWithItems(cart.id);
+      existing = ((full?.items ?? []) as CartLineRow[]).find(matchesThisConfiguration);
+    }
+  } else {
+    const full = await cartService.getWithItems(cart.id);
+    existing = ((full?.items ?? []) as CartLineRow[]).find(matchesThisConfiguration);
+  }
 
   const finalQty = existing ? existing.quantity + Math.max(1, quantity) : Math.max(1, quantity);
 
@@ -312,14 +363,20 @@ export async function updateCartItem(itemId: number, quantity: number) {
     // Re-pricing can throw (product lookup); never let it block the quantity
     // change — fall back to updating just the quantity, matching addToCart.
     let pricing: { listPrice: string; salePrice: string | null } | null = null;
+    // The re-resolved picks, which are written back with the price they produced — see below.
+    let lineAddons: ResolvedAddon[] = [];
+    // Whether this line has anything to do with paid extras AT ALL. A line that never carried
+    // any is left alone: `modifier_selections` also holds the variant-modifier OBJECT the REST
+    // API writes, and stamping `[]` over one would destroy a record this card never owned.
+    const storedAddons = readStoredAddons(item.modifier_selections);
     try {
       // The line's own extras ride the new quantity too (card 0CDcCYmO). They are RE-RESOLVED
       // from the product's current definition rather than read off the line, so an extra staff
       // have re-priced or withdrawn moves here exactly as the catalogue price does — the stored
       // picks are the record of WHAT was chosen, never of what it costs.
-      const lineAddons = await resolveAddonsForProduct(
+      lineAddons = await resolveAddonsForProduct(
         item.product_id,
-        storedAddonsAsSelection(readStoredAddons(item.modifier_selections))
+        storedAddonsAsSelection(storedAddons)
       );
       pricing = withAddonSurcharge(
         await resolveItemPricing(item.product_id, item.variant_id, quantity),
@@ -333,7 +390,18 @@ export async function updateCartItem(itemId: number, quantity: number) {
       cart.id,
       itemId,
       pricing
-        ? { quantity, listPrice: pricing.listPrice, salePrice: pricing.salePrice }
+        ? {
+            quantity,
+            listPrice: pricing.listPrice,
+            salePrice: pricing.salePrice,
+            // The RECORD moves with the money. An extra staff withdrew leaves the price here,
+            // and leaving the stored pick behind would print "+ Slicers: Slicer 4mm" on a cart
+            // row that was not charged for it — and stamp it onto `order_items.product_options`
+            // at checkout, where a rep or the warehouse reads it as a paid accessory.
+            ...(storedAddons.length > 0 || lineAddons.length > 0
+              ? { modifierSelections: lineAddons }
+              : {}),
+          }
         : { quantity }
     );
 
@@ -397,10 +465,21 @@ export async function repriceCartForSession(): Promise<{ repriced: number }> {
         );
         const sameList = pricing.listPrice === item.list_price;
         const sameSale = (pricing.salePrice ?? null) === (item.sale_price ?? null);
-        if (sameList && sameSale) continue;
+        // The picks are compared too, not only the two amounts: an extra staff withdrew and one
+        // they re-priced by exactly what another gained both leave the money where it was while
+        // the stored record is now wrong, and that record is what the cart prints and what the
+        // checkout stamps onto the order line.
+        const storedAddons = readStoredAddons(item.modifier_selections);
+        const sameAddons = addonSelectionKey(lineAddons) === addonSelectionKey(storedAddons);
+        if (sameList && sameSale && sameAddons) continue;
         await cartItemService.updateForParent(cart.id, item.id, {
           listPrice: pricing.listPrice,
           salePrice: pricing.salePrice,
+          // Left alone on a line that never carried extras — the column also holds the
+          // variant-modifier object the REST API writes, which is not ours to overwrite.
+          ...(storedAddons.length > 0 || lineAddons.length > 0
+            ? { modifierSelections: lineAddons }
+            : {}),
         });
         repriced++;
       } catch (e) {

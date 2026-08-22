@@ -155,6 +155,8 @@
     "lib/mega-menu.ts",
     "lib/orders/customer-order-notes.test.ts",
     "lib/orders/customer-order-notes.ts",
+    "lib/orders/line-options.test.ts",
+    "lib/orders/line-options.ts",
     "lib/orders/order-access.test.ts",
     "lib/orders/order-access.ts",
     "lib/orders/order-document-name.test.ts",

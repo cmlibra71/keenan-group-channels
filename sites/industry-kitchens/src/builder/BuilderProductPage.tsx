@@ -81,8 +81,15 @@ function ActionsBridge({
     [setCartCount, open]
   );
   const countingAddToQuote = React.useCallback(
-    async (pid: number, variantId: number | null) => {
-      const res = await addToQuote(pid, variantId);
+    async (
+      pid: number,
+      variantId: number | null,
+      // The shopper's ticked extras (card 0CDcCYmO). A quote line is priced by a rep, so
+      // these move no money here — they ride the line as the record of what was asked for,
+      // the same way a bundle build does.
+      addons?: AddonSelectionInput
+    ) => {
+      const res = await addToQuote(pid, variantId, null, addons);
       if (res && "quoteCount" in res && typeof res.quoteCount === "number") {
         setQuoteCount(res.quoteCount);
         open("quote");
