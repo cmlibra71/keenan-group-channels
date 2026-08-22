@@ -54,13 +54,16 @@ export function SilverChefPanel() {
 
   // No price to rent: the buy box is already offering a quote instead.
   //
-  // NOTE, and it is a real gap rather than a decision: `products.hide_price`
-  // (card 7vu2iEEZ) is not honoured anywhere on the storefront yet, so it
-  // cannot be honoured here either — the purchase scope carries no such flag.
-  // The weekly figure is the price divided by a constant, so the day that flag
-  // starts working this panel is a SECOND place a hidden price would be
-  // published and must hide with it. Recorded on `sf-product-page` in the
-  // behaviour register so the card that builds it cannot miss this surface.
+  // This is ALSO how a hidden price hides its weekly rent, and that is money, not
+  // cosmetics: the rent is the shopper's price divided by a constant, so publishing
+  // it while suppressing the price would not suppress the price — it would only make
+  // it harder to read. `products.hide_price` (card 7vu2iEEZ) is honoured by MASKING
+  // `displayPrice`/`displaySalePrice`/`activeMemberPrice` in the shared purchase
+  // provider, so the three values this panel reads are already 0/null/null by the
+  // time they reach `productFinanceOffer`, whose `visible <= 0` guard returns null.
+  // Do not "fix" that by reading a raw price here: the masking is deliberately the
+  // ONLY seam, because a dozen readers take these values and one missed branch is a
+  // leaked price. Recorded on `sf-product-page` in the behaviour register.
   if (!offer) return null;
 
   const isSkope = offer.funder === "skope";
