@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing url parameter" }, { status: 400 });
   }
 
-  // SSRF guard: only fetch https images from our own S3 buckets.
+  // SSRF guard: only fetch https images from an allowlisted bucket — our own two wholesale, plus
+  // Zoey's shared media bucket UNDER our own site's product-media prefix only (see image-origin.ts).
   if (!isAllowedImageUrl(url)) {
     return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
   }
