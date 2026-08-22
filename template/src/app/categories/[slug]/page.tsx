@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { ChevronRight, Package } from "lucide-react";
+import { isAllowedImageUrl } from "@/lib/image-origin";
 import {
   getCategoryBySlug,
   getCategoryListing,
@@ -290,16 +291,28 @@ export default async function CategoryPage({
         <div className="mb-10">
           <h2 className="text-lg font-semibold text-zinc-900 mb-4">Subcategories</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {subcategories.map((sub: { id: number; name: string; slug: string; imageUrl?: string | null }) => (
+            {/*
+              `image_url`, not `imageUrl`: the service snake-cases every key on
+              the way out (see CategoryChildSlim). The row is left un-annotated
+              on purpose — an inline shape here is what hid the bug, because a
+              hand-written optional key that never arrives compiles clean and
+              renders the placeholder for every tile. (Card 7LjU5UDE.)
+
+              `isAllowedImageUrl` is the same "usable" test the department
+              strip uses: /api/image 403s anything outside our own buckets and
+              a 403 draws the browser's broken-image glyph, which is the tile
+              Steve was explicitly promised we would not ship (gRLRF8yu).
+            */}
+            {subcategories.map((sub) => (
               <Link
                 key={sub.id}
                 href={`/categories/${sub.slug}`}
                 className="group flex items-center gap-3 rounded-lg border border-zinc-200 p-3 hover:border-zinc-400 hover:shadow-sm transition-all"
               >
-                {sub.imageUrl ? (
+                {sub.image_url && isAllowedImageUrl(sub.image_url) ? (
                   <div className="relative h-12 w-12 flex-shrink-0">
                     <Image
-                      src={sub.imageUrl}
+                      src={sub.image_url}
                       alt={sub.name}
                       fill
                       sizes="48px"

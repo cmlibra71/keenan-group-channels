@@ -8,6 +8,8 @@ import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR }
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { getCartUuid, setCartUuid } from "@/lib/cart";
 import { brandIdsForProducts } from "@/lib/checkout/free-shipping-brands";
+import { backorderFactsForProducts, backorderFactsForProduct } from "@/lib/cart/backorder-facts";
+import { availableUnits, canPurchaseQuantity, resolveBackorderPolicy } from "@keenan/services/backorder";
 import { getSession } from "@/lib/auth";
 import { pickBestBulkUnit, layerCartPrice } from "@/lib/pricing/cart-pricing";
 
@@ -136,6 +138,25 @@ async function resolveItemPricing(
   return layerCartPrice({ listPrice, catalogSalePrice, suppress, memberSalePrice, bulkUnit });
 }
 
+/**
+ * The two per-product refusals (card 7vu2iEEZ), enforced HERE and not only in the page, because a
+ * stale tab or a hand-posted action would otherwise book something staff switched off.
+ *
+ * Stock alone never refuses: an empty shelf is a back order, and the cart says so. Only a product
+ * explicitly set to "No - do not let this product be purchased when Out of Stock" is turned away,
+ * and only for the units that are not on the shelf.
+ */
+const CART_RESTRICTED_ERROR = "This product isn't available to order online — please add it to a quote.";
+const CART_QUANTITY_ERROR = "This product is not available in the requested quantity.";
+
+async function refuseCartQuantity(productId: number, quantity: number): Promise<string | null> {
+  const facts = await backorderFactsForProduct(productId);
+  if (!facts) return null; // unknown product: leave it to the pricing lookup below to fail properly
+  if (facts.restrictAddToCart) return CART_RESTRICTED_ERROR;
+  if (!canPurchaseQuantity(facts, quantity)) return CART_QUANTITY_ERROR;
+  return null;
+}
+
 export async function addToCart(productId: number, variantId?: number | null, quantity: number = 1) {
   // "What we show is what we accept" — a product restricted away from this shopper is not addable,
   // even by poking the action directly (the listing/PDP guards are UX; THIS is the enforcement).
@@ -150,6 +171,9 @@ export async function addToCart(productId: number, variantId?: number | null, qu
   } | null;
 
   const finalQty = existing ? existing.quantity + Math.max(1, quantity) : Math.max(1, quantity);
+
+  const refusal = await refuseCartQuantity(productId, finalQty);
+  if (refusal) return { error: refusal };
 
   // Price for the FINAL quantity (so crossing a bulk tier re-prices the whole line).
   let pricing: { listPrice: string; salePrice: string | null };
@@ -203,12 +227,20 @@ export async function updateCartItem(itemId: number, quantity: number) {
     // getWithItems returns snake_case rows — read product_id / variant_id (reading
     // the camelCase keys yielded undefined, so re-pricing threw on every change).
     const item = full?.items.find((i: { id: number }) => i.id === itemId) as
-      | { id: number; product_id: number; variant_id: number | null }
+      | { id: number; product_id: number; variant_id: number | null; quantity: number }
       | undefined;
 
     // Line already gone (raced with a concurrent remove) — nothing to update.
     if (!item) {
       return { success: true, cartCount: await countCartItems(cart.id) };
+    }
+
+    // Same refusal as the add, so a "+" cannot walk past a limit the add refused (card 7vu2iEEZ).
+    // Only an INCREASE is judged: a line already in the basket when staff changed the setting must
+    // still be reducible and removable, or the shopper is stuck with a cart they cannot empty.
+    if (quantity > item.quantity) {
+      const refusal = await refuseCartQuantity(item.product_id, quantity);
+      if (refusal) return { error: refusal };
     }
 
     // Re-pricing can throw (product lookup); never let it block the quantity
@@ -322,9 +354,24 @@ const readCart = cache(async () => {
   // route re-render — removing the last promoted line must take the "FREE" away
   // there and then. One batched lookup per cart read.
   const brands = await brandIdsForProducts(visible.map((i) => i.product_id));
+
+  // Back-order facts per line (card 7vu2iEEZ). The SHORTFALL is not precomputed here: the
+  // quantity buttons move optimistically in the client, so the row is handed the stock it can
+  // have without waiting and works the message out from the quantity actually on screen. That is
+  // what makes "2 of the items will be backordered" follow a click instead of lagging a round
+  // trip behind it. `available_units` is null for an untracked product — no ceiling, not zero.
+  const stock = await backorderFactsForProducts(visible.map((i) => i.product_id));
   return {
     ...full,
-    items: visible.map((i) => ({ ...i, brand_id: brands.get(i.product_id) ?? null })),
+    items: visible.map((i) => {
+      const facts = stock.get(i.product_id);
+      return {
+        ...i,
+        brand_id: brands.get(i.product_id) ?? null,
+        available_units: facts ? availableUnits(facts) : null,
+        backorder_policy: facts ? resolveBackorderPolicy(facts.backorderPolicy) : null,
+      };
+    }),
   };
 });
 

@@ -90,8 +90,16 @@ export async function addToQuote(
     price: string;
     sale_price: string | null;
     metafields?: unknown;
+    restrict_add_to_quote?: boolean | null;
   } | null;
   if (!product) return { error: "Product not found" };
+
+  // Zoey "Restrict Add to Quote" (card 7vu2iEEZ). The button is not offered for this product, so
+  // reaching here means a stale page or a hand-posted action — refused HERE, as the cart refuses
+  // its own restricted products, rather than trusting the page that drew the button.
+  if (product.restrict_add_to_quote === true) {
+    return { error: "This product can't be added to a quote. Please contact us about it." };
+  }
 
   // ── Kit products (Zoey grouped / bundle, authored in the portal) ──────────────────────────
   // A BUNDLE is a modular configuration: it is not priced live, its picks come through as a
