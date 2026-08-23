@@ -71,9 +71,10 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
         <div className="bg-brand">
           <div className="container-page">
             {/* min-height, not height: the masthead GROWS to hold the logo
-                (card kiJa7dug — Steve wants it at least 350px across on
-                desktop) rather than cropping or squashing the lockup. 72/78px
-                stays the FLOOR so a small logo leaves the bar as it was. */}
+                rather than cropping or squashing the lockup. 72/78px stays the
+                FLOOR so a small logo leaves the bar as it was — with the 150px
+                box below (card bf2w6JFe) the bar settles at 166px on desktop
+                instead of the 331px Tim called too large. */}
             <div className="flex min-h-[72px] items-center gap-5 py-2 lg:min-h-[78px] lg:gap-6">
               <MobileNavDrawer
                 departments={megaMenu.departments}
@@ -88,24 +89,30 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
                   as a light block here; that is the uploaded asset, not this
                   fallback.
 
-                  SIZED BY WIDTH, not by height (card kiJa7dug): "at least
-                  350px across" is a width, and the setting can hold any shape
-                  of artwork — CD's is a stacked lockup, IK's a wide wordmark —
-                  so a fixed height would give each of them a different width.
-                  `h-auto` keeps the real artwork's aspect ratio; the
-                  width/height props are only Next's pre-load hint and its
-                  srcSet basis (350 buys the 400w/800w sources a 350px box
-                  needs), the loaded image's own ratio wins after that.
+                  SIZED TO A 150px SQUARE BOX from `sm` up (card bf2w6JFe, Tim
+                  2026-08-23: "the logo at the top of Chefs Depot is now too
+                  large, can we change it to 150px square"). This SUPERSEDES the
+                  350px-wide sizing of card kiJa7dug ON CHEFS DEPOT ONLY —
+                  Industry Kitchens keeps 350px, so do not "restore parity" by
+                  copying either header onto the other. `object-contain` keeps
+                  the artwork's own aspect ratio inside the box, so a stacked
+                  lockup letterboxes against the green rather than being
+                  stretched or cropped; the box is square because the setting
+                  can hold any shape of artwork and 150 is the cap in BOTH
+                  directions. The width/height props are only Next's pre-load
+                  hint and its srcSet basis; the loaded image's own ratio wins.
 
-                  The mobile width is `min(150px, 25vw)`, NOT a flat 150px:
-                  this Link is `shrink-0`, so on a 320px-wide screen (iPhone SE
-                  / a 640px window at 200% zoom) a 150px logo pushed the CART
-                  control off the right edge — and `html,body{overflow-x:hidden}`
-                  meant the shopper could not scroll to it. `max-w-full` does
-                  NOT catch that: it resolves against a shrink-wrapped parent,
-                  so it constrains nothing. The vw term is what makes the logo
-                  give width back at the responsive floor. Re-measure the cart's
-                  right edge at 320px before raising it. */}
+                  Below `sm` the sizing is UNCHANGED from kiJa7dug —
+                  `w-[min(150px,25vw)]` with `h-auto`, deliberately not the
+                  square box. This Link is `shrink-0`, so on a 320px-wide screen
+                  (iPhone SE / a 640px window at 200% zoom) a flat 150px logo
+                  pushed the CART control off the right edge — and
+                  `html,body{overflow-x:hidden}` meant the shopper could not
+                  scroll to it. `max-w-full` does NOT catch that: it resolves
+                  against a shrink-wrapped parent, so it constrains nothing. The
+                  vw term is what makes the logo give width back at the
+                  responsive floor, and `h-auto` keeps the phone bar short.
+                  Re-measure the cart's right edge at 320px before raising it. */}
               <Link href="/" className="shrink-0" aria-label={storeName}>
                 <Image
                   src={logoUrl || "/brand/chefs-depot-logo-white.png"}
@@ -113,7 +120,7 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
                   height={269}
                   width={350}
                   priority
-                  className="h-auto w-[min(150px,25vw)] max-w-full object-contain sm:w-[200px] lg:w-[350px]"
+                  className="h-auto w-[min(150px,25vw)] max-w-full object-contain sm:h-[150px] sm:w-[150px]"
                 />
               </Link>
 
