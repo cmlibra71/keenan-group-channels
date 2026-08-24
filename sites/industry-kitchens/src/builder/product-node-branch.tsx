@@ -14,6 +14,8 @@ import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { withSilverChefNode } from "@/builder/silverchef-node";
 import { withImageNoticeNode } from "@/builder/product-image-notice";
+import { withCdMemberPricingNode } from "@/builder/cd-member-pricing-node";
+import { buildCdMembershipData, resolveCdLadderLevelId } from "@/lib/pricing/cd-member-pricing.server";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 
 // ============================================================================
@@ -46,6 +48,8 @@ export interface ProductMemberContext {
   /** Non-members get a savings PERCENTAGE for the join teaser — never a price. */
   teaserCustomerGroupId: number | null;
   accountId: number | null;
+  /** The buying-group rung this shopper prices at (card gk23c1VK); null off-ladder. */
+  ladderLevelId?: string | null;
 }
 
 export interface ProductNodeBranchArgs {
@@ -84,6 +88,17 @@ export async function renderProductNodeBranch({
   // this because its flag has been on since the template shipped.
   if (!forceNodes && !draft && !(await getFeatureFlag("node_product_template_enabled"))) return null;
 
+  // The buying-group rung, resolved ONCE and handed to BOTH the pricing call
+  // below and the membership panel further down. The engine prices what the buy
+  // box charges from it; the panel labels that figure with it. Split them and a
+  // Level 4 member is charged at Level 1 with "Level 4" printed beside it.
+  const ladderLevelId =
+    member.ladderLevelId ??
+    (await resolveCdLadderLevelId({
+      isMember: member.isMember,
+      accountId: member.accountId,
+    }).catch(() => null));
+
   const payload = await getProductPageData(slug, {
     memberContext: {
       customerGroupId: member.customerGroupId,
@@ -91,6 +106,7 @@ export async function renderProductNodeBranch({
       loggedIn: member.loggedIn,
       planPrice: member.planPrice,
       teaserCustomerGroupId: member.teaserCustomerGroupId,
+      ladderLevelId,
     },
     // Per-account contract prices override every layer; the payload's product +
     // related cards and its variant pricing are all resolved with the account
@@ -130,7 +146,31 @@ export async function renderProductNodeBranch({
   // than being written into the stored trees so there is nothing to undo on a rollback and a site
   // that re-authors its buy row keeps the behaviour. It wraps the PLACED nodes as well as the
   // stored ones, so a buy control introduced by a future placed node is guarded too.
-  const nodeTree = guardBuyControls(withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE)));
+  // Chefs Depot's three prices and the spend-more-save-more ladder (card Nyp8bkPm) are
+  // PLACED here for the same reason: the panel has to reach every product page on a site
+  // that renders from a stored tree. It goes after the SilverChef panel, so the money
+  // block reads price, weekly rent, then ladder. The leaf renders NULL on a channel with
+  // no ladder switched on, on a product whose price is hidden and on a SKU with no IK
+  // trade row, so placing it on every product page is safe.
+  const nodeTree = guardBuyControls(
+    withCdMemberPricingNode(withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE)))
+  );
+
+  // The panel's figures, resolved ONCE per request. A sealed native cannot read the
+  // database, so the prices and this shopper's ladder position ride the route's own
+  // `nativeData` bag, exactly as the kit contents do. Null unless this channel has the
+  // buying-group ladder switched on, which is no channel until one is.
+  const cdMembership = await buildCdMembershipData({
+    isMember: member.isMember,
+    loggedIn: member.loggedIn,
+    accountId: member.accountId,
+    planPrice: member.planPrice,
+    ladderLevelId,
+    product: {
+      price: payload.product.price ?? null,
+      variants: payload.product.variants ?? [],
+    },
+  }).catch(() => null);
 
   const namedStyles = await getNamedStyles().catch(() => ({}));
   const components = guardBuyControlsInComponents(
@@ -180,7 +220,7 @@ export async function renderProductNodeBranch({
         components={components}
         jsFunctions={jsFunctions}
         callResults={callResults}
-        nativeData={nativeData}
+        nativeData={{ ...(nativeData ?? {}), cdMembership }}
       />
     </div>
   );

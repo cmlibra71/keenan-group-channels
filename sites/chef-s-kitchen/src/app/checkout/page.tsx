@@ -289,7 +289,6 @@ export default async function CheckoutPage() {
 
   // Check membership status for checkout banners
   let showMemberBanner = false;
-  let estimatedSavings = 0;
   let isMember = false;
   let memberSavings = 0;
 
@@ -311,7 +310,6 @@ export default async function CheckoutPage() {
       const plans = await getSubscriptionPlans();
       if (plans.length > 0) {
         showMemberBanner = true;
-        estimatedSavings = Math.round(subtotal * (checkoutSettings.memberSavingsPercentage / 100) * 100) / 100;
       }
     }
   }
@@ -334,11 +332,11 @@ export default async function CheckoutPage() {
         </div>
       )}
 
-      {showMemberBanner && estimatedSavings > 0 && (
+      {showMemberBanner && (
         <div className="mb-6 flex items-center justify-between bg-member-bg border border-member/40 rounded-lg px-4 py-3">
           <div className="flex items-center gap-2 text-sm text-member-text">
             <Crown className="h-4 w-4 text-member-text shrink-0" />
-            Members save up to ${estimatedSavings.toFixed(2)} on this order.
+            Members buy every line lower, and lower again as their twelve-month spend grows.
           </div>
           <Link
             href="/membership"

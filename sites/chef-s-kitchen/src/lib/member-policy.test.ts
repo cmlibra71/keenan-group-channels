@@ -25,9 +25,17 @@ test("guest carries NO pricing group", () => {
   assert.equal(d.loggedIn, false);
 });
 
-test("guest keeps the teaser group and plan price so the join funnel survives", () => {
+test("NO guest carries a teaser group — the savings percentage is retired", () => {
+  // Card Nyp8bkPm. A member's price is interpolated between two trade prices whose
+  // spread differs SKU by SKU, so there is no single percentage to publish and
+  // Tim's pack forbids inventing one. Null here is what stops "Members save up to
+  // X%" rendering on the product page and on every listing tile.
   const d = resolveMemberPricing(facts());
-  assert.equal(d.teaserCustomerGroupId, BASE_GROUP);
+  assert.equal(d.teaserCustomerGroupId, null);
+});
+
+test("the guest still gets the plan price, so the join pitch keeps its $14.95", () => {
+  const d = resolveMemberPricing(facts());
   assert.equal(d.planPrice, "14.95");
 });
 
