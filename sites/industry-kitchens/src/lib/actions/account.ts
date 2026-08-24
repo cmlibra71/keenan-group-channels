@@ -16,7 +16,7 @@ import {
   type ContactAddressData,
 } from "@/lib/contact-addresses";
 import { defaultsForNewAddress } from "@/lib/checkout/save-address";
-import { getStripeProvider } from "@/lib/stripe";
+import { stripeProviderForScope, stripeScopeOf } from "@/lib/stripe";
 import { getContactPermissions } from "@/lib/role-permissions";
 import {
   mayManageAddressBook,
@@ -179,7 +179,12 @@ export async function updateCustomerProfile(input: {
       const subs = await subscriptionService.listForContact(session.contactId, CHANNEL_ID);
       const sub = subs.find((s) => s.status === "active" || s.status === "pending");
       if (sub?.stripe_customer_id) {
-        const stripe = await getStripeProvider();
+        // The Stripe customer lives in the account the SUBSCRIPTION was created
+        // in, which for anyone who joined before this storefront had its own
+        // Stripe account is the shared one (card OHDx84DK). Asking the new
+        // account about them returns "No such customer" and the profile save
+        // would log a failure on every edit.
+        const stripe = await stripeProviderForScope(stripeScopeOf(sub));
         await stripe.updateCustomer(sub.stripe_customer_id as string, {
           name: `${firstName} ${lastName}`.trim(),
           phone: phone || undefined,

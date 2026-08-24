@@ -10,8 +10,9 @@ import {
   contactService,
   wantStripeTestMode,
 } from "@/lib/store";
+import { STRIPE_SCOPE_GLOBAL } from "@keenan/services";
 import { createAddressForContact } from "@/lib/contact-addresses";
-import { getStripeProvider } from "@/lib/stripe";
+import { stripeProviderForScope, stripeScopeOf } from "@/lib/stripe";
 import { normaliseAuState, isValidAuPostcode } from "@/lib/checkout/au-address";
 
 // Per-customer in-flight guard (per container): the active/pending check and the
@@ -61,7 +62,16 @@ export async function createSubscription(planId: number): Promise<{
       return { success: false, error: "You already have an active subscription" };
     }
 
-    const stripeProvider = await getStripeProvider();
+    // THE PLAN'S ACCOUNT DECIDES, not today's channel rule (card OHDx84DK). The
+    // customer, the price and the subscription must all be in ONE Stripe
+    // account: a plan's price id is only valid in the account it was minted in,
+    // and presenting it to another one fails "No such price" — which is what
+    // would happen to every new Chefs Depot member the moment CD's own keys were
+    // entered, because the live plan was minted on the shared account. Moving the
+    // plan across is an in-place re-mint in the portal (Membership > Plans), so
+    // there is still exactly ONE Chefs Depot plan and one member tier.
+    const planScope = stripeScopeOf(plan);
+    const stripeProvider = await stripeProviderForScope(planScope);
 
     // Recover any stranded "pending" record before creating a new one. A pending
     // row is written before the customer confirms payment, so an abandoned or
@@ -79,8 +89,12 @@ export async function createSubscription(planId: number): Promise<{
     const pendingSub = allSubs.find((s) => s.status === "pending");
     if (pendingSub) {
       const stripeSubId = pendingSub.stripe_subscription_id as string | null;
+      // Read the stranded subscription on the account IT lives in, which need
+      // not be the account the plan points at now (card OHDx84DK).
       const remote = stripeSubId
-        ? await stripeProvider.getSubscription(stripeSubId).catch(() => null)
+        ? await stripeProviderForScope(stripeScopeOf(pendingSub))
+            .then((p) => p.getSubscription(stripeSubId))
+            .catch(() => null)
         : null;
 
       if (remote && (remote.status === "active" || remote.status === "trialing")) {
@@ -164,7 +178,13 @@ export async function createSubscription(planId: number): Promise<{
       status: "pending",
       stripeSubscriptionId: stripeSub.subscriptionId,
       stripeCustomerId,
-      ...((await wantStripeTestMode()) ? { metafields: { test_mode: true } } : {}),
+      // The account this subscription lives in, for its whole life. Cancel, the
+      // billing portal and the Stripe-customer sync all resolve from here, so it
+      // keeps working after this storefront moves onto its own Stripe account.
+      metafields: {
+        stripe_account_scope: planScope ?? STRIPE_SCOPE_GLOBAL,
+        ...((await wantStripeTestMode()) ? { test_mode: true } : {}),
+      },
     });
 
     refresh(); // acting user's view refreshes; shared data cache stays intact
@@ -341,7 +361,10 @@ export async function completeMembershipProfile(input: {
     // Best-effort Stripe enrichment — never fail the onboarding on this.
     try {
       if (sub.stripe_customer_id) {
-        const stripeProvider = await getStripeProvider();
+        // The Stripe customer lives in the account the SUBSCRIPTION was created
+        // in (card OHDx84DK) — for anyone who joined before this storefront had
+        // its own account, that is the shared one.
+        const stripeProvider = await stripeProviderForScope(stripeScopeOf(sub));
         await stripeProvider.updateCustomer(sub.stripe_customer_id as string, {
           name: `${firstName} ${lastName}`.trim() || undefined,
           phone,
@@ -395,7 +418,8 @@ export async function createBillingPortalSession(returnUrl: string): Promise<{
       return { success: false, error: "No active subscription found" };
     }
 
-    const stripeProvider = await getStripeProvider();
+    // The portal shows THIS subscription, so open it on the account it lives in.
+    const stripeProvider = await stripeProviderForScope(stripeScopeOf(sub));
     const url = await stripeProvider.createBillingPortalSession(
       sub.stripe_customer_id,
       returnUrl
@@ -433,7 +457,9 @@ export async function cancelSubscription(): Promise<{
 
     // Cancel via Stripe (at period end)
     if (sub.stripe_subscription_id) {
-      const stripeProvider = await getStripeProvider();
+      // Cancel on the account the subscription lives in — Stripe cannot move a
+      // subscription between accounts (card OHDx84DK).
+      const stripeProvider = await stripeProviderForScope(stripeScopeOf(sub));
       await stripeProvider.cancelSubscription(sub.stripe_subscription_id, true);
     }
 

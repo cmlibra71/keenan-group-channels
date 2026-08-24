@@ -245,9 +245,11 @@ export default async function CheckoutPage() {
     canSaveNewAddress = mayFileAddressInBook(await getContactPermissions(session.contactId));
   }
 
-  // Resolve the channel's Stripe gateway (test-vs-live aware, prod-safe fallback)
-  // from the global payment_gateways setting. All channels share one Stripe
-  // account; segmentation happens via metadata.
+  // Resolve THIS CHANNEL's Stripe gateway (test-vs-live aware, prod-safe
+  // fallback): its own `channel_settings.payment_gateways` entries when it has
+  // them, the global `store_settings` row when it does not (card OHDx84DK).
+  // Metadata still segments — every intent carries channel_id — but it no longer
+  // decides which account the money lands in.
   //
   // `testSession` is true ONLY while this browser holds an ephemeral test checkout
   // session (a short-lived signed cookie; nothing stored anywhere, no setting a
@@ -257,12 +259,24 @@ export default async function CheckoutPage() {
   const { gateway: stripeGateway, testSession } = await resolveStripeGateway();
   const stripePublishableKey: string | undefined = stripeGateway?.credentials?.publishable_key;
 
-  // A test checkout session that cannot resolve a TEST gateway must refuse to take
-  // payment, never fall back to live: this browser was told no money would be
-  // taken. Drop the card option entirely rather than mounting Elements on a live
-  // key or leaving a Pay button that would charge a real card.
-  const cardUnavailableInTestSession = testSession && !stripePublishableKey;
-  const offeredPaymentMethods = cardUnavailableInTestSession
+  // NO PUBLISHABLE KEY, NO CARD OPTION — whatever the reason (card OHDx84DK).
+  //
+  // This used to fire only inside a test checkout session. That was a hole the
+  // moment a storefront could hold its own Stripe account: paste this shop's
+  // LIVE keys with the Add-gateway modal's "test mode" box still ticked and the
+  // channel has entries but no live one, `selectChannelGateway` correctly
+  // refuses to borrow the other storefront's account, and there is no key. The
+  // shopper was still OFFERED "Credit / Debit Card", saw no card field
+  // underneath it, pressed Place Order — and `placeOrder` writes the order row
+  // BEFORE it calls Stripe, so the slip stranded unpaid orders with nothing on
+  // screen to explain them.
+  //
+  // The original reason still holds too: a test session that cannot resolve a
+  // TEST gateway must refuse rather than fall back to live, because this browser
+  // was told no money would be taken.
+  const cardUnavailable = !stripePublishableKey;
+  const cardUnavailableInTestSession = testSession && cardUnavailable;
+  const offeredPaymentMethods = cardUnavailable
     ? paymentMethods.filter((m) => m.id !== "stripe")
     : paymentMethods;
 

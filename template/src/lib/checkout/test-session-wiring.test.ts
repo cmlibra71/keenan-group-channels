@@ -88,6 +88,19 @@ test("a test session that cannot resolve a test gateway refuses the card", () =>
   assert.match(pageSrc, /paymentMethods=\{offeredPaymentMethods\}/);
 });
 
+test("no publishable key at all means no card option, test session or not", () => {
+  // Card OHDx84DK. This used to be gated on `testSession`, which left a hole the
+  // moment a storefront could hold its own Stripe account: entries but no LIVE
+  // one (the Add-gateway modal defaults to test mode) resolves to no gateway at
+  // all, the card option was still drawn with no field under it, and placeOrder
+  // writes the order row BEFORE calling Stripe — stranded unpaid orders.
+  assert.match(pageSrc, /const cardUnavailable = !stripePublishableKey;/);
+  assert.match(pageSrc, /const offeredPaymentMethods = cardUnavailable\n/);
+  // The test-session banner still has its own, narrower flag.
+  assert.match(pageSrc, /const cardUnavailableInTestSession = testSession && cardUnavailable;/);
+  assert.match(pageSrc, /testModeCardUnavailable=\{cardUnavailableInTestSession\}/);
+});
+
 test("the banner names the test cards a tester needs", () => {
   for (const card of [
     "4242 4242 4242 4242",

@@ -1098,9 +1098,11 @@ export async function placeOrder(
   }
 
   // For Stripe: create PaymentIntent and return client secret for browser confirmation.
-  // Uses the global paymentService — credentials live in store_settings.payment_gateways
-  // (configured at /dashboard/settings/payments in the portal). Channel segmentation
-  // happens via metadata stamped by paymentService.
+  // paymentService resolves the gateway PER CHANNEL (card OHDx84DK): this
+  // storefront's own `channel_settings.payment_gateways` entries when it has
+  // them, the global `store_settings.payment_gateways` row when it does not.
+  // Both are configured at /dashboard/settings/payments in the portal. Metadata
+  // stamped by paymentService still identifies the channel on every intent.
   if (effectivePaymentMethod === "stripe") {
     try {
       const { clientSecret, billingDetails } = await paymentService.createStripePaymentIntent(order.id, {

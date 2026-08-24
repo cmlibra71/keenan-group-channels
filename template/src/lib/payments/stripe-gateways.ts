@@ -9,10 +9,10 @@ export type StripeGatewayEntry = {
   testMode?: boolean;
 };
 
-/** The enabled Stripe entries from a raw payment_gateways setting value. */
-export function enabledStripeGateways(gateways: StripeGatewayEntry[]): StripeGatewayEntry[] {
-  return gateways.filter((g) => g.provider === "stripe" && g.enabled !== false);
-}
+// The enabled-entry filter that used to live here is now `enabledGatewaysOfProvider`
+// in @keenan/services (card OHDx84DK): with a channel list AND a global list to
+// filter, and a portal that filters the same lists, a second copy of "what counts
+// as enabled" is a second answer waiting to happen.
 
 /**
  * What the browser hands `stripe.confirmCardPayment()` — card b88eIfaS.
@@ -25,9 +25,11 @@ export function enabledStripeGateways(gateways: StripeGatewayEntry[]): StripeGat
  * provided" and every billing/shipping/IP distance "Not available".
  *
  * `billing_details.email` is a Radar signal and does NOT make Stripe send anything.
- * It is deliberately NOT `receipt_email`: one Stripe account serves both storefronts
- * under Industry Kitchens' business name, so a Stripe-sent receipt is always wrong on
- * Chefs Depot (card EInDib45), and the account's "Successful payments" switch is still
+ * It is deliberately NOT `receipt_email`: a Stripe-sent receipt is a second branded
+ * mail on top of ours whichever account sends it (card EInDib45 — found when one
+ * account served both storefronts under Industry Kitchens' business name, and the
+ * rule survives card OHDx84DK giving a storefront its own account). The account's
+ * "Successful payments" switch is still
  * on. The shopper's one email per order is our own branded confirmation.
  *
  * The details come back from `placeOrder`, derived from the order that was just
