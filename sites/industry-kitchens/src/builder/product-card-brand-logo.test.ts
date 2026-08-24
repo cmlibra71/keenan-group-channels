@@ -9,6 +9,9 @@ import {
   NO_IMAGE_CONDITION,
   NO_IMAGE_NO_LOGO_CONDITION,
   PRODUCT_CARD_KEY,
+  BRAND_LOGO_TARGETS,
+  CLEARANCE_SPOTLIGHT_KEY,
+  CLEARANCE_BRAND_LOGO_FALLBACK_ID,
 } from "./product-card-brand-logo";
 
 // ============================================================================
@@ -192,4 +195,158 @@ test("a channel with no product-card master comes back unchanged", () => {
   const components = { "price-block": liveCardTree() };
   const out = withBrandLogoFallback(components as unknown as Record<string, unknown>);
   assert.equal(out, components);
+});
+
+// ============================================================================
+// The HOME page's clearance rail — the SECOND authored master, and the one a
+// fix aimed only at the listing tile misses. The shape below is the LIVE
+// published `home-clearance-spotlight` master for Industry Kitchens
+// (cms_components, channel 1) as read from the database on 2026-08-25, trimmed
+// to the image stage. Note the binding prefix: this master addresses the row
+// through the repeat's item alias `card`, NOT `props.card`.
+// ============================================================================
+
+function liveClearanceTree(): NodeTree {
+  return {
+    v: 1,
+    root: {
+      id: "n-mshd2l5v-jrl4v",
+      kind: "element",
+      tag: "section",
+      condition: { kind: "expr", source: "props.section.products[0]" },
+      children: [
+        {
+          id: "n-mshd2l5v-owb6z",
+          kind: "element",
+          tag: "div",
+          classes: ["grid", "grid-cols-2", "sm:grid-cols-3"],
+          children: [
+            {
+              id: "n-mshd2l5v-gmqy4",
+              kind: "repeat",
+              label: "cards",
+              limit: 9,
+              source: "props.section.products",
+              itemAlias: "card",
+              children: [
+                {
+                  id: "n-mshd2l5v-wtzh2",
+                  kind: "element",
+                  tag: "div",
+                  classes: ["relative", "aspect-square", "bg-white"],
+                  children: [
+                    {
+                      id: "n-mshd2l5v-ek92y",
+                      kind: "element",
+                      tag: "img",
+                      label: "image",
+                      classes: [
+                        "object-contain",
+                        "p-4",
+                        "group-hover:scale-[1.03]",
+                        "transition-transform",
+                        "duration-500",
+                        "ease-out",
+                      ],
+                      attrs: {
+                        alt: { kind: "binding", path: "card.name" },
+                        src: { kind: "binding", path: "card.image_url" },
+                        fill: { kind: "static", value: "true" },
+                        sizes: { kind: "static", value: "(max-width: 640px) 50vw, 33vw" },
+                      },
+                      condition: { kind: "expr", source: "card.image_url" },
+                    },
+                    {
+                      id: "n-mshd2l5v-hpm3s",
+                      kind: "element",
+                      tag: "div",
+                      label: "no-image",
+                      classes: ["h-full", "w-full", "flex"],
+                      children: [
+                        { id: "n-mshd2l5v-23mxk", kind: "element", tag: "svg", classes: ["h-10", "w-10"] },
+                      ],
+                      condition: { kind: "expr", source: "!card.image_url" },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  } as unknown as NodeTree;
+}
+
+const CLEARANCE_TARGET = BRAND_LOGO_TARGETS.find((t) => t.key === CLEARANCE_SPOTLIGHT_KEY)!;
+
+test("the clearance rail's master gets the same fallback, on its own `card.` prefix", () => {
+  const { tree, inserted } = applyBrandLogoFallback(liveClearanceTree(), CLEARANCE_TARGET);
+  assert.equal(inserted, true);
+  const logo = find(tree.root as unknown as Rec, CLEARANCE_BRAND_LOGO_FALLBACK_ID);
+  assert.ok(logo, "the rail's logo node is inserted");
+  assert.equal(condition(logo), "!card.image_url && card.brand_logo_url");
+  const attrs = logo!.attrs as Record<string, { path?: string; value?: string }>;
+  assert.equal(attrs.src.path, "card.brand_logo_url");
+  assert.equal(attrs.alt.path, "card.brand_name");
+  assert.equal(attrs.fill.value, "true");
+});
+
+test("the rail's grey box is narrowed so exactly one branch can be true", () => {
+  const { tree } = applyBrandLogoFallback(liveClearanceTree(), CLEARANCE_TARGET);
+  const grey = find(tree.root as unknown as Rec, "n-mshd2l5v-hpm3s");
+  assert.equal(condition(grey), "!card.image_url && !card.brand_logo_url");
+});
+
+test("the rail's logo matches the rail's own padding, not the listing tile's", () => {
+  const { tree } = applyBrandLogoFallback(liveClearanceTree(), CLEARANCE_TARGET);
+  const logo = find(tree.root as unknown as Rec, CLEARANCE_BRAND_LOGO_FALLBACK_ID);
+  assert.deepEqual(logo!.classes, ["object-contain", "p-4"]);
+  assert.ok(!(logo!.classes as string[]).includes("object-cover"), "a 2:1 logo is never cropped");
+});
+
+test("the rail's photo carries the broken-FILE fallback on the same prefix", () => {
+  const { tree } = applyBrandLogoFallback(liveClearanceTree(), CLEARANCE_TARGET);
+  const photo = find(tree.root as unknown as Rec, "n-mshd2l5v-ek92y");
+  const attrs = photo!.attrs as Record<string, { path?: string; value?: string }>;
+  assert.equal(attrs["data-fallback-src"].path, "card.brand_logo_url");
+  assert.equal(attrs["data-fallback-alt"].path, "card.brand_name");
+  assert.equal(attrs["data-fallback-class"].value, "object-contain p-4");
+  // untouched otherwise
+  assert.equal(attrs.src.path, "card.image_url");
+  assert.equal(condition(photo), "card.image_url");
+});
+
+test("the listing-tile target never matches the rail's master, and vice versa", () => {
+  // Wrong prefix = no anchor = nothing guessed at.
+  assert.equal(applyBrandLogoFallback(liveClearanceTree()).inserted, false);
+  assert.equal(applyBrandLogoFallback(liveCardTree(), CLEARANCE_TARGET).inserted, false);
+});
+
+test("withBrandLogoFallback fixes BOTH masters in one pass", () => {
+  const untouched = liveCardTree();
+  const components = {
+    [PRODUCT_CARD_KEY]: liveCardTree(),
+    [CLEARANCE_SPOTLIGHT_KEY]: liveClearanceTree(),
+    "price-block": untouched,
+  };
+  const out = withBrandLogoFallback(components as unknown as Record<string, unknown>) as Record<
+    string,
+    NodeTree
+  >;
+  assert.ok(find(out[PRODUCT_CARD_KEY].root as unknown as Rec, BRAND_LOGO_FALLBACK_ID));
+  assert.ok(
+    find(out[CLEARANCE_SPOTLIGHT_KEY].root as unknown as Rec, CLEARANCE_BRAND_LOGO_FALLBACK_ID)
+  );
+  assert.equal(out["price-block"], untouched, "every other master is passed through by reference");
+});
+
+test("idempotent across both masters", () => {
+  const components = {
+    [PRODUCT_CARD_KEY]: liveCardTree(),
+    [CLEARANCE_SPOTLIGHT_KEY]: liveClearanceTree(),
+  } as unknown as Record<string, unknown>;
+  const once = withBrandLogoFallback(components);
+  const twice = withBrandLogoFallback(once);
+  assert.equal(twice, once, "a second pass changes nothing and copies nothing");
 });

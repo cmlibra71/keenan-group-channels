@@ -11,6 +11,7 @@ import {
   getCustomerLogos,
   getCmsPage,
 } from "@/lib/store";
+import { attachBrandLogos } from "@/lib/brand-logo-fallback";
 import { HomeSections } from "@/components/home/HomeSections";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 
@@ -60,7 +61,15 @@ export default async function HomePage() {
         if (carousels[s.category_slug]) return;
         if (s.variant === "clearance") {
           const { products } = await getProducts({ onSale: true, limit: 9 });
-          carousels[s.category_slug] = { products };
+          // Card tSrCcnvx: the clearance rail draws its OWN tile
+          // (ClearanceSpotlight), not <ProductGrid>, so the brand-logo fallback
+          // has to be attached here — the grid resolves it for itself and this
+          // rail cannot, being a client component. Every other carousel variant
+          // renders through HomepageSpotlight → ProductGrid and is already
+          // covered. No-op on any channel outside BRAND_LOGO_FALLBACK_CHANNELS.
+          carousels[s.category_slug] = {
+            products: (await attachBrandLogos(products)) as unknown as CarouselProducts,
+          };
           return;
         }
         const category = await getCategoryBySlug(s.category_slug);
