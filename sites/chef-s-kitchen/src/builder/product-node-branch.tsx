@@ -14,6 +14,7 @@ import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { withSilverChefNode } from "@/builder/silverchef-node";
 import { withImageNoticeNode } from "@/builder/product-image-notice";
+import { attachBrandLogos } from "@/lib/brand-logo-fallback";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 
 // ============================================================================
@@ -100,6 +101,25 @@ export async function renderProductNodeBranch({
   }).catch(() => null);
   if (!payload) return null;
 
+  // Card tSrCcnvx (Tim, 2026-08-19): the related-products rail places the same
+  // `product-card` master a category grid does, so its rows need the same
+  // brand-logo fallback field. Those rows are composed inside
+  // `getProductPageData`, not by the route, so they are enriched here.
+  //
+  // COPIED, never mutated: `getProductPageData` is cache-wrapped, and writing
+  // into the object it returns would write into the shared cached value.
+  const relatedRows = payload.related?.products as unknown as { id: number }[] | undefined;
+  const pagePayload: typeof payload =
+    Array.isArray(relatedRows) && relatedRows.length > 0
+      ? {
+          ...payload,
+          related: {
+            ...payload.related,
+            products: (await attachBrandLogos(relatedRows)) as unknown as typeof payload.related.products,
+          },
+        }
+      : payload;
+
   // The AUTHORED tree wins: the product template doc (builder_kind='nodes' —
   // published version live, draft in preview). Seed only as fallback.
   const nodesDoc = (await getCmsTemplate("product", draft).catch(() => null)) as {
@@ -158,7 +178,7 @@ export async function renderProductNodeBranch({
   let callResults: Record<string, unknown> = {};
   if (Object.keys(jsFunctions).length > 0) {
     await loadJsSandbox(jsFunctions).catch(() => null);
-    callResults = await computeCallResults(nodeTree.root, jsFunctions, payload as object).catch(
+    callResults = await computeCallResults(nodeTree.root, jsFunctions, pagePayload as object).catch(
       () => ({})
     );
   }
@@ -175,7 +195,7 @@ export async function renderProductNodeBranch({
       <ViewedProductTracker product={viewedProduct} />
       <BuilderProductPage
         tree={nodeTree}
-        payload={payload}
+        payload={pagePayload}
         namedStyles={namedStyles}
         components={components}
         jsFunctions={jsFunctions}
