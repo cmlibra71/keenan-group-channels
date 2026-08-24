@@ -26,7 +26,11 @@ import {
   parseAttributeSelections,
 } from "@keenan/services/services";
 import { parsePriceBands, parseRangeParam } from "@/lib/category-attributes";
-import { renderCategoryNodeBranch, type CategoryListingPricing } from "@/builder/category-node-branch";
+import {
+  renderCategoryNodeBranch,
+  categoryTreePlacesSeoCopy,
+  type CategoryListingPricing,
+} from "@/builder/category-node-branch";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
 import { RichContent } from "@/components/content/RichContent";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
@@ -204,7 +208,18 @@ export default async function CategoryPage({
   // category page is set — so the page renders exactly as before.
   const { isEnabled } = await draftMode();
   const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
-  const cmsCat = await getCmsCategoryPage(category.id, draft).catch(() => null);
+  // Both of these are per-request cached loads that only need `draft`, so they go
+  // together rather than one after the other — "as long as it's fast to open".
+  const [cmsCat, seoCopyPlacedInTree] = await Promise.all([
+    getCmsCategoryPage(category.id, draft).catch(() => null),
+    // Does the authored Category Page Template PLACE this storefront's own
+    // approved wording itself (card nYxPgpvK)? The payload carries it as
+    // `category.seo_intro_html`, so a page can put it in the header or anywhere
+    // else; printing the same paragraphs again at the foot would duplicate body
+    // copy across every category page, which is the cannibalisation this content
+    // exists to avoid. The QUESTIONS are not placeable and stay where they are.
+    categoryTreePlacesSeoCopy(draft),
+  ]);
   const region = (r: string): RenderedBlock[] =>
     ((cmsCat?.blocks as unknown as RenderedBlock[]) ?? []).filter((b) => b.region === r);
   const aboveBlocks = region("above_listing");
@@ -220,7 +235,7 @@ export default async function CategoryPage({
   };
   const categorySeo = (
     <CategorySeo
-      introHtml={seo.channel_seo_intro_html}
+      introHtml={seoCopyPlacedInTree ? undefined : seo.channel_seo_intro_html}
       faq={seo.channel_seo_faq}
       faqJsonLd={seo.channel_seo_faq_jsonld}
       categoryName={category.name}

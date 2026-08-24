@@ -1,6 +1,16 @@
 import Link from "next/link";
 
-export type FooterColumn = { heading: string; links: { label: string; href: string }[] };
+export type FooterLink = { label: string; href: string };
+export type FooterColumn = {
+  heading: string;
+  links: FooterLink[];
+  /** A second headed group stacked under the column's own links. The portal's
+   *  Navigation editor writes it when a footer link holds links of its own
+   *  (card aveLhTwr); a storefront that ignored it would silently drop every
+   *  link staff put under that heading. */
+  extraHeading?: string;
+  extraLinks?: FooterLink[];
+};
 export type FooterContact = { phone?: string; email?: string; address?: string };
 export type FooterSocial = { platform: string; href: string };
 export type FooterPaymentBadge = { name: string; image_url?: string | null };
@@ -32,6 +42,20 @@ const DEFAULT_COLUMNS: FooterColumn[] = [
     ],
   },
 ];
+
+function FooterLinkList({ links }: { links: FooterLink[] }) {
+  return (
+    <ul className="mt-2 space-y-2">
+      {links.map((l) => (
+        <li key={l.href + l.label}>
+          <Link href={l.href} className="text-sm text-zinc-500 hover:text-zinc-900">
+            {l.label}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export function Footer({
   storeName,
@@ -79,15 +103,13 @@ export function Footer({
           {columns.map((col) => (
             <div key={col.heading}>
               <h4 className="text-sm font-semibold text-zinc-900">{col.heading}</h4>
-              <ul className="mt-2 space-y-2">
-                {col.links.map((l) => (
-                  <li key={l.href + l.label}>
-                    <Link href={l.href} className="text-sm text-zinc-500 hover:text-zinc-900">
-                      {l.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+              <FooterLinkList links={col.links ?? []} />
+              {col.extraHeading && col.extraLinks && col.extraLinks.length > 0 && (
+                <>
+                  <h4 className="mt-6 text-sm font-semibold text-zinc-900">{col.extraHeading}</h4>
+                  <FooterLinkList links={col.extraLinks} />
+                </>
+              )}
             </div>
           ))}
         </div>

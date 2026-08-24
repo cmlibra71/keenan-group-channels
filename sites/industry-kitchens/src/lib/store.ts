@@ -47,6 +47,7 @@ import {
 } from "@keenan/services";
 import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
+import { withBrandLogoFallback } from "@/builder/product-card-brand-logo";
 import {
   STOREFRONT_FILTERS_SETTING_KEY,
   normalizeStorefrontFilters,
@@ -107,13 +108,35 @@ export const {
   getCmsCategoryPage,
   getCmsTemplate,
   getNamedStyles,
-  getComponents,
-  getDraftComponents,
   getDesignTokens,
   getDraftDesignTokens,
   getCheckoutSettings,
   calculateShipping,
 } = _store;
+
+// ============================================================================
+// Component masters, with the brand-logo image fallback placed at read time.
+//
+// Card tSrCcnvx (Tim, 2026-08-19): an Industry Kitchens product with no image —
+// or a broken one — shows its BRAND's logo instead of the grey package box, on
+// the listing tile as well as the product page. IK category pages render their
+// tiles from the stored `product-card` master rather than from `ProductCard.tsx`
+// (`node_category_template_enabled` is on for channel 1), so the rule has to
+// reach the master too.
+//
+// It is placed HERE, once, rather than in each of the four node branches that
+// load components (category, brand, home, product), because a branch that
+// forgot the call would serve grey boxes on one screen and logos on the next.
+// Nothing is written to the stored tree — see `product-card-brand-logo.ts`.
+// ============================================================================
+
+type ComponentMap = Awaited<ReturnType<typeof _store.getComponents>>;
+
+export const getComponents = async (): Promise<ComponentMap> =>
+  withBrandLogoFallback(await _store.getComponents());
+
+export const getDraftComponents = async (): Promise<ComponentMap> =>
+  withBrandLogoFallback((await _store.getDraftComponents()) as ComponentMap);
 
 // ============================================================================
 // Channel settings (raw accessor)
@@ -422,13 +445,24 @@ export type SpecialistCta = {
 
 export type PaymentBadge = { name: string; image_url?: string };
 
-export type FooterColumnSetting = { heading: string; links: { label: string; href: string }[] };
+export type FooterLinkSetting = { label: string; href: string };
+export type FooterColumnSetting = {
+  heading: string;
+  links: FooterLinkSetting[];
+  /** A second headed group stacked under the column's own links, written by the
+   *  portal's Navigation editor (card aveLhTwr). */
+  extraHeading?: string;
+  extraLinks?: FooterLinkSetting[];
+};
 export type FooterSetting = {
   tagline?: string;
   columns?: FooterColumnSetting[];
   contact?: { phone?: string; email?: string; address?: string };
   social?: { platform: string; href: string }[];
   payment_badges?: PaymentBadge[];
+  /** Finance-partner logos the footer links out to (Industry Kitchens carries
+   *  SilverChef and SKOPE Funding). */
+  partners?: { name: string; image_url?: string; href?: string }[];
   legal?: string;
 };
 

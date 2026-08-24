@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useState } from "react";
 import { Package } from "lucide-react";
 import { Price } from "@/components/ui/Price";
 import { ga4SelectItem } from "@/components/analytics/ga4";
@@ -13,6 +14,20 @@ interface ProductCardProps {
   salePrice?: string | null;
   imageUrl?: string | null;
   brandName?: string;
+  /**
+   * Card tSrCcnvx (Tim, 2026-08-19): the tile falls back to the BRAND's logo
+   * when the product has no photo, or when the photo's file turns out to be
+   * missing. Null (no brand, or a brand with no usable logo) keeps the grey box
+   * with the package icon that shipped before.
+   */
+  brandLogoUrl?: string | null;
+  /**
+   * ALT text for that logo — the brand's NAME, matching what the authored
+   * `product-card` master binds, so the same fallback never reads two different
+   * ways on two screens. Kept separate from `brandName`, which draws the tile's
+   * brand eyebrow: these listings do not show one and this must not start.
+   */
+  brandLogoAlt?: string | null;
   memberPricingAvailable?: boolean;
   /** Active member's price for this product — renders the member layout. */
   memberPrice?: number | null;
@@ -23,7 +38,16 @@ interface ProductCardProps {
   listIndex?: number;
 }
 
-export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName, memberPricingAvailable, memberPrice, productId, listId, listName, listIndex }: ProductCardProps) {
+export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName, brandLogoUrl, brandLogoAlt, memberPricingAvailable, memberPrice, productId, listId, listName, listIndex }: ProductCardProps) {
+  // A dead image file is invisible to the server — the row exists and the URL is
+  // well formed — so the browser is the only place it can be caught. An errored
+  // photo drops to the same fallback an imageless product gets; a logo that is
+  // itself missing drops to the grey box rather than a broken-image glyph.
+  const [photoBroken, setPhotoBroken] = useState(false);
+  const [logoBroken, setLogoBroken] = useState(false);
+  const photoUrl = imageUrl && !photoBroken ? imageUrl : null;
+  const logoUrl = brandLogoUrl && !logoBroken ? brandLogoUrl : null;
+
   const displayPrice = parseFloat(price);
   const displaySalePrice = salePrice ? parseFloat(salePrice) : null;
   const showMemberPrice =
@@ -49,13 +73,25 @@ export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName,
   return (
     <Link href={`/products/${slug}`} className="group block" onClick={handleSelect}>
       <div className="relative aspect-square overflow-hidden rounded-lg bg-zinc-100">
-        {imageUrl ? (
+        {photoUrl ? (
           <Image
-            src={imageUrl}
+            src={photoUrl}
             alt={name}
+            onError={() => setPhotoBroken(true)}
             fill
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
             className="object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+        ) : logoUrl ? (
+          /* Contained and padded, never `object-cover`: brand logos are 600x300,
+             and cropping one to fill a square stage makes it unreadable. */
+          <Image
+            src={logoUrl}
+            alt={brandLogoAlt || brandName || name}
+            onError={() => setLogoBroken(true)}
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            className="object-contain p-6"
           />
         ) : (
           <div className="h-full w-full flex items-center justify-center text-zinc-300">
