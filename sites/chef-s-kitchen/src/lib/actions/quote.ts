@@ -27,6 +27,7 @@ import {
 } from "@keenan/services/product-addons";
 import { slidingWindowAllow } from "@/lib/rate-limit";
 import { resolveCustomerRequestState } from "@keenan/services";
+import { decideQuoteLineWrite } from "@/lib/quotes/addon-line-write";
 import {
   quoteHidesPrices,
   resolveQuoteAcceptState,
@@ -158,15 +159,28 @@ export async function addToQuote(
   // the line and written into the line note the quote editor already prints — and they move NO
   // money, because a quote line is priced by a rep on review (the same reason member and
   // quantity tiers are left off above).
+  // DID THE CALLER RENDER THE EXTRAS PANEL? `undefined` / `null` means it did not — a listing
+  // TILE's Add to Quote posts no selection at all (`master-leaves.tsx`, and the related-product
+  // rail through the node bridge). An empty OBJECT means the panel WAS on screen and the shopper
+  // ticked nothing, which is a deliberate clear-down. Collapsing the two turned a tile click on a
+  // product the customer had already configured into a silent wipe: the quantity did not go up,
+  // the picks were nulled and the line's comment was erased, and from a tile there is no control
+  // anywhere to say "keep my blades". This is the same `undefined`-vs-empty distinction the
+  // portal's own `product-type-actions.ts` draws.
+  const addonsPosted = addons != null;
   const addonDefinition = readProductAddons(product.metafields);
-  const resolvedAddons = resolveAddonSelection(addonDefinition, addons);
+  const resolvedAddons = addonsPosted ? resolveAddonSelection(addonDefinition, addons) : [];
   // A required single-choice group is a question about the MACHINE, not about the cart, so it
   // is asked on this button too — and asked HERE rather than only in the page, because a stale
-  // tab or a hand-posted action would otherwise quote a configuration nobody answered.
-  const unansweredGroups = unansweredAddonGroups(addonDefinition, addons);
+  // tab or a hand-posted action would otherwise quote a configuration nobody answered. From a
+  // TILE the shopper cannot answer it where they are standing, so that message sends them to the
+  // page carrying the panel instead of naming a control they cannot see.
+  const unansweredGroups = unansweredAddonGroups(addonDefinition, addonsPosted ? addons : {});
   if (unansweredGroups.length > 0) {
     return {
-      error: `Please choose ${unansweredGroups.join(" and ")} before adding this to a quote.`,
+      error: addonsPosted
+        ? `Please choose ${unansweredGroups.join(" and ")} before adding this to a quote.`
+        : `Open this product's page to choose ${unansweredGroups.join(" and ")} before adding it to a quote.`,
     };
   }
   const addonNote = describeAddonSelection(resolvedAddons);
@@ -236,20 +250,37 @@ export async function addToQuote(
     const hadAddons = Array.isArray(existingAttributes.addon_selection)
       ? (existingAttributes.addon_selection as unknown[]).length > 0
       : false;
-    const isConfigured = kit?.kind === "bundle" || resolvedAddons.length > 0 || hadAddons;
-    const reconfigured = isConfigured && lineNotes !== (existing.customer_notes ?? null);
-    // Clearing every extra is a re-configuration too, and it has to REMOVE the record — a line
-    // priced as a bare machine that still lists $725 of blades is exactly the stale record the
-    // cart half of this card refuses.
-    const nextAttributes =
-      lineAttributes || (hadAddons && resolvedAddons.length === 0)
-        ? // MERGED into the existing bag, never over it: `attributes` has other owners
-          // (quotes.md `quote-editor`), and a bundle re-configuration used to replace it whole.
-          { ...existingAttributes, ...(lineAttributes ?? {}), ...(resolvedAddons.length === 0 ? { addon_selection: null } : {}) }
-        : null;
+    // What this second press MEANS for the line already there — one more of these, or a
+    // re-configuration of it — and whether this action is allowed to touch the line's
+    // customer-visible comment. Both decisions are pure and unit-tested in
+    // `lib/quotes/addon-line-write.ts`, which carries the reasoning: a listing TILE posts no
+    // selection and must not be read as a clear-down, and a comment a rep typed is never
+    // overwritten (quotes.md, card 7bmpuqei).
+    const { incrementsQuantity, clearsAddons, writesNote } = decideQuoteLineWrite({
+      addonsPosted,
+      hadAddons,
+      resolvedAddonCount: resolvedAddons.length,
+      isBundleBuild: kit?.kind === "bundle",
+      lineNotes,
+      existingNote: existing.customer_notes ?? null,
+      ownedNote:
+        typeof existingAttributes.storefront_note === "string"
+          ? existingAttributes.storefront_note
+          : null,
+    });
+
+    const attributeChanges: Record<string, unknown> = { ...(lineAttributes ?? {}) };
+    if (clearsAddons) attributeChanges.addon_selection = null;
+    if (writesNote) attributeChanges.storefront_note = lineNotes;
+
     await quoteItemService.updateForParent(quote.id, existing.id, {
-      quantity: reconfigured ? existing.quantity : existing.quantity + 1,
-      ...(nextAttributes ? { attributes: nextAttributes, customerNotes: lineNotes } : {}),
+      quantity: incrementsQuantity ? existing.quantity + 1 : existing.quantity,
+      // MERGED into the existing bag, never over it: `attributes` has other owners
+      // (quotes.md `quote-editor`), and a bundle re-configuration used to replace it whole.
+      ...(Object.keys(attributeChanges).length > 0
+        ? { attributes: { ...existingAttributes, ...attributeChanges } }
+        : {}),
+      ...(writesNote ? { customerNotes: lineNotes } : {}),
     });
   } else {
     await quoteItemService.createForParent(quote.id, {
@@ -265,7 +296,17 @@ export async function addToQuote(
       // frozen at the price it was added at for life (card laFQveZT). Say it out
       // loud here; the service will not guess it for us.
       priceSource: "customer",
-      ...(lineAttributes ? { attributes: lineAttributes, customerNotes: lineNotes } : {}),
+      // The storefront stamps the note it just wrote as its own, so a later re-configuration
+      // can tell its own words from a rep's (see the update branch above).
+      ...(lineAttributes || lineNotes
+        ? {
+            attributes: {
+              ...(lineAttributes ?? {}),
+              ...(lineNotes ? { storefront_note: lineNotes } : {}),
+            },
+            customerNotes: lineNotes,
+          }
+        : {}),
     });
   }
 

@@ -202,15 +202,28 @@ export const AddToCartWidget: WidgetComponent = () => {
 export const AddToQuoteWidget: WidgetComponent = () => {
   const purchase = useProductPurchaseOptional();
   if (!purchase) return <NoProvider name="add_to_quote" />;
-  const { product, cartVariantId, useGroupedMode, allOptionsSelected, restrictAddToQuote } =
-    purchase;
+  const {
+    product,
+    cartVariantId,
+    useGroupedMode,
+    allOptionsSelected,
+    restrictAddToQuote,
+    selectedAddons,
+    addonGroupsUnanswered,
+  } = purchase;
   // Zoey "Restrict Add to Quote" — the button simply is not offered for this product (7vu2iEEZ).
   if (restrictAddToQuote) return null;
   return (
     <AddToQuoteButton
       productId={product.id}
       variantId={cartVariantId}
-      disabled={useGroupedMode && !allOptionsSelected}
+      // Card 0CDcCYmO. This renderer is the fallback both sites fall back to when
+      // `node_product_template_enabled` is switched off, so the ticked extras travel with THIS
+      // button too — a quote path that silently dropped them hands the rep a bare machine. A
+      // required group greys the button here as it does on the coded buy box, and the action
+      // refuses it again server-side.
+      addons={selectedAddons}
+      disabled={(useGroupedMode && !allOptionsSelected) || addonGroupsUnanswered.length > 0}
     />
   );
 };

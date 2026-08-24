@@ -327,11 +327,14 @@ const withExtras = (over: Partial<CartLineInput> = {}): CartLineInput =>
     ...over,
   });
 
-test("the picks ride onto the order line, one entry per group", () => {
+test("the picks ride onto the order line, one entry per group, with NO money", () => {
+  // This bag prints to the CUSTOMER on /account/orders/[id], one line above a
+  // GST-INCLUSIVE unit price and line total. An ex-GST figure in the text put two of
+  // our own numbers on one row on different tax bases (Product Brief §3).
   const { lineItems } = buildLineItems([withExtras()], false);
   assert.deepEqual(lineItems[0].productOptions, {
-    Slicers: "Slicer 4mm (+$245.00)",
-    "Feed hopper": "Large hopper (+$480.00)",
+    Slicers: "Slicer 4mm",
+    "Feed hopper": "Large hopper",
   });
 });
 
@@ -371,8 +374,8 @@ test("the draft-only surcharge never reaches the insert", () => {
   const rows = forOrderInsert(lineItems);
   assert.equal("addonSurchargeExTax" in rows[0], false);
   assert.deepEqual(rows[0].productOptions, {
-    Slicers: "Slicer 4mm (+$245.00)",
-    "Feed hopper": "Large hopper (+$480.00)",
+    Slicers: "Slicer 4mm",
+    "Feed hopper": "Large hopper",
   });
   // Everything else survives untouched.
   assert.equal(rows[0].sku, "RG-100");

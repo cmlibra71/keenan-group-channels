@@ -169,25 +169,44 @@ async function resolveAddonsForProduct(
 }
 
 /**
- * A REQUIRED single-choice extras group nobody answered — refused HERE, not only in the page.
+ * The extras a shopper ticked AND the reason to refuse the add, decided from ONE product read.
  *
- * The provider greys the buy button while such a group is unanswered, but the Product Brief's
- * rule is that a refusal lives in the action as well ("or a stale form still writes the order"),
- * which is exactly what `refuseCartQuantity` above does for the two per-product switches. It
- * costs one read that is only taken when the product actually carries extras.
+ * The provider greys the buy button while a required single-choice group is unanswered, but the
+ * Product Brief's rule is that a refusal lives in the action as well ("or a stale form still
+ * writes the order"), which is exactly what `refuseCartQuantity` below does for the two
+ * per-product switches.
  *
- * Returns the message to refuse with, or null.
+ * COST, honestly: this is ONE `products` read on every Add to Cart on both storefronts. It
+ * cannot be skipped when nothing is ticked, because that is precisely the case a required group
+ * has to catch — so the read is unconditional and the two halves that need it share it rather
+ * than taking it twice, which is what this function exists for. (An earlier comment here claimed
+ * the read was "only taken when the product actually carries extras"; it never was.)
+ *
+ * A listing TILE posts no selection at all, and the shopper standing on a category page has no
+ * panel to answer with — so that refusal names the product page instead of a control they
+ * cannot see.
  */
-async function refuseUnansweredAddons(
+async function readAddonsForAdd(
   productId: number,
   selection: AddonSelectionInput | null | undefined
-): Promise<string | null> {
+): Promise<{ resolved: ResolvedAddon[]; refusal: string | null }> {
   const product = (await productService.getById(productId)) as { metafields?: unknown } | null;
   const definition = readProductAddons(product?.metafields);
-  if (!definition) return null;
-  const missing = unansweredAddonGroups(definition, selection);
-  if (missing.length === 0) return null;
-  return `Please choose ${missing.join(" and ")} before adding this to your cart.`;
+  if (!definition) return { resolved: [], refusal: null };
+  const posted = selection != null;
+  const missing = unansweredAddonGroups(definition, posted ? selection : {});
+  if (missing.length > 0) {
+    return {
+      resolved: [],
+      refusal: posted
+        ? `Please choose ${missing.join(" and ")} before adding this to your cart.`
+        : `Open this product's page to choose ${missing.join(" and ")} before adding it to your cart.`,
+    };
+  }
+  return {
+    resolved: posted ? resolveAddonSelection(definition, selection) : [],
+    refusal: null,
+  };
 }
 
 /**
@@ -223,14 +242,14 @@ export async function addToCart(
 
   const cart = await getOrCreateCart();
 
-  const resolvedAddons = await resolveAddonsForProduct(productId, addons);
-  const selectionKey = addonSelectionKey(resolvedAddons);
-
-  // A required extras group the shopper never answered is refused here as well as in the page
-  // (Product Brief §3), the same way the two per-product switches are. Only taken when the
-  // product carries extras at all.
-  const addonRefusal = await refuseUnansweredAddons(productId, addons);
+  // The picks and the required-group refusal come out of ONE product read (Product Brief §3
+  // refuses in the action, not only in the page; speed on this path is stakeholder-visible).
+  const { resolved: resolvedAddons, refusal: addonRefusal } = await readAddonsForAdd(
+    productId,
+    addons
+  );
   if (addonRefusal) return { error: addonRefusal };
+  const selectionKey = addonSelectionKey(resolvedAddons);
 
   // Is this product/variant WITH THESE EXTRAS already in the cart?
   //

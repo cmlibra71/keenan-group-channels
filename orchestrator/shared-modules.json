@@ -186,6 +186,8 @@
     "lib/quote.ts",
     "lib/quotes/acknowledgement-url.test.ts",
     "lib/quotes/acknowledgement-url.ts",
+    "lib/quotes/addon-line-write.test.ts",
+    "lib/quotes/addon-line-write.ts",
     "lib/quotes/customer-editable.ts",
     "lib/quotes/quote-request.test.ts",
     "lib/quotes/quote-request.ts",
