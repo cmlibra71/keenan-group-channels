@@ -40,11 +40,13 @@ import {
 import {
   getContactPermissions,
   accountHasSavedAddress,
+  contactHasSavedAddress,
   sumContactOrderTotalSince,
   firstFailedOrderCondition,
   describeFailedCondition,
   resolveAccountEmailRecipients,
 } from "@/lib/role-permissions";
+import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import { applyAccountPricesToCart } from "@/lib/checkout/account-prices";
 import { saveCheckoutAddressForContact } from "@/lib/contact-addresses";
 import { blockedProductIds } from "@/lib/catalog-scope";
@@ -261,9 +263,20 @@ export async function placeOrder(
   ) {
     const known = await accountHasSavedAddress(perms.accountId, address1, postalCode);
     if (!known) {
+      // "Choose one already saved" is only an instruction if this shopper HAS a
+      // list to choose from — and the checkout's picker is CONTACT-scoped
+      // (`customerAddressService.listForContact`), while this gate is
+      // account-scoped. On production every contact who hits this has zero saved
+      // rows of their own (card H5JdsMrC), so the old sentence pointed at an empty
+      // picker and left them nowhere to go. Same refusal; the only wording of it
+      // that names something they can actually do.
+      // `perms.isB2B` can only be true for a signed-in contact, but the compiler
+      // cannot see that — and a guest with no picker gets the same wording anyway.
+      const canPick = session ? await contactHasSavedAddress(session.contactId) : false;
       return {
-        error:
-          "Your role on this account doesn't allow adding a new address during checkout. Please choose an address already saved on your account.",
+        error: canPick
+          ? "Your role on this account doesn't allow adding a new address during checkout. Please choose an address already saved on your account."
+          : "Your role on this account doesn't allow adding a new address during checkout, and there's no address saved to your profile yet. Please contact us and we'll add it for you.",
       };
     }
   }
@@ -1032,16 +1045,16 @@ export async function placeOrder(
   // The role gate is re-checked server-side against the SAME `perms` the new-
   // address check above used — the checkbox is simply not rendered for a
   // restricted contact, and a hand-posted `saveAddress` must not bypass that.
+  // FILING is a change to what the account has saved, so since card H5JdsMrC it
+  // also takes the address book's own add codes (bill-to AND ship-to, which are
+  // main-contact-only): a colleague who is not the manager still gets their order,
+  // delivered to the address they typed — it is simply not added to the book.
   //
   // Wrapped whole in try/catch: the order already exists and is paid-for-real in
   // a moment. Failing to file an address in a book must never fail an order.
   if (session?.contactId && isAu && formData.get("saveAddress") === "on") {
     try {
-      const mayAddAddress =
-        !perms.isB2B ||
-        perms.accountId === null ||
-        (perms.can("add_billing_address_in_checkout") && perms.can("add_shipping_address_in_checkout"));
-      if (mayAddAddress) {
+      if (mayFileAddressInBook(perms)) {
         await saveCheckoutAddressForContact(session.contactId, {
           firstName,
           lastName,

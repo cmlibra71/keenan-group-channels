@@ -17,6 +17,14 @@
 // The wording names the CONTROLS the customer must use ("Default billing",
 // "Default shipping", the Phone box), because a prompt that describes a
 // requirement without naming where to satisfy it is just an accusation.
+//
+// Which is why the address items are DROPPED for a customer whose B2B role may
+// not touch the address book (card H5JdsMrC). That change hides Add address,
+// Edit, Delete and Set-as-default; leaving "Add an address…" in the amber panel
+// directly above the section it just emptied would be exactly the accusation
+// this rule forbids — and it is not an edge case, because on production every
+// contact the address gate refuses has no saved address at all, so the empty
+// book IS their screen. The phone item is untouched: they can always fix that.
 // ============================================================================
 
 export type MissingDetail = "phone" | "address" | "defaultBilling" | "defaultShipping";
@@ -24,6 +32,16 @@ export type MissingDetail = "phone" | "address" | "defaultBilling" | "defaultShi
 export interface ProfileCompletenessInput {
   phone: string | null | undefined;
   addresses: readonly { isDefaultBilling: boolean; isDefaultShipping: boolean }[];
+  /**
+   * May this customer ADD an address (card H5JdsMrC)? Default true, so a B2C
+   * shopper and every caller that does not know about roles is unchanged.
+   */
+  canAddAddress?: boolean;
+  /**
+   * May this customer CHANGE a saved address — which is what "Set as default
+   * billing / shipping" does? Default true, same reason.
+   */
+  canEditAddress?: boolean;
 }
 
 /**
@@ -37,11 +55,18 @@ export function missingProfileDetails(input: ProfileCompletenessInput): MissingD
   const missing: MissingDetail[] = [];
   if (!(input.phone ?? "").trim()) missing.push("phone");
 
+  const canAdd = input.canAddAddress ?? true;
+  const canEdit = input.canEditAddress ?? true;
+
   const addresses = input.addresses ?? [];
   if (addresses.length === 0) {
-    missing.push("address");
+    // Never ask for an address the customer is not allowed to add.
+    if (canAdd) missing.push("address");
     return missing;
   }
+  // "Set as default billing / shipping" is an EDIT of a saved address, so a
+  // customer refused the edit cannot satisfy either line.
+  if (!canEdit) return missing;
   if (!addresses.some((a) => a.isDefaultBilling)) missing.push("defaultBilling");
   if (!addresses.some((a) => a.isDefaultShipping)) missing.push("defaultShipping");
   return missing;

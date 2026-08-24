@@ -14,6 +14,7 @@ import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { withSilverChefNode } from "@/builder/silverchef-node";
 import { withImageNoticeNode } from "@/builder/product-image-notice";
+import { withUpsellBlock } from "@/builder/upsell-node";
 import { attachBrandLogos } from "@/lib/brand-logo-fallback";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 
@@ -150,7 +151,16 @@ export async function renderProductNodeBranch({
   // than being written into the stored trees so there is nothing to undo on a rollback and a site
   // that re-authors its buy row keeps the behaviour. It wraps the PLACED nodes as well as the
   // stored ones, so a buy control introduced by a future placed node is guarded too.
-  const nodeTree = guardBuyControls(withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE)));
+  // The upsell rail (card fYqTM5Ot) is PLACED here for the third time on this page and for
+  // the same reason: Zoey shows upsells as their own block, the data has been sitting in
+  // `product_upsells` since the import, and nothing on either stored tree reads it. The pass
+  // clones the tree's OWN related block so the rail keeps that site's tile component — which
+  // is what keeps the listing-tile rules (no stock wording, Add to Cart intact) true of it —
+  // and renders nothing at all for a product with no upsells. It runs BEFORE guardBuyControls
+  // so the cloned tiles are guarded exactly like the ones they were cloned from.
+  const nodeTree = guardBuyControls(
+    withUpsellBlock(withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE)))
+  );
 
   const namedStyles = await getNamedStyles().catch(() => ({}));
   const components = guardBuyControlsInComponents(

@@ -92,9 +92,12 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
                   SIZED TO A 150px SQUARE BOX from `sm` up (card bf2w6JFe, Tim
                   2026-08-23: "the logo at the top of Chefs Depot is now too
                   large, can we change it to 150px square"). This SUPERSEDES the
-                  350px-wide sizing of card kiJa7dug ON CHEFS DEPOT ONLY —
-                  Industry Kitchens keeps 350px, so do not "restore parity" by
-                  copying either header onto the other. `object-contain` keeps
+                  350px-wide sizing of card kiJa7dug ON CHEFS DEPOT ONLY.
+                  Industry Kitchens has since been capped at 200px WIDE by card
+                  yNp4uoiM (Steve 2026-08-24) — a different number and a
+                  different shape of rule (a width cap, not a square box), so do
+                  not "restore parity" by copying either header onto the other.
+                  `object-contain` keeps
                   the artwork's own aspect ratio inside the box, so a stacked
                   lockup letterboxes against the green rather than being
                   stretched or cropped; the box is square because the setting

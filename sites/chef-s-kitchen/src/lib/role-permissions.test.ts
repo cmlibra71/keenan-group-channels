@@ -6,6 +6,9 @@ import {
   firstFailedOrderCondition,
   resolveEmailRecipientsFromRows,
   emailPermissionCodes,
+  decideMainOnlyPermission,
+  isMainOnlyCode,
+  MAIN_ONLY_PERMISSIONS,
 } from "./role-permissions.ts";
 
 // ── parseRolePermissions ─────────────────────────────────────────────────────
@@ -220,4 +223,99 @@ test("recipients: a Billing-style role granted the invoices triple gets invoice 
   });
   assert.deepEqual(shipments.to, []);
   assert.deepEqual(shipments.cc, []);
+});
+
+// ── Main-contact-only codes (card H5JdsMrC) ──────────────────────────────────
+// The live rows these are written against (prod 2026-08-24, 20,563 active
+// memberships): Manager 20,105 (main, main-contact) · Buyer 300 (additional) ·
+// Billing 131 (main, denies the bill-to trio) · (Legacy Account Role) 10 (scope
+// null, main-contact) · Shipping 6 (main, denies the trio) · Restricted Buyer 6 ·
+// Buyer Requires Approval 3 · (Deprecated) Account Admin 1 (additional, GRANTS
+// the bill-to trio).
+
+test("main-only: the ship-to trio joins Zoey's eleven", () => {
+  for (const code of [
+    "add_ship_to_address",
+    "edit_ship_to_address",
+    "remove_ship_to_address",
+    "add_bill_to_address",
+    "edit_bill_to_address",
+    "remove_bill_to_address",
+  ]) {
+    assert.equal(isMainOnlyCode(code), true, code);
+  }
+  assert.equal(MAIN_ONLY_PERMISSIONS.size, 14);
+  assert.equal(isMainOnlyCode("submit_orders"), false);
+  assert.equal(isMainOnlyCode("add_shipping_address_in_checkout"), false);
+});
+
+test("main-only: an ABSENT code is refused on an Additional Contact Role", () => {
+  // "Buyer" — the 300-member role the card is actually about. It grants ordering
+  // and never mentions any address book code.
+  const buyer = parseRolePermissions([
+    "submit_orders",
+    "submit_quotes",
+    { deny: ["view_company_orders"], conditions: {} },
+  ]);
+  const ctx = { scope: "additional" as const, isMainContact: false };
+  assert.equal(decideMainOnlyPermission("add_ship_to_address", buyer, ctx), false);
+  assert.equal(decideMainOnlyPermission("edit_ship_to_address", buyer, ctx), false);
+  assert.equal(decideMainOnlyPermission("remove_ship_to_address", buyer, ctx), false);
+  // …while the permissive default still applies to everything that is NOT main-only.
+  assert.equal(decidePermission("add_shipping_address_in_checkout", buyer), true);
+});
+
+test("main-only: an ABSENT code is allowed on a Main Contact Role", () => {
+  const manager = parseRolePermissions(["add_bill_to_address", "submit_orders"]);
+  const ctx = { scope: "main" as const, isMainContact: true };
+  assert.equal(decideMainOnlyPermission("add_ship_to_address", manager, ctx), true);
+});
+
+test("main-only: the account's MAIN CONTACT is never locked out by a role-data gap", () => {
+  // "(Legacy Account Role)": scope NULL, permissions ["view_company_orders"],
+  // 10 live memberships — every one of them flagged as the account's main contact.
+  const legacy = parseRolePermissions(["view_company_orders"]);
+  assert.equal(
+    decideMainOnlyPermission("edit_ship_to_address", legacy, { scope: null, isMainContact: true }),
+    true
+  );
+  // The same role held by somebody who is NOT the main contact is refused.
+  assert.equal(
+    decideMainOnlyPermission("edit_ship_to_address", legacy, { scope: null, isMainContact: false }),
+    false
+  );
+});
+
+test("main-only: an explicit DENY beats a main-contact role", () => {
+  // "Billing" and "Shipping" are both `main` scope and both untick the bill-to
+  // trio in production. They stay refused, which is Zoey's own behaviour.
+  const billing = parseRolePermissions([
+    "submit_orders",
+    { deny: ["add_bill_to_address", "edit_bill_to_address", "remove_bill_to_address"], conditions: {} },
+  ]);
+  const ctx = { scope: "main" as const, isMainContact: true };
+  assert.equal(decideMainOnlyPermission("add_bill_to_address", billing, ctx), false);
+  // Its ship-to counterpart is absent, so the main-contact rule still allows it —
+  // and the address book asks for BOTH, so Billing stays refused there.
+  assert.equal(decideMainOnlyPermission("add_ship_to_address", billing, ctx), true);
+});
+
+test("main-only: an explicit GRANT beats an additional-scope role", () => {
+  // "(Deprecated) Account Admin": additional scope, bill-to trio granted outright.
+  const deprecated = parseRolePermissions([
+    "add_bill_to_address",
+    "edit_bill_to_address",
+    "remove_bill_to_address",
+  ]);
+  const ctx = { scope: "additional" as const, isMainContact: false };
+  assert.equal(decideMainOnlyPermission("add_bill_to_address", deprecated, ctx), true);
+  // Its ship-to half was never granted, so the address book still refuses it.
+  assert.equal(decideMainOnlyPermission("add_ship_to_address", deprecated, ctx), false);
+});
+
+test("main-only: no role at all is not a manager", () => {
+  assert.equal(
+    decideMainOnlyPermission("add_ship_to_address", null, { scope: null, isMainContact: false }),
+    false
+  );
 });
