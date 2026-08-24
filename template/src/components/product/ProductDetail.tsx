@@ -44,6 +44,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
     cartVariantId,
     selectedAddons,
     addonGroupsUnanswered,
+    addonGroupsOffered,
     displayBasePrice,
   } = useProductPurchase();
 
@@ -221,7 +222,9 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
             kitChoices={isBundle ? toKitChoices(kitSelection) : null}
             // Card 0CDcCYmO. The extras panel sits above BOTH buttons: pressing this one keeps
             // the configuration, so the rep prices what the customer was actually looking at.
-            addons={selectedAddons}
+            // Posted only where the panel was OFFERED — an empty object is a deliberate
+            // clear-down, `undefined` leaves the line's configuration alone.
+            addons={addonGroupsOffered ? selectedAddons : undefined}
             label={isBundle ? "Add to Quote — request pricing" : undefined}
           />
         )}

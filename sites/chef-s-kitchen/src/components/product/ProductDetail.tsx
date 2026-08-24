@@ -51,6 +51,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
     cartVariantId,
     selectedAddons,
     addonGroupsUnanswered,
+    addonGroupsOffered,
     displayBasePrice,
   } = useProductPurchase();
 
@@ -218,7 +219,9 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
                   disabled={(useGroupedMode && !allOptionsSelected) || addonGroupsUnanswered.length > 0}
                   // Card 0CDcCYmO. The extras panel sits above BOTH buttons: pressing this one
                   // keeps the configuration, so the rep prices what the customer was looking at.
-                  addons={selectedAddons}
+                  // Posted only where the panel was OFFERED (card 0CDcCYmO): an empty object
+                  // is a deliberate clear-down, `undefined` leaves the line's configuration alone.
+                  addons={addonGroupsOffered ? selectedAddons : undefined}
                 />
               )}
             </>
@@ -228,8 +231,10 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
               variantId={cartVariantId}
               disabled={(useGroupedMode && !allOptionsSelected) || !kitReady || addonGroupsUnanswered.length > 0}
               kitChoices={kitChoices}
-              // Card 0CDcCYmO — the picks travel with whichever button is pressed.
-              addons={selectedAddons}
+              // Card 0CDcCYmO — the picks travel with whichever button is pressed. Posted only
+              // where the panel was OFFERED: an empty object is a deliberate clear-down,
+              // `undefined` leaves the line's configuration alone.
+              addons={addonGroupsOffered ? selectedAddons : undefined}
               label="Add to Quote — request pricing"
             />
           )}

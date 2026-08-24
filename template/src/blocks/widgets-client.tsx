@@ -211,6 +211,7 @@ export const AddToQuoteWidget: WidgetComponent = () => {
     restrictAddToQuote,
     selectedAddons,
     addonGroupsUnanswered,
+    addonGroupsOffered,
   } = purchase;
   // Zoey "Restrict Add to Quote" — the button simply is not offered for this product (7vu2iEEZ).
   if (restrictAddToQuote) return null;
@@ -222,8 +223,10 @@ export const AddToQuoteWidget: WidgetComponent = () => {
       // `node_product_template_enabled` is switched off, so the ticked extras travel with THIS
       // button too — a quote path that silently dropped them hands the rep a bare machine. A
       // required group greys the button here as it does on the coded buy box, and the action
-      // refuses it again server-side.
-      addons={selectedAddons}
+      // refuses it again server-side. A selection is posted only where the panel was actually
+      // OFFERED: this renderer builds its provider input by hand and does not pass `addons`, and
+      // an empty object would read as a deliberate clear-down of a configuration made elsewhere.
+      addons={addonGroupsOffered ? selectedAddons : undefined}
       disabled={(useGroupedMode && !allOptionsSelected) || addonGroupsUnanswered.length > 0}
     />
   );
