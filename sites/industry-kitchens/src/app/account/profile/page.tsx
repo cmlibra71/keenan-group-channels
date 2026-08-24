@@ -45,12 +45,21 @@ export default async function ProfilePage() {
   const canManageAddresses = mayManageAddressBook(perms, "edit");
   const canAddAddress = mayManageAddressBook(perms, "add");
   const canRemoveAddress = mayManageAddressBook(perms, "remove");
+  // "Manage your…" is a promise the section can no longer keep once every control
+  // in it is gone, so the blurb changes with the controls.
+  const addressesAreReadOnly = !canAddAddress && !canManageAddresses && !canRemoveAddress;
 
   // What is still outstanding on this account (card xqWftDcL). It PROMPTS — it
   // never blocks: no order and no checkout reads this.
+  // The address items are dropped when the role refuses the control that would
+  // satisfy them (card H5JdsMrC): telling a customer to "add an address" above a
+  // section whose Add button we have just hidden is the accusation card xqWftDcL
+  // wrote this prompt to avoid. The phone item is unaffected.
   const missing = missingProfileDetails({
     phone: contact?.phone ?? "",
     addresses,
+    canAddAddress: canAddAddress,
+    canEditAddress: canManageAddresses,
   });
   const promptLines = profilePromptLines(missing);
 
@@ -96,8 +105,9 @@ export default async function ProfilePage() {
       <section className="mb-10">
         <h2 className="text-lg font-semibold text-zinc-900 mb-1">Addresses</h2>
         <p className="text-sm text-zinc-500 mb-4">
-          Manage your delivery and billing addresses. You can keep a billing
-          address separate from your company/shipping address.
+          {addressesAreReadOnly
+            ? "The delivery and billing addresses saved to your profile."
+            : "Manage your delivery and billing addresses. You can keep a billing address separate from your company/shipping address."}
         </p>
         <AddressBook
           addresses={addresses}

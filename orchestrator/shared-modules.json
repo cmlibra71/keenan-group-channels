@@ -60,6 +60,8 @@
     "lib/account/account-people.ts",
     "lib/account/account-roles.test.ts",
     "lib/account/account-roles.ts",
+    "lib/account/address-authority.test.ts",
+    "lib/account/address-authority.ts",
     "lib/account/people-email.ts",
     "lib/account/profile-completeness.test.ts",
     "lib/account/profile-completeness.ts",

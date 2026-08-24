@@ -80,6 +80,71 @@ export function addressAuthorityMessage(verb: "adding" | "editing" | "removing")
   return `Your role on this account doesn't allow ${verb} addresses. Ask your account administrator.`;
 }
 
-/** The sentence the Address Book prints in place of its own controls. */
-export const ADDRESS_BOOK_READ_ONLY_NOTE =
-  "These are your account's saved addresses. Only the account's manager can add, change or remove them — ask them if one needs updating. You can still choose any of them when you order.";
+// ── What a refused customer is TOLD in the address book ──────────────────────
+//
+// Three things this wording has to get right, and the first version of it got
+// all three wrong:
+//
+//  1. The book is CONTACT-scoped, not account-scoped (`loadProfileAddresses`,
+//     `customerAddressService.listForContact` and `deleteAddressForContact` all
+//     key on `contact_id`). These are the person's OWN saved rows, so we must not
+//     call them "your account's addresses".
+//  2. There is nowhere on any storefront screen where the account's manager can
+//     change a COLLEAGUE's saved address, so "ask your manager" is a dead end.
+//     The refused customer is sent to us. On production every contact this
+//     refuses is also their account's main contact or has no colleague who could
+//     help — the 136 Billing and Shipping contacts ARE their account's main
+//     contact, so "ask the manager" would have told them to ask themselves.
+//  3. It must not promise a choice among nothing. Every contact this refuses has
+//     ZERO saved addresses today, so the empty book IS the screen: the note has
+//     to describe what they can still do (type a delivery address as they order),
+//     not offer them a list that is not there.
+//
+// It is also printed whenever ANY of the three writes is refused, not only when
+// all three are — a role that may add but not edit would otherwise lose Edit,
+// Delete and Set-as-default with no explanation at all.
+
+/** The verb each refused action is described with, in the order they read. */
+const REFUSED_VERBS: readonly [keyof AddressBookPermissions, string][] = [
+  ["canAdd", "adding"],
+  ["canEdit", "changing"],
+  ["canRemove", "removing"],
+];
+
+export interface AddressBookPermissions {
+  canAdd: boolean;
+  canEdit: boolean;
+  canRemove: boolean;
+}
+
+export interface AddressBookNoticeInput extends AddressBookPermissions {
+  /** Does this customer have any saved address to choose from right now? */
+  hasSavedAddresses: boolean;
+}
+
+function joinVerbs(verbs: readonly string[]): string {
+  if (verbs.length <= 1) return verbs[0] ?? "";
+  return `${verbs.slice(0, -1).join(", ")} or ${verbs[verbs.length - 1]}`;
+}
+
+/**
+ * The sentences the Address Book prints in place of the controls it hides, or
+ * `null` when nothing is refused and the book behaves normally.
+ *
+ * The component renders one more line after these, carrying the "contact us"
+ * link — the "somewhere to go" every refusal on this surface owes the customer.
+ */
+export function addressBookNoticeLines(input: AddressBookNoticeInput): string[] | null {
+  const refused = REFUSED_VERBS.filter(([key]) => !input[key]).map(([, verb]) => verb);
+  if (refused.length === 0) return null;
+
+  const lines = [
+    `Your role on this account doesn't allow ${joinVerbs(refused)} saved addresses.`,
+  ];
+  if (input.hasSavedAddresses) {
+    lines.push("You can still choose any of the addresses below whenever you order.");
+  } else if (!input.canAdd) {
+    lines.push("You can still type a delivery address as you order — it just isn't saved here.");
+  }
+  return lines;
+}

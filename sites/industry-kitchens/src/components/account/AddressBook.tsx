@@ -12,7 +12,7 @@ import {
   setDefaultAddress,
   type AddressInput,
 } from "@/lib/actions/account";
-import { ADDRESS_BOOK_READ_ONLY_NOTE } from "@/lib/account/address-authority";
+import { addressBookNoticeLines } from "@/lib/account/address-authority";
 
 export type Address = {
   id: number;
@@ -73,7 +73,15 @@ export function AddressBook({
   const [editing, setEditing] = useState<number | "new" | null>(null);
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
-  const readOnly = !canAdd && !canEdit && !canRemove;
+  // Printed whenever ANY of the three writes is refused, not only when all three
+  // are: a role that may add but not edit would otherwise lose Edit, Delete and
+  // Set-as-default with nothing on screen explaining where they went.
+  const notice = addressBookNoticeLines({
+    canAdd,
+    canEdit,
+    canRemove,
+    hasSavedAddresses: addresses.length > 0,
+  });
 
   async function onDelete(id: number) {
     setBusy(true);
@@ -106,10 +114,19 @@ export function AddressBook({
         <p className="text-sm text-zinc-500">No saved addresses yet.</p>
       )}
 
-      {readOnly && (
-        <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
-          {ADDRESS_BOOK_READ_ONLY_NOTE}
-        </p>
+      {notice && (
+        <div className="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
+          {notice.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
+          <p>
+            If one needs adding or changing, please{" "}
+            <a href="/pages/contact" className="font-medium text-zinc-900 underline hover:text-zinc-600">
+              contact us
+            </a>
+            .
+          </p>
+        </div>
       )}
 
       {refusal && (
