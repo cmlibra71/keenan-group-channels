@@ -20,6 +20,7 @@ import {
   type NodeTree,
 } from "@keenan/services/builder";
 import { cmsFunctionService } from "@keenan/services/services";
+import { treePlacesSeoCopy } from "@/builder/seo-copy-placement";
 import {
   BuilderCategoryPage,
   type CategoryGridProduct,
@@ -67,6 +68,43 @@ export interface CategoryNodeBranchArgs {
   categorySlugFallback: string;
   /** draftMode() OR the `x-kg-json` parity header. */
   draft: boolean;
+}
+
+/**
+ * Does the authored Category Page Template PLACE this storefront's own approved
+ * page copy?
+ *
+ * The wording written and approved on Products → Category page SEO used to have
+ * exactly one home: the block at the foot of the page, hard-coded in the route.
+ * Since card nYxPgpvK the payload also carries it as `category.seo_intro_html`,
+ * so a template can put it in the header, above the grid, anywhere — which is
+ * the whole ask ("no way to manipulate the positioning or formatting of that
+ * text inside the CMS", Steve 2026-08-24).
+ *
+ * The route has to know, because a page that prints the same paragraphs twice is
+ * worse than one that cannot move them: duplicated body copy on 4,231 category
+ * pages is the cannibalisation this content exists to avoid. So the foot block
+ * withholds its intro — and only its intro, the questions stay — when the tree
+ * binds that path. A site with no tree, or with the node not placed, behaves
+ * exactly as it did before.
+ *
+ * Component MASTERS are searched too: a node placed inside a shared component is
+ * still on the page, and the instance only carries the component's key.
+ *
+ * Every read here is the same `cache()`d load the branch itself does, so calling
+ * both on one request costs one fetch.
+ */
+export async function categoryTreePlacesSeoCopy(draft: boolean): Promise<boolean> {
+  const catTemplate = (await getCmsTemplate("category_layout", draft).catch(() => null)) as {
+    node_tree?: unknown;
+  } | null;
+  const nodeTree = (catTemplate?.node_tree as NodeTree | null) ?? null;
+  if (!nodeTree?.root) return false;
+  if (!draft && !(await getFeatureFlag("node_category_template_enabled"))) return false;
+  const components = (await (draft ? getDraftComponents() : getComponents()).catch(
+    () => ({})
+  )) as Record<string, NodeTree>;
+  return treePlacesSeoCopy(nodeTree, components);
 }
 
 /**
