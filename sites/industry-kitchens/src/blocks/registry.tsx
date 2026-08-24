@@ -146,6 +146,7 @@ async function ProductListingBlock({ props }: BlockProps) {
 
 // --- the map ----------------------------------------------------------------
 
+import { EmbedBlock } from "./EmbedBlock";
 import { CATEGORY_BLOCK_COMPONENTS } from "./category-blocks";
 import { PRODUCT_BLOCK_COMPONENTS } from "./product-blocks";
 import { HOME_BLOCK_COMPONENTS } from "./home-blocks";
@@ -156,6 +157,7 @@ export const BLOCK_COMPONENTS: Record<string, FC<BlockProps> | ((p: BlockProps) 
   content_page: ContentPageBlock,
   raw_html: RawHtmlBlock,
   image: ImageBlock,
+  embed: EmbedBlock,
   spacer: SpacerBlock,
   cta: CtaBlock,
   hero: HeroBlock,

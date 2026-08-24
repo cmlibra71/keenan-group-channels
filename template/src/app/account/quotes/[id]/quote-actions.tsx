@@ -27,7 +27,13 @@ export function QuoteActions({
   const canDuplicate = !["quote_cancelled"].includes(status);
 
   const run = (
-    fn: () => Promise<{ success?: boolean; error?: string; quoteId?: number }>,
+    fn: () => Promise<{
+      success?: boolean;
+      error?: string;
+      quoteId?: number;
+      /** Set by acceptQuote: the portal's acceptance acknowledgement page. */
+      acknowledgementUrl?: string | null;
+    }>,
     okText: string,
     goTo?: (r: { quoteId?: number }) => string,
   ) =>
@@ -38,6 +44,16 @@ export function QuoteActions({
         setMsg({ kind: "err", text: r.error });
       } else {
         setMsg({ kind: "ok", text: okText });
+        // Card 87IkgD2H (Tim, 2026-08-19): accepting takes the customer to a real
+        // acknowledgement — what happens next, how to pay, the finance offer and a
+        // ten-second countdown back to this account area — rather than refreshing
+        // this page under them. It is the PORTAL's page, so this is a full
+        // navigation, not a router push. A quote that somehow carries no
+        // acknowledgement URL falls through to the refresh this always did.
+        if (r?.acknowledgementUrl) {
+          window.location.assign(r.acknowledgementUrl);
+          return;
+        }
         if (goTo && r?.quoteId) router.push(goTo(r));
         else router.refresh();
       }
@@ -57,7 +73,11 @@ export function QuoteActions({
               () => acceptQuote(quoteId),
               // Accepting without paying sends the pro-forma (card 0Wy0xHuq) —
               // say so, or the customer waits for something they think is coming.
-              "Quote accepted — we've emailed your pro-forma. You can pay it below."
+              // It says "below" nowhere any more: accepting now navigates to the
+              // portal's acknowledgement (card 87IkgD2H), so this line flashes for
+              // a frame on the way out and must not point at a place that has just
+              // stopped existing. The acknowledgement carries how to pay.
+              "Quote accepted — we've emailed your pro-forma."
             )
           }
           className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"

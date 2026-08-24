@@ -337,7 +337,7 @@ export default async function CategoryPage({
           <RichContent
             html={category.description}
             stripStyles
-            className="mt-3 max-w-[70ch] text-zinc-600 leading-relaxed prose prose-sm prose-zinc"
+            className="mt-3 max-w-none text-zinc-600 leading-relaxed kg-category-copy"
           />
         )}
         <p className="mt-3 text-sm text-zinc-500">
