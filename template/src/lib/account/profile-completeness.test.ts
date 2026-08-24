@@ -74,3 +74,55 @@ test("nothing in the prompt claims an order is blocked", () => {
     assert.doesNotMatch(line, /can(not|'t)|blocked|required|must/i);
   }
 });
+
+// ── The prompt never asks for a control the customer's role has taken away ──
+// (card H5JdsMrC landing on card xqWftDcL's rule: every prompt line names the
+// CONTROL that satisfies it.)
+
+test("a customer refused the address book is not told to add an address", () => {
+  const missing = missingProfileDetails({
+    phone: "0400 000 000",
+    addresses: [],
+    canAddAddress: false,
+    canEditAddress: false,
+  });
+  assert.deepEqual(missing, []);
+});
+
+test("the phone item survives an address refusal — they can still fix that", () => {
+  const missing = missingProfileDetails({
+    phone: "",
+    addresses: [],
+    canAddAddress: false,
+    canEditAddress: false,
+  });
+  assert.deepEqual(missing, ["phone"]);
+});
+
+test("a customer who may not EDIT is not told to set a default on a saved address", () => {
+  const missing = missingProfileDetails({
+    phone: "0400 000 000",
+    addresses: [addr(false, false)],
+    canAddAddress: false,
+    canEditAddress: false,
+  });
+  assert.deepEqual(missing, []);
+});
+
+test("the flags default to true, so B2C and role-unaware callers are unchanged", () => {
+  assert.deepEqual(missingProfileDetails({ phone: "0400 000 000", addresses: [] }), ["address"]);
+  assert.deepEqual(
+    missingProfileDetails({ phone: "0400 000 000", addresses: [addr(false, false)] }),
+    ["defaultBilling", "defaultShipping"]
+  );
+});
+
+test("a customer who may still ADD is asked for the address they can actually add", () => {
+  const missing = missingProfileDetails({
+    phone: "0400 000 000",
+    addresses: [],
+    canAddAddress: true,
+    canEditAddress: false,
+  });
+  assert.deepEqual(missing, ["address"]);
+});

@@ -5,6 +5,7 @@ import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
 import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
 import { getContactPermissions } from "@/lib/role-permissions";
+import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import { summariseLinesFreight } from "@keenan/services";
 import { gstSplit } from "@keenan/services/calc";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
@@ -234,17 +235,14 @@ export default async function CheckoutPage() {
   }
 
   // May this shopper add the address they type to their address book? Guests have
-  // no account to save into. A contact on a B2B account is bound by the SAME role
-  // codes placeOrder enforces for a new checkout address — if their role forbids
-  // adding one, we must not offer to keep it. placeOrder re-checks this server-side;
-  // this is only what we SHOW.
+  // no account to save into. A contact on a B2B account is bound by the SAME rule
+  // `placeOrder` enforces — ONE function, `mayFileAddressInBook`, so what we SHOW
+  // is what we will ACCEPT. Offering to keep an address we would then quietly drop
+  // is a promise the site does not honour. placeOrder re-checks it server-side;
+  // this is only what we show.
   let canSaveNewAddress = false;
   if (session) {
-    const perms = await getContactPermissions(session.contactId);
-    canSaveNewAddress =
-      !perms.isB2B ||
-      perms.accountId === null ||
-      (perms.can("add_billing_address_in_checkout") && perms.can("add_shipping_address_in_checkout"));
+    canSaveNewAddress = mayFileAddressInBook(await getContactPermissions(session.contactId));
   }
 
   // Resolve the channel's Stripe gateway (test-vs-live aware, prod-safe fallback)
