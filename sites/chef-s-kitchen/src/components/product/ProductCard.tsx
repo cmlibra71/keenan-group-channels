@@ -177,9 +177,11 @@ export function ProductCard({
             a figure invented here would be a money claim on a customer-facing screen.
 
             This card draws the tile on the home rails, /products, /clearance, /search and the
-            brand pages. CATEGORY pages render the authored `product-card` master instead, which
-            `builder/promo-tag-node.ts` reaches at render time off this same wording — one
-            constant, so the two tiles can never say different things. */}
+            brand pages. Every AUTHORED page — category, brand, the product page's "You may also
+            like" rail, /pages/[slug] — repeats the stored `product-card` master instead, which
+            `builder/promo-tag-node.ts` reaches at render time off this same wording, applied once
+            in `@/lib/store` so no branch can load the master without it. One constant, so no two
+            of our own screens can say different things about the same product. */}
         {PROMO_TAG_LABEL && (
           <p className="mt-3">
             <span className="badge-promo">{PROMO_TAG_LABEL}</span>

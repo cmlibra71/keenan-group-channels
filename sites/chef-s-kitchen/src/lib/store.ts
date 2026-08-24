@@ -1,4 +1,7 @@
 import { unstable_cache } from "next/cache";
+import type { NodeTree } from "@keenan/services/builder";
+import { withPromoTagInComponents } from "@/builder/promo-tag-node";
+import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
 import { initCommerceDb, createChannelStore, getCommerceClient, blogService } from "@keenan/services";
 import {
   channelService,
@@ -115,9 +118,42 @@ export const {
   calculateShipping,
   getProductPageData,
   getNamedStyles,
-  getComponents,
-  getDraftComponents,
 } = _store;
+
+// ============================================================================
+// Component masters, with the "Buy more & save" tile tag placed at read time.
+//
+// Card FNYihLHk (Steve, 2026-08-23): every Chefs Depot product tile carries the
+// tagline pill under the brand, name and price. The React `ProductCard.tsx`
+// covers the tiles this site draws in React; every AUTHORED page — category,
+// brand, home, product (its "You may also like" rail) and `/pages/[slug]` —
+// repeats the stored `product-card` master instead, so the rule has to reach
+// the master too.
+//
+// It is placed HERE, once, and not in each of the five node branches that load
+// components, for exactly the reason card tSrCcnvx placed the Industry Kitchens
+// brand-logo fallback here: a branch that forgot the call would carry the tag on
+// one of our own screens and not on the next, for the same product. The category
+// page and the product page's upsell rail render the SAME master.
+//
+// Nothing is written to the stored tree — see `builder/promo-tag-node.ts`. On a
+// site whose `lib/promo-tag.ts` holds null this returns the map untouched, which
+// is the channel gate.
+// ============================================================================
+
+type ComponentMap = Awaited<ReturnType<typeof _store.getComponents>>;
+
+const withPromoTag = (components: ComponentMap): ComponentMap =>
+  withPromoTagInComponents(
+    components as Record<string, NodeTree>,
+    PROMO_TAG_LABEL
+  ) as ComponentMap;
+
+export const getComponents = async (): Promise<ComponentMap> =>
+  withPromoTag(await _store.getComponents());
+
+export const getDraftComponents = async (): Promise<ComponentMap> =>
+  withPromoTag((await _store.getDraftComponents()) as ComponentMap);
 
 export type { MegaMenuNode, MegaMenuFeatured, ContentPage } from "@keenan/services";
 

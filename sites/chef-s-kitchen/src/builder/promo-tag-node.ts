@@ -3,14 +3,23 @@ import type { NodeTree, BuilderNode } from "@keenan/services/builder";
 // ============================================================================
 // The "Buy more & save" tag on the AUTHORED listing tile (card FNYihLHk).
 //
-// WHY CODE AND NOT AUTHORING. A category page on a channel with
-// `node_category_template_enabled` renders from an authored node tree stored in
-// the database, and its tiles are placements of the `product-card` COMPONENT
+// WHY CODE AND NOT AUTHORING. An AUTHORED page renders from a node tree stored
+// in the database, and its tiles are placements of the `product-card` COMPONENT
 // master (`cms_components`), not the React `ProductCard`. Verified live on
-// 2026-08-25: chefsdepot.com.au/categories/* serves ten `data-node-id="cmp-seed-17"`
-// tiles, while its home rails, /products, /clearance, /search and /brands/* all
-// still serve the React card. So editing ProductCard.tsx alone ships the tag on
-// five listing surfaces out of six and misses the busiest one.
+// 2026-08-25: chefsdepot.com.au/categories/* serves `data-node-id="cmp-seed-17"`
+// tiles and a Chefs Depot PRODUCT page repeats the very same master for its
+// "You may also like" rail, while the home rails, /products, /clearance,
+// /search and /brands/* still serve the React card. So editing ProductCard.tsx
+// alone ships the tag on some of our own screens and not on others, for the
+// same product.
+//
+// WHERE IT IS APPLIED. Once, at `@/lib/store`, which wraps `getComponents` /
+// `getDraftComponents` — the single read every node branch and every authored
+// route goes through (category, brand, home, product, `/pages/[slug]`). That is
+// the seam card tSrCcnvx used for the Industry Kitchens brand-logo fallback, and
+// it is the reason there is no "which branch did we remember" question: a branch
+// cannot load a master without the tag on it. Wiring one branch instead covers
+// the happy path only, and the page next door disagrees with it.
 //
 // Placing it at render time is the same choice — and the same shape — as the
 // illustrative-image banner (82HgV23q), the SilverChef panel (6f47rFeT) and the

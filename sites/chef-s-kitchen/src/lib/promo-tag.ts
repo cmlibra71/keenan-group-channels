@@ -14,11 +14,13 @@
  *
  * WHY THE WORDING LIVES HERE rather than in the tile. The listing tile is drawn two ways on this
  * site: the React `components/product/ProductCard.tsx` (home rails, /products, /clearance,
- * /search, brand pages) and, on category pages, the AUTHORED `product-card` component the Site
- * Builder repeats — which shared code has to reach at render time
- * (`builder/promo-tag-node.ts`). That shared module is byte-identical across `template/` and both
- * sites, so the per-channel decision has to sit in a file a site is allowed to differ in. This is
- * that seam — the same shape as `lib/orders/pay-balance-site.tsx`, deliberately NOT listed in
+ * /search, brand pages) and, on every AUTHORED page — category, brand, the product page's "You
+ * may also like" rail, `/pages/[slug]` — the `product-card` component the Site Builder repeats,
+ * which shared code has to reach at render time (`builder/promo-tag-node.ts`, applied once at
+ * `@/lib/store` so no branch can load the master without it). That shared module is
+ * byte-identical across `template/` and both sites, so the per-channel decision has to sit in a
+ * file a site is allowed to differ in. This is that seam — the same shape as
+ * `lib/orders/pay-balance-site.tsx`, deliberately NOT listed in
  * `orchestrator/shared-modules.json`. `template/` and Industry Kitchens hold `null` here, which
  * inserts and renders nothing: IK has its own trade tag ("Mates Rates", the card's own
  * comparison) and is not on the Chefs Depot buying-group ladder.

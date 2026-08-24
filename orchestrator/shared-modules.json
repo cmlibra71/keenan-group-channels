@@ -186,6 +186,7 @@
     "lib/payments/stripe-gateways.ts",
     "lib/pricing/cart-pricing.test.ts",
     "lib/pricing/cart-pricing.ts",
+    "lib/promo-tag-wiring.test.ts",
     "lib/quote.ts",
     "lib/quotes/acknowledgement-url.test.ts",
     "lib/quotes/acknowledgement-url.ts",
