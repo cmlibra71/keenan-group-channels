@@ -1,7 +1,7 @@
 "use server";
 
 import { cache } from "react";
-import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, CHANNEL_ID } from "@/lib/store";
+import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, applyAdvertisedLadderPrices, getMemberLadderLevelId, CHANNEL_ID } from "@/lib/store";
 import { resolveAccountLinePrices, accountLineKey } from "@keenan/services";
 import { getAccountId } from "@/lib/member";
 import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
@@ -106,6 +106,26 @@ async function resolveItemPricing(
     if (variant?.sale_price) catalogSalePrice = variant.sale_price;
   }
 
+  // ── THE ADVERTISED PRICE (card gk23c1VK). On a channel whose buying-group
+  // ladder advertises the Industry Kitchens trade price, the cart's list price
+  // is M — the same figure the product page and the listing card showed. A cart
+  // that re-derived RRP here would charge a price the shopper never saw, which
+  // is the exact failure the "cart lines store their price at ADD time" rule
+  // exists to prevent. No-op on a channel with no ladder switched on.
+  {
+    const [row] = await applyAdvertisedLadderPrices([
+      {
+        id: productId,
+        price: listPrice,
+        ...(variantId ? { variants: [{ id: variantId, price: listPrice }] } : {}),
+      },
+    ]);
+    const advertised =
+      (row as { variants?: Array<{ price?: unknown }> }).variants?.[0]?.price ??
+      (row as { price?: unknown }).price;
+    if (typeof advertised === "string" && parseFloat(advertised) > 0) listPrice = advertised;
+  }
+
   // Channels with member-only cost-plus pricing suppress the shared catalog sale
   // price (it's another channel's public price) AND bulk tiers — list price stays RRP.
   const suppress = await shouldSuppressCatalogSalePrice();
@@ -123,7 +143,21 @@ async function resolveItemPricing(
           const variantResult = variantId ? null : await productVariantService.listForParent(productId, { page: 1, limit: 1, sort: "id", direction: "asc" });
           const pricingVariantId = variantId || (variantResult?.data[0] as { id: number } | undefined)?.id;
           if (pricingVariantId) {
-            const pricing = await getEffectivePrice(pricingVariantId, CHANNEL_ID, contact.customer_group_id, quantity);
+            // The shopper's rung on the buying-group ladder, resolved the same
+            // way every other pricing surface resolves it. Null off-ladder.
+            const ladderLevelId = await getMemberLadderLevelId({
+              accountId,
+              contactId: session.contactId,
+            }).catch(() => null);
+            const pricing = await getEffectivePrice(
+              pricingVariantId,
+              CHANNEL_ID,
+              contact.customer_group_id,
+              quantity,
+              accountId,
+              null,
+              ladderLevelId
+            );
             if (pricing.salePrice) memberSalePrice = pricing.salePrice;
           }
         }

@@ -46,6 +46,8 @@ export interface ProductMemberContext {
   /** Non-members get a savings PERCENTAGE for the join teaser — never a price. */
   teaserCustomerGroupId: number | null;
   accountId: number | null;
+  /** The buying-group rung this shopper prices at (card gk23c1VK); null off-ladder. */
+  ladderLevelId?: string | null;
 }
 
 export interface ProductNodeBranchArgs {
@@ -91,6 +93,7 @@ export async function renderProductNodeBranch({
       loggedIn: member.loggedIn,
       planPrice: member.planPrice,
       teaserCustomerGroupId: member.teaserCustomerGroupId,
+      ladderLevelId: member.ladderLevelId ?? null,
     },
     // Per-account contract prices override every layer; the payload's product +
     // related cards and its variant pricing are all resolved with the account

@@ -2,9 +2,15 @@ import Link from "next/link";
 import { Check } from "lucide-react";
 
 /**
- * Design-system membership value strip: warm-ink panel with a gold radial
- * glow, serif "Members save 10–25% on every order" headline, four gold-tick
- * perks, and the price box with the Join CTA.
+ * Design-system membership value strip: warm-ink panel with a gold radial glow,
+ * a serif headline, four gold-tick perks, and the price box with the Join CTA.
+ *
+ * The headline used to read "Members save 10–25% on every order". It had no
+ * measured basis and it misdescribed the reference price, so card gk23c1VK
+ * replaced it: under the buying-group model there is no single saving figure,
+ * because the distance between the entry and floor trade prices is set item by
+ * item by how hard the group buys it. Do not reintroduce a percentage here —
+ * one may only be published from a measured spread across the catalogue.
  */
 export function MembershipValueStrip({
   planPrice,
@@ -37,7 +43,9 @@ export function MembershipValueStrip({
 
         <div className="relative">
           <h3 className="heading-serif mb-2 text-[28px] text-white">
-            Members save <em className="not-italic text-member-bright">10–25%</em> on every order.
+            Members buy at a{" "}
+            <em className="not-italic text-member-bright">different price tier</em>, from their
+            first order.
           </h3>
           <div className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2.5 sm:grid-cols-2">
             {perks.map((perk) => (

@@ -7,6 +7,8 @@ import {
   getMemberPriceMap,
   accountService,
   applyAccountPricesToProducts,
+  applyAdvertisedLadderPrices,
+  getMemberLadderLevelId,
 } from "@/lib/store";
 
 export interface MemberContext {
@@ -26,6 +28,12 @@ export interface MemberContext {
    * contract price is not a membership perk. Null for guests and accountless shoppers.
    */
   accountId: number | null;
+  /**
+   * The shopper's rung on the buying-group ladder (card gk23c1VK), or null when
+   * this channel has no ladder switched on — which is every channel but Chefs
+   * Depot. Resolved once per request and threaded into every pricing call.
+   */
+  ladderLevelId: string | null;
 }
 
 /**
@@ -58,6 +66,7 @@ export async function getMemberContext(): Promise<MemberContext> {
     loggedIn: !!session,
     customerGroupId: null,
     accountId,
+    ladderLevelId: null,
   };
 
   const enabled = await getFeatureFlag("member_pricing_enabled");
@@ -71,11 +80,18 @@ export async function getMemberContext(): Promise<MemberContext> {
     customer_group_id: number | null;
   } | null;
 
+  // The ladder rung (card gk23c1VK) — null on a channel with no ladder.
+  const ladderLevelId = await getMemberLadderLevelId({
+    accountId,
+    contactId: session.contactId,
+  }).catch(() => null);
+
   return {
     isMember: true,
     loggedIn: true,
     customerGroupId: contact?.customer_group_id ?? null,
     accountId,
+    ladderLevelId,
   };
 }
 
@@ -87,9 +103,12 @@ export async function getMemberContext(): Promise<MemberContext> {
  */
 export async function applyAccountPrices<T extends { id: number }[]>(products: T): Promise<T> {
   if (products.length === 0) return products;
+  // The buying-group ADVERTISED price first (card gk23c1VK) — a no-op on a
+  // channel with no ladder — then the account's contract prices over the top.
+  const advertised = (await applyAdvertisedLadderPrices(products as never)) as T;
   const accountId = await getAccountId();
-  if (!accountId) return products;
-  return applyAccountPricesToProducts(products as never, accountId) as Promise<T>;
+  if (!accountId) return advertised;
+  return applyAccountPricesToProducts(advertised as never, accountId) as Promise<T>;
 }
 
 /**
@@ -101,7 +120,7 @@ export async function getListingMemberPrices(
   products: { id: number }[]
 ): Promise<Record<number, number>> {
   if (products.length === 0) return {};
-  const { customerGroupId, accountId } = await getMemberContext();
+  const { customerGroupId, accountId, ladderLevelId } = await getMemberContext();
   if (!customerGroupId && !accountId) return {};
-  return getMemberPriceMap(products.map((p) => p.id), customerGroupId, accountId);
+  return getMemberPriceMap(products.map((p) => p.id), customerGroupId, accountId, ladderLevelId);
 }

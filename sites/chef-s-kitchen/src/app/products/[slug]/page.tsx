@@ -312,6 +312,7 @@ export default async function ProductPage({
         planPrice: memberCtx.planPrice ? parseFloat(memberCtx.planPrice).toFixed(2) : null,
         teaserCustomerGroupId: memberCtx.teaserCustomerGroupId,
         accountId: memberCtx.accountId,
+        ladderLevelId: memberCtx.ladderLevelId,
       },
       jsonLd,
       viewedProduct: {
