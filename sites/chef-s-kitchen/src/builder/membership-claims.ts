@@ -71,12 +71,14 @@ export interface ClaimRewriteResult {
   rewritten: string[];
 }
 
-// The walk is structural, not variant-aware — same approach as
-// `strip-stock-nodes.ts`: read nodes off a plain-record view, rewrite only the
-// static text parts, and copy everything else through byte for byte so an
-// authored tree's component instances, styles and bindings survive intact.
+// The walk is deliberately GENERIC — every object and array value, not just the
+// two child keys. A stored tree is `{ v, root: { … } }` with component
+// instances, slots and prop bags in between, and a walker that only followed
+// `children` silently reported "already clean" on the very page this exists to
+// fix. Only `text[].value` strings are ever rewritten, and only when they match
+// a known claim exactly; everything else is copied through byte for byte, which
+// is what keeps component instances, styles and bindings intact.
 type NodeRecord = Record<string, unknown>;
-const CHILD_KEYS = ["children", "emptyChildren"] as const;
 
 function rewriteText(value: string, rewritten: string[]): string {
   let out = value;
@@ -94,22 +96,22 @@ function rewriteNode(node: unknown, rewritten: string[]): unknown {
   if (!node || typeof node !== "object") return node;
 
   const rec = node as NodeRecord;
-  const next: NodeRecord = { ...rec };
+  const next: NodeRecord = {};
 
-  if (Array.isArray(rec.text)) {
-    next.text = (rec.text as unknown[]).map((part) => {
-      if (part && typeof part === "object" && "value" in part) {
-        const value = (part as { value: unknown }).value;
-        if (typeof value === "string") {
-          return { ...(part as Record<string, unknown>), value: rewriteText(value, rewritten) };
+  for (const [key, value] of Object.entries(rec)) {
+    if (key === "text" && Array.isArray(value)) {
+      next.text = (value as unknown[]).map((part) => {
+        if (part && typeof part === "object" && "value" in part) {
+          const raw = (part as { value: unknown }).value;
+          if (typeof raw === "string") {
+            return { ...(part as Record<string, unknown>), value: rewriteText(raw, rewritten) };
+          }
         }
-      }
-      return part;
-    });
-  }
-
-  for (const key of CHILD_KEYS) {
-    if (Array.isArray(rec[key])) next[key] = (rec[key] as unknown[]).map((c) => rewriteNode(c, rewritten));
+        return part;
+      });
+      continue;
+    }
+    next[key] = rewriteNode(value, rewritten);
   }
 
   return next;
@@ -122,24 +124,19 @@ export function rewriteMembershipClaims(tree: NodeTree): ClaimRewriteResult {
   return { tree: next, rewritten };
 }
 
-/** Any surviving claim marker in a tree's static text, for the post-condition. */
+/** Any surviving claim marker ANYWHERE in the tree, for the post-condition. */
 export function findMembershipClaims(tree: NodeTree): string[] {
   const found = new Set<string>();
   const walk = (node: unknown) => {
+    if (typeof node === "string") {
+      for (const marker of MEMBERSHIP_CLAIM_MARKERS) {
+        if (node.toLowerCase().includes(marker.toLowerCase())) found.add(marker);
+      }
+      return;
+    }
     if (Array.isArray(node)) return node.forEach(walk);
     if (!node || typeof node !== "object") return;
-    const rec = node as NodeRecord;
-    if (Array.isArray(rec.text)) {
-      for (const part of rec.text as unknown[]) {
-        if (part && typeof part === "object" && "value" in part) {
-          const value = String((part as { value: unknown }).value ?? "");
-          for (const marker of MEMBERSHIP_CLAIM_MARKERS) {
-            if (value.toLowerCase().includes(marker.toLowerCase())) found.add(marker);
-          }
-        }
-      }
-    }
-    for (const key of CHILD_KEYS) if (Array.isArray(rec[key])) (rec[key] as unknown[]).forEach(walk);
+    for (const value of Object.values(node as Record<string, unknown>)) walk(value);
   };
   walk(tree);
   return [...found];
