@@ -12,7 +12,8 @@
 import Link from "next/link";
 import Image from "next/image";
 import { ChevronRight, Package } from "lucide-react";
-import type { RenderContext } from "@keenan/services";
+import { isAllowedImageUrl } from "@/lib/image-origin";
+import type { CategoryChildSlim, RenderContext } from "@keenan/services";
 import {
   getCategoryListing,
   getSubcategories,
@@ -61,7 +62,8 @@ export type CategoryExtras = {
   memberPriceMap?: Record<number, number>;
   memberPricingEnabled?: boolean;
   breadcrumbs?: Array<{ id: number; name: string; slug: string }>;
-  subcategories?: Array<{ id: number; name: string; slug: string; imageUrl?: string | null }>;
+  /** As `getSubcategories` returns them: snake_cased, `image_url` (card 7LjU5UDE). */
+  subcategories?: CategoryChildSlim[];
   page?: number;
   hasMore?: boolean;
   nextPageHref?: string;
@@ -183,10 +185,7 @@ async function CategoryHeaderBlock({ props, ctx }: BlockProps) {
     extras.listing
       ? Promise.resolve(extras.listing.total)
       : getCategoryListing(category.id, { page: 1, limit: 1 }).then((l) => l.total).catch(() => 0),
-    extras.subcategories ??
-      (getSubcategories(category.id) as Promise<
-        Array<{ id: number; name: string; slug: string; imageUrl?: string | null }>
-      >),
+    extras.subcategories ?? getSubcategories(category.id),
   ]);
   const showDescription = props.show_description !== false;
   const showSubcategories = props.show_subcategories !== false;
@@ -211,7 +210,7 @@ async function CategoryHeaderBlock({ props, ctx }: BlockProps) {
           <RichContent
             html={category.description}
             stripStyles
-            className="mt-3 max-w-[70ch] text-zinc-600 leading-relaxed prose prose-sm prose-zinc"
+            className="mt-3 max-w-none text-zinc-600 leading-relaxed kg-category-copy"
           />
         )}
         <p className="mt-3 text-sm text-zinc-500">
@@ -229,9 +228,9 @@ async function CategoryHeaderBlock({ props, ctx }: BlockProps) {
                 href={`/categories/${sub.slug}`}
                 className="group flex items-center gap-3 rounded-lg border border-zinc-200 p-3 hover:border-zinc-400 hover:shadow-sm transition-all"
               >
-                {sub.imageUrl ? (
+                {sub.image_url && isAllowedImageUrl(sub.image_url) ? (
                   <div className="relative h-12 w-12 flex-shrink-0">
-                    <Image src={sub.imageUrl} alt={sub.name} fill sizes="48px" className="rounded object-cover" />
+                    <Image src={sub.image_url} alt={sub.name} fill sizes="48px" className="rounded object-cover" />
                   </div>
                 ) : (
                   <div className="h-12 w-12 rounded bg-zinc-100 flex items-center justify-center flex-shrink-0">

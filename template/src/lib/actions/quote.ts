@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath, refresh } from "next/cache";
-import { quoteService, quoteItemService, productService, productVariantService, CHANNEL_ID, shouldSuppressCatalogSalePrice } from "@/lib/store";
+import { quoteService, quoteItemService, productService, productVariantService, CHANNEL_ID, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import {
   wantsStripeTestMode,
   resolveChannelStaffNotificationRecipients,
@@ -31,6 +31,7 @@ import {
   quoteAllowsItemEdits,
 } from "@/lib/quotes/customer-editable";
 import { isStaffOnlyDraft, withoutStaffOnlyDrafts } from "@/lib/quotes/draft-visibility";
+import { acceptanceAcknowledgementUrl } from "@/lib/quotes/acknowledgement-url";
 import { getContactPermissions } from "@/lib/role-permissions";
 import { isProductVisibleToViewer, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { contactService, customerAddressService } from "@/lib/store";
@@ -90,8 +91,16 @@ export async function addToQuote(
     price: string;
     sale_price: string | null;
     metafields?: unknown;
+    restrict_add_to_quote?: boolean | null;
   } | null;
   if (!product) return { error: "Product not found" };
+
+  // Zoey "Restrict Add to Quote" (card 7vu2iEEZ). The button is not offered for this product, so
+  // reaching here means a stale page or a hand-posted action — refused HERE, as the cart refuses
+  // its own restricted products, rather than trusting the page that drew the button.
+  if (product.restrict_add_to_quote === true) {
+    return { error: "This product can't be added to a quote. Please contact us about it." };
+  }
 
   // ── Kit products (Zoey grouped / bundle, authored in the portal) ──────────────────────────
   // A BUNDLE is a modular configuration: it is not priced live, its picks come through as a
@@ -597,8 +606,28 @@ export async function acceptQuote(quoteId: number) {
 
   revalidatePath(`/account/quotes/${quoteId}`);
   revalidatePath("/account/quotes");
+
+  // This storefront's own site row, for the acknowledgement host below. Cached
+  // per request and best-effort: an acceptance that has already succeeded must
+  // never fail because we could not read a URL, and a null simply falls back.
+  const { site } = await getSiteConfig().catch(() => ({ site: null }));
+
   return {
     success: true,
+    // Where the customer is sent now that the acceptance is done (card 87IkgD2H,
+    // Tim 2026-08-19). It is the PORTAL's acknowledgement page — the same one the
+    // emailed quote link lands on — and it is one page rather than two on purpose:
+    // it carries the SilverChef offer, and that figure is computed once in the
+    // portal's shared finance module. Re-building it here would mean a second rent
+    // calculation on a storefront that cannot reach that module, which is the very
+    // gap `sf-account-quotes` records rather than papering over.
+    //
+    // `from=account` says the reader is signed in HERE, which is the only thing it
+    // decides: the countdown goes to this storefront's /account rather than its
+    // front page, and the wording names the pro-forma this path has just emailed.
+    // Nothing is unlocked by it — the quote's uuid is the credential, exactly as
+    // it is for the emailed link.
+    acknowledgementUrl: acceptanceAcknowledgementUrl(q.uuid, site),
     ...(requiresAdminApproval
       ? {
           message:

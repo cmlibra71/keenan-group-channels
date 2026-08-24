@@ -8,7 +8,7 @@ import {
   getChannelSetting,
 } from "@/lib/store";
 import { CHANNEL_ID } from "@/lib/channel";
-import { loadJsSandbox, computeCallResults } from "@keenan/services/builder";
+import { loadJsSandbox, computeCallResults, guardBuyControls, guardBuyControlsInComponents } from "@keenan/services/builder";
 import { cmsFunctionService } from "@keenan/services/services";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
@@ -139,12 +139,26 @@ export async function renderProductNodeBranch({
   // reason: it has to be able to appear on any product on either site, and both sites
   // render this page from a stored tree. Idempotent by node id; renders nothing unless
   // the product carries the tick, so every other product page is unchanged.
-  const nodeTree = withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE));
+  //
+  // The buy row's per-product refusals are applied to the TREE, not just to the payload flags the
+  // tree binds to. Card 7vu2iEEZ: the three live buy rows express "no Add to Cart" three different
+  // ways (Chefs Depot desktop hides a live/greyed pair, its phone bar greys the twin, Industry
+  // Kitchens greys one always-rendered button), so a flag alone left a dead grey button with no
+  // wording beside it on two of the three — which `docs/behaviour/catalogue.md` > sf-product-page
+  // forbids outright, because CXnP1lrL removed every string that could have explained one. The
+  // pass is pure and never touches a tile (a tile names the product it buys); it runs here rather
+  // than being written into the stored trees so there is nothing to undo on a rollback and a site
+  // that re-authors its buy row keeps the behaviour. It wraps the PLACED nodes as well as the
+  // stored ones, so a buy control introduced by a future placed node is guarded too.
+  const nodeTree = guardBuyControls(withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE)));
 
   const namedStyles = await getNamedStyles().catch(() => ({}));
-  const components = (await (draft ? getDraftComponents() : getComponents()).catch(
-    () => ({})
-  )) as Record<string, typeof SEED_PRODUCT_TREE>;
+  const components = guardBuyControlsInComponents(
+    (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<
+      string,
+      typeof SEED_PRODUCT_TREE
+    >
+  );
   // CSS for AUTHORED classes: the static Tailwind sheet only covers classes in
   // this repo's source, so the portal compiles the channel's designer
   // vocabulary (arbitrary values, lg:/hover: variants, palette colours…) on

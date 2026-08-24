@@ -196,6 +196,11 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
           salePrice: product.salePrice,
           inventoryLevel: product.inventoryLevel ?? 0,
           inventoryTracking: product.inventoryTracking ?? "none",
+          // Per-product buying controls (card 7vu2iEEZ). Unset reads as today's behaviour.
+          backorderPolicy: product.backorderPolicy ?? null,
+          restrictAddToQuote: product.restrictAddToQuote === true,
+          restrictAddToCart: product.restrictAddToCart === true,
+          hidePrice: product.hidePrice === true,
           availability: product.availability ?? "available",
           descriptionShort: product.descriptionShort,
           images: product.images,
@@ -491,6 +496,11 @@ async function ProductOverviewBlock({ props, ctx }: BlockProps) {
     salePrice: product.salePrice,
     inventoryLevel: product.inventoryLevel ?? 0,
     inventoryTracking: product.inventoryTracking ?? "none",
+    // Per-product buying controls (card 7vu2iEEZ). Unset reads as today's behaviour.
+    backorderPolicy: product.backorderPolicy ?? null,
+    restrictAddToQuote: product.restrictAddToQuote === true,
+    restrictAddToCart: product.restrictAddToCart === true,
+    hidePrice: product.hidePrice === true,
     availability: product.availability ?? "available",
     descriptionShort: product.descriptionShort,
     images: product.images,

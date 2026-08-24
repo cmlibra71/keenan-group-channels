@@ -364,7 +364,7 @@ export default async function CategoryPage({
             <RichContent
               html={category.description}
               stripStyles
-              className="mt-2 max-w-[70ch] text-[15px] leading-relaxed text-white/85"
+              className="mt-2 max-w-none text-[15px] leading-relaxed text-white/85 kg-category-copy"
             />
           )}
           <span className="mt-3.5 inline-block rounded-full bg-white/[0.16] px-3 py-[5px] text-xs font-semibold text-white">
