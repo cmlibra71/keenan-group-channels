@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath, refresh } from "next/cache";
-import { quoteService, quoteItemService, productService, productVariantService, CHANNEL_ID, shouldSuppressCatalogSalePrice } from "@/lib/store";
+import { quoteService, quoteItemService, productService, productVariantService, CHANNEL_ID, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import {
   wantsStripeTestMode,
   resolveChannelStaffNotificationRecipients,
@@ -38,7 +38,9 @@ import {
   quoteAllowsItemEdits,
 } from "@/lib/quotes/customer-editable";
 import { isStaffOnlyDraft, withoutStaffOnlyDrafts } from "@/lib/quotes/draft-visibility";
+import { acceptanceAcknowledgementUrl } from "@/lib/quotes/acknowledgement-url";
 import { getContactPermissions } from "@/lib/role-permissions";
+import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import { isProductVisibleToViewer, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { contactService, customerAddressService } from "@/lib/store";
 import { saveCheckoutAddressForContact } from "@/lib/contact-addresses";
@@ -366,28 +368,25 @@ export async function getQuoteDeliveryAddresses(): Promise<SavedQuoteAddress[]> 
  * The checkout's rule, unchanged: a B2B contact whose role forbids adding an address
  * does not get one saved, and because one saved address can become the contact's
  * default BILLING as well as shipping (the first one always does), it takes BOTH
- * codes — exactly as `placeOrder` does on the single-page checkout. It is asked here
- * so the drawer can stop PRINTING a promise we then quietly do not keep.
+ * checkout codes — exactly as `placeOrder` does on the single-page checkout — and,
+ * since card H5JdsMrC, the address book's own main-contact-only add codes too. It is
+ * asked here so the drawer can stop PRINTING a promise we then quietly do not keep.
  *
  * Fails open on a lookup error, like every other role read on a customer path: the
  * worst case is an address saved for someone who could have added one anyway.
  */
-function mayFileAddressForRole(perms: {
-  isB2B: boolean;
-  accountId: number | null;
-  can: (code: string) => boolean;
-}): boolean {
-  if (!perms.isB2B || perms.accountId === null) return true;
-  return (
-    perms.can("add_shipping_address_in_checkout") && perms.can("add_billing_address_in_checkout")
-  );
-}
+// ONE name for the ROLE rule: `mayFileAddressInBook` (lib/account/address-authority.ts),
+// shared with `placeOrder` and the address book so the three writers into that
+// table cannot drift apart. The local `mayFileAddressForRole` alias is gone — two
+// names for one predicate is how a register entry comes to describe a rule nobody
+// can find. (`mayFileQuoteAddressInBook`, further down, is a different question
+// entirely: the AU-country test on the address itself.)
 
 export async function canSaveQuoteAddress(): Promise<boolean> {
   const session = await getSession();
   if (!session) return false;
   try {
-    return mayFileAddressForRole(await getContactPermissions(session.contactId));
+    return mayFileAddressInBook(await getContactPermissions(session.contactId));
   } catch (e) {
     console.error("[canSaveQuoteAddress] role read failed (non-fatal):", e);
     return true;
@@ -490,7 +489,7 @@ export async function submitQuote(form: QuoteRequestForm) {
   // "Needs details" the next time the customer reaches the checkout.
   if (newAddress) {
     try {
-      if (mayFileAddressForRole(perms) && mayFileQuoteAddressInBook(newAddress)) {
+      if (mayFileAddressInBook(perms) && mayFileQuoteAddressInBook(newAddress)) {
         await saveCheckoutAddressForContact(
           session.contactId,
           quoteAddressBookRow({ ...newAddress, country: String(shippingAddress.country ?? "") })
@@ -667,8 +666,28 @@ export async function acceptQuote(quoteId: number) {
 
   revalidatePath(`/account/quotes/${quoteId}`);
   revalidatePath("/account/quotes");
+
+  // This storefront's own site row, for the acknowledgement host below. Cached
+  // per request and best-effort: an acceptance that has already succeeded must
+  // never fail because we could not read a URL, and a null simply falls back.
+  const { site } = await getSiteConfig().catch(() => ({ site: null }));
+
   return {
     success: true,
+    // Where the customer is sent now that the acceptance is done (card 87IkgD2H,
+    // Tim 2026-08-19). It is the PORTAL's acknowledgement page — the same one the
+    // emailed quote link lands on — and it is one page rather than two on purpose:
+    // it carries the SilverChef offer, and that figure is computed once in the
+    // portal's shared finance module. Re-building it here would mean a second rent
+    // calculation on a storefront that cannot reach that module, which is the very
+    // gap `sf-account-quotes` records rather than papering over.
+    //
+    // `from=account` says the reader is signed in HERE, which is the only thing it
+    // decides: the countdown goes to this storefront's /account rather than its
+    // front page, and the wording names the pro-forma this path has just emailed.
+    // Nothing is unlocked by it — the quote's uuid is the credential, exactly as
+    // it is for the emailed link.
+    acknowledgementUrl: acceptanceAcknowledgementUrl(q.uuid, site),
     ...(requiresAdminApproval
       ? {
           message:
