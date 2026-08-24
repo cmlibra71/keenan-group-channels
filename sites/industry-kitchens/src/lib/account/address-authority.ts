@@ -16,11 +16,37 @@
 // What this deliberately does NOT gate: CHOOSING one of the addresses already
 // saved on the account. A colleague who is not the manager still has to be able
 // to receive goods, and the Product Brief forbids turning a customer away at
-// checkout over a detail. Nor does it refuse an ORDER: a delivery address typed
-// at checkout is used for that order, it is simply not filed in the book.
+// checkout over a detail. Nor does THIS module refuse an ORDER.
 //
 // Accountless (B2C) shoppers have no membership, so `isB2B` is false and they
 // bypass all of this — a B2C person is their own manager.
+//
+// ── KNOWN CONFLICT, reported not hidden (surface sf-checkout) ────────────────
+// `placeOrder` carries a SEPARATE, older gate owned by the role-enforcement work
+// (docs/crm-parity/10-role-enforcement.md rows 9/10): a contact denied
+// `add_billing_address_in_checkout` / `add_shipping_address_in_checkout` has
+// their ORDER refused unless the typed address is ALREADY saved on the account.
+// On production (2026-08-24) all 310 memberships this card refuses sit on
+// accounts with ZERO `customer_addresses`, and 309 of them are denied those two
+// checkout codes outright — so once the book's Add is gone they have no
+// self-serve way to put an address anywhere, and no way to place a storefront
+// order. Both rules are individually right; together they close the door.
+//
+// We keep the refusal (it is what the card asks for and what Zoey does — Zoey
+// treats `add_bill_to_address` as main-contact-only too) and we do NOT widen the
+// checkout gate, because widening it would be the "gate on selection" the
+// Product Brief forbids in reverse: a junior buyer could redirect deliveries to
+// an address nobody approved, which is the exact risk this card exists to close.
+// What we owe them instead is a route that is REAL and wording that is TRUE:
+// every refusal on both surfaces now names the remedy (contact us) and never
+// tells them to do something the next screen refuses.
+//
+// The ROOT cause is a separate Zoey parity gap that no card owns yet: Zoey's own
+// ship-to list lives in `account_locations` (20,539 rows across 19,864 accounts —
+// every one of the 135 refused accounts has some), and this storefront's checkout
+// reads only `customer_addresses`. Offer the account's locations at checkout and
+// the dead end disappears without loosening anything. Recorded on card H5JdsMrC
+// and in docs/behaviour/checkout-freight.md.
 // ============================================================================
 
 export type AddressBookAction = "add" | "edit" | "remove";
@@ -64,11 +90,26 @@ export function mayManageAddressBook(
  * the quote — the save is best effort and the address is still used.
  */
 export function mayFileAddressInBook(perms: AddressRolePermissions): boolean {
+  // No resolved account = nothing to file against and no role to read: fail open,
+  // exactly as `placeOrder` does. Checked here (not inside the two predicates
+  // below) so the early return cannot be lost in a refactor.
+  if (!perms.isB2B || perms.accountId === null) return true;
+  return mayTypeNewAddressAtCheckout(perms) && mayManageAddressBook(perms, "add");
+}
+
+/**
+ * May this contact introduce a NEW (not-yet-saved) address while ordering?
+ *
+ * Zoey's two checkout codes, read exactly as `placeOrder` reads them — this is
+ * the pre-existing gate that REFUSES THE ORDER (10-role-enforcement rows 9/10),
+ * lifted out so the screens can ask the same question the order will ask.
+ * Nothing here changes that gate; it exists so the address book can tell the
+ * customer the truth about what happens next instead of guessing.
+ */
+export function mayTypeNewAddressAtCheckout(perms: AddressRolePermissions): boolean {
   if (!perms.isB2B || perms.accountId === null) return true;
   return (
-    perms.can("add_billing_address_in_checkout") &&
-    perms.can("add_shipping_address_in_checkout") &&
-    mayManageAddressBook(perms, "add")
+    perms.can("add_billing_address_in_checkout") && perms.can("add_shipping_address_in_checkout")
   );
 }
 
@@ -97,8 +138,15 @@ export function addressAuthorityMessage(verb: "adding" | "editing" | "removing")
 //     contact, so "ask the manager" would have told them to ask themselves.
 //  3. It must not promise a choice among nothing. Every contact this refuses has
 //     ZERO saved addresses today, so the empty book IS the screen: the note has
-//     to describe what they can still do (type a delivery address as they order),
-//     not offer them a list that is not there.
+//     to describe what they can still do, not offer them a list that is not there.
+//  4. And — the one the second review caught — it must not promise something the
+//     NEXT screen refuses. "You can still type a delivery address as you order"
+//     is false for 309 of the 310 memberships this card refuses, because their
+//     role is also denied `add_*_address_in_checkout` and `placeOrder` turns that
+//     order away. Whether that sentence is true is not a guess we may make from
+//     the book alone, so the page hands in the two facts that decide it:
+//     `canTypeAddressAtCheckout` and `accountHasSavedAddresses`. Every branch
+//     below is a sentence we can stand behind on the next screen.
 //
 // It is also printed whenever ANY of the three writes is refused, not only when
 // all three are — a role that may add but not edit would otherwise lose Edit,
@@ -118,8 +166,14 @@ export interface AddressBookPermissions {
 }
 
 export interface AddressBookNoticeInput extends AddressBookPermissions {
-  /** Does this customer have any saved address to choose from right now? */
+  /** Does THIS contact have any saved address in this book right now? */
   hasSavedAddresses: boolean;
+  /**
+   * May they type a brand-new address while ordering — i.e. would `placeOrder`
+   * accept it? `mayTypeNewAddressAtCheckout`. Defaults to true so a B2C caller
+   * (which never reaches these lines anyway) reads unchanged.
+   */
+  canTypeAddressAtCheckout?: boolean;
 }
 
 function joinVerbs(verbs: readonly string[]): string {
@@ -141,10 +195,32 @@ export function addressBookNoticeLines(input: AddressBookNoticeInput): string[] 
   const lines = [
     `Your role on this account doesn't allow ${joinVerbs(refused)} saved addresses.`,
   ];
+  const canType = input.canTypeAddressAtCheckout ?? true;
+
   if (input.hasSavedAddresses) {
+    // The checkout's picker is CONTACT-scoped (`customerAddressService.listForContact`),
+    // so "the addresses below" and "what you can choose at checkout" are the same
+    // list. That is the only reason this sentence is safe to print.
     lines.push("You can still choose any of the addresses below whenever you order.");
-  } else if (!input.canAdd) {
+  } else if (input.canAdd) {
+    // They may still add one here, so the book itself is the way out.
+  } else if (canType) {
     lines.push("You can still type a delivery address as you order — it just isn't saved here.");
+  } else {
+    // The dead end, said plainly. No route through the site exists for this
+    // person today, so we must not invent one: the contact-us line the component
+    // prints underneath is the whole remedy, and it is a real one — staff file the
+    // address and everything works from there.
+    //
+    // Note we do NOT soften this when a COLLEAGUE has an address on the account.
+    // `placeOrder`'s gate is account-wide, so typing that colleague's address
+    // verbatim would in fact be accepted — but the checkout only ever OFFERS this
+    // contact's own rows, so there is no screen on which they could choose or even
+    // read it. Telling them to pick from a list they are not shown is the same
+    // failure as the sentence this replaced.
+    lines.push(
+      "There's no delivery address saved to your profile, and your role can't add one while you order — so we'll need to add it for you before an order can go through."
+    );
   }
   return lines;
 }

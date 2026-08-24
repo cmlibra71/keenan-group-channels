@@ -9,7 +9,7 @@ import { AccountPeople } from "@/components/account/AccountPeople";
 import { loadAccountPeople } from "@/lib/account/account-people-data";
 import { loadProfileContact, loadProfileAddresses } from "@/lib/account/profile-data";
 import { getContactPermissions } from "@/lib/role-permissions";
-import { mayManageAddressBook } from "@/lib/account/address-authority";
+import { mayManageAddressBook, mayTypeNewAddressAtCheckout } from "@/lib/account/address-authority";
 import {
   missingProfileDetails,
   profilePromptLines,
@@ -47,6 +47,13 @@ export default async function ProfilePage() {
   // "Manage your…" is a promise the section can no longer keep once every control
   // in it is gone, so the blurb changes with the controls.
   const addressesAreReadOnly = !canAddAddress && !canManageAddresses && !canRemoveAddress;
+
+  // What the refused customer is TOLD depends on what the NEXT screen will do, so
+  // the fact that decides it is read here rather than guessed in the component
+  // (card H5JdsMrC, second review): would `placeOrder` accept an address they type?
+  // For 309 of the 310 memberships this card refuses the answer is no, and the old
+  // note promised them exactly that.
+  const canTypeAddressAtCheckout = mayTypeNewAddressAtCheckout(perms);
 
   // What is still outstanding on this account (card xqWftDcL). It PROMPTS — it
   // never blocks: no order and no checkout reads this.
@@ -110,6 +117,7 @@ export default async function ProfilePage() {
           canAdd={canAddAddress}
           canEdit={canManageAddresses}
           canRemove={canRemoveAddress}
+          canTypeAddressAtCheckout={canTypeAddressAtCheckout}
           googlePlacesEnabled={checkoutSettings.googlePlacesEnabled}
           // The details from the Profile card above, so a new address does not
           // ask for the same name, business and phone a second time (xqWftDcL).

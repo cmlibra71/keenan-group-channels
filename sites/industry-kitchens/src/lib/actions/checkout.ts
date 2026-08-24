@@ -40,6 +40,7 @@ import {
 import {
   getContactPermissions,
   accountHasSavedAddress,
+  contactHasSavedAddress,
   sumContactOrderTotalSince,
   firstFailedOrderCondition,
   describeFailedCondition,
@@ -262,9 +263,20 @@ export async function placeOrder(
   ) {
     const known = await accountHasSavedAddress(perms.accountId, address1, postalCode);
     if (!known) {
+      // "Choose one already saved" is only an instruction if this shopper HAS a
+      // list to choose from — and the checkout's picker is CONTACT-scoped
+      // (`customerAddressService.listForContact`), while this gate is
+      // account-scoped. On production every contact who hits this has zero saved
+      // rows of their own (card H5JdsMrC), so the old sentence pointed at an empty
+      // picker and left them nowhere to go. Same refusal; the only wording of it
+      // that names something they can actually do.
+      // `perms.isB2B` can only be true for a signed-in contact, but the compiler
+      // cannot see that — and a guest with no picker gets the same wording anyway.
+      const canPick = session ? await contactHasSavedAddress(session.contactId) : false;
       return {
-        error:
-          "Your role on this account doesn't allow adding a new address during checkout. Please choose an address already saved on your account.",
+        error: canPick
+          ? "Your role on this account doesn't allow adding a new address during checkout. Please choose an address already saved on your account."
+          : "Your role on this account doesn't allow adding a new address during checkout, and there's no address saved to your profile yet. Please contact us and we'll add it for you.",
       };
     }
   }

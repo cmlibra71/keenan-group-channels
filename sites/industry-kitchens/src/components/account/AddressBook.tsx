@@ -61,6 +61,7 @@ export function AddressBook({
   canAdd = true,
   canEdit = true,
   canRemove = true,
+  canTypeAddressAtCheckout = true,
 }: {
   addresses: Address[];
   googlePlacesEnabled?: boolean;
@@ -68,6 +69,8 @@ export function AddressBook({
   canAdd?: boolean;
   canEdit?: boolean;
   canRemove?: boolean;
+  /** Would `placeOrder` accept an address they type at checkout? */
+  canTypeAddressAtCheckout?: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState<number | "new" | null>(null);
@@ -81,6 +84,7 @@ export function AddressBook({
     canEdit,
     canRemove,
     hasSavedAddresses: addresses.length > 0,
+    canTypeAddressAtCheckout,
   });
 
   async function onDelete(id: number) {

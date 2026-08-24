@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   mayManageAddressBook,
   mayFileAddressInBook,
+  mayTypeNewAddressAtCheckout,
   ADDRESS_BOOK_CODES,
   addressAuthorityMessage,
   addressBookNoticeLines,
@@ -123,6 +124,93 @@ test("a fully refused customer WITH saved addresses is told they may still choos
   });
   assert.ok(lines);
   assert.match(lines.join(" "), /choose any of the addresses below/);
+});
+
+// ── The promise must survive the NEXT screen (second review of card H5JdsMrC) ──
+//
+// `placeOrder` refuses the ORDER of a contact denied the two
+// `add_*_address_in_checkout` codes unless the typed address is already saved on
+// the account (10-role-enforcement rows 9/10). On production ALL 310 memberships
+// this card refuses sit on accounts with zero saved addresses and 309 of them are
+// denied those codes — so "you can still type a delivery address as you order"
+// was false for essentially every customer who could ever read it.
+
+test("a refused customer who ALSO cannot type an address at checkout is never told they can", () => {
+  const lines = addressBookNoticeLines({
+    canAdd: false,
+    canEdit: false,
+    canRemove: false,
+    hasSavedAddresses: false,
+    canTypeAddressAtCheckout: false,
+  });
+  assert.ok(lines);
+  const text = lines.join(" ");
+  assert.doesNotMatch(text, /still type/i, "the checkout would refuse that order");
+  assert.doesNotMatch(text, /choose/i, "there is nothing on screen to choose");
+  assert.match(text, /no delivery address saved to your profile/i);
+  assert.match(text, /add it for you/i, "a refusal owes them a route that works");
+});
+
+test("typing at checkout is offered ONLY when the checkout would accept it", () => {
+  for (const canTypeAddressAtCheckout of [true, false]) {
+    const text = (
+      addressBookNoticeLines({
+        canAdd: false,
+        canEdit: false,
+        canRemove: false,
+        hasSavedAddresses: false,
+        canTypeAddressAtCheckout,
+      }) ?? []
+    ).join(" ");
+    assert.equal(/still type/i.test(text), canTypeAddressAtCheckout);
+  }
+});
+
+test("'choose one below' is printed only when there IS one below", () => {
+  // The checkout picker is contact-scoped, so this book IS the list they will be
+  // offered. A colleague's address on the same account is never shown to them and
+  // must never be described as a choice.
+  for (const hasSavedAddresses of [true, false]) {
+    const text = (
+      addressBookNoticeLines({
+        canAdd: false,
+        canEdit: false,
+        canRemove: false,
+        hasSavedAddresses,
+        canTypeAddressAtCheckout: false,
+      }) ?? []
+    ).join(" ");
+    assert.equal(/choose/i.test(text), hasSavedAddresses);
+  }
+});
+
+test("mayTypeNewAddressAtCheckout reads the two checkout codes placeOrder reads", () => {
+  const both = perms({
+    isB2B: true,
+    allow: ["add_billing_address_in_checkout", "add_shipping_address_in_checkout"],
+  });
+  assert.equal(mayTypeNewAddressAtCheckout(both), true);
+  assert.equal(
+    mayTypeNewAddressAtCheckout(perms({ isB2B: true, allow: ["add_billing_address_in_checkout"] })),
+    false
+  );
+  assert.equal(mayTypeNewAddressAtCheckout(perms({ isB2B: false, allow: [] })), true);
+  assert.equal(
+    mayTypeNewAddressAtCheckout(perms({ isB2B: true, accountId: null, allow: [] })),
+    true
+  );
+});
+
+test("filing an address needs the checkout's permission AND the book's", () => {
+  // The composition the whole card rests on, pinned so neither half can be
+  // dropped: mayFileAddressInBook = mayTypeNewAddressAtCheckout && add-to-book.
+  const checkoutOnly = perms({
+    isB2B: true,
+    allow: ["add_billing_address_in_checkout", "add_shipping_address_in_checkout"],
+  });
+  const bookOnly = perms({ isB2B: true, allow: [...ADDRESS_BOOK_CODES.add] });
+  assert.equal(mayFileAddressInBook(checkoutOnly), false);
+  assert.equal(mayFileAddressInBook(bookOnly), false);
 });
 
 test("the note never sends the customer to the account manager and never claims the book is shared", () => {

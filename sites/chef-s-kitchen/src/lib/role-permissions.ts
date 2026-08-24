@@ -575,6 +575,35 @@ export async function accountHasSavedAddress(
 }
 
 /**
+ * Does THIS CONTACT have any saved address of their own — i.e. will the checkout
+ * offer them a picker at all?
+ *
+ * Contact-scoped on purpose. `accountHasSavedAddress` above is the GATE, and it
+ * is account-wide; this is only ever used to word the refusal, and what a shopper
+ * can choose is `customerAddressService.listForContact` — their own rows. Telling
+ * somebody to pick from a list the screen never draws is the failure this exists
+ * to avoid (card H5JdsMrC).
+ *
+ * Fails OPEN to `true` (logged): the caller only uses it to pick which sentence
+ * to print, and the pre-existing sentence is the safer thing to say on a hiccup.
+ */
+export async function contactHasSavedAddress(contactId: number): Promise<boolean> {
+  try {
+    const sql = getCommerceClient();
+    if (!sql) throw new Error("Commerce database is not initialised.");
+    const rows = await sql<{ n: string }[]>`
+      SELECT count(*)::text AS n FROM customer_addresses WHERE contact_id = ${contactId}`;
+    return Number(rows[0]?.n ?? 0) > 0;
+  } catch (e) {
+    console.error(
+      `[role-permissions] saved-address count FAILED for contact ${contactId} — assuming they have one:`,
+      e
+    );
+    return true;
+  }
+}
+
+/**
  * DB-backed wrapper over resolveEmailRecipientsFromRows: who else on the
  * account should get a document email. Fails CLOSED to “no extra recipients”
  * (an email fan-out is additive; a lookup failure just means only the primary

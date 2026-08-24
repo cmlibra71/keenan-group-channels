@@ -313,15 +313,18 @@ export async function getQuoteDeliveryAddresses(): Promise<SavedQuoteAddress[]> 
  * Fails open on a lookup error, like every other role read on a customer path: the
  * worst case is an address saved for someone who could have added one anyway.
  */
-// Shared with `placeOrder` so the three writers into the address book cannot
-// drift apart: lib/account/address-authority.ts.
-const mayFileAddressForRole = mayFileAddressInBook;
+// ONE name for the ROLE rule: `mayFileAddressInBook` (lib/account/address-authority.ts),
+// shared with `placeOrder` and the address book so the three writers into that
+// table cannot drift apart. The local `mayFileAddressForRole` alias is gone — two
+// names for one predicate is how a register entry comes to describe a rule nobody
+// can find. (`mayFileQuoteAddressInBook`, further down, is a different question
+// entirely: the AU-country test on the address itself.)
 
 export async function canSaveQuoteAddress(): Promise<boolean> {
   const session = await getSession();
   if (!session) return false;
   try {
-    return mayFileAddressForRole(await getContactPermissions(session.contactId));
+    return mayFileAddressInBook(await getContactPermissions(session.contactId));
   } catch (e) {
     console.error("[canSaveQuoteAddress] role read failed (non-fatal):", e);
     return true;
@@ -424,7 +427,7 @@ export async function submitQuote(form: QuoteRequestForm) {
   // "Needs details" the next time the customer reaches the checkout.
   if (newAddress) {
     try {
-      if (mayFileAddressForRole(perms) && mayFileQuoteAddressInBook(newAddress)) {
+      if (mayFileAddressInBook(perms) && mayFileQuoteAddressInBook(newAddress)) {
         await saveCheckoutAddressForContact(
           session.contactId,
           quoteAddressBookRow({ ...newAddress, country: String(shippingAddress.country ?? "") })
