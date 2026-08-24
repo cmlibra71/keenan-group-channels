@@ -47,6 +47,8 @@
     "builder/product-image-notice.ts",
     "builder/product-node-branch.tsx",
     "builder/seeds/product.ts",
+    "builder/seo-copy-placement.test.ts",
+    "builder/seo-copy-placement.ts",
     "builder/silverchef-node.test.ts",
     "builder/silverchef-node.ts",
     "builder/strip-stock-nodes.test.ts",

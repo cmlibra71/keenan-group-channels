@@ -18,7 +18,10 @@ import {
 import type { RenderContext } from "@keenan/services";
 import { getListingMemberPrices } from "@/lib/member";
 import { categoryRobots } from "@/lib/seo";
-import { renderCategoryNodeBranch } from "@/builder/category-node-branch";
+import {
+  renderCategoryNodeBranch,
+  categoryTreePlacesSeoCopy,
+} from "@/builder/category-node-branch";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { assertCategoryVisible } from "@/lib/catalog-scope";
 import { redirectIfMapped } from "@/lib/redirect-seam";
@@ -210,9 +213,16 @@ export default async function CategoryPage({
     channel_seo_faq?: { question: string; answer_html: string; answer_text: string }[];
     channel_seo_faq_jsonld?: string;
   };
+  // ...unless the authored Category Page Template PLACES that copy itself (card
+  // nYxPgpvK). The payload now carries it as `category.seo_intro_html`, so a page can
+  // put the site's own wording in the header or anywhere else; printing the same
+  // paragraphs again down here would duplicate body copy across every category page,
+  // which is the cannibalisation this content exists to avoid. The QUESTIONS are not
+  // placeable and stay where they are.
+  const seoCopyPlacedInTree = await categoryTreePlacesSeoCopy(draft);
   const categorySeo = (
     <CategorySeo
-      introHtml={seo.channel_seo_intro_html}
+      introHtml={seoCopyPlacedInTree ? undefined : seo.channel_seo_intro_html}
       faq={seo.channel_seo_faq}
       faqJsonLd={seo.channel_seo_faq_jsonld}
       categoryName={category.name}

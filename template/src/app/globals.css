@@ -53,6 +53,43 @@ html, body {
   .kg-category-copy table { width: 100%; margin: 1em 0; border-collapse: collapse; }
   .kg-category-copy th,
   .kg-category-copy td { padding: 0.4em 0.6em; text-align: left; vertical-align: top; }
+  .kg-category-copy u { text-decoration: underline; text-underline-offset: 2px; }
+  .kg-category-copy s,
+  .kg-category-copy strike { text-decoration: line-through; }
+  .kg-category-copy sub { vertical-align: sub; font-size: 0.8em; }
+  .kg-category-copy sup { vertical-align: super; font-size: 0.8em; }
+  /* Nested lists: preflight leaves them unmarked, and a sub-list drawn with the
+     same disc as its parent reads as one flat list. */
+  .kg-category-copy ul ul { list-style: circle; }
+  .kg-category-copy ol ol { list-style: lower-alpha; }
+  .kg-category-copy ul ul,
+  .kg-category-copy ul ol,
+  .kg-category-copy ol ol,
+  .kg-category-copy ol ul { margin: 0.25em 0; }
+  /* Colour is still never SET — the rule borrows the text colour it inherits and
+     fades it, so one block serves the light header card and the dark banner. */
+  .kg-category-copy blockquote {
+    margin: 1em 0;
+    padding-left: 1em;
+    border-left: 3px solid color-mix(in srgb, currentColor 30%, transparent);
+  }
+  .kg-category-copy hr {
+    margin: 1.5em 0;
+    border: 0;
+    border-top: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  }
+  .kg-category-copy pre {
+    margin: 1em 0;
+    padding: 0.75em 1em;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    background: color-mix(in srgb, currentColor 8%, transparent);
+  }
+  .kg-category-copy code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.9em;
+  }
+  .kg-category-copy th { font-weight: 700; }
 }
 
 /* The width the card is about. Industry Kitchens' category header renders from a
