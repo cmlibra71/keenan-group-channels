@@ -21,6 +21,7 @@ import {
 } from "@/lib/store";
 import { HomeSections, type HomeSectionsProps } from "@/components/home/HomeSections";
 import { applyCatalogScope } from "@/lib/catalog-scope";
+import { attachBrandLogos } from "@/lib/brand-logo-fallback";
 
 type BlockProps = { props: Record<string, unknown>; ctx?: RenderContext };
 
@@ -104,6 +105,14 @@ async function ProductCarouselBlock({ props }: BlockProps) {
   // is applied HERE — the rows came from the shared cached channel query.
   products = await applyCatalogScope(products);
   if (products.length === 0) return null;
+  // Card tSrCcnvx: the clearance variant draws ClearanceSpotlight's own tile
+  // rather than <ProductGrid>, so the brand-logo fallback is attached here — the
+  // grid resolves it for itself. No-op on any channel outside
+  // BRAND_LOGO_FALLBACK_CHANNELS, and additive, so the default variant is
+  // unaffected either way.
+  if (variant === "clearance") {
+    products = (await attachBrandLogos(products)) as unknown as typeof products;
+  }
   const memberPricingAvailable = await getFeatureFlag("member_pricing_enabled");
 
   // hero.* is stored flattened (portal field round-trip safety) — reassemble.

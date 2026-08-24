@@ -1,6 +1,7 @@
 import { ProductCard } from "./ProductCard";
 import { applyAccountPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
+import { getBrandLogos } from "@/lib/brand-logo-fallback";
 import { Ga4ViewItemList } from "@/components/analytics/Ga4ViewItemList";
 
 interface ProductWithImage {
@@ -61,6 +62,13 @@ export async function ProductGrid({
     );
   }
 
+  // Card tSrCcnvx: the brand logo the tile falls back to when a product has no
+  // photo, or when its photo's file turns out to be missing. Resolved for EVERY
+  // row (not only the visibly imageless ones) because a broken file is only
+  // discovered in the browser, where no further server read is available. One
+  // primary-key lookup per grid.
+  const brandLogos = await getBrandLogos(products.map((p) => p.id));
+
   return (
     <div className={wrapperClassName}>
       <Ga4ViewItemList
@@ -83,6 +91,8 @@ export async function ProductGrid({
           price={product.price}
           salePrice={product.salePrice}
           imageUrl={product.thumbnailImage?.urlThumbnail || product.thumbnailImage?.urlStandard}
+          brandLogoUrl={brandLogos.get(product.id)?.brand_logo_url ?? null}
+          brandLogoAlt={brandLogos.get(product.id)?.brand_name ?? null}
           memberPricingAvailable={memberPricingAvailable}
           memberPrice={memberPriceMap?.[product.id] ?? null}
           listId={listId}

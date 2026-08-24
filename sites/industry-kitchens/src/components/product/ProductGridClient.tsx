@@ -28,6 +28,15 @@ export interface GridProduct {
   price: string;
   salePrice: string | null;
   thumbnailImage?: { urlStandard: string; urlThumbnail: string | null } | null;
+  /**
+   * Card tSrCcnvx: the brand's logo, which the tile shows instead of the grey
+   * package box when the product has no photo (or its file is broken). Attached
+   * UPSTREAM, in the node branch that scopes and prices these rows — this file
+   * is presentation only and may never reach the database.
+   */
+  brand_logo_url?: string | null;
+  /** The brand's NAME — the fallback image's ALT text. Attached with the URL above. */
+  brand_name?: string | null;
 }
 
 export function ProductGridClient({
@@ -73,6 +82,8 @@ export function ProductGridClient({
           price={product.price}
           salePrice={product.salePrice}
           imageUrl={product.thumbnailImage?.urlThumbnail || product.thumbnailImage?.urlStandard}
+          brandLogoUrl={product.brand_logo_url ?? null}
+          brandLogoAlt={product.brand_name ?? null}
           memberPricingAvailable={memberPricingAvailable}
           memberPrice={memberPriceMap?.[product.id] ?? null}
           listId={listId}
