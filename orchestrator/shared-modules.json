@@ -46,6 +46,8 @@
     "builder/product-image-notice.test.ts",
     "builder/product-image-notice.ts",
     "builder/product-node-branch.tsx",
+    "builder/promo-tag-node.test.ts",
+    "builder/promo-tag-node.ts",
     "builder/seeds/product.ts",
     "builder/seo-copy-placement.test.ts",
     "builder/seo-copy-placement.ts",

@@ -21,6 +21,8 @@ import {
 } from "@keenan/services/builder";
 import { cmsFunctionService } from "@keenan/services/services";
 import { treePlacesSeoCopy } from "@/builder/seo-copy-placement";
+import { withPromoTagInComponents } from "@/builder/promo-tag-node";
+import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
 import {
   BuilderCategoryPage,
   type CategoryGridProduct,
@@ -179,9 +181,19 @@ export async function renderCategoryNodeBranch({
   });
 
   const namedStyles = await getNamedStyles().catch(() => ({}));
-  const components = (await (draft ? getDraftComponents() : getComponents()).catch(
-    () => ({})
-  )) as Record<string, NodeTree>;
+  // The tile a customer meets on THIS page is the authored `product-card` master, not the React
+  // ProductCard — so the storefront's "Buy more & save" tag (card FNYihLHk) has to be placed on
+  // it at render time, the same way the SilverChef panel and the illustrative-image banner reach
+  // the authored product page. Nothing is written to the stored master. On a site whose
+  // `lib/promo-tag.ts` holds null — `template/` and Industry Kitchens today — this returns the
+  // map untouched and no tag exists anywhere.
+  const components = withPromoTagInComponents(
+    (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<
+      string,
+      NodeTree
+    >,
+    PROMO_TAG_LABEL
+  );
   const builderCss =
     ((await getChannelSetting("builder_published_css").catch(() => null)) as {
       css?: string;

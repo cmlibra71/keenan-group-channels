@@ -457,6 +457,25 @@ body {
          bg-accent-subtle text-accent-dark;
 }
 
+/* The "Buy more & save" tile tag (card FNYihLHk). A solid pill under the price, the shape
+   Steve's mock shows.
+
+   Two deliberate departures from the `.badge-*` family above, both taken FROM the mock, which
+   is the card's own artwork and the only design brief it carries:
+     - sentence case at 12.5px, not the family's uppercase 11px. It is a tagline in the card
+       BODY, not a corner tag on the photo, so it has no uppercase neighbours to match and the
+       mock renders it as a sentence.
+     - the MEMBERSHIP GOLD, not the mock's red. The mock is a Rodd & Gunn screenshot and red is
+       that retailer's brand colour; on this site gold is already the savings colour
+       (`.badge-member`, the member price, the crown) and rust is reserved for clearance and
+       Save% urgency. Ink on gold rather than white on gold — white on #E9B949 fails contrast. */
+.badge-promo {
+  @apply inline-flex items-center gap-1 font-bold
+         px-[10px] py-[5px] rounded-sm leading-none
+         text-[12.5px] tracking-[0.01em]
+         bg-member text-ink-900;
+}
+
 /* ═══ ALERTS ════════════════════════════════════════ */
 
 .alert-error {
