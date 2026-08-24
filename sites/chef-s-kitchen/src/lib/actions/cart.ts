@@ -154,7 +154,13 @@ async function resolveItemPricing(
               CHANNEL_ID,
               contact.customer_group_id,
               quantity,
-              accountId,
+              // accountId is deliberately NOT passed. The account's own contract
+              // prices are resolved separately above (`resolveAccountLinePrices`)
+              // and take priority over everything; handing them to the engine here
+              // too would be a second, unannounced pricing path on sf-cart for both
+              // storefronts, which is not what this card is for. The ladder needs
+              // only the rung.
+              null,
               null,
               ladderLevelId
             );

@@ -134,7 +134,7 @@ export default async function MembershipLandingPage() {
           <BenefitCard
             icon="pricing"
             title="Members-Only Pricing"
-            description="Members buy at a different price tier, from their first order — and it steps down further as your spend builds."
+            description="Members buy at a different price tier, applied automatically from their first order."
           />
           {freeShippingEnabled && (
             <BenefitCard

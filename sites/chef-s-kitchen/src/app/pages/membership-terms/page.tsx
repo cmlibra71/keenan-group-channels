@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getSubscriptionPlans } from "@/lib/store";
 
 // ============================================================================
 // Membership terms and conditions (card gk23c1VK, attachment 06/07 — marked
@@ -23,7 +24,21 @@ export const metadata = {
 };
 
 /** One numbered clause. Kept as data so the numbering cannot drift from the text. */
-const CLAUSES: Array<{ heading: string; body: Array<string | { strong: string; rest: string }> }> = [
+type Clause = { heading: string; body: Array<string | { strong: string; rest: string }> };
+
+/**
+ * THE TERMS DESCRIBE WHAT CAN ACTUALLY BE BOUGHT.
+ *
+ * Subscription billing is out of this card's scope, and only the monthly plan
+ * exists in `subscription_plans` — so the yearly plan cannot be purchased and
+ * the membership page's yearly toggle never renders. Terms that describe a
+ * yearly option, a yearly renewal reminder and a yearly-versus-monthly switch
+ * would be describing something a customer cannot buy, on the one page they are
+ * held to. The yearly clauses therefore appear only when a yearly plan really is
+ * on sale, and reappear by themselves the day one is created.
+ */
+function buildClauses(hasYearlyPlan: boolean): Clause[] {
+  return [
   {
     heading: "Membership and eligibility",
     body: [
@@ -42,7 +57,9 @@ const CLAUSES: Array<{ heading: string; body: Array<string | { strong: string; r
   {
     heading: "Fees and billing",
     body: [
-      "Membership is charged monthly in advance, or yearly in advance at a 20% discount on twelve monthly payments. Current fees are shown on the membership page and are inclusive of GST.",
+      hasYearlyPlan
+        ? "Membership is charged monthly in advance, or yearly in advance. Current fees, and the saving on a yearly plan, are shown on the membership page and are inclusive of GST."
+        : "Membership is charged monthly in advance. Current fees are shown on the membership page and are inclusive of GST.",
       "Fees are charged to the payment method held against your account on the same date each billing period. Where a payment fails, we may retry it, and member pricing may be suspended until the account is brought up to date.",
       "We may change the membership fee on 30 days written notice to the email address on your account. A change takes effect at your next renewal, and you may cancel before it applies.",
     ],
@@ -50,8 +67,12 @@ const CLAUSES: Array<{ heading: string; body: Array<string | { strong: string; r
   {
     heading: "Automatic renewal",
     body: [
-      "Membership renews automatically at the end of each period — each month on a monthly plan, each year on a yearly plan — using the payment method held against your account, at the fee current at that time.",
-      "On a yearly plan we will email a reminder to the address on your account at least 14 days before renewal. On a monthly plan, the recurring charge is your notice.",
+      hasYearlyPlan
+        ? "Membership renews automatically at the end of each period — each month on a monthly plan, each year on a yearly plan — using the payment method held against your account, at the fee current at that time."
+        : "Membership renews automatically at the end of each month, using the payment method held against your account, at the fee current at that time.",
+      hasYearlyPlan
+        ? "On a yearly plan we will email a reminder to the address on your account at least 14 days before renewal. On a monthly plan, the recurring charge is your notice."
+        : "The recurring monthly charge is your notice of renewal.",
       "To stop a renewal, cancel before the renewal date. Cancelling on or after the renewal date does not reverse that period's charge.",
       "You can turn off automatic renewal at any time from your account or by contacting us. If you do, membership ends at the close of the period already paid for.",
     ],
@@ -64,9 +85,13 @@ const CLAUSES: Array<{ heading: string; body: Array<string | { strong: string; r
       {
         strong: "Membership fees are non-refundable.",
         rest:
-          " All membership transactions are final. No refund or pro-rata credit is given for any unused part of a monthly or yearly period, whether you cancel, stop using the account, or your membership is ended under these terms.",
+          " All membership transactions are final. No refund or pro-rata credit is given for any unused part of a billing period, whether you cancel, stop using the account, or your membership is ended under these terms.",
       },
-      "Switching between monthly and yearly takes effect at your next renewal. No credit is given for the remainder of the period already paid for.",
+      ...(hasYearlyPlan
+        ? [
+            "Switching between monthly and yearly takes effect at your next renewal. No credit is given for the remainder of the period already paid for.",
+          ]
+        : []),
       "Nothing in this clause limits your rights under the Australian Consumer Law, which apply to goods you buy from us regardless of your membership.",
     ],
   },
@@ -138,9 +163,16 @@ const CLAUSES: Array<{ heading: string; body: Array<string | { strong: string; r
       "These terms are governed by the laws of Victoria, Australia.",
     ],
   },
-];
+  ];
+}
 
-export default function MembershipTermsPage() {
+export default async function MembershipTermsPage() {
+  // Read the plans that really exist rather than describing the ones the bundle
+  // proposed: see buildClauses.
+  const plans = (await getSubscriptionPlans().catch(() => [])) as Array<{
+    billing_interval?: string;
+  }>;
+  const clauses = buildClauses(plans.some((p) => p.billing_interval === "year"));
   return (
     <div className="container-page section-padding">
       <div className="mx-auto max-w-3xl">
@@ -152,7 +184,7 @@ export default function MembershipTermsPage() {
         </p>
 
         <ol className="mt-10 space-y-10">
-          {CLAUSES.map((clause, i) => (
+          {clauses.map((clause, i) => (
             <li key={clause.heading}>
               <h2 className="heading-serif text-xl text-text-primary">
                 {i + 1}. {clause.heading}

@@ -25,6 +25,7 @@ import {
   sendOrderConfirmationEmail,
   sendOrderStaffNotificationEmail,
   productImageService,
+  snapshotOrderLadderPricing,
 } from "@keenan/services";
 import { getSession } from "@/lib/auth";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
@@ -392,6 +393,10 @@ export async function payQuote(
               items_total: plan.items.length,
             });
           }
+          // The buying-group M/W/R snapshot on the ORDER's own lines (card gk23c1VK):
+          // the quote's snapshot does not carry over, because these are new lines
+          // with new ids on the document the customer is actually charged on.
+          await snapshotOrderLadderPricing(order.id).catch(() => ({ written: 0 }));
           // The quote is settled the moment the order exists. markAccepted first so
           // the acceptance is audited and staff alerted exactly as any other
           // acceptance, then markConverted stamps the linkage.

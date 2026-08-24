@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { NodeTree } from "@keenan/services/builder";
 import {
   rewriteMembershipClaims,
+  rewriteMembershipStrings,
   findMembershipClaims,
   MEMBERSHIP_CLAIM_REWRITES,
 } from "./membership-claims";
@@ -138,4 +139,79 @@ test("component instances, styles and bindings are copied through untouched", ()
   assert.equal(out.root.children[0].props.heading, "Members save 10–25% on every order.");
   assert.ok(findMembershipClaims(tree).length > 0, "the post-condition must still catch it");
   assert.deepEqual(out.root.children[1].text[0], { kind: "binding", path: "product.name" });
+});
+
+
+// ============================================================================
+// The three ways the FIRST pass missed a live claim, each one now a test.
+// ============================================================================
+
+test("a claim SPLIT ACROSS SIBLING NODES is collapsed onto the first of them", () => {
+  // The real home value strip, verbatim from the `membership-value-strip`
+  // component master: the sentence "Members save 10–25% on every order." exists
+  // in no single string, so an exact-match rewrite over one text run reported
+  // the tree clean while the claim went on rendering to every visitor.
+  const strip = {
+    v: 1,
+    root: {
+      id: "root",
+      tag: "div",
+      kind: "element",
+      children: [
+        {
+          id: "h3-cseed-149",
+          tag: "h3",
+          kind: "element",
+          label: "strip-headline",
+          classes: ["heading-serif"],
+          children: [
+            { id: "span-cseed-146", tag: "span", kind: "element", text: [{ kind: "static", value: "Members save " }], classes: [] },
+            { id: "em-cseed-147", tag: "em", kind: "element", text: [{ kind: "static", value: "10–25%" }], classes: ["not-italic"] },
+            { id: "span-cseed-148", tag: "span", kind: "element", text: [{ kind: "static", value: " on every order." }], classes: [] },
+          ],
+        },
+      ],
+    },
+  } as unknown as NodeTree;
+
+  const { tree, rewritten } = rewriteMembershipClaims(strip);
+  assert.equal(rewritten.length, 1);
+  assert.deepEqual(findMembershipClaims(tree), [], "no marker survives");
+
+  const json = JSON.stringify(tree);
+  assert.ok(json.includes("Members buy at a different price tier, from their first order."));
+  // The styled fragment is REMOVED rather than left empty — an empty <em> with
+  // classes is a fragment of a claim waiting to be refilled.
+  assert.ok(!json.includes("em-cseed-147"));
+  assert.ok(!json.includes("span-cseed-148"));
+  // The first node keeps its id, so an author's selection and any style bound to
+  // it survive the edit.
+  assert.ok(json.includes("span-cseed-146"));
+
+  assert.deepEqual(rewriteMembershipClaims(tree).rewritten, [], "idempotent");
+});
+
+test("a claim stored OUTSIDE a tree is rewritten too", () => {
+  // `subscription_plans.benefits` — rendered on the home value strip and on both
+  // membership fee cards, and live on chefsdepot.com.au until 2026-08-24.
+  const { values, rewritten } = rewriteMembershipStrings([
+    "Members-only pricing (10-25% off retail)",
+    "Australia-wide delivery on all orders",
+  ]);
+  assert.equal(rewritten.length, 1);
+  assert.deepEqual(values, [
+    "Members-only pricing",
+    "Australia-wide delivery on all orders",
+  ]);
+  assert.deepEqual(rewriteMembershipStrings(values).rewritten, [], "idempotent");
+});
+
+test("the replacement copy claims no percentage and no ladder the engine may not be running", () => {
+  // Two separate rules: no product-saving percentage may be published at all
+  // (blueprint §10/§13), and the always-on copy may not describe the buying-group
+  // ladder, which ships switched off.
+  for (const rule of MEMBERSHIP_CLAIM_REWRITES) {
+    assert.ok(!/\d+\s*[–-]\s*\d+\s*%/.test(rule.to), `percentage range in: ${rule.to}`);
+    assert.ok(!/rolling twelve-month|steps down|spend builds/i.test(rule.to), `ladder claim in: ${rule.to}`);
+  }
 });

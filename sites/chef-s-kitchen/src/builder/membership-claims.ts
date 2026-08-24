@@ -32,10 +32,9 @@ export const MEMBERSHIP_CLAIM_REWRITES: Array<{ from: string; to: string }> = [
       "Join from $14.95/month and your member price is applied automatically at cart and checkout.",
     to:
       "Member pricing is calculated from our current trade price list at the moment you see it — the same " +
-      "list our own team quotes from. Membership starts from $14.95/month, your member price applies from " +
-      "your first order, and it steps down further as your rolling twelve-month spend grows. The distance " +
-      "is set item by item, so there is no single percentage: your price is shown on every product page " +
-      "once you are signed in.",
+      "list our own team quotes from. Membership starts from $14.95/month and your member price applies " +
+      "automatically once you are signed in. The distance is set item by item, so there is no single " +
+      "percentage: your price is shown on every product page.",
   },
   {
     from: "Members save 10–25% on every order.",
@@ -47,9 +46,36 @@ export const MEMBERSHIP_CLAIM_REWRITES: Array<{ from: string; to: string }> = [
   },
   {
     from: "Save 10-25% off retail on all kitchen equipment. The more you buy, the more you save.",
-    to:
-      "Members buy at a different price tier, from their first order — and it steps down further as your " +
-      "spend builds.",
+    to: "Members buy at a different price tier, applied automatically from their first order.",
+  },
+  // Stored on the PLAN, not in a tree — `subscription_plans.benefits`, rendered
+  // on the home value strip and on both fee cards. Live on chefsdepot.com.au.
+  {
+    from: "Members-only pricing (10-25% off retail)",
+    to: "Members-only pricing",
+  },
+];
+
+/**
+ * Claims a Site Builder author has SPLIT ACROSS SIBLING NODES, which an
+ * exact-match rewrite over one text run can never see.
+ *
+ * The home value strip's headline is authored as
+ * `<span>Members save </span><em>10–25%</em><span> on every order.</span>` —
+ * three element nodes, so "Members save 10–25% on every order." never appears
+ * in any single string and the rewrite silently reported the tree clean while
+ * the claim went on rendering. The whole run is collapsed onto the FIRST node
+ * (keeping its id) and the others are dropped, so the sentence comes out right
+ * and no empty styled fragment is left behind.
+ */
+export const MEMBERSHIP_CLAIM_SPLIT_REWRITES: Array<{ parts: string[]; to: string }> = [
+  {
+    parts: ["Members save ", "10–25%", " on every order."],
+    to: "Members buy at a different price tier, from their first order.",
+  },
+  {
+    parts: ["Members save ", "10-25%", " on every order."],
+    to: "Members buy at a different price tier, from their first order.",
   },
 ];
 
@@ -91,6 +117,41 @@ function rewriteText(value: string, rewritten: string[]): string {
   return out;
 }
 
+/** The single static string a text-only element node renders, or null. */
+function soleText(node: unknown): string | null {
+  if (!node || typeof node !== "object" || Array.isArray(node)) return null;
+  const t = (node as NodeRecord).text;
+  if (!Array.isArray(t) || t.length === 0) return null;
+  let out = "";
+  for (const part of t) {
+    if (!part || typeof part !== "object" || !("value" in part)) return null;
+    const v = (part as { value: unknown }).value;
+    if (typeof v !== "string") return null;
+    out += v;
+  }
+  return out;
+}
+
+/**
+ * Collapse a claim an author split across sibling nodes onto the first of them.
+ * See {@link MEMBERSHIP_CLAIM_SPLIT_REWRITES}.
+ */
+function collapseSplitClaims(children: unknown[], rewritten: string[]): unknown[] {
+  const texts = children.map(soleText);
+  for (const rule of MEMBERSHIP_CLAIM_SPLIT_REWRITES) {
+    for (let i = 0; i + rule.parts.length <= children.length; i++) {
+      const window = texts.slice(i, i + rule.parts.length);
+      if (window.some((t) => t == null)) continue;
+      if (!window.every((t, k) => t === rule.parts[k])) continue;
+      const first = children[i] as NodeRecord;
+      const replaced: NodeRecord = { ...first, text: [{ kind: "static", value: rule.to }] };
+      rewritten.push(rule.parts.join(""));
+      return [...children.slice(0, i), replaced, ...children.slice(i + rule.parts.length)];
+    }
+  }
+  return children;
+}
+
 function rewriteNode(node: unknown, rewritten: string[]): unknown {
   if (Array.isArray(node)) return node.map((n) => rewriteNode(n, rewritten));
   if (!node || typeof node !== "object") return node;
@@ -111,10 +172,29 @@ function rewriteNode(node: unknown, rewritten: string[]): unknown {
       });
       continue;
     }
+    if (key === "children" && Array.isArray(value)) {
+      next.children = collapseSplitClaims(value as unknown[], rewritten).map((n) =>
+        rewriteNode(n, rewritten)
+      );
+      continue;
+    }
     next[key] = rewriteNode(value, rewritten);
   }
 
   return next;
+}
+
+/**
+ * Rewrite the claims held OUTSIDE a node tree — today, the membership plan's
+ * `benefits` list. Same table, same post-condition, because a false claim is a
+ * false claim wherever it is stored and this one renders on the home page.
+ */
+export function rewriteMembershipStrings(values: string[]): {
+  values: string[];
+  rewritten: string[];
+} {
+  const rewritten: string[] = [];
+  return { values: values.map((v) => rewriteText(v, rewritten)), rewritten };
 }
 
 /** A copy of the tree with every known false claim rewritten. */

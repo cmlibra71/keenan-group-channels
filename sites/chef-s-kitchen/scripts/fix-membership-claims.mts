@@ -16,25 +16,42 @@
  *
  * Idempotent and safe to re-run. Run from sites/chef-s-kitchen:
  *   # 1. see what would change, touching nothing
- *   node --env-file=.env --import tsx scripts/fix-membership-claims.mts
+ *   node --env-file=.env scripts/fix-membership-claims.mts
  *   # 2. drafts only — live rendering unaffected
- *   node --env-file=.env --import tsx scripts/fix-membership-claims.mts --apply --draft-only
+ *   node --env-file=.env scripts/fix-membership-claims.mts --apply --draft-only
  *   # 3. drafts + published — this is the one customers see. Run it in the same
  *   #    deploy wave as this card, then purge the storefront cache (published
  *   #    CMS reads are cached 300s).
- *   node --env-file=.env --import tsx scripts/fix-membership-claims.mts --apply
+ *   node --env-file=.env scripts/fix-membership-claims.mts --apply
  *
  * Published rows are edited in place rather than by publishing a new version, so
  * page history is preserved and reverting is restoring the row.
  */
 import postgres from "postgres";
 import type { NodeTree } from "@keenan/services/builder";
-import { rewriteMembershipClaims, findMembershipClaims } from "../src/builder/membership-claims";
+import {
+  rewriteMembershipClaims,
+  findMembershipClaims,
+  rewriteMembershipStrings,
+  MEMBERSHIP_CLAIM_MARKERS,
+} from "../src/builder/membership-claims.ts";
 
 const APPLY = process.argv.includes("--apply");
 const DRAFT_ONLY = process.argv.includes("--draft-only");
 
 let changes = 0;
+/** Trees that still carry a claim after the pass. Reported at the end, loudly. */
+const leftovers: string[] = [];
+
+/** Post-condition on EVERY tree, not only the ones this pass rewrote. A claim an
+ *  author split across sibling nodes used to be invisible to the exact-match
+ *  rewrite AND to this check, so the run reported "already clean" while the
+ *  words went on rendering — which is how "10–25%" survived the first pass. */
+function audit(label: string, tree: NodeTree | null) {
+  if (!tree) return;
+  const found = findMembershipClaims(tree);
+  if (found.length) leftovers.push(`${label}: ${found.join(" / ")}`);
+}
 
 /** Rewrite one stored tree, enforce the post-condition, and report. */
 function plan(label: string, tree: NodeTree | null): { tree: NodeTree } | null {
@@ -75,6 +92,7 @@ async function main() {
 
     for (const page of pages) {
       const draft = plan(`page ${page.id} "${page.slug}" draft`, page.node_tree);
+      audit(`page ${page.id} "${page.slug}" draft`, draft?.tree ?? page.node_tree);
       if (draft && APPLY) {
         await sql`UPDATE cms_pages SET node_tree = ${sql.json(draft.tree as never)}, draft_updated_at = now() WHERE id = ${page.id}`;
         console.log("    draft: UPDATED");
@@ -87,6 +105,7 @@ async function main() {
         node_tree: NodeTree | null;
       }[];
       const published = plan(`page ${page.id} "${page.slug}" published (v${version?.id})`, version?.node_tree ?? null);
+      audit(`page ${page.id} published v${version?.id}`, published?.tree ?? version?.node_tree ?? null);
       if (published && APPLY && !DRAFT_ONLY) {
         await sql`UPDATE cms_page_versions SET node_tree = ${sql.json(published.tree as never)} WHERE id = ${version.id}`;
         console.log("    published: UPDATED");
@@ -108,17 +127,58 @@ async function main() {
 
     for (const c of components) {
       const draft = plan(`component "${c.key}" (${c.id}) draft`, c.draft_tree);
+      audit(`component "${c.key}" (${c.id}) draft`, draft?.tree ?? c.draft_tree);
       if (draft && APPLY) {
         await sql`UPDATE cms_components SET draft_tree = ${sql.json(draft.tree as never)} WHERE id = ${c.id}`;
         console.log("    draft tree: UPDATED");
       }
       const pub = plan(`component "${c.key}" (${c.id}) published`, c.published_tree);
+      audit(`component "${c.key}" (${c.id}) published`, pub?.tree ?? c.published_tree);
       if (pub && APPLY && !DRAFT_ONLY) {
         await sql`UPDATE cms_components SET published_tree = ${sql.json(pub.tree as never)} WHERE id = ${c.id}`;
         console.log("    published tree: UPDATED");
       } else if (pub && DRAFT_ONLY) {
         console.log("    published tree: SKIPPED (--draft-only)");
       }
+    }
+
+    // The membership PLAN's benefit list. Not a tree, but rendered on the home
+    // value strip and on both fee cards, so a false claim there is as live as one
+    // in a page — and it is the one the first pass missed entirely.
+    const plans = (await sql`
+      SELECT id, channel_id, name, benefits FROM subscription_plans ORDER BY id`) as unknown as {
+      id: number;
+      channel_id: number;
+      name: string;
+      benefits: string[] | null;
+    }[];
+
+    for (const row of plans) {
+      const before = Array.isArray(row.benefits) ? row.benefits : [];
+      if (before.length === 0) continue;
+      const { values, rewritten } = rewriteMembershipStrings(before);
+      const stillClaiming = values.filter((v) =>
+        MEMBERSHIP_CLAIM_MARKERS.some((m) => v.toLowerCase().includes(m.toLowerCase()))
+      );
+      if (stillClaiming.length) {
+        leftovers.push(`subscription_plan ${row.id} benefits: ${stillClaiming.join(" / ")}`);
+      }
+      if (rewritten.length === 0) continue;
+      changes++;
+      console.log(`  plan ${row.id} "${row.name}" benefits: rewrites ${rewritten.length} claim(s)`);
+      if (APPLY) {
+        await sql`UPDATE subscription_plans SET benefits = ${sql.json(values as never)} WHERE id = ${row.id}`;
+        console.log("    benefits: UPDATED");
+      }
+    }
+
+    if (leftovers.length) {
+      console.error("\nCLAIMS STILL PRESENT after the pass:");
+      for (const l of leftovers) console.error("  " + l);
+      console.error(
+        "\nEach of these renders to a customer. Fix it in the Site Builder (or add the " +
+          "exact wording to MEMBERSHIP_CLAIM_REWRITES) and re-run."
+      );
     }
 
     console.log(

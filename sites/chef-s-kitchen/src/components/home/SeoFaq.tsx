@@ -26,7 +26,7 @@ export function SeoFaq({
       : [
           {
             q: "How does Chefs Depot membership pricing work?",
-            a: "Member pricing is calculated from our current trade price list at the moment you see it — the same list our own team quotes from. Membership starts from $14.95/month, your member price applies from your first order, and it steps down further as your rolling twelve-month spend grows. The distance is set item by item, so there is no single percentage: your price is shown on every product page once you are signed in.",
+            a: "Member pricing is calculated from our current trade price list at the moment you see it — the same list our own team quotes from. Membership starts from $14.95/month and your member price applies automatically once you are signed in. The distance is set item by item, so there is no single percentage: your price is shown on every product page.",
           },
           {
             q: "Do you deliver Australia-wide?",
