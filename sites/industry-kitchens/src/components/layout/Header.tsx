@@ -85,22 +85,35 @@ export async function Header({
         <div className="border-b border-zinc-200">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-3 lg:gap-6 py-3">
-              {/* Logo — SIZED BY WIDTH, not by height (card kiJa7dug: Steve
-                  wants the site logo at least 350px across on desktop). The
-                  row is padded, not fixed-height, so it grows to hold the
-                  artwork instead of cropping it. IK's mark keeps its OWN
+              {/* Logo — SIZED BY WIDTH, not by height, and CAPPED AT 200px
+                  ACROSS (card yNp4uoiM, Steve 2026-08-24: "it is currently too
+                  large, please reduce to 200px width max"). That SUPERSEDES the
+                  350px desktop width of card kiJa7dug ON INDUSTRY KITCHENS —
+                  the same way card bf2w6JFe superseded it on Chefs Depot with a
+                  150px square box. The two mastheads are now sized differently
+                  ON PURPOSE: do not "restore parity" by copying either header
+                  onto the other, or onto `template/` (still 350px, and it is
+                  the scaffold for future sites, not this site).
+
+                  `max-w-[200px]` is the cap itself, not decoration: it holds at
+                  every breakpoint whatever the `w-*` utilities say, so a future
+                  breakpoint cannot quietly raise the logo past Steve's number.
+                  The row is padded, not fixed-height, so it grows to hold the
+                  artwork instead of cropping it, and IK's mark keeps its OWN
                   aspect ratio (`h-auto`) — it is not stretched to match Chefs
                   Depot's stacked lockup. The width/height props are Next's
-                  pre-load hint and srcSet basis; the loaded image's own ratio
-                  wins.
+                  pre-load hint and srcSet basis (now 200px, matching the widest
+                  rendered size, so phones stop paying for a 350px asset); the
+                  loaded image's own ratio wins.
 
                   The mobile width is `min(150px, 25vw)`, NOT a flat 150px:
                   this Link is `shrink-0`, so on a 320px-wide screen (iPhone SE
                   / a 640px window at 200% zoom) a 150px logo pushed the compact
                   phone/quote/cart/menu cluster off the right edge — and
                   `html,body{overflow-x:hidden}` meant the shopper could not
-                  scroll to it. `max-w-full` does NOT catch that: it resolves
-                  against a shrink-wrapped parent, so it constrains nothing.
+                  scroll to it. `max-w-full` did NOT catch that: it resolves
+                  against a shrink-wrapped parent, so it constrained nothing,
+                  which is why the cap here is an explicit pixel value.
                   Re-measure that cluster's right edge at 320px before raising
                   it. */}
               <Link href="/" className="shrink-0">
@@ -108,10 +121,10 @@ export async function Header({
                   <Image
                     src={logoUrl}
                     alt={logoAlt || storeName}
-                    width={350}
-                    height={187}
+                    width={200}
+                    height={107}
                     priority
-                    className="h-auto w-[min(150px,25vw)] max-w-full object-contain sm:w-[200px] lg:w-[350px]"
+                    className="h-auto w-[min(150px,25vw)] max-w-[200px] object-contain sm:w-[200px]"
                   />
                 ) : (
                   <span className="text-xl font-bold text-[#D94B2B]">{storeName}</span>
