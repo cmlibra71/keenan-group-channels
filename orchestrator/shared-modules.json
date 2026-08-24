@@ -51,6 +51,8 @@
     "builder/silverchef-node.ts",
     "builder/strip-stock-nodes.test.ts",
     "builder/strip-stock-nodes.ts",
+    "builder/upsell-node.test.ts",
+    "builder/upsell-node.ts",
     "builder/use-form-handlers.ts",
     "components/layout/ScrollReset.tsx",
     "components/search/use-search-suggestions.ts",
