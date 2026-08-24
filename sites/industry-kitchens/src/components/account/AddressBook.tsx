@@ -12,6 +12,7 @@ import {
   setDefaultAddress,
   type AddressInput,
 } from "@/lib/actions/account";
+import { ADDRESS_BOOK_READ_ONLY_NOTE } from "@/lib/account/address-authority";
 
 export type Address = {
   id: number;
@@ -45,29 +46,57 @@ export type AddressPrefill = {
   phone: string;
 };
 
+/**
+ * `canAdd` / `canEdit` / `canRemove` come from the B2B account role (card
+ * H5JdsMrC): on a business account only the manager may change what the account
+ * has saved. Hiding a control is presentation only — every action re-checks the
+ * role server-side — but a hidden control still needs its explanation, so the
+ * read-only note takes the place of the ones we remove. Defaults are `true`, so a
+ * B2C shopper and every existing caller behave exactly as before.
+ */
 export function AddressBook({
   addresses,
   googlePlacesEnabled = false,
   prefill,
+  canAdd = true,
+  canEdit = true,
+  canRemove = true,
 }: {
   addresses: Address[];
   googlePlacesEnabled?: boolean;
   prefill?: AddressPrefill;
+  canAdd?: boolean;
+  canEdit?: boolean;
+  canRemove?: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState<number | "new" | null>(null);
   const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const readOnly = !canAdd && !canEdit && !canRemove;
 
   async function onDelete(id: number) {
     setBusy(true);
-    await deleteCustomerAddress(id);
+    // The action answers with the reason when the role refuses. Swallowing it is
+    // how a button comes to do nothing at all in front of a customer.
+    const result = await deleteCustomerAddress(id);
     setBusy(false);
+    if (!result.success) {
+      setRefusal(result.error ?? "That address could not be removed.");
+      return;
+    }
+    setRefusal(null);
     router.refresh();
   }
   async function onSetDefault(id: number, type: "billing" | "shipping") {
     setBusy(true);
-    await setDefaultAddress(id, type);
+    const result = await setDefaultAddress(id, type);
     setBusy(false);
+    if (!result.success) {
+      setRefusal(result.error ?? "That default could not be set.");
+      return;
+    }
+    setRefusal(null);
     router.refresh();
   }
 
@@ -75,6 +104,18 @@ export function AddressBook({
     <div className="space-y-4">
       {addresses.length === 0 && editing === null && (
         <p className="text-sm text-zinc-500">No saved addresses yet.</p>
+      )}
+
+      {readOnly && (
+        <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
+          {ADDRESS_BOOK_READ_ONLY_NOTE}
+        </p>
+      )}
+
+      {refusal && (
+        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          {refusal}
+        </p>
       )}
 
       {addresses.map((a) =>
@@ -114,21 +155,25 @@ export function AddressBook({
                 </div>
               </div>
               <div className="flex shrink-0 gap-1">
-                <button onClick={() => setEditing(a.id)} aria-label="Edit" className="p-2 text-zinc-400 hover:text-zinc-900">
-                  <Pencil className="h-4 w-4" />
-                </button>
-                <button onClick={() => onDelete(a.id)} disabled={busy} aria-label="Delete" className="p-2 text-zinc-400 hover:text-red-600 disabled:opacity-50">
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                {canEdit && (
+                  <button onClick={() => setEditing(a.id)} aria-label="Edit" className="p-2 text-zinc-400 hover:text-zinc-900">
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                )}
+                {canRemove && (
+                  <button onClick={() => onDelete(a.id)} disabled={busy} aria-label="Delete" className="p-2 text-zinc-400 hover:text-red-600 disabled:opacity-50">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             </div>
             <div className="mt-2 flex flex-wrap gap-3 text-xs">
-              {!a.isDefaultBilling && (
+              {canEdit && !a.isDefaultBilling && (
                 <button onClick={() => onSetDefault(a.id, "billing")} disabled={busy} className="font-semibold text-zinc-900 underline hover:text-zinc-600 disabled:opacity-50">
                   Set as default billing
                 </button>
               )}
-              {!a.isDefaultShipping && (
+              {canEdit && !a.isDefaultShipping && (
                 <button onClick={() => onSetDefault(a.id, "shipping")} disabled={busy} className="font-semibold text-zinc-900 underline hover:text-zinc-600 disabled:opacity-50">
                   Set as default shipping
                 </button>
@@ -149,12 +194,14 @@ export function AddressBook({
           }}
         />
       ) : (
-        <button
-          onClick={() => setEditing("new")}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
-        >
-          <Plus className="h-3.5 w-3.5" /> Add address
-        </button>
+        canAdd && (
+          <button
+            onClick={() => setEditing("new")}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+          >
+            <Plus className="h-3.5 w-3.5" /> Add address
+          </button>
+        )
       )}
     </div>
   );

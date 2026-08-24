@@ -27,6 +27,15 @@
 //      `submit_other_customer_orders` (deny). A missing key must never brick
 //      checkout — Zoey's checkboxes default on for standard roles, and the
 //      legacy→Zoey migration is lossy (it cannot reconstruct unticked boxes).
+// MAIN-CONTACT-ONLY codes (MAIN_ONLY_PERMISSIONS) do NOT take the permissive
+// default. Zoey prints those checkboxes only on a MAIN CONTACT ROLE form, so an
+// Additional Contact Role can never have ticked them and "absent" there means
+// "was never offered", not "nobody said". They resolve through
+// `decideMainOnlyPermission`: explicit deny, then explicit grant, then the
+// account's MAIN CONTACT, then a `main`-scope role, else NO. Same ordering as
+// `roleManagesPeople` (lib/account/account-roles.ts), which learnt it on live
+// rows. Card H5JdsMrC: a colleague who is not the manager may not change the
+// account's delivery addresses.
 // GRANT-ONLY codes are not action gates and are false unless granted:
 //   - the 19 `receive_email_for_*` codes (they SUBSCRIBE a contact to account
 //     emails — defaulting them "allow" would email every contact everything);
@@ -64,11 +73,49 @@ export interface ContactPermissions {
   accountId: number | null;
   roleId: number | null;
   roleName: string | null;
+  /** `account_roles.scope` — Zoey's Main vs Additional Contact Role. */
+  roleScope: AccountRoleScope;
   isMainContact: boolean;
   /** True when the DB lookup failed and we failed OPEN. */
   failedOpen: boolean;
   can(code: string): boolean;
   conditions(code: string): RoleCondition[];
+}
+
+/** Zoey's role TYPE: a Main Contact Role or an Additional Contact Role. */
+export type AccountRoleScope = "main" | "additional" | null;
+
+/**
+ * The codes Zoey offers ONLY on a Main Contact Role form.
+ *
+ * The first 11 are Zoey's own (portal `src/lib/account-roles/role-permissions.ts`
+ * `MAIN_ONLY_PERMISSIONS`). The three `*_ship_to_address` codes are a KGP
+ * extension added by card H5JdsMrC: Zoey's ship-to pair governs `account_locations`,
+ * which is portal/Zoey-managed and which no storefront ever writes, so it could not
+ * gate the one address book our customers actually edit.
+ *
+ * Keep this list in step with the portal catalogue — it is the authoring side of
+ * the same rule, and the portal's `role-permissions.test.ts` pins the count.
+ */
+export const MAIN_ONLY_PERMISSIONS: ReadonlySet<string> = new Set([
+  "add_location",
+  "edit_location",
+  "add_contact",
+  "edit_contact",
+  "remove_contact",
+  "add_bill_to_address",
+  "edit_bill_to_address",
+  "remove_bill_to_address",
+  "add_ship_to_address",
+  "edit_ship_to_address",
+  "remove_ship_to_address",
+  "add_saved_card",
+  "edit_saved_card",
+  "remove_saved_card",
+]);
+
+export function isMainOnlyCode(code: string): boolean {
+  return MAIN_ONLY_PERMISSIONS.has(code);
 }
 
 /** Codes that default DENY when absent (everything else defaults allow). */
@@ -162,6 +209,33 @@ export function decidePermission(
     if (parsed.grants.has(code)) return true;
   }
   return !DEFAULT_DENY_CODES.has(code);
+}
+
+/**
+ * The decision function for a MAIN-CONTACT-ONLY code.
+ *
+ * Order, and every step of it earns its place against the live rows (prod
+ * 2026-08-24, 20,563 active memberships):
+ *   1. an EXPLICIT deny always wins — "Billing" and "Shipping" (both `main`
+ *      scope, 137 members) untick the bill-to trio in Zoey and stay refused;
+ *   2. an EXPLICIT grant always wins — "(Deprecated) Account Admin" is
+ *      `additional` scope yet grants the bill-to trio outright;
+ *   3. the account's MAIN CONTACT is the manager the card is written about, so a
+ *      role-data gap can never lock the manager out of their own address book;
+ *   4. otherwise only a `main`-scope role gets the benefit of an ABSENT code. An
+ *      unknown or null scope is not a Main Contact Role.
+ * The permissive default (`decidePermission`) is deliberately NOT reachable here:
+ * absent on an Additional role means the checkbox was never offered.
+ */
+export function decideMainOnlyPermission(
+  code: string,
+  parsed: ParsedRolePermissions | null,
+  ctx: { scope: AccountRoleScope; isMainContact: boolean }
+): boolean {
+  if (parsed?.denies.has(code)) return false;
+  if (parsed?.grants.has(code)) return true;
+  if (ctx.isMainContact) return true;
+  return ctx.scope === "main";
 }
 
 // ── submit_orders Conditions evaluation (pure) ───────────────────────────────
@@ -287,16 +361,22 @@ const BYPASS: Omit<ContactPermissions, "failedOpen"> = {
   accountId: null,
   roleId: null,
   roleName: null,
+  roleScope: null,
   isMainContact: false,
   can: () => true,
   conditions: () => [],
 };
+
+function normaliseScope(raw: unknown): AccountRoleScope {
+  return raw === "main" || raw === "additional" ? raw : null;
+}
 
 function buildContext(
   row: {
     account_id: number;
     role_id: number | null;
     role_name: string | null;
+    role_scope: string | null;
     is_main_contact: boolean;
     permissions: unknown;
   } | null,
@@ -304,14 +384,20 @@ function buildContext(
 ): ContactPermissions {
   if (!row) return { ...BYPASS, failedOpen };
   const parsed = row.role_id !== null ? parseRolePermissions(row.permissions) : null;
+  const scope = normaliseScope(row.role_scope);
+  const isMainContact = Boolean(row.is_main_contact);
   return {
     isB2B: true,
     accountId: row.account_id,
     roleId: row.role_id,
     roleName: row.role_name,
-    isMainContact: Boolean(row.is_main_contact),
+    roleScope: scope,
+    isMainContact,
     failedOpen,
-    can: (code) => decidePermission(code, parsed),
+    can: (code) =>
+      isMainOnlyCode(code)
+        ? decideMainOnlyPermission(code, parsed, { scope, isMainContact })
+        : decidePermission(code, parsed),
     conditions: (code) => parsed?.conditions[code] ?? [],
   };
 }
@@ -334,11 +420,12 @@ export async function getContactPermissions(
         account_id: number;
         role_id: number | null;
         role_name: string | null;
+        role_scope: string | null;
         is_main_contact: boolean;
         permissions: unknown;
       }[]
     >`
-      SELECT m.account_id, m.role_id, r.name AS role_name,
+      SELECT m.account_id, m.role_id, r.name AS role_name, r.scope AS role_scope,
              m.is_main_contact, r.permissions
       FROM account_memberships m
       LEFT JOIN account_roles r ON r.id = m.role_id

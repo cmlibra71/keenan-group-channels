@@ -33,6 +33,7 @@ import {
 import { isStaffOnlyDraft, withoutStaffOnlyDrafts } from "@/lib/quotes/draft-visibility";
 import { acceptanceAcknowledgementUrl } from "@/lib/quotes/acknowledgement-url";
 import { getContactPermissions } from "@/lib/role-permissions";
+import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import { isProductVisibleToViewer, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { contactService, customerAddressService } from "@/lib/store";
 import { saveCheckoutAddressForContact } from "@/lib/contact-addresses";
@@ -305,22 +306,16 @@ export async function getQuoteDeliveryAddresses(): Promise<SavedQuoteAddress[]> 
  * The checkout's rule, unchanged: a B2B contact whose role forbids adding an address
  * does not get one saved, and because one saved address can become the contact's
  * default BILLING as well as shipping (the first one always does), it takes BOTH
- * codes — exactly as `placeOrder` does on the single-page checkout. It is asked here
- * so the drawer can stop PRINTING a promise we then quietly do not keep.
+ * checkout codes — exactly as `placeOrder` does on the single-page checkout — and,
+ * since card H5JdsMrC, the address book's own main-contact-only add codes too. It is
+ * asked here so the drawer can stop PRINTING a promise we then quietly do not keep.
  *
  * Fails open on a lookup error, like every other role read on a customer path: the
  * worst case is an address saved for someone who could have added one anyway.
  */
-function mayFileAddressForRole(perms: {
-  isB2B: boolean;
-  accountId: number | null;
-  can: (code: string) => boolean;
-}): boolean {
-  if (!perms.isB2B || perms.accountId === null) return true;
-  return (
-    perms.can("add_shipping_address_in_checkout") && perms.can("add_billing_address_in_checkout")
-  );
-}
+// Shared with `placeOrder` so the three writers into the address book cannot
+// drift apart: lib/account/address-authority.ts.
+const mayFileAddressForRole = mayFileAddressInBook;
 
 export async function canSaveQuoteAddress(): Promise<boolean> {
   const session = await getSession();

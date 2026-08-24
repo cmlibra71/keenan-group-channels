@@ -8,6 +8,8 @@ import { AddressBook, type Address } from "@/components/account/AddressBook";
 import { AccountPeople } from "@/components/account/AccountPeople";
 import { loadAccountPeople } from "@/lib/account/account-people-data";
 import { loadProfileContact, loadProfileAddresses } from "@/lib/account/profile-data";
+import { getContactPermissions } from "@/lib/role-permissions";
+import { mayManageAddressBook } from "@/lib/account/address-authority";
 import {
   missingProfileDetails,
   profilePromptLines,
@@ -24,14 +26,24 @@ export default async function ProfilePage() {
   // page renders five contact fields, and reading the whole contact row would
   // serialise `password_hash`, staff notes and the net-terms entitlement into
   // the page payload in a dev build (card BIig1Zo1).
-  const [contact, addressRows, checkoutSettings, peopleView] = await Promise.all([
+  const [contact, addressRows, checkoutSettings, peopleView, perms] = await Promise.all([
     loadProfileContact(session.contactId),
     loadProfileAddresses(session.contactId),
     getCheckoutSettings(),
     loadAccountPeople(session.contactId),
+    getContactPermissions(session.contactId),
   ]);
 
   const addresses: Address[] = addressRows;
+
+  // Card H5JdsMrC: only the account's manager may change the addresses the
+  // account has saved. The controls are hidden for everyone else and the reason
+  // is printed in their place — a control removed with no explanation is the
+  // failure pattern the behaviour register names. The actions re-check this
+  // themselves, so hiding is presentation, never the gate.
+  const canManageAddresses = mayManageAddressBook(perms, "edit");
+  const canAddAddress = mayManageAddressBook(perms, "add");
+  const canRemoveAddress = mayManageAddressBook(perms, "remove");
 
   // What is still outstanding on this account (card xqWftDcL). It PROMPTS — it
   // never blocks: no order and no checkout reads this.
@@ -85,6 +97,9 @@ export default async function ProfilePage() {
         </p>
         <AddressBook
           addresses={addresses}
+          canAdd={canAddAddress}
+          canEdit={canManageAddresses}
+          canRemove={canRemoveAddress}
           googlePlacesEnabled={checkoutSettings.googlePlacesEnabled}
           // The details from the Profile card above, so a new address does not
           // ask for the same name, business and phone a second time (xqWftDcL).

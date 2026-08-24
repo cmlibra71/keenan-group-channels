@@ -45,6 +45,7 @@ import {
   describeFailedCondition,
   resolveAccountEmailRecipients,
 } from "@/lib/role-permissions";
+import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import { applyAccountPricesToCart } from "@/lib/checkout/account-prices";
 import { saveCheckoutAddressForContact } from "@/lib/contact-addresses";
 import { blockedProductIds } from "@/lib/catalog-scope";
@@ -1032,16 +1033,16 @@ export async function placeOrder(
   // The role gate is re-checked server-side against the SAME `perms` the new-
   // address check above used — the checkbox is simply not rendered for a
   // restricted contact, and a hand-posted `saveAddress` must not bypass that.
+  // FILING is a change to what the account has saved, so since card H5JdsMrC it
+  // also takes the address book's own add codes (bill-to AND ship-to, which are
+  // main-contact-only): a colleague who is not the manager still gets their order,
+  // delivered to the address they typed — it is simply not added to the book.
   //
   // Wrapped whole in try/catch: the order already exists and is paid-for-real in
   // a moment. Failing to file an address in a book must never fail an order.
   if (session?.contactId && isAu && formData.get("saveAddress") === "on") {
     try {
-      const mayAddAddress =
-        !perms.isB2B ||
-        perms.accountId === null ||
-        (perms.can("add_billing_address_in_checkout") && perms.can("add_shipping_address_in_checkout"));
-      if (mayAddAddress) {
+      if (mayFileAddressInBook(perms)) {
         await saveCheckoutAddressForContact(session.contactId, {
           firstName,
           lastName,
