@@ -106,8 +106,6 @@ export async function categoryTreePlacesSeoCopy(draft: boolean): Promise<boolean
   return treePlacesSeoCopy(nodeTree, components);
 }
 
-
-
 /**
  * Renders the category template's node tree, or returns null if the node path
  * does not apply (no tree authored, or the flag is off outside draft).

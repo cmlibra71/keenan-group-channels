@@ -67,6 +67,37 @@ test("a node inside a shared component master counts as placed", () => {
   assert.equal(treePlacesSeoCopy(pageTree, {}), false);
 });
 
+test("a master nothing on the page uses does NOT count", () => {
+  // The scan is scoped to masters this tree actually reaches. An unused or
+  // half-finished component in the channel's library that happens to bind the
+  // path would otherwise strip the approved copy from the foot of every category
+  // page on the site — 4,231 of them — with nothing on any screen to explain it.
+  const components = {
+    "not-on-this-page": page(leaf({ richBinding: "category.seo_intro_html" })),
+  };
+  assert.equal(treePlacesSeoCopy(page(leaf({})), components), false);
+});
+
+test("a master reached THROUGH another master counts", () => {
+  // Masters nest: the page places a wrapper, the wrapper places the copy block.
+  const components = {
+    wrapper: page({ id: "n-inner", kind: "component", componentKey: "copy-block" }),
+    "copy-block": page(leaf({ richBinding: "category.seo_intro_html" })),
+  };
+  const pageTree = page({ id: "n-cmp", kind: "component", componentKey: "wrapper" });
+  assert.equal(treePlacesSeoCopy(pageTree, components), true);
+});
+
+test("a component cycle terminates", () => {
+  // Two masters that place each other. Nothing stops an author saving that, and
+  // an unbounded walk would hang the category route rather than fail it.
+  const components = {
+    a: page({ id: "n-b", kind: "component", componentKey: "b" }),
+    b: page({ id: "n-a", kind: "component", componentKey: "a" }),
+  };
+  assert.equal(treePlacesSeoCopy(page({ id: "n-cmp", kind: "component", componentKey: "a" }), components), false);
+});
+
 test("a condition or a text binding on the path counts too", () => {
   // The palette's node gates itself on the same path, and an author may bind it
   // as text rather than rich HTML. Either way the copy is on the page.

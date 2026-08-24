@@ -568,18 +568,23 @@ body {
   font-weight: 600;
 }
 
-/* ── Author-written category copy (card nYxPgpvK) ─────────────────────────────
-   The category description is authored as RICH text in the portal — H2/H3
-   sub-headings, paragraphs, lists — and reaches the page as raw HTML: through
-   the published Site Builder node tree on Industry Kitchens, through the
-   category route on Chefs Depot. Tailwind's preflight zeroes heading sizes and
+/* ── Author-written page copy (cards nYxPgpvK, leNXsdgf) ─────────────────
+   Category descriptions and brand copy are authored as RICH text in the portal
+   — H2/H3 sub-headings, paragraphs, lists, quotes, tables — and reach the page
+   as raw HTML: through a published Site Builder node tree, or through the
+   category / brand route. Tailwind's preflight zeroes heading sizes and
    paragraph margins, and neither site installs @tailwindcss/typography, so the
-   `prose` classes an authored tree carries have NO rules behind them: every
+   `prose` classes those blocks used to carry have NO rules behind them: every
    sub-heading rendered at body weight and the paragraphs ran together.
 
-   `@keenan/services` (composeCategoryPagePayload) wraps both halves of the copy
-   in .kg-category-copy, and the routes below put the same class on the block
-   they render, so ONE set of rules serves both paths.
+   TWO class names, one set of rules, on purpose. `@keenan/services`
+   (composeCategoryPagePayload) wraps category copy in `.kg-category-copy`, which
+   is the name that shipped and is emitted by code whose release the storefront
+   does not control. `.kg-page-copy` is the name a person puts on a block BY HAND
+   in the Site Builder — a brand block labelled `kg-category-copy` reads as a
+   mistake — and the palette entries write it. Aliasing the two with `:is()`
+   costs no specificity and means neither side can ship ahead of the other and
+   leave an unstyled block on a live page.
 
    In the COMPONENTS layer on purpose: Tailwind utilities still beat these, so a
    class an author puts on an element keeps working, and an unlayered block would
@@ -591,76 +596,88 @@ body {
   /* First/last element flush with the block. Two levels: the node path puts the
      authored elements directly inside the wrapper, the route path renders them
      inside RichContent's per-segment div. */
-  .kg-category-copy > :first-child,
-  .kg-category-copy > :first-child > :first-child { margin-top: 0; }
-  .kg-category-copy > :last-child,
-  .kg-category-copy > :last-child > :last-child { margin-bottom: 0; }
+  :is(.kg-category-copy, .kg-page-copy) > :first-child,
+  :is(.kg-category-copy, .kg-page-copy) > :first-child > :first-child { margin-top: 0; }
+  :is(.kg-category-copy, .kg-page-copy) > :last-child,
+  :is(.kg-category-copy, .kg-page-copy) > :last-child > :last-child { margin-bottom: 0; }
 
-  .kg-category-copy p { margin: 0.75em 0; }
-  .kg-category-copy h2 { font-size: 1.25em; font-weight: 700; line-height: 1.3; margin: 1.5em 0 0.5em; }
-  .kg-category-copy h3 { font-size: 1.1em; font-weight: 700; line-height: 1.35; margin: 1.3em 0 0.4em; }
-  .kg-category-copy h4,
-  .kg-category-copy h5,
-  .kg-category-copy h6 { font-size: 1em; font-weight: 700; margin: 1.1em 0 0.3em; }
-  .kg-category-copy strong,
-  .kg-category-copy b { font-weight: 700; }
-  .kg-category-copy em,
-  .kg-category-copy i { font-style: italic; }
-  .kg-category-copy ul { list-style: disc; padding-left: 1.4em; margin: 0.75em 0; }
-  .kg-category-copy ol { list-style: decimal; padding-left: 1.4em; margin: 0.75em 0; }
-  .kg-category-copy li { margin: 0.25em 0; }
-  .kg-category-copy a { text-decoration: underline; text-underline-offset: 2px; }
-  .kg-category-copy img { max-width: 100%; height: auto; }
-  .kg-category-copy table { width: 100%; margin: 1em 0; border-collapse: collapse; }
-  .kg-category-copy th,
-  .kg-category-copy td { padding: 0.4em 0.6em; text-align: left; vertical-align: top; }
-  .kg-category-copy u { text-decoration: underline; text-underline-offset: 2px; }
-  .kg-category-copy s,
-  .kg-category-copy strike { text-decoration: line-through; }
-  .kg-category-copy sub { vertical-align: sub; font-size: 0.8em; }
-  .kg-category-copy sup { vertical-align: super; font-size: 0.8em; }
+  :is(.kg-category-copy, .kg-page-copy) p { margin: 0.75em 0; }
+  :is(.kg-category-copy, .kg-page-copy) h2 { font-size: 1.25em; font-weight: 700; line-height: 1.3; margin: 1.5em 0 0.5em; }
+  :is(.kg-category-copy, .kg-page-copy) h3 { font-size: 1.1em; font-weight: 700; line-height: 1.35; margin: 1.3em 0 0.4em; }
+  :is(.kg-category-copy, .kg-page-copy) h4,
+  :is(.kg-category-copy, .kg-page-copy) h5,
+  :is(.kg-category-copy, .kg-page-copy) h6 { font-size: 1em; font-weight: 700; margin: 1.1em 0 0.3em; }
+  :is(.kg-category-copy, .kg-page-copy) strong,
+  :is(.kg-category-copy, .kg-page-copy) b { font-weight: 700; }
+  :is(.kg-category-copy, .kg-page-copy) em,
+  :is(.kg-category-copy, .kg-page-copy) i { font-style: italic; }
+  :is(.kg-category-copy, .kg-page-copy) ul { list-style: disc; padding-left: 1.4em; margin: 0.75em 0; }
+  :is(.kg-category-copy, .kg-page-copy) ol { list-style: decimal; padding-left: 1.4em; margin: 0.75em 0; }
+  :is(.kg-category-copy, .kg-page-copy) li { margin: 0.25em 0; }
+  /* Weight AND underline, because the copy can now live in the tree. The block at
+     the foot of the page styles its own links on the COMPONENT
+     (`[&_a]:font-medium [&_a]:text-zinc-900 [&_a]:underline`, card xvz6pXB4) — a
+     paragraph that moves into the header would otherwise lose its link weight and
+     the same sentence would read differently depending on where it was placed.
+     Colour still travels with the component, not with the copy: a fixed
+     `zinc-900` is invisible on the Chefs Depot dark banner. */
+  :is(.kg-category-copy, .kg-page-copy) a { font-weight: 500; text-decoration: underline; text-underline-offset: 2px; }
+  :is(.kg-category-copy, .kg-page-copy) img { max-width: 100%; height: auto; }
+  :is(.kg-category-copy, .kg-page-copy) table { width: 100%; margin: 1em 0; border-collapse: collapse; }
+  :is(.kg-category-copy, .kg-page-copy) th,
+  :is(.kg-category-copy, .kg-page-copy) td { padding: 0.4em 0.6em; text-align: left; vertical-align: top; }
+  :is(.kg-category-copy, .kg-page-copy) u { text-decoration: underline; text-underline-offset: 2px; }
+  :is(.kg-category-copy, .kg-page-copy) s,
+  :is(.kg-category-copy, .kg-page-copy) strike { text-decoration: line-through; }
+  :is(.kg-category-copy, .kg-page-copy) sub { vertical-align: sub; font-size: 0.8em; }
+  :is(.kg-category-copy, .kg-page-copy) sup { vertical-align: super; font-size: 0.8em; }
   /* Nested lists: preflight leaves them unmarked, and a sub-list drawn with the
      same disc as its parent reads as one flat list. */
-  .kg-category-copy ul ul { list-style: circle; }
-  .kg-category-copy ol ol { list-style: lower-alpha; }
-  .kg-category-copy ul ul,
-  .kg-category-copy ul ol,
-  .kg-category-copy ol ol,
-  .kg-category-copy ol ul { margin: 0.25em 0; }
+  :is(.kg-category-copy, .kg-page-copy) ul ul { list-style: circle; }
+  :is(.kg-category-copy, .kg-page-copy) ol ol { list-style: lower-alpha; }
+  :is(.kg-category-copy, .kg-page-copy) ul ul,
+  :is(.kg-category-copy, .kg-page-copy) ul ol,
+  :is(.kg-category-copy, .kg-page-copy) ol ol,
+  :is(.kg-category-copy, .kg-page-copy) ol ul { margin: 0.25em 0; }
   /* Colour is still never SET — the rule borrows the text colour it inherits and
      fades it, so one block serves the light header card and the dark banner. */
-  .kg-category-copy blockquote {
+  :is(.kg-category-copy, .kg-page-copy) blockquote {
     margin: 1em 0;
     padding-left: 1em;
     border-left: 3px solid color-mix(in srgb, currentColor 30%, transparent);
   }
-  .kg-category-copy hr {
+  :is(.kg-category-copy, .kg-page-copy) hr {
     margin: 1.5em 0;
     border: 0;
     border-top: 1px solid color-mix(in srgb, currentColor 25%, transparent);
   }
-  .kg-category-copy pre {
+  :is(.kg-category-copy, .kg-page-copy) pre {
     margin: 1em 0;
     padding: 0.75em 1em;
     overflow-x: auto;
     white-space: pre-wrap;
     background: color-mix(in srgb, currentColor 8%, transparent);
   }
-  .kg-category-copy code {
+  :is(.kg-category-copy, .kg-page-copy) code {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 0.9em;
   }
-  .kg-category-copy th { font-weight: 700; }
+  :is(.kg-category-copy, .kg-page-copy) th { font-weight: 700; }
 }
 
 /* The width the card is about. Industry Kitchens' category header renders from a
    PUBLISHED Site Builder tree, and that tree pins the description block to
    `max-w-[70ch]` — about 55% of the header card, which is the empty band down
-   the right-hand side. That width lives in DATA, so code releases it here: a
-   node-tree box that sets an arbitrary max-width AND holds our category copy
-   goes full width. Deliberately unlayered, because it has to beat the utility
-   the builder's compiled sheet emits. Narrow by construction: `max-w-7xl` on the
-   page container carries no bracket so the page keeps its own width, and the
-   routes that render this copy without a node tree set `max-w-none` themselves
-   and never match here. */
-[data-kg-nodes] [class*="max-w-["]:has(.kg-category-copy) { max-width: none; }
+   the right-hand side Steve reported. That width lives in DATA, in a row nobody
+   can edit from code, so code releases it here.
+
+   Pinned to `max-w-[70ch]` EXACTLY, not to any bracketed width. The first cut
+   released `[class*="max-w-["]`, which was fine while the copy could only ever
+   sit in that one published box — but the point of nYxPgpvK is that a person can
+   now PLACE this block anywhere and style it, and an author who sets
+   `max-w-[65ch]` in the Style panel has to get 65ch, not silence. Deliberately
+   unlayered, because it still has to beat the utility the builder's compiled
+   sheet emits for the published tree. `max-w-7xl` on the page container carries
+   no bracket and never matched; the routes that render this copy without a node
+   tree set `max-w-none` themselves. */
+[data-kg-nodes] [class*="max-w-[70ch]"]:has(:is(.kg-category-copy, .kg-page-copy)) { max-width: none; }

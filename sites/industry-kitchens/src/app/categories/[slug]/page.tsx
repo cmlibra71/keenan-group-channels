@@ -199,7 +199,18 @@ export default async function CategoryPage({
   // path and the draft tree, so a conversion can be diffed against this page.
   const { isEnabled } = await draftMode();
   const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
-  const cmsCat = await getCmsCategoryPage(category.id, draft).catch(() => null);
+  // Both of these are per-request cached loads that only need `draft`, so they go
+  // together rather than one after the other — "as long as it's fast to open".
+  const [cmsCat, seoCopyPlacedInTree] = await Promise.all([
+    getCmsCategoryPage(category.id, draft).catch(() => null),
+    // Does the authored Category Page Template PLACE this storefront's own
+    // approved wording itself (card nYxPgpvK)? The payload carries it as
+    // `category.seo_intro_html`, so a page can put it in the header or anywhere
+    // else; printing the same paragraphs again at the foot would duplicate body
+    // copy across every category page, which is the cannibalisation this content
+    // exists to avoid. The QUESTIONS are not placeable and stay where they are.
+    categoryTreePlacesSeoCopy(draft),
+  ]);
   const region = (r: string): RenderedBlock[] =>
     ((cmsCat?.blocks as unknown as RenderedBlock[]) ?? []).filter((b) => b.region === r);
   const aboveBlocks = region("above_listing");
@@ -213,13 +224,6 @@ export default async function CategoryPage({
     channel_seo_faq?: { question: string; answer_html: string; answer_text: string }[];
     channel_seo_faq_jsonld?: string;
   };
-  // ...unless the authored Category Page Template PLACES that copy itself (card
-  // nYxPgpvK). The payload now carries it as `category.seo_intro_html`, so a page can
-  // put the site's own wording in the header or anywhere else; printing the same
-  // paragraphs again down here would duplicate body copy across every category page,
-  // which is the cannibalisation this content exists to avoid. The QUESTIONS are not
-  // placeable and stay where they are.
-  const seoCopyPlacedInTree = await categoryTreePlacesSeoCopy(draft);
   const categorySeo = (
     <CategorySeo
       introHtml={seoCopyPlacedInTree ? undefined : seo.channel_seo_intro_html}
