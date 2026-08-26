@@ -175,6 +175,9 @@ jobs:
           AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION=ap-southeast-2
+          AWS_SES_REGION=ap-southeast-2
+          AWS_SES_CONFIGURATION_SET=keenan-portal-delivery
+          TEST_EMAIL_DOMAINS=e2e.test
           GUARD_MODE=${{ vars.GUARD_MODE || 'log' }}
           GUARD_TRUST_CF_IP=${{ vars.GUARD_TRUST_CF_IP || 'false' }}
           GUARD_XFF_TRUSTED_HOPS=${{ vars.GUARD_XFF_TRUSTED_HOPS || '1' }}

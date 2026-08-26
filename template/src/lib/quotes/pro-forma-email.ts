@@ -1,10 +1,11 @@
 import "server-only";
-import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
+import { SendEmailCommand } from "@aws-sdk/client-ses";
 import {
   brandedEmailLayout,
   brandedButton,
   emailSource,
   resolveEmailBranding,
+  safeSesSend,
 } from "@keenan/services";
 import { CHANNEL_ID, getSiteConfig } from "@/lib/store";
 import { siteBaseUrl } from "@/lib/seo";
@@ -32,11 +33,15 @@ import { quoteFreightStillPending } from "@/lib/quotes/freight-pending";
  *
  * Best-effort — a mail failure must never fail the acceptance the customer just
  * made, so every caller swallows it.
+ *
+ * IT GOES THROUGH THE SHARED WRAPPER, not a bare SES client of its own (card oLF9OgFs).
+ * On this path it is the ONLY email the customer receives — `acceptQuote` tells the portal's
+ * acceptance follow-up `customerAlreadyNotified`, so no confirmation is sent beside it — and a
+ * bare client meant it left no row on the quote's Emails card, none on the person's history, no
+ * SES configuration set (so it could never report Delivered or Bounced) and no test-safety
+ * redirect. Steve, 2026-08-26: the Quote History records everything and the Emails sent panel
+ * captures nothing. `safeSesSend` supplies all four from the one call.
  */
-
-const sesClient = new SESClient({
-  region: process.env.AWS_SES_REGION || process.env.AWS_REGION || "ap-southeast-2",
-});
 
 function escapeHtml(s: string): string {
   return s
@@ -61,7 +66,11 @@ type QuoteRow = Record<string, unknown> &
 
 /** Send the pro-forma for an accepted quote. Never throws. */
 export async function sendQuoteProForma(quote: QuoteRow, to: string | null): Promise<void> {
-  const recipient = (process.env.EMAIL_GLOBAL_REDIRECT?.trim() || to || "").trim();
+  // EMAIL_GLOBAL_REDIRECT is no longer read here: `safeSesSend` applies it — and the @e2e.test
+  // swap, the tracking CC and the `[TEST — who]` subject with it — from `resolveTestRedirect`,
+  // which is the ONE place the test-safety rule lives. A pro-forma addressed to nobody is not
+  // sent at all, where the old line would still have mailed the redirect inbox.
+  const recipient = (to || "").trim();
   if (!recipient) return;
 
   const currency = (quote.currency_code as string) || "AUD";
@@ -165,7 +174,7 @@ export async function sendQuoteProForma(quote: QuoteRow, to: string | null): Pro
     .filter((l) => l !== "")
     .join("\n");
 
-  await sesClient.send(
+  await safeSesSend(
     new SendEmailCommand({
       Source: emailSource(branding),
       Destination: { ToAddresses: [recipient] },
@@ -176,6 +185,15 @@ export async function sendQuoteProForma(quote: QuoteRow, to: string | null): Pro
           Text: { Data: text, Charset: "UTF-8" },
         },
       },
-    })
+    }),
+    {
+      // Writes the quote's own `quote.email_sent` row AND the recipient's `contact.email_sent`
+      // row from this single call, so the two trails can never disagree about what went out.
+      emailKind: "quote_proforma",
+      quoteId: quote.id,
+      channelId: CHANNEL_ID,
+      purchaser: recipient,
+      testMode: (quote.attributes as Record<string, unknown> | null | undefined)?.test_mode === true,
+    }
   );
 }
