@@ -30,7 +30,8 @@ import { normaliseCustomerReference } from "@/lib/checkout/customer-reference";
 import { setLastOrder } from "@/lib/checkout/last-order";
 import { canViewOrderConfirmation } from "@/lib/checkout/confirmation-access";
 import { siteBaseUrl } from "@/lib/seo";
-import type { ConfirmBillingDetails } from "@/lib/payments/stripe-gateways";
+import { canTakeCardPayment, type ConfirmBillingDetails } from "@/lib/payments/stripe-gateways";
+import { resolveStripeGateway } from "@/lib/payments/gateway";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 import {
   ACCOUNT_REQUIRED_SETTING,
@@ -575,6 +576,26 @@ export async function placeOrder(
   if (!isPaymentMethodOnChannel(paymentMethod, checkoutSettings.customerPaymentMethods)) {
     return { error: unavailablePaymentMethodError() };
   }
+  // (0b) …and can this storefront actually TAKE a card right now? (card OHDx84DK)
+  //
+  // The checkout page drops the Credit / Debit Card option whenever this channel
+  // has no usable Stripe credentials — its own account holds entries but no live
+  // one (the likeliest cutover slip: live keys pasted with the Add-gateway
+  // modal's "test mode" box still ticked), or the settings read refused. THIS is
+  // the authorization half, and it has to sit HERE, before the order row is
+  // written: `placeOrder` writes the order and only then calls Stripe, so a
+  // stale form, a second tab, or a submit racing a settings save used to leave a
+  // NUMBERED, UNPAID order behind and put a raw internal Stripe message in front
+  // of the shopper. Dropping the option on the page alone is exactly the
+  // show-≠-accept split the payment-methods register rule forbids.
+  //
+  // ONE predicate with the page — `canTakeCardPayment` — so the two halves
+  // cannot drift, and the same customer wording the channel-list refusal uses.
+  const { gateway: channelStripeGateway } = await resolveStripeGateway();
+  const cardUnavailable = !canTakeCardPayment(channelStripeGateway);
+  if (cardUnavailable && paymentMethod === "stripe") {
+    return { error: unavailablePaymentMethodError() };
+  }
   // (1) THEN the account's own two controls, and BOTH of them: the allow-list
   // (which methods this account may use at all) and the per-account staff-only
   // list (methods staff may key on the account's behalf but the customer may
@@ -616,18 +637,28 @@ export async function placeOrder(
     // refuse an order the page invited.
     settings: checkoutSettings.financeSettings,
   });
+  // A card this storefront cannot take is dropped from BOTH counts, exactly as
+  // the page drops it from both — otherwise a store whose only method is the card
+  // resolves a signed-in shopper to "account-restricted" and blames their account
+  // for a gateway a staff member has not finished setting up (card OHDx84DK).
   const offerableMethods = filterFinanceMethods(
     filterPaymentMethodsForAccount(
       checkoutSettings.customerPaymentMethods,
       accountOptions?.allowedPaymentMethods ?? null,
       accountOptions?.staffOnlyPaymentMethods ?? null
-    ).filter((m) => m.id !== "net_terms" || !!netTerms),
+    )
+      .filter((m) => m.id !== "net_terms" || !!netTerms)
+      .filter((m) => !cardUnavailable || m.id !== "stripe"),
     cartFinanceOffer.eligible
   );
   if (
     resolvePaymentAvailability(
-      filterFinanceMethods(checkoutSettings.customerPaymentMethods, cartFinanceOffer.eligible)
-        .length,
+      filterFinanceMethods(
+        checkoutSettings.customerPaymentMethods.filter(
+          (m) => !cardUnavailable || m.id !== "stripe"
+        ),
+        cartFinanceOffer.eligible
+      ).length,
       offerableMethods.length,
       // A guest has no account, so the account wording would name something they
       // have not got — they fall to the store state and the order is placed unpaid.
@@ -1131,7 +1162,21 @@ export async function placeOrder(
       await setLastOrder(order.order_number, "stripe");
       return { stripe: { clientSecret, orderNumber: order.order_number, billingDetails } };
     } catch (err) {
-      return { error: err instanceof Error ? err.message : "Failed to create payment." };
+      // WHAT THE SHOPPER READS IS OURS, NOT STRIPE'S (card OHDx84DK).
+      //
+      // This returned `err.message` verbatim, which is how an internal
+      // configuration sentence — "This storefront has its own Stripe gateway but
+      // no live entry. Add its live keys under Settings > Payments." — reached a
+      // Chefs Depot customer. Nothing thrown here is shopper-actionable: a card
+      // DECLINE happens later, in the browser, at confirm time; everything at
+      // intent-CREATION time is our configuration or Stripe being unreachable.
+      // The internal text is logged where staff can read it (Product Brief: no
+      // internal vocabulary on a customer face).
+      console.error("[placeOrder] could not create the PaymentIntent:", err);
+      return {
+        error:
+          "We couldn't start the card payment. Please try again, or choose another payment method.",
+      };
     }
   }
 

@@ -10,7 +10,7 @@ import {
   contactService,
   wantStripeTestMode,
 } from "@/lib/store";
-import { STRIPE_SCOPE_GLOBAL } from "@keenan/services";
+import { STRIPE_SCOPE_GLOBAL, sameStripeAccountScope } from "@keenan/services";
 import { createAddressForContact } from "@/lib/contact-addresses";
 import { stripeProviderForScope, stripeScopeOf } from "@/lib/stripe";
 import { normaliseAuState, isValidAuPostcode } from "@/lib/checkout/au-address";
@@ -111,7 +111,15 @@ export async function createSubscription(planId: number): Promise<{
       if (
         remote &&
         (remote.status === "incomplete" || remote.status === "past_due") &&
-        remote.clientSecret
+        remote.clientSecret &&
+        // …but ONLY while the stranded subscription is in the same account the
+        // plan is in now (card OHDx84DK). The subscribe page mounts Stripe.js
+        // with the PLAN's publishable key, so handing back a client secret from
+        // the account the plan has since been MOVED OFF gives Elements an intent
+        // it cannot see — `resource_missing` on every retry, forever, with no way
+        // out for the shopper. When they disagree, drop the stale row below and
+        // mint a fresh subscription on the plan's current account.
+        sameStripeAccountScope(stripeScopeOf(pendingSub), planScope)
       ) {
         // Still awaiting its first payment — let the customer retry on the same
         // subscription instead of stranding them.

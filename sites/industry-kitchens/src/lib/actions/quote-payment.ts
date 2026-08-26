@@ -432,7 +432,18 @@ export async function payQuote(
       };
     } catch (err) {
       // The order exists and is awaiting payment; the customer can retry.
-      return { error: err instanceof Error ? err.message : "Failed to start the card payment." };
+      //
+      // The message is OURS, never Stripe's or the gateway resolver's (card
+      // OHDx84DK): returning `err.message` verbatim put an internal
+      // configuration sentence naming Settings > Payments in front of a
+      // customer. Nothing thrown at intent-CREATION time is shopper-actionable
+      // — a decline happens later, in the browser — so the internal text is
+      // logged for staff and the shopper is told what they can do.
+      console.error("[payQuote] could not create the PaymentIntent:", err);
+      return {
+        error:
+          "We couldn't start the card payment. Please try again, or choose another payment method.",
+      };
     }
   }
 

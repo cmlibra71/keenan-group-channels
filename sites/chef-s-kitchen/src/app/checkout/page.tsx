@@ -9,6 +9,7 @@ import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import { summariseLinesFreight } from "@keenan/services";
 import { gstSplit } from "@keenan/services/calc";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
+import { canTakeCardPayment } from "@/lib/payments/stripe-gateways";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 import { ACCOUNT_REQUIRED_SETTING, checkoutNeedsSignIn } from "@/lib/checkout/account-required";
 import { CheckoutSignInGate } from "@/components/checkout/CheckoutSignInGate";
@@ -158,6 +159,51 @@ export default async function CheckoutPage() {
   const financeMethodsEnabled = entitledPaymentMethods.some((m) => isFinancePaymentMethod(m.id));
   const paymentMethods = filterFinanceMethods(entitledPaymentMethods, financeOffer.eligible);
 
+  // Resolve THIS CHANNEL's Stripe gateway (test-vs-live aware, prod-safe
+  // fallback): its own `channel_settings.payment_gateways` entries when it has
+  // them, the global `store_settings` row when it does not (card OHDx84DK).
+  // Metadata still segments — every intent carries channel_id — but it no longer
+  // decides which account the money lands in.
+  //
+  // `testSession` is true ONLY while this browser holds an ephemeral test checkout
+  // session (a short-lived signed cookie; nothing stored anywhere, no setting a
+  // human can leave switched on). It is the sole input to the on-screen "test
+  // mode, no money will be taken" banner, so the banner cannot be rendered
+  // without one.
+  const { gateway: stripeGateway, testSession } = await resolveStripeGateway();
+
+  // NO USABLE STRIPE CREDENTIALS, NO CARD OPTION — whatever the reason (card
+  // OHDx84DK).
+  //
+  // This used to fire only inside a test checkout session. That was a hole the
+  // moment a storefront could hold its own Stripe account: paste this shop's
+  // LIVE keys with the Add-gateway modal's "test mode" box still ticked and the
+  // channel has entries but no live one, `selectChannelGateway` correctly
+  // refuses to borrow the other storefront's account, and there is no key. The
+  // shopper was still OFFERED "Credit / Debit Card", saw no card field
+  // underneath it, pressed Place Order — and `placeOrder` writes the order row
+  // BEFORE it calls Stripe, so the slip stranded unpaid orders with nothing on
+  // screen to explain them.
+  //
+  // The original reason still holds too: a test session that cannot resolve a
+  // TEST gateway must refuse rather than fall back to live, because this browser
+  // was told no money would be taken.
+  //
+  // The drop happens HERE, above the availability call, and not further down
+  // where it used to: `resolvePaymentAvailability` must count the list actually
+  // rendered. Dropping the card afterwards left a channel whose ONLY offerable
+  // method is card reading "available" with an empty list and Place Order still
+  // enabled — a dead button with no hint, the exact pattern the "Do not break"
+  // list on this surface exists to prevent (7vu2iEEZ, VAjaPj0t).
+  const cardUnavailable = !canTakeCardPayment(stripeGateway);
+  const cardUnavailableInTestSession = testSession && cardUnavailable;
+  const stripePublishableKey: string | undefined = cardUnavailable
+    ? undefined
+    : stripeGateway?.credentials?.publishable_key;
+  const offeredPaymentMethods = cardUnavailable
+    ? paymentMethods.filter((m) => m.id !== "stripe")
+    : paymentMethods;
+
   // Nothing left to offer means one of two very different things, and the customer
   // must be told the right one: the STORE has no methods switched on (order still
   // placed, invoiced later — unchanged), or this ACCOUNT may use none of the store's
@@ -168,14 +214,28 @@ export default async function CheckoutPage() {
   // store whose only enabled method is staff-only offers a shopper nothing at all,
   // and must say so rather than blame the shopper's account (card NmAfwrdE).
   //
-  // Both counts are taken AFTER the finance floor, and the offered one is the list
-  // actually rendered below: resolving it off `entitledPaymentMethods` counted
-  // methods the shopper cannot see, so a cart under $1,000 whose only surviving
-  // methods were SilverChef/Finance read "available" with an empty list and Place
-  // Order still enabled. The count and the rendered list must be the same list.
+  // Both counts are taken AFTER the finance floor AND after the no-credentials
+  // card drop, and the offered one is `offeredPaymentMethods` — the list actually
+  // rendered below. Resolving it off `entitledPaymentMethods` counted methods the
+  // shopper cannot see, so a cart under $1,000 whose only surviving methods were
+  // SilverChef/Finance read "available" with an empty list and Place Order still
+  // enabled; resolving it off `paymentMethods` did the same to a channel whose
+  // only offerable method is the card. The count and the rendered list must be
+  // the same list.
+  //
+  // The card drop comes off the STORE count too. A storefront that cannot take a
+  // card right now is not offering one, so counting it would resolve a signed-in
+  // shopper to "account-restricted" — "Online payment isn't available on your
+  // account" — and blame a customer for a gateway a staff member has not finished
+  // setting up. The store state is the honest one, and it is the behaviour a store
+  // with nothing switched on already has.
+  const channelOfferedMethods = filterFinanceMethods(
+    checkoutSettings.customerPaymentMethods,
+    financeOffer.eligible
+  ).filter((m) => !cardUnavailable || m.id !== "stripe");
   const paymentAvailability = resolvePaymentAvailability(
-    filterFinanceMethods(checkoutSettings.customerPaymentMethods, financeOffer.eligible).length,
-    paymentMethods.length,
+    channelOfferedMethods.length,
+    offeredPaymentMethods.length,
     !!session
   );
   // The application form has to exist before its attachment uploads can be
@@ -245,40 +305,6 @@ export default async function CheckoutPage() {
     canSaveNewAddress = mayFileAddressInBook(await getContactPermissions(session.contactId));
   }
 
-  // Resolve THIS CHANNEL's Stripe gateway (test-vs-live aware, prod-safe
-  // fallback): its own `channel_settings.payment_gateways` entries when it has
-  // them, the global `store_settings` row when it does not (card OHDx84DK).
-  // Metadata still segments — every intent carries channel_id — but it no longer
-  // decides which account the money lands in.
-  //
-  // `testSession` is true ONLY while this browser holds an ephemeral test checkout
-  // session (a short-lived signed cookie; nothing stored anywhere, no setting a
-  // human can leave switched on). It is the sole input to the on-screen "test
-  // mode, no money will be taken" banner, so the banner cannot be rendered
-  // without one.
-  const { gateway: stripeGateway, testSession } = await resolveStripeGateway();
-  const stripePublishableKey: string | undefined = stripeGateway?.credentials?.publishable_key;
-
-  // NO PUBLISHABLE KEY, NO CARD OPTION — whatever the reason (card OHDx84DK).
-  //
-  // This used to fire only inside a test checkout session. That was a hole the
-  // moment a storefront could hold its own Stripe account: paste this shop's
-  // LIVE keys with the Add-gateway modal's "test mode" box still ticked and the
-  // channel has entries but no live one, `selectChannelGateway` correctly
-  // refuses to borrow the other storefront's account, and there is no key. The
-  // shopper was still OFFERED "Credit / Debit Card", saw no card field
-  // underneath it, pressed Place Order — and `placeOrder` writes the order row
-  // BEFORE it calls Stripe, so the slip stranded unpaid orders with nothing on
-  // screen to explain them.
-  //
-  // The original reason still holds too: a test session that cannot resolve a
-  // TEST gateway must refuse rather than fall back to live, because this browser
-  // was told no money would be taken.
-  const cardUnavailable = !stripePublishableKey;
-  const cardUnavailableInTestSession = testSession && cardUnavailable;
-  const offeredPaymentMethods = cardUnavailable
-    ? paymentMethods.filter((m) => m.id !== "stripe")
-    : paymentMethods;
 
   // Bulky items in this cart (card Wxjp8wpg). Non-empty ⇒ CheckoutForm makes the shopper choose
   // curbside vs specialised delivery. Read from the products, and re-read by placeOrder, so what

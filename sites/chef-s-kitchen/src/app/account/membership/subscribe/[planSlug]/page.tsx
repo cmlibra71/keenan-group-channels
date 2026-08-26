@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { signInRedirect } from "@/lib/account-redirect";
 import { getFeatureFlag, getActiveSubscriptionForContact, subscriptionPlanService, CHANNEL_ID } from "@/lib/store";
 import { SubscribeForm } from "./SubscribeForm";
-import { resolveStripeGateway } from "@/lib/payments/gateway";
+import { stripePublishableKeyForScope, stripeScopeOf } from "@/lib/stripe";
 
 export const metadata = {
   title: "Subscribe",
@@ -32,14 +32,29 @@ export default async function SubscribePage({
 
   const metafields = plan.metafields as Record<string, string> | null;
 
-  // Read publishable_key from the portal-wide payment_gateways setting (same
-  // place the cart checkout reads it from). Comment in checkout/page.tsx:
-  // "All channels share one Stripe account; segmentation happens via metadata."
-  // wantTestMode also drives the TEST MODE banner shown above the card field.
-  const { gateway: stripeGateway, wantTestMode } = await resolveStripeGateway();
-  const stripePublishableKey: string | undefined = stripeGateway?.credentials?.publishable_key;
+  // THE PLAN'S ACCOUNT DECIDES — the same rule `createSubscription` follows
+  // (card OHDx84DK). A plan's Stripe price, the customer and the subscription
+  // all live inside ONE account, and the plan carries the marker saying which.
+  // Reading the key off today's CHANNEL rule instead would mount Stripe.js on
+  // this storefront's own `pk_live_` and then confirm a client secret from an
+  // intent raised in the account the plan actually belongs to: `resource_missing`
+  // for every new member between the day this storefront's keys are entered and
+  // the day the plan is re-minted (Membership > Plans, "Move this plan"). Elements
+  // and the intent address one account, exactly as they do at the checkout.
+  //
+  // `testMode` is the environment answer, the same one that picks the price id
+  // below, and it drives the TEST MODE banner above the card field.
+  const planScope = stripeScopeOf(plan);
+  const { publishableKey: stripePublishableKey, testMode: wantTestMode } =
+    await stripePublishableKeyForScope(planScope);
 
-  if (!stripePublishableKey || !metafields?.stripe_price_id) {
+  // The page refuses on the SAME price id the action will use, so what we show is
+  // what we accept: a plan re-minted onto a new account has no test price until
+  // somebody mints one, and a dev build must say "not configured" rather than
+  // present the old account's price.
+  const planPriceId = wantTestMode ? metafields?.stripe_price_id_test : metafields?.stripe_price_id;
+
+  if (!stripePublishableKey || !planPriceId) {
     return (
       <div className="mx-auto max-w-lg px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="page-title mb-4">Subscribe</h1>

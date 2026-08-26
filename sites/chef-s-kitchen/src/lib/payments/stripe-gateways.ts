@@ -15,6 +15,32 @@ export type StripeGatewayEntry = {
 // as enabled" is a second answer waiting to happen.
 
 /**
+ * CAN THIS STOREFRONT ACTUALLY TAKE A CARD RIGHT NOW? (card OHDx84DK)
+ *
+ * A card payment needs BOTH halves of one account's credentials: the browser
+ * mounts Stripe Elements with the publishable key, and the server raises the
+ * PaymentIntent with the secret key. Half a credential set takes no money, so
+ * the card option must not be offered at all.
+ *
+ * This is ONE predicate on purpose, and both halves of the checkout call it —
+ * the page (which decides what to render) and `placeOrder` (which decides what
+ * to accept). The sf-checkout rule is that every filter on the page is
+ * duplicated in the action; a second copy of THIS filter is how the page comes
+ * to offer a card the action then refuses, after the order row is written.
+ *
+ * It bites the likeliest cutover slip: paste a storefront's LIVE keys with the
+ * Add-gateway modal's "test mode" box still ticked and the channel has entries
+ * but no live one, `selectChannelGateway` correctly refuses to borrow the other
+ * storefront's account, and there is no key at all.
+ */
+export function canTakeCardPayment(
+  gateway: { credentials?: Record<string, string> | null } | null | undefined
+): boolean {
+  const credentials = gateway?.credentials;
+  return Boolean(credentials?.publishable_key?.trim() && credentials?.secret_key?.trim());
+}
+
+/**
  * What the browser hands `stripe.confirmCardPayment()` — card b88eIfaS.
  *
  * The PaymentIntent already carries the buyer's name and address on `shipping`
