@@ -102,3 +102,74 @@ test("placeOrder drops the unchargeable card from both availability counts", () 
       "signed-in shopper to \"account-restricted\" and blames their account for our configuration"
   );
 });
+
+/**
+ * THE THIRD CONSUMER (`sf-account-quotes`, `quotes.md` §5).
+ *
+ * The `payment-methods` rule names three call sites of the same availability
+ * decision, not two: the checkout page, `placeOrder`, AND the quote pay-state.
+ * The first cut of card OHDx84DK reached only the first two, and the pay-a-quote
+ * screen on the SAME storefront went on offering — and COUNTING — a card its own
+ * action could not charge. `payQuote` writes the order row before it raises the
+ * intent, exactly as `placeOrder` does, so the slip strands the same numbered
+ * unpaid order.
+ *
+ * These two files are therefore inside the guard as well. `resolveQuotePayState`
+ * takes its `channelPaymentMethodCount` from `nonFinanceCustomerMethods`, so the
+ * card must be filtered out of THAT list — not merely out of the rendered
+ * `payMethods` — or the greyed-Pay reason reads "available" over a dead radio.
+ */
+const QUOTE_PAGE = path.join(SRC, "app/account/quotes/[id]/page.tsx");
+const PAY_QUOTE = path.join(SRC, "lib/actions/quote-payment.ts");
+
+for (const [label, file] of [
+  ["the pay-a-quote page", QUOTE_PAGE],
+  ["payQuote", PAY_QUOTE],
+] as const) {
+  test(`${label} drops the unchargeable card from the pay-state counts`, () => {
+    const source = readFileSync(file, "utf8");
+    assert.ok(
+      source.includes("canTakeCardPayment("),
+      `${label} must use the same predicate as the checkout, not a second copy of the test`
+    );
+    const listAt = source.indexOf("const nonFinanceCustomerMethods");
+    assert.notEqual(listAt, -1, `${label} no longer builds \`nonFinanceCustomerMethods\``);
+    // The declaration only — up to its terminating `;` — so a drop applied to
+    // some LATER list cannot be mistaken for this one.
+    const listDecl = source.slice(listAt, source.indexOf(";", listAt));
+    assert.ok(
+      /!cardUnavailable \|\| m\.id !== "stripe"/.test(listDecl),
+      `${label} builds \`nonFinanceCustomerMethods\` WITHOUT dropping the unchargeable card, so ` +
+        "`channelPaymentMethodCount` counts a method the screen will not offer: the Pay button " +
+        "stays enabled over a dead Card radio"
+    );
+    const cardAt = source.indexOf("const cardUnavailable");
+    assert.notEqual(cardAt, -1, `${label} no longer resolves \`cardUnavailable\``);
+    assert.ok(
+      cardAt < listAt,
+      `${label} resolves the gateway BELOW the method list, so the filter cannot be applied to the counts`
+    );
+  });
+}
+
+test("payQuote refuses a posted card it cannot charge BEFORE it writes the order", () => {
+  const source = readFileSync(PAY_QUOTE, "utf8");
+  const guardAt = source.indexOf('cardUnavailable && paymentMethod === "stripe"');
+  assert.notEqual(guardAt, -1, "payQuote no longer refuses a posted card it cannot charge");
+  const writeAt = source.indexOf("orderService.create");
+  assert.ok(
+    writeAt === -1 || guardAt < writeAt,
+    "the refusal must come BEFORE the order row is written, or the slip strands an unpaid order " +
+      "the customer never gets to pay"
+  );
+});
+
+test("the pay-a-quote panel is handed no publishable key it cannot charge against", () => {
+  const source = readFileSync(QUOTE_PAGE, "utf8");
+  assert.ok(
+    /stripePublishableKey=\{\s*cardUnavailable \? undefined :/.test(source),
+    "QuotePayPanel must not receive a publishable key when the card is unavailable: `cardSelected` " +
+      "keys off that prop, so half a credential set would mount Elements against a secret key " +
+      "`payQuote` does not hold"
+  );
+});
