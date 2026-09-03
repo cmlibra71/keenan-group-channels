@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronLeft, Package } from "lucide-react";
+import { ChevronLeft, Download, Package } from "lucide-react";
 import { ApiError, loadOrderContactForOrder } from "@keenan/services";
 import { getSession } from "@/lib/auth";
 import { signInRedirect } from "@/lib/account-redirect";
@@ -28,6 +28,7 @@ import {
   isNetTermsMethod,
 } from "@/lib/orders/order-presentation";
 import { orderDocumentName } from "@/lib/orders/order-document-name";
+import { invoiceDocumentUrl } from "@/lib/orders/invoice-document-url";
 import { customerOrderStage } from "@/lib/orders/order-status-label";
 import { readCustomerOrderNotes } from "@/lib/orders/customer-order-notes";
 import { EYEBROW_CLASS, PAGE_TITLE_CLASS, PANEL_TITLE_CLASS } from "@/lib/orders/order-page-styles";
@@ -127,6 +128,12 @@ interface OrderDetail {
    */
   external_source: string | null;
   order_number: string | null;
+  /**
+   * `orders.uuid` — RENDERED, as the credential on the link to this order's own tax invoice
+   * (card EizZjaY3). It is the unguessable key the portal serves that document on, the way
+   * `/q/<uuid>` keys a quote; the enumerable order number could never be one.
+   */
+  uuid: string | null;
   status: string | null;
   payment_status: string | null;
   payment_method: string | null;
@@ -320,6 +327,15 @@ export default async function OrderDetailPage({
     }).paid,
     paymentStatus: order.payment_status,
   });
+  // The document itself, one click away (card EizZjaY3). Rendered by the portal from this order's
+  // rows as they stand right now, so it is the same piece of paper the invoice email attaches —
+  // the same "Pro-Forma Tax Invoice" / "Paid Tax Invoice Receipt" naming the eyebrow above prints,
+  // and the same balance owing the Payment section states.
+  // Gated on the order having live lines, because that is the FIRST thing the document build
+  // refuses on ("This order has no line items") — and `items` above is the identical set it reads,
+  // `order_items` with `cancelled_at IS NULL`. Offering a download that answers 404 is worse than
+  // offering none. This costs nothing: the lines are already loaded and already rendered below.
+  const invoiceHref = items.length > 0 ? invoiceDocumentUrl(order.uuid) : null;
 
   const totalInc = money(order.total_inc_tax);
   const gst = money(order.total_tax);
@@ -387,10 +403,27 @@ export default async function OrderDetailPage({
           {customerOrderStage(order.status)}
         </span>
       </div>
-      <p className="text-sm text-text-muted mb-8">
+      <p className="text-sm text-text-muted mb-4">
         {placed ? `Placed ${placed}` : ""}
         {order.customer_po ? `${placed ? " · " : ""}Your reference: ${order.customer_po}` : ""}
       </p>
+
+      {/* The customer's own copy of the tax invoice (card EizZjaY3). The document existed and was
+          reachable only if somebody emailed it; this is the download Steve asked for. It carries
+          the words "Tax Invoice", which is what the ATO requires of it. */}
+      {invoiceHref && (
+        <p className="mb-8">
+          <a
+            href={invoiceHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-text-primary hover:bg-surface-secondary"
+          >
+            <Download className="h-4 w-4" />
+            Download {documentName} (PDF)
+          </a>
+        </p>
+      )}
 
       {/* ── Updates staff published to this customer ─────────────────────────
           The other end of the portal Order History panel's "Visible on Store Frontend" tick
