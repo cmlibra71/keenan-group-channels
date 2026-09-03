@@ -15,19 +15,50 @@ export function sanitizeHtml(html: string): string {
       "p", "br", "hr", "div", "span",
       "b", "i", "em", "strong", "u", "s", "strike", "small", "sub", "sup", "mark", "font",
       "a", "ul", "ol", "li", "dl", "dt", "dd",
-      "blockquote", "pre", "code",
+      "blockquote", "pre", "code", "kbd", "samp", "var", "abbr", "cite", "q", "time", "address",
       "h1", "h2", "h3", "h4", "h5", "h6",
       "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption", "colgroup", "col",
       "img", "figure", "figcaption",
+      // The structure the Zoey-era information pages are written in. Without these
+      // the warranty page's <header> and its five <section>s collapse into one run
+      // of prose and every style rule written against them stops matching, which
+      // is most of what "the portal does not support these pages" looked like.
+      // [card vMQUPzG6]
+      "section", "article", "header", "footer", "aside", "nav", "main",
+      // The accordion. <details>/<summary> is the one interactive control that
+      // needs no script, which is why the Zoey FAQ is built out of it and why it
+      // survives when the page's own JavaScript cannot.
+      "details", "summary",
+      // Inert buttons — event handlers never survive sanitization, so a button
+      // here is a shape and the page's CSS is what makes it look like one.
+      "button",
+      // Inline-SVG icons (DOMPurify sanitizes SVG vectors) — the same subset
+      // sanitizeKtlHtml below has always allowed.
+      "svg", "path", "g", "circle", "ellipse", "line", "polyline", "polygon", "rect",
     ],
     ALLOWED_ATTR: [
       "href", "title", "target", "rel", "name",
-      "src", "alt", "width", "height", "loading",
-      "colspan", "rowspan", "align", "valign",
+      "src", "srcset", "sizes", "alt", "width", "height", "loading", "decoding",
+      "colspan", "rowspan", "align", "valign", "scope",
       "class", "style", "color", "face",
+      "aria-label", "aria-hidden", "aria-expanded", "aria-controls", "role",
+      // `<details open>` — an accordion panel the author left expanded. `hidden`
+      // and `type` are the two other inert state attributes these pages use.
+      "open", "hidden", "type",
+      // SVG geometry (the tags above are useless without it).
+      "viewBox", "d", "fill", "stroke", "stroke-width", "stroke-linecap",
+      "stroke-linejoin", "cx", "cy", "r", "x", "y", "x1", "y1", "x2", "y2",
+      "points", "rx", "ry", "xmlns",
     ],
     // Defence in depth — these are dropped even if the lists above ever change.
     FORBID_TAGS: ["script", "iframe", "object", "embed", "form", "input", "style", "link", "base"],
+    // Still off here. A page that needs to style rows by state
+    // (`tr[data-no-residential]`) carries its own markup AND its own scoped
+    // stylesheet in a Site Builder HTML block, which is a different render path
+    // (`hardenCodeHtml` / `scopeCodeHtml` in @keenan/services). This one governs
+    // product descriptions and imported legacy bodies, where a data attribute
+    // would only be a hook for styling that has nowhere to come from — and
+    // `data-node-id` is a handle the builder canvas measures boxes with.
     ALLOW_DATA_ATTR: false,
   });
 }
