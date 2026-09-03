@@ -65,3 +65,12 @@ test("still drops data attributes on this path", () => {
   );
   assert.equal(sanitizeHtml(`<div data-node-id="code-1">x</div>`), "<div>x</div>");
 });
+
+test("a `hidden` attribute never survives — it could only ever hide copy", () => {
+  // This policy also governs product descriptions and imported legacy bodies
+  // (catalogue.md sf-product-page / sf-catalog-browse). A Zoey-era description
+  // carrying `hidden` on a wrapper would render nothing at all. [card vMQUPzG6]
+  const out = sanitizeHtml(`<section hidden><p>Specifications</p></section>`);
+  assert.equal(out.includes("hidden"), false);
+  assert.ok(out.includes("Specifications"));
+});

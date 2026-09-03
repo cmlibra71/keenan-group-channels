@@ -42,9 +42,15 @@ export function sanitizeHtml(html: string): string {
       "colspan", "rowspan", "align", "valign", "scope",
       "class", "style", "color", "face",
       "aria-label", "aria-hidden", "aria-expanded", "aria-controls", "role",
-      // `<details open>` — an accordion panel the author left expanded. `hidden`
-      // and `type` are the two other inert state attributes these pages use.
-      "open", "hidden", "type",
+      // `<details open>` — an accordion panel the author left expanded.
+      // `hidden` is deliberately NOT here. This policy also governs product
+      // descriptions and imported legacy bodies (RichContent reaches the product
+      // page, the category pages and CategorySeo — catalogue.md sf-product-page
+      // and sf-catalog-browse), and a Zoey-era description carrying `hidden` on
+      // a wrapper would render NOTHING where it used to render its text. The
+      // pages that toggle `hidden` do it from script, which never survives
+      // sanitization anyway, so allowing it could only ever hide copy.
+      "open", "type",
       // SVG geometry (the tags above are useless without it).
       "viewBox", "d", "fill", "stroke", "stroke-width", "stroke-linecap",
       "stroke-linejoin", "cx", "cy", "r", "x", "y", "x1", "y1", "x2", "y2",
