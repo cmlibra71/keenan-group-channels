@@ -2,7 +2,6 @@ import { notFound, redirect } from "next/navigation";
 import { draftMode, headers } from "next/headers";
 import type { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
 import { ChevronRight } from "lucide-react";
 import {
   getCategoryBySlug,
@@ -344,20 +343,20 @@ export default async function CategoryPage({
 
   return (
     <div>
-      {/* ═══ Branded banner ═══ */}
+      {/* ═══ Branded banner — brand green only, deliberately NO backdrop image ═══
+          Card TnQJpunl (Steve, 2026-08-26): "We don't need the category feature
+          image to also be stretched and made the background image behind the
+          site header. Please just the main green site colour, no image." The
+          stretched `category.image_url` at opacity-30 and its `brand-deep`
+          gradient scrim used to sit here. Do not reinstate them.
+
+          `category.image_url` itself is untouched and still draws the
+          subcategory / department TILES and the `/categories` index; only the
+          banner backdrop is gone. The live Chefs Depot category page renders
+          from its Site Builder node tree, not from here, so the removal that
+          actually reaches a shopper is `builder/category-banner-backdrop.ts` —
+          this route is the legacy fallback and has to agree with it. ═══ */}
       <section className="relative overflow-hidden bg-gradient-to-br from-brand-mid to-brand-deep">
-        {category.image_url && (
-          <>
-            <Image
-              src={category.image_url}
-              alt=""
-              fill
-              sizes="100vw"
-              className="object-cover opacity-30"
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-brand-deep/80 to-brand-deep/40" />
-          </>
-        )}
         <div className="container-page relative py-10 lg:py-12">
           {/* Breadcrumb */}
           <nav className="mb-3 flex flex-wrap items-center gap-1.5 text-[13px] text-white/70">
