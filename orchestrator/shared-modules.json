@@ -39,6 +39,8 @@
     "builder/builder-image-srcset.test.ts",
     "builder/builder-image-srcset.ts",
     "builder/builder-image.tsx",
+    "builder/category-banner-backdrop.test.ts",
+    "builder/category-banner-backdrop.ts",
     "builder/category-node-branch.tsx",
     "builder/home-node-branch.tsx",
     "builder/live-gst.ts",

@@ -21,6 +21,7 @@ import {
 } from "@keenan/services/builder";
 import { cmsFunctionService } from "@keenan/services/services";
 import { treePlacesSeoCopy } from "@/builder/seo-copy-placement";
+import { stripCategoryBannerBackdrop } from "@/builder/category-banner-backdrop";
 import {
   BuilderCategoryPage,
   type CategoryGridProduct,
@@ -132,9 +133,19 @@ export async function renderCategoryNodeBranch({
   const catTemplate = (await getCmsTemplate("category_layout", draft).catch(() => null)) as {
     node_tree?: unknown;
   } | null;
-  const nodeTree = (catTemplate?.node_tree as NodeTree | null) ?? null;
-  if (!nodeTree) return null;
+  const storedTree = (catTemplate?.node_tree as NodeTree | null) ?? null;
+  if (!storedTree) return null;
   if (!draft && !(await getFeatureFlag("node_category_template_enabled"))) return null;
+
+  // Card TnQJpunl (Steve, 2026-08-26): the category feature image is not also
+  // the stretched backdrop behind the header — "just the main green site colour,
+  // no image". Applied to the tree on the way to the renderer rather than
+  // written back to the stored tree, so there is nothing to undo on a rollback
+  // and a republish from the designer cannot quietly reinstate it. A no-op on a
+  // tree that never had one — Industry Kitchens' is authored clean — so this
+  // shared module changes exactly one storefront. See
+  // `builder/category-banner-backdrop.ts`.
+  const nodeTree = stripCategoryBannerBackdrop(storedTree).tree;
 
   // Card tSrCcnvx (Tim, 2026-08-19): the brand logo an authored tile falls back
   // to when a product has no photo. Additive — every other field on the row is
