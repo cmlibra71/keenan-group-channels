@@ -107,6 +107,21 @@ type PlaceOrderResult = {
      * card EInDib45 exists to keep true.
      */
     billingDetails?: ConfirmBillingDetails | null;
+    /**
+     * THE SERVER'S VERDICT ON THE POSTED CARD (card JiaDTjr1): the payment-method
+     * id this intent was actually created against, or null when none was — either
+     * because none was posted, or because the one that was is not this person's,
+     * has expired, or could not be re-read.
+     *
+     * It is returned because the BROWSER confirms the payment, and it must confirm
+     * with what the server accepted, not with what the form believed at submit
+     * time. Those two disagree whenever the re-read declines the card, and
+     * confirming a customer-attached payment method against an intent that carries
+     * no customer is a Stripe error in front of a shopper whose order is already
+     * written. Nulling it here is what puts the card box back in front of them —
+     * a fallback, never a refusal.
+     */
+    savedCardId?: string | null;
   };
 };
 
@@ -906,7 +921,9 @@ export async function placeOrder(
         // Breadcrumb BEFORE handing off to the card form — see the fresh-order
         // branch below for why it can't wait for confirmStripePayment.
         await setLastOrder(existing.order_number, "stripe");
-        return { stripe: { clientSecret, orderNumber: existing.order_number, billingDetails } };
+        return {
+          stripe: { clientSecret, orderNumber: existing.order_number, billingDetails, savedCardId },
+        };
       }
     } catch (e) {
       console.error("[placeOrder] idempotency reuse check failed (non-fatal):", e);
@@ -1225,7 +1242,7 @@ export async function placeOrder(
       // that ordering irrelevant. Harmless if the shopper abandons the card form
       // — the cart is still full, so the guard never fires.
       await setLastOrder(order.order_number, "stripe");
-      return { stripe: { clientSecret, orderNumber: order.order_number, billingDetails } };
+      return { stripe: { clientSecret, orderNumber: order.order_number, billingDetails, savedCardId } };
     } catch (err) {
       // WHAT THE SHOPPER READS IS OURS, NOT STRIPE'S (card OHDx84DK).
       //

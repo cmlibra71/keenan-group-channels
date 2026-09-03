@@ -99,6 +99,16 @@ export async function resolveStripeGateway(): Promise<ResolvedStripeGateway> {
  * test entry, and calling that `channel:2` would lose every customer minted under
  * it.
  *
+ * AND IT ASKS THE SAME QUESTION THE INTENT ASKS. An ephemeral test checkout
+ * session is STRICT on both sides: `PaymentService.getDefaultGateway` demands a
+ * real test entry (`selectTestGatewayStrict`) and refuses rather than fall back,
+ * so this must too. Without `strictTestMode` the two disagree — on a channel with
+ * no test entry anywhere, `selectChannelGateway`'s test arm falls through to a
+ * LIVE entry, so the Stripe CUSTOMER would be minted on the live account and,
+ * because that entry is not `testMode`, PERSISTED onto the real contact, while
+ * the intent that was meant to use it throws. The customer and the key come out
+ * of one rule or not at all.
+ *
  * Returns null when nothing usable is configured — the caller then simply does
  * not offer, or save, a card, exactly as it behaves today.
  */
@@ -108,5 +118,9 @@ export async function resolveScopedStripeGateway(): Promise<ScopedStripeGateway 
   return resolveScopedChannelStripeGateway({
     channelId: CHANNEL_ID,
     wantTestMode: testSession || envWantsTestMode,
+    // Only the ephemeral SESSION is strict. The environment default (test keys on
+    // a dev build) keeps `selectChannelGateway`'s dev convenience, which is
+    // exactly what `getDefaultGateway` does when `forceTestMode` is undefined.
+    ...(testSession ? { strictTestMode: true } : {}),
   }).catch(() => null);
 }

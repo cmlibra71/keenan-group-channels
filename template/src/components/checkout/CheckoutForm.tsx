@@ -23,9 +23,11 @@ import { describeSavedCard, type SavedCard } from "@keenan/services/saved-cards"
 import {
   NEW_CARD_CHOICE,
   chosenSavedCard,
+  initialSavedCardChoice,
   mayOfferSavedCards,
   mayOfferToSaveCard,
   SAVED_CARDS_UNAVAILABLE,
+  SAVED_CARD_NOT_USABLE,
 } from "@/lib/checkout/saved-cards";
 import {
   cardEntryBlocksSubmit,
@@ -245,13 +247,25 @@ export function CheckoutForm({
   // typed — the card data itself never reaches our server, so this is the only
   // place the answer exists.
   const [cardComplete, setCardComplete] = useState(false);
+  // The same answer, readable from inside the confirm effect without becoming a
+  // dependency of it (card JiaDTjr1 x TT3DGpsE): that effect must run exactly once
+  // per placeOrder result, and adding render state to its dependency list is how a
+  // confirmation comes to fire twice.
+  const cardCompleteRef = useRef(false);
+  const markCardComplete = useCallback((complete: boolean) => {
+    cardCompleteRef.current = complete;
+    setCardComplete(complete);
+  }, []);
   // WHICH CARD THIS SUBMIT IS POINTED AT (card JiaDTjr1): a payment-method id off
-  // the shopper's own file, or NEW_CARD_CHOICE for the card box. Defaults to the
-  // card Stripe calls their default — the list arrives with usable cards first and
-  // the default at the top, so [0] IS that card, and an expired one is never
-  // pre-selected. With nothing on file it is the box, exactly as today.
+  // the shopper's own file, or NEW_CARD_CHOICE for the card box.
+  //
+  // A card is ticked for them ONLY where the choice is unambiguous — Stripe's own
+  // default, or a single usable card (`initialSavedCardChoice`). Two cards and no
+  // default means nothing is ticked: choosing one alphabetically would move money
+  // off a card the shopper never picked. With nothing on file it is the box,
+  // exactly as today.
   const [savedCardChoice, setSavedCardChoice] = useState<string>(
-    savedCards[0] && !savedCards[0].expired ? savedCards[0].id : NEW_CARD_CHOICE
+    initialSavedCardChoice(savedCards)?.id ?? NEW_CARD_CHOICE
   );
   // Keep the card the shopper is about to type, for next time. Off by default:
   // storing a card is the shopper's decision, not ours.
@@ -319,7 +333,7 @@ export function CheckoutForm({
           card.on("change", (event: { error?: { message: string }; complete?: boolean }) => {
             if (!mounted) return;
             setStripeError(event.error ? event.error.message : null);
-            setCardComplete(Boolean(event.complete));
+            markCardComplete(Boolean(event.complete));
             // Once the card is complete our refusal is no longer true. Clear it
             // rather than leave two messages arguing about one box.
             if (event.complete) setCardRefused(false);
@@ -339,11 +353,11 @@ export function CheckoutForm({
       setCardReady(false);
       // Nothing about the card survives a switch to another payment method: a
       // message left behind would be a second, contradicting error on screen.
-      setCardComplete(false);
+      markCardComplete(false);
       setCardRefused(false);
       setStripeError(null);
     };
-  }, [selectedPaymentMethod, stripePublishableKey]);
+  }, [selectedPaymentMethod, stripePublishableKey, markCardComplete]);
 
   // Handle Stripe payment response from server action.
   //
@@ -370,13 +384,42 @@ export function CheckoutForm({
 
     const { clientSecret, orderNumber, billingDetails } = stripeState;
 
+    // WHAT THE SERVER ACCEPTED, not what the form believed (card JiaDTjr1).
+    // `placeOrder` re-reads every posted card id off this person's own file and
+    // says here which one — if any — the intent was actually created against. The
+    // two disagree whenever that re-read declines the card (removed or expired
+    // since the page rendered, Stripe unreachable, no customer resolvable), and
+    // confirming a customer-attached payment method against an intent carrying no
+    // customer is a Stripe error the shopper cannot act on, behind a card box that
+    // is still hidden. So the server's verdict decides, and the ref survives only
+    // as the record of what this submit ASKED for — reading the radio's render
+    // state in here would put it in the dependency list and re-fire the
+    // confirmation the TT3DGpsE guard runs exactly once.
+    const acceptedSavedCardId = stripeState.savedCardId ?? null;
+    const declinedSavedCard = !!submittedSavedCardRef.current && !acceptedSavedCardId;
+    if (declinedSavedCard) {
+      // Put the card box back in front of them: `usingSavedCard` is what hides it,
+      // and it is derived from this radio. A fallback, never a refusal.
+      setSavedCardChoice(NEW_CARD_CHOICE);
+      submittedSavedCardRef.current = null;
+    }
+
     async function confirmPayment() {
       // A saved card needs no card ELEMENT — it is the payment method itself
       // (card JiaDTjr1). Demanding the element here would leave a shopper paying
       // with a card on file stuck on a spinning button with no explanation.
-      const savedCardId = submittedSavedCardRef.current;
       if (!stripeRef.current) return;
-      if (!savedCardId && !cardElementRef.current) return;
+      if (!acceptedSavedCardId && !cardElementRef.current) return;
+
+      // The saved card was declined and there is nothing typed to fall back ON.
+      // Say so plainly and stop: confirming an empty element would answer with
+      // Stripe's "your card number is incomplete", which tells the shopper
+      // nothing about the card they actually chose. The order stays open and the
+      // next press of Pay reuses it (see the comment on `confirmedResultRef`).
+      if (declinedSavedCard && !cardCompleteRef.current) {
+        setStripeError(SAVED_CARD_NOT_USABLE);
+        return;
+      }
 
       setStripeProcessing(true);
       setStripeError(null);
@@ -395,8 +438,8 @@ export function CheckoutForm({
         // freshly typed card still travels with who is paying (card b88eIfaS).
         const { error: stripeErr } = await stripeRef.current.confirmCardPayment(
           clientSecret,
-          savedCardId
-            ? savedCardConfirmParams(savedCardId)
+          acceptedSavedCardId
+            ? savedCardConfirmParams(acceptedSavedCardId)
             : cardConfirmParams(cardElementRef.current, billingDetails)
         );
 

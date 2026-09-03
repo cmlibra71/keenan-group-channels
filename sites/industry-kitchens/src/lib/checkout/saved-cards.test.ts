@@ -4,6 +4,7 @@ import type { SavedCard } from "@keenan/services/saved-cards";
 import {
   NEW_CARD_CHOICE,
   chosenSavedCard,
+  initialSavedCardChoice,
   mayOfferSavedCards,
   mayOfferToSaveCard,
 } from "./saved-cards";
@@ -59,4 +60,24 @@ test("the offer to keep a card appears only where there is a person and a new ca
   assert.equal(mayOfferToSaveCard({ ...base, signedIn: false }), false);
   assert.equal(mayOfferToSaveCard({ ...base, usingSavedCard: true }), false);
   assert.equal(mayOfferToSaveCard({ ...base, paymentMethod: "net_terms" }), false);
+});
+
+test("a card is pre-ticked only where the choice is unambiguous", () => {
+  const visa = card({ id: "pm_visa", brand: "Visa", is_default: false });
+  const amex = card({ id: "pm_amex", brand: "American Express", is_default: false });
+
+  // Stripe's own default is the shopper's stated preference.
+  assert.equal(
+    initialSavedCardChoice([visa, card({ id: "pm_default", is_default: true })])?.id,
+    "pm_default"
+  );
+  // One usable card: there is nothing to get wrong.
+  assert.equal(initialSavedCardChoice([visa])?.id, "pm_visa");
+  // TWO usable cards and no default: nothing is ticked. Picking one for them
+  // alphabetically would move money off a card they never chose.
+  assert.equal(initialSavedCardChoice([amex, visa]), null);
+  // An expired card is never pre-selected, and never counts towards "only one".
+  assert.equal(initialSavedCardChoice([card({ id: "pm_dead", expired: true }), visa])?.id, "pm_visa");
+  assert.equal(initialSavedCardChoice([card({ id: "pm_dead", expired: true })]), null);
+  assert.equal(initialSavedCardChoice([]), null);
 });

@@ -98,3 +98,34 @@ export function mayOfferToSaveCard(input: {
  */
 export const SAVED_CARDS_UNAVAILABLE =
   "We couldn't load your saved cards just now. You can still pay by entering your card below.";
+
+/**
+ * The line a shopper reads when the SERVER declined the card they chose.
+ *
+ * `placeOrder` re-reads every posted card id off that person's own file, and it
+ * can legitimately come back with nothing: the card was removed or expired
+ * between rendering and pressing Pay, or Stripe could not be reached to confirm
+ * it is theirs. The order is already written by then, so the only good answer is
+ * to put the card box back in front of them and say why — never to confirm the
+ * payment with a card the server just refused, which is a Stripe error the
+ * shopper cannot act on, behind a hidden card box.
+ */
+export const SAVED_CARD_NOT_USABLE =
+  "We couldn't use your saved card. Please enter your card details below to finish paying.";
+
+/**
+ * PURE. Which card should be TICKED when the checkout first draws the picker?
+ *
+ * Only where the choice is unambiguous, because this decides which card a
+ * returning shopper pays with if they read nothing: Stripe's own default card, or
+ * a single usable card. With two usable cards and no default, nothing is
+ * pre-selected — picking one for them alphabetically is money moving off a card
+ * they did not choose. `null` means "use a different card", i.e. the box, which
+ * is where a shopper with no cards already is.
+ */
+export function initialSavedCardChoice(cards: readonly SavedCard[]): SavedCard | null {
+  const usable = cards.filter((c) => !c.expired);
+  const preferred = usable.find((c) => c.is_default);
+  if (preferred) return preferred;
+  return usable.length === 1 ? usable[0] : null;
+}
