@@ -200,3 +200,28 @@ test("the post-condition finds the backdrop before, and nothing after", () => {
   const { tree } = stripCategoryBannerBackdrop(cdCategoryTree());
   assert.deepEqual(findBannerBackdropNodes(tree), []);
 });
+
+test("a backdrop re-authored under a NEW label escapes the strip and the post-condition says so", () => {
+  // The failure this pass cannot prevent, only report. Id and label matching are
+  // both defeated by a designer who deletes the node and rebuilds it with its own
+  // name, and the storefront would quietly go back to Steve's screenshot. The
+  // structural check is what makes that visible, and `renderCategoryNodeBranch`
+  // warns on exactly this result.
+  const tree = cdCategoryTree();
+  const banner = (tree.root as unknown as { children: { children: Record<string, unknown>[] }[] }).children[0];
+  banner.children[0] = {
+    id: "img-newname",
+    kind: "element",
+    tag: "img",
+    label: "hero-photo",
+    classes: ["object-cover", "opacity-30", "absolute", "inset-0"],
+    attrs: { src: { kind: "binding", path: "category.image_url" } },
+  };
+  const { tree: stripped, removed } = stripCategoryBannerBackdrop(tree);
+  assert.ok(!removed.includes("img-newname"), "id/label matching cannot catch a renamed node");
+  assert.deepEqual(
+    findBannerBackdropNodes(stripped),
+    ["img-newname"],
+    "the post-condition must still see a full-bleed category.image_url behind the banner"
+  );
+});

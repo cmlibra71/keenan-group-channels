@@ -21,7 +21,10 @@ import {
 } from "@keenan/services/builder";
 import { cmsFunctionService } from "@keenan/services/services";
 import { treePlacesSeoCopy } from "@/builder/seo-copy-placement";
-import { stripCategoryBannerBackdrop } from "@/builder/category-banner-backdrop";
+import {
+  stripCategoryBannerBackdrop,
+  findBannerBackdropNodes,
+} from "@/builder/category-banner-backdrop";
 import {
   BuilderCategoryPage,
   type CategoryGridProduct,
@@ -145,7 +148,26 @@ export async function renderCategoryNodeBranch({
   // tree that never had one — Industry Kitchens' is authored clean — so this
   // shared module changes exactly one storefront. See
   // `builder/category-banner-backdrop.ts`.
-  const nodeTree = stripCategoryBannerBackdrop(storedTree).tree;
+  const stripped = stripCategoryBannerBackdrop(storedTree);
+  const nodeTree = stripped.tree;
+
+  // The post-condition, and it is not belt-and-braces. The strip matches on node
+  // id and on label; an author who rebuilds the backdrop under a fresh name
+  // defeats both, and Steve's screenshot comes straight back with nothing
+  // anywhere saying the fix stopped working. `findBannerBackdropNodes` asks the
+  // acceptance question structurally instead — is anything still stretching
+  // `category.image_url` across the banner (`absolute` + `inset-0`) — so a
+  // silent regression announces itself in the logs of the site it happened on.
+  // It cannot fire on a subcategory tile or the `/categories` index: those bind
+  // the same field in flow, without the full-bleed positioning.
+  const survivingBackdrop = findBannerBackdropNodes(nodeTree);
+  if (survivingBackdrop.length > 0) {
+    console.warn(
+      `[TnQJpunl] category banner backdrop survived the strip: ${survivingBackdrop.join(", ")}` +
+        ` (removed by id/label: ${stripped.removed.join(", ") || "none"}).` +
+        " Add its label to BANNER_BACKDROP_LABELS in builder/category-banner-backdrop.ts."
+    );
+  }
 
   // Card tSrCcnvx (Tim, 2026-08-19): the brand logo an authored tile falls back
   // to when a product has no photo. Additive — every other field on the row is

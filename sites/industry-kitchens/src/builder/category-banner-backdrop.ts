@@ -141,11 +141,13 @@ export function stripCategoryBannerBackdrop(
 }
 
 /**
- * Post-condition helper: does any node left in the tree still stretch the
+ * The post-condition, called on every render by `renderCategoryNodeBranch`
+ * straight after the strip: does any node left in the tree still stretch the
  * category feature image across the banner? Id and label matching is the
  * mechanism; "nothing paints `category.image_url` behind the header" is the
  * actual acceptance criterion, and an author who rebuilt the backdrop under
- * another name would defeat both.
+ * another name would defeat both. This is what turns that into a warning in the
+ * logs instead of a silent return of the photograph.
  *
  * A node counts only when it BOTH binds `category.image_url` and is positioned
  * as a full-bleed backdrop (`absolute` + `inset-0`) — the subcategory tiles and
