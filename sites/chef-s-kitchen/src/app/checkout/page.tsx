@@ -6,7 +6,7 @@ import { getSession } from "@/lib/auth";
 import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
 import { getContactPermissions } from "@/lib/role-permissions";
 import { mayFileAddressInBook } from "@/lib/account/address-authority";
-import { summariseLinesFreight } from "@keenan/services";
+import { summariseLinesFreight, listSavedCardsForContact, type SavedCard } from "@keenan/services";
 import { gstSplit } from "@keenan/services/calc";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
 import { canTakeCardPayment } from "@/lib/payments/stripe-gateways";
@@ -275,6 +275,37 @@ export default async function CheckoutPage() {
     }
   }
 
+  // THE CARDS THIS PERSON ALREADY HAS ON FILE (card JiaDTjr1).
+  //
+  // Cards live in Stripe against the PERSON, so this is by contact and by nothing
+  // else — never by the company account (Tim demonstrated a contact with no
+  // company whose cards still appeared). Read on THIS channel's Stripe account,
+  // with THIS person's customer id for that account (card OHDx84DK): the two
+  // halves are resolved together inside `listSavedCardsForContact`, because a
+  // customer id from the other account is `resource_missing`, not a fallback.
+  //
+  // Skipped entirely unless the card method actually survived to this shopper —
+  // a storefront that cannot take a card, or an account whose allow-list removes
+  // it, must not pay for a Stripe round trip, and a card picker under a method
+  // that is not drawn would be a control with nothing behind it.
+  //
+  // `available: false` means Stripe could not be reached, NOT "no cards". The
+  // form says so and still shows the card box: this never blocks a payment.
+  let savedCards: SavedCard[] = [];
+  let savedCardsUnavailable = false;
+  if (session && offeredPaymentMethods.some((m) => m.id === "stripe")) {
+    const result = await listSavedCardsForContact({
+      channelId: CHANNEL_ID,
+      contactId: session.contactId,
+      // The ephemeral test checkout session has to reach the cards too, or a test
+      // shopper is offered a live account's cards that this browser's key cannot
+      // charge.
+      ...(testSession ? { testMode: true } : {}),
+    }).catch(() => null);
+    savedCards = result?.cards ?? [];
+    savedCardsUnavailable = result ? !result.available : true;
+  }
+
   // Prefill the contact panel for a signed-in shopper who has NO saved address —
   // their name and phone live on the contact record, not in the address book, so
   // without this they retype details we already hold. Best-effort: a failed
@@ -409,6 +440,8 @@ export default async function CheckoutPage() {
         shippingEnabled={shippingEnabled}
         bulkyProductNames={bulkyProductNames}
         stripePublishableKey={stripePublishableKey}
+        savedCards={savedCards}
+        savedCardsUnavailable={savedCardsUnavailable}
         testMode={testSession}
         testModeCardUnavailable={cardUnavailableInTestSession}
         finance={financeMethodsEnabled ? financeOffer : null}
