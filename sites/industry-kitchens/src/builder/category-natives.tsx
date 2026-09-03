@@ -1,6 +1,7 @@
 "use client";
 import type { NativeComponents } from "@keenan/services/builder-react";
 import { AttributeFacetSections, PriceSliderFacet } from "@/components/category/FilterRail";
+import type { CategoryFacets } from "@/components/category/FilterRail";
 import type { CategoryListingCtx } from "./BuilderCategoryPage";
 
 // Industry Kitchens seals nothing on the category page any more.
@@ -24,9 +25,12 @@ import type { CategoryListingCtx } from "./BuilderCategoryPage";
 // nothing is shadowed.
 export function categoryNatives({ listing }: { listing: CategoryListingCtx }): NativeComponents {
   return {
+    // `CategoryFacets`, not `as never`: `CategoryListingCtx.facets` is
+    // `unknown`, so `as never` would satisfy any prop shape at all and hide a
+    // future mismatch at this seam instead of failing the typecheck.
     "category-attribute-facets": () => (
-      <AttributeFacetSections facets={listing.facets as never} />
+      <AttributeFacetSections facets={listing.facets as CategoryFacets} />
     ),
-    "facet-price-slider": () => <PriceSliderFacet facets={listing.facets as never} />,
+    "facet-price-slider": () => <PriceSliderFacet facets={listing.facets as CategoryFacets} />,
   };
 }

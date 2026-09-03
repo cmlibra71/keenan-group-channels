@@ -577,7 +577,14 @@ export function AttributeFacetSections({ facets }: { facets: CategoryFacets }) {
 export function PriceSliderFacet({ facets }: { facets: CategoryFacets }) {
   const price = normalizeStorefrontFilters(facets.filters).find((f) => f.id === "price");
   if (!price?.enabled || !facets.priceRange) return null;
-  return <RangeFacet param="price" title={price.label} range={{ ...facets.priceRange, money: true }} />;
+  // The two thumbs' aria-labels read "Minimum price" / "Maximum price" — a
+  // plain noun, NOT `price.label`. The heading a shopper actually sees above
+  // this slider is the AUTHORED group's static text, which the injection
+  // deliberately leaves alone (NfYe3P3G: heading, order and collapsed come from
+  // the designed page). Quoting the portal's configured label instead would let
+  // a screen reader announce one name while the screen shows another the moment
+  // an author renames the group.
+  return <RangeFacet param="price" title="price" range={{ ...facets.priceRange, money: true }} />;
 }
 
 /** Generic removable teal chips for the active facet selections (toolbar row). */

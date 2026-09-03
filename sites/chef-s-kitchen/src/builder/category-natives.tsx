@@ -11,6 +11,7 @@ import {
   PriceSliderFacet,
 } from "@/components/category/FilterRail";
 import { ProductGridClient, type GridProduct } from "@/components/product/ProductGridClient";
+import type { CategoryFacets } from "@/components/category/FilterRail";
 import type { CategoryListingCtx } from "./BuilderCategoryPage";
 
 // Chefs Depot's sealed leaves for the category template. Lifted verbatim out of
@@ -29,10 +30,13 @@ import type { CategoryListingCtx } from "./BuilderCategoryPage";
 // nothing is shadowed.
 export function categoryNatives({ listing }: { listing: CategoryListingCtx }): NativeComponents {
   return {
+    // `CategoryFacets`, not `as never`: `CategoryListingCtx.facets` is
+    // `unknown`, so `as never` would satisfy any prop shape at all and hide a
+    // future mismatch at this seam instead of failing the typecheck.
     "category-attribute-facets": () => (
-      <AttributeFacetSections facets={listing.facets as never} />
+      <AttributeFacetSections facets={listing.facets as CategoryFacets} />
     ),
-    "facet-price-slider": () => <PriceSliderFacet facets={listing.facets as never} />,
+    "facet-price-slider": () => <PriceSliderFacet facets={listing.facets as CategoryFacets} />,
     "facet-toggle": (props: Record<string, unknown>) => (
       <FacetCheckbox
         param={String(props.param ?? "")}
