@@ -119,6 +119,21 @@ function categoryGroups(facets: CategoryFacets): FacetGroupDef[] {
   // Per-category attribute sections sit UNDER the three configurable facets.
   // Which ones appear is decided by the data, not by a setting: the site reads
   // the values this category's products carry (services/catalog/attributeFacets).
+  groups.push(...attributeGroups(facets));
+  return groups;
+}
+
+/**
+ * The per-category attribute sections on their own (C8G4f4U8).
+ *
+ * Split out of `categoryGroups` because an AUTHORED rail needs exactly these and
+ * none of the three configurable facets: both storefronts now draw their
+ * category rail from a Site Builder tree that binds Sub-category / Brand /
+ * Price by hand, and `AttributeFacetSections` below places these underneath it
+ * (`builder/category-facet-injection.ts`).
+ */
+function attributeGroups(facets: CategoryFacets): FacetGroupDef[] {
+  const groups: FacetGroupDef[] = [];
   for (const attr of facets.attributes ?? []) {
     if (attr.kind === "range") {
       if (attr.min === undefined || attr.max === undefined) continue;
@@ -500,6 +515,69 @@ export function FacetCheckbox({ param, value, label, count }: { param: string; v
       <span className="text-xs text-steel-400">{count}</span>
     </label>
   );
+}
+
+/**
+ * The per-category attribute sections, drawn INSIDE an authored filter rail
+ * (card C8G4f4U8, reopened by Steve 2026-08-25).
+ *
+ * Which attributes a category offers is decided from that category's own data,
+ * so an author cannot place a section per attribute per category — there are
+ * thousands of categories and twelve possible attributes. The rail therefore
+ * grows them at render time: `builder/category-facet-injection.ts` places this
+ * leaf after the last authored facet group, and it draws whatever the listing
+ * earned, using the same accordion, tick box and slider the sealed rail uses.
+ *
+ * A ticked value stays on screen even when this narrowing left it no products
+ * of its own — otherwise the shopper cannot untick it. Same contract as
+ * `RailContent`.
+ */
+export function AttributeFacetSections({ facets }: { facets: CategoryFacets }) {
+  const searchParams = useSearchParams();
+  const groups = attributeGroups(facets);
+  if (groups.length === 0) return null;
+  return (
+    <>
+      {groups.map((g) => {
+        if (g.range) {
+          return (
+            <FacetGroup key={g.param} title={g.title} defaultOpen={g.defaultOpen}>
+              <RangeFacet param={g.param} title={g.title} range={g.range} />
+            </FacetGroup>
+          );
+        }
+        const ticked = new Set(searchParams.get(g.param)?.split(",").filter(Boolean) ?? []);
+        const opts = g.options.filter((o) => o.count > 0 || ticked.has(o.value));
+        if (opts.length === 0) return null;
+        return (
+          <FacetGroup key={g.param} title={g.title} defaultOpen={g.defaultOpen}>
+            {opts.map((o) => (
+              <FacetCheckbox key={o.value} param={g.param} value={o.value} label={o.label} count={o.count} />
+            ))}
+          </FacetGroup>
+        );
+      })}
+    </>
+  );
+}
+
+/**
+ * The Price min-max SLIDER, drawn inside an authored rail's own Price group in
+ * place of its three legacy band tick boxes (C8G4f4U8 — Steve: "we don't want
+ * long lists, we just want sliders").
+ *
+ * The authored group keeps its heading, its position and its open/collapsed
+ * behaviour: the injection swaps only the option list, so NfYe3P3G's rule that
+ * those three come from the designed page still holds. The band tokens keep
+ * FILTERING — the slider draws the window a band covers (`priceBandWindow`) and
+ * the band still names itself in the toolbar chips. Price switched off in
+ * Products > Filtering renders nothing at all: `applyStorefrontFilters` nulls
+ * the travel with the bands, so the slider cannot put the facet back.
+ */
+export function PriceSliderFacet({ facets }: { facets: CategoryFacets }) {
+  const price = normalizeStorefrontFilters(facets.filters).find((f) => f.id === "price");
+  if (!price?.enabled || !facets.priceRange) return null;
+  return <RangeFacet param="price" title={price.label} range={{ ...facets.priceRange, money: true }} />;
 }
 
 /** Generic removable teal chips for the active facet selections (toolbar row). */

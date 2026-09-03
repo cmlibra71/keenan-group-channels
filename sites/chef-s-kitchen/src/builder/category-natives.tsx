@@ -1,7 +1,15 @@
 "use client";
 import Link from "next/link";
 import type { NativeComponents } from "@keenan/services/builder-react";
-import { FilterRail, FilterChips, SortSelect, FacetCheckbox, MobileFilterRail } from "@/components/category/FilterRail";
+import {
+  FilterRail,
+  FilterChips,
+  SortSelect,
+  FacetCheckbox,
+  MobileFilterRail,
+  AttributeFacetSections,
+  PriceSliderFacet,
+} from "@/components/category/FilterRail";
 import { ProductGridClient, type GridProduct } from "@/components/product/ProductGridClient";
 import type { CategoryListingCtx } from "./BuilderCategoryPage";
 
@@ -11,8 +19,20 @@ import type { CategoryListingCtx } from "./BuilderCategoryPage";
 // These are all LEGACY: filter-rail, clear-filters, filter-drawer, facet-option
 // and filter-controls are component MASTERS now. Natives win over same-key
 // masters, so none of those keys may ever be added here.
+// The per-category attribute sections and the Price slider (card C8G4f4U8).
+// These are NOT legacy: which attributes a category offers is decided from that
+// category's own product data, so an author cannot place a section per
+// attribute per category. `builder/category-facet-injection.ts` places both
+// leaves inside the AUTHORED rail at render time — after the last authored
+// facet group, and in place of the Price group's three legacy band tick boxes —
+// and they draw whatever this listing earned. Neither key is a master, so
+// nothing is shadowed.
 export function categoryNatives({ listing }: { listing: CategoryListingCtx }): NativeComponents {
   return {
+    "category-attribute-facets": () => (
+      <AttributeFacetSections facets={listing.facets as never} />
+    ),
+    "facet-price-slider": () => <PriceSliderFacet facets={listing.facets as never} />,
     "facet-toggle": (props: Record<string, unknown>) => (
       <FacetCheckbox
         param={String(props.param ?? "")}
