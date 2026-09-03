@@ -8,16 +8,8 @@ import {
   subscriptionService,
   contactService,
 } from "@/lib/store";
-import { StripeSubscriptionProvider, wantsStripeTestMode } from "@keenan/services";
-import { resolveStripeGateway } from "@/lib/payments/gateway";
-
-async function getStripeProvider(): Promise<StripeSubscriptionProvider> {
-  const { gateway } = await resolveStripeGateway();
-  if (!gateway?.credentials?.secret_key) {
-    throw new Error("Stripe is not configured. Set up the global Stripe gateway in the portal under Settings > Payments.");
-  }
-  return new StripeSubscriptionProvider(gateway.credentials.secret_key);
-}
+import { wantsStripeTestMode, STRIPE_SCOPE_GLOBAL } from "@keenan/services";
+import { stripeProviderForScope, stripeScopeOf } from "@/lib/stripe";
 
 // Per-customer in-flight guard (per container): the active/pending check and the
 // Stripe+local create aren't atomic, so two concurrent submits (double-click / retry)
@@ -76,7 +68,16 @@ export async function createSubscription(planId: number): Promise<{
       return { success: false, error: "You have a pending subscription being processed" };
     }
 
-    const stripeProvider = await getStripeProvider();
+    // THE PLAN'S ACCOUNT DECIDES, not today's channel rule (card OHDx84DK). The
+    // customer, the price and the subscription must all be in ONE Stripe
+    // account: the plan's price id is only valid in the account it was minted
+    // in, and presenting it to another one fails "No such price" — which is what
+    // would happen to every new Chefs Depot member the moment CD's own keys were
+    // entered, because the live plan was minted on the shared account. Moving the
+    // plan across is an in-place re-mint in the portal (Membership > Plans), so
+    // that there is still exactly ONE Chefs Depot plan and one member tier.
+    const planScope = stripeScopeOf(plan);
+    const stripeProvider = await stripeProviderForScope(planScope);
 
     // Get or create Stripe customer. Metadata keys are unchanged for existing
     // Stripe-side reporting; since identity unification the numeric subject is
@@ -128,7 +129,14 @@ export async function createSubscription(planId: number): Promise<{
       status: "pending",
       stripeSubscriptionId: stripeSub.subscriptionId,
       stripeCustomerId,
-      ...((await wantsStripeTestMode(CHANNEL_ID)) ? { metafields: { test_mode: true } } : {}),
+      // The account this subscription lives in, for its whole life. Every later
+      // call about it — cancel, billing portal, keeping the Stripe customer in
+      // step with the profile — resolves from here, so it keeps working after
+      // this storefront moves onto its own Stripe account.
+      metafields: {
+        stripe_account_scope: planScope ?? STRIPE_SCOPE_GLOBAL,
+        ...((await wantsStripeTestMode(CHANNEL_ID)) ? { test_mode: true } : {}),
+      },
     });
 
     refresh(); // acting user's view refreshes; shared data cache stays intact
@@ -171,7 +179,9 @@ export async function createBillingPortalSession(returnUrl: string): Promise<{
       return { success: false, error: "No active subscription found" };
     }
 
-    const stripeProvider = await getStripeProvider();
+    // The billing portal shows THIS subscription, so it must be opened on the
+    // account the subscription lives in (card OHDx84DK).
+    const stripeProvider = await stripeProviderForScope(stripeScopeOf(sub));
     const url = await stripeProvider.createBillingPortalSession(
       sub.stripe_customer_id,
       returnUrl
@@ -209,7 +219,10 @@ export async function cancelSubscription(): Promise<{
 
     // Cancel via Stripe (at period end)
     if (sub.stripe_subscription_id) {
-      const stripeProvider = await getStripeProvider();
+      // Cancel on the account the subscription lives in — Stripe cannot move a
+      // subscription between accounts, so an older member stays where they were
+      // created (card OHDx84DK).
+      const stripeProvider = await stripeProviderForScope(stripeScopeOf(sub));
       await stripeProvider.cancelSubscription(sub.stripe_subscription_id, true);
     }
 
