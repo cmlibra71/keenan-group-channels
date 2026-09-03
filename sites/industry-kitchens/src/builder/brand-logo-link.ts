@@ -34,7 +34,18 @@ export const BRAND_LOGO_IMG_ID = "brand-logo-img";
  */
 export const BRAND_EYEBROW_ID = "brand-eyebrow";
 
-/** Shown only when the brand has both a logo and a page to link to. */
+/**
+ * Shown only when the brand has both a logo and a page to link to.
+ *
+ * NOTE (tSrCcnvx): this condition does NOT run the logo through
+ * `usableBrandLogo` / `isAllowedImageUrl`, while the gallery's brand-logo
+ * fallback does. A brand logo stored outside the image proxy's allowlist would
+ * therefore draw a broken-image glyph HERE while the gallery below correctly
+ * kept the grey box — the two would disagree on the same page. Defensive only
+ * today: all 412 logos live in our own buckets. Left alone deliberately, because
+ * a binding expression cannot call a predicate; if a logo ever lands off-bucket,
+ * fix it by tightening what `brands.image_url` may hold, not by forking this.
+ */
 export const LOGO_CONDITION = "brand.imageUrl && brand.href";
 /** The text eyebrow becomes the no-logo fallback. */
 export const EYEBROW_FALLBACK_CONDITION = "brand.name && !brand.imageUrl";

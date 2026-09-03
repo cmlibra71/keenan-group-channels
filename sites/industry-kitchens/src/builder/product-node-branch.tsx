@@ -14,6 +14,8 @@ import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { withSilverChefNode } from "@/builder/silverchef-node";
 import { withImageNoticeNode } from "@/builder/product-image-notice";
+import { withUpsellBlock } from "@/builder/upsell-node";
+import { attachBrandLogos } from "@/lib/brand-logo-fallback";
 import { withCdMemberPricingNode } from "@/builder/cd-member-pricing-node";
 import { buildCdMembershipData, resolveCdLadderLevelId } from "@/lib/pricing/cd-member-pricing.server";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
@@ -116,6 +118,25 @@ export async function renderProductNodeBranch({
   }).catch(() => null);
   if (!payload) return null;
 
+  // Card tSrCcnvx (Tim, 2026-08-19): the related-products rail places the same
+  // `product-card` master a category grid does, so its rows need the same
+  // brand-logo fallback field. Those rows are composed inside
+  // `getProductPageData`, not by the route, so they are enriched here.
+  //
+  // COPIED, never mutated: `getProductPageData` is cache-wrapped, and writing
+  // into the object it returns would write into the shared cached value.
+  const relatedRows = payload.related?.products as unknown as { id: number }[] | undefined;
+  const pagePayload: typeof payload =
+    Array.isArray(relatedRows) && relatedRows.length > 0
+      ? {
+          ...payload,
+          related: {
+            ...payload.related,
+            products: (await attachBrandLogos(relatedRows)) as unknown as typeof payload.related.products,
+          },
+        }
+      : payload;
+
   // The AUTHORED tree wins: the product template doc (builder_kind='nodes' —
   // published version live, draft in preview). Seed only as fallback.
   const nodesDoc = (await getCmsTemplate("product", draft).catch(() => null)) as {
@@ -146,6 +167,14 @@ export async function renderProductNodeBranch({
   // than being written into the stored trees so there is nothing to undo on a rollback and a site
   // that re-authors its buy row keeps the behaviour. It wraps the PLACED nodes as well as the
   // stored ones, so a buy control introduced by a future placed node is guarded too.
+  // The upsell rail (card fYqTM5Ot) is PLACED here for the third time on this page and for
+  // the same reason: Zoey shows upsells as their own block, the data has been sitting in
+  // `product_upsells` since the import, and nothing on either stored tree reads it. The pass
+  // clones the tree's OWN related block so the rail keeps that site's tile component — which
+  // is what keeps the listing-tile rules (no stock wording, Add to Cart intact) true of it —
+  // and renders nothing at all for a product with no upsells. It runs BEFORE guardBuyControls
+  // so the cloned tiles are guarded exactly like the ones they were cloned from.
+  //
   // Chefs Depot's three prices and the spend-more-save-more ladder (card Nyp8bkPm) are
   // PLACED here for the same reason: the panel has to reach every product page on a site
   // that renders from a stored tree. It goes after the SilverChef panel, so the money
@@ -153,7 +182,9 @@ export async function renderProductNodeBranch({
   // no ladder switched on, on a product whose price is hidden and on a SKU with no IK
   // trade row, so placing it on every product page is safe.
   const nodeTree = guardBuyControls(
-    withCdMemberPricingNode(withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE)))
+    withCdMemberPricingNode(
+      withUpsellBlock(withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE)))
+    )
   );
 
   // The panel's figures, resolved ONCE per request. A sealed native cannot read the
@@ -198,7 +229,7 @@ export async function renderProductNodeBranch({
   let callResults: Record<string, unknown> = {};
   if (Object.keys(jsFunctions).length > 0) {
     await loadJsSandbox(jsFunctions).catch(() => null);
-    callResults = await computeCallResults(nodeTree.root, jsFunctions, payload as object).catch(
+    callResults = await computeCallResults(nodeTree.root, jsFunctions, pagePayload as object).catch(
       () => ({})
     );
   }
@@ -215,7 +246,7 @@ export async function renderProductNodeBranch({
       <ViewedProductTracker product={viewedProduct} />
       <BuilderProductPage
         tree={nodeTree}
-        payload={payload}
+        payload={pagePayload}
         namedStyles={namedStyles}
         components={components}
         jsFunctions={jsFunctions}

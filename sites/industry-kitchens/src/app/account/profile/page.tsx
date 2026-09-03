@@ -9,6 +9,8 @@ import { AddressBook, type Address } from "@/components/account/AddressBook";
 import { AccountPeople } from "@/components/account/AccountPeople";
 import { loadAccountPeople } from "@/lib/account/account-people-data";
 import { loadProfileContact, loadProfileAddresses } from "@/lib/account/profile-data";
+import { getContactPermissions } from "@/lib/role-permissions";
+import { mayManageAddressBook, mayTypeNewAddressAtCheckout } from "@/lib/account/address-authority";
 import {
   missingProfileDetails,
   profilePromptLines,
@@ -25,20 +27,46 @@ export default async function ProfilePage() {
   // page renders five contact fields, and reading the whole contact row would
   // serialise `password_hash`, staff notes and the net-terms entitlement into
   // the page payload in a dev build (card BIig1Zo1).
-  const [contact, addressRows, checkoutSettings, peopleView] = await Promise.all([
+  const [contact, addressRows, checkoutSettings, peopleView, perms] = await Promise.all([
     loadProfileContact(session.contactId),
     loadProfileAddresses(session.contactId),
     getCheckoutSettings(),
     loadAccountPeople(session.contactId),
+    getContactPermissions(session.contactId),
   ]);
 
   const addresses: Address[] = addressRows;
 
+  // Card H5JdsMrC: only the account's manager may change the addresses the
+  // account has saved. The controls are hidden for everyone else and the reason
+  // is printed in their place — a control removed with no explanation is the
+  // failure pattern the behaviour register names. The actions re-check this
+  // themselves, so hiding is presentation, never the gate.
+  const canManageAddresses = mayManageAddressBook(perms, "edit");
+  const canAddAddress = mayManageAddressBook(perms, "add");
+  const canRemoveAddress = mayManageAddressBook(perms, "remove");
+  // "Manage your…" is a promise the section can no longer keep once every control
+  // in it is gone, so the blurb changes with the controls.
+  const addressesAreReadOnly = !canAddAddress && !canManageAddresses && !canRemoveAddress;
+
+  // What the refused customer is TOLD depends on what the NEXT screen will do, so
+  // the fact that decides it is read here rather than guessed in the component
+  // (card H5JdsMrC, second review): would `placeOrder` accept an address they type?
+  // For 309 of the 310 memberships this card refuses the answer is no, and the old
+  // note promised them exactly that.
+  const canTypeAddressAtCheckout = mayTypeNewAddressAtCheckout(perms);
+
   // What is still outstanding on this account (card xqWftDcL). It PROMPTS — it
   // never blocks: no order and no checkout reads this.
+  // The address items are dropped when the role refuses the control that would
+  // satisfy them (card H5JdsMrC): telling a customer to "add an address" above a
+  // section whose Add button we have just hidden is the accusation card xqWftDcL
+  // wrote this prompt to avoid. The phone item is unaffected.
   const missing = missingProfileDetails({
     phone: contact?.phone ?? "",
     addresses,
+    canAddAddress: canAddAddress,
+    canEditAddress: canManageAddresses,
   });
   const promptLines = profilePromptLines(missing);
 
@@ -84,11 +112,16 @@ export default async function ProfilePage() {
       <section className="mb-10">
         <h2 className="text-lg font-semibold text-zinc-900 mb-1">Addresses</h2>
         <p className="text-sm text-zinc-500 mb-4">
-          Manage your delivery and billing addresses. You can keep a billing
-          address separate from your company/shipping address.
+          {addressesAreReadOnly
+            ? "The delivery and billing addresses saved to your profile."
+            : "Manage your delivery and billing addresses. You can keep a billing address separate from your company/shipping address."}
         </p>
         <AddressBook
           addresses={addresses}
+          canAdd={canAddAddress}
+          canEdit={canManageAddresses}
+          canRemove={canRemoveAddress}
+          canTypeAddressAtCheckout={canTypeAddressAtCheckout}
           googlePlacesEnabled={checkoutSettings.googlePlacesEnabled}
           // The details from the Profile card above, so a new address does not
           // ask for the same name, business and phone a second time (xqWftDcL).

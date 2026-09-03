@@ -11,7 +11,16 @@ import Image from "next/image";
  * strings are now config-sourced.
  */
 export type FooterLink = { label: string; href: string };
-export type FooterColumn = { heading: string; links: FooterLink[] };
+export type FooterColumn = {
+  heading: string;
+  links: FooterLink[];
+  /** A second headed group stacked under the column's own links. The portal's
+   *  Navigation editor writes it when a footer link holds links of its own
+   *  (card aveLhTwr); a storefront that ignored it would silently drop every
+   *  link staff put under that heading. */
+  extraHeading?: string;
+  extraLinks?: FooterLink[];
+};
 export type FooterConfig = {
   blurb?: string;
   shop?: FooterColumn;
@@ -68,19 +77,31 @@ const DEFAULT_FOOTER: Required<Omit<FooterConfig, "membership" | "columns">> &
   abn: "",
 };
 
+function LinkList({ links }: { links: FooterLink[] }) {
+  return (
+    <ul className="space-y-2.5">
+      {links.map((l) => (
+        <li key={l.href + l.label}>
+          <Link href={l.href} className="footer-link">
+            {l.label}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Column({ column }: { column: FooterColumn }) {
   return (
     <div>
       <h4 className="heading-sans mb-4 text-white/85">{column.heading}</h4>
-      <ul className="space-y-2.5">
-        {column.links.map((l) => (
-          <li key={l.href + l.label}>
-            <Link href={l.href} className="footer-link">
-              {l.label}
-            </Link>
-          </li>
-        ))}
-      </ul>
+      <LinkList links={column.links ?? []} />
+      {column.extraHeading && column.extraLinks && column.extraLinks.length > 0 && (
+        <>
+          <h4 className="heading-sans mb-4 mt-6 text-white/85">{column.extraHeading}</h4>
+          <LinkList links={column.extraLinks} />
+        </>
+      )}
     </div>
   );
 }
@@ -103,7 +124,9 @@ export function Footer({
   const abn = cfg.abn ?? DEFAULT_FOOTER.abn;
 
   // Custom columns from the Navigation editor override the named columns.
-  const customColumns = (cfg.columns ?? []).filter((c) => c && c.heading && c.links?.length);
+  const customColumns = (cfg.columns ?? []).filter(
+    (c) => c && c.heading && (c.links?.length || c.extraLinks?.length)
+  );
   const columns: FooterColumn[] =
     customColumns.length > 0
       ? customColumns

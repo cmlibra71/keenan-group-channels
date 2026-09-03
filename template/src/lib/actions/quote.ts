@@ -33,6 +33,7 @@ import {
 import { isStaffOnlyDraft, withoutStaffOnlyDrafts } from "@/lib/quotes/draft-visibility";
 import { acceptanceAcknowledgementUrl } from "@/lib/quotes/acknowledgement-url";
 import { getContactPermissions } from "@/lib/role-permissions";
+import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import { isProductVisibleToViewer, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { contactService, customerAddressService } from "@/lib/store";
 import { saveCheckoutAddressForContact } from "@/lib/contact-addresses";
@@ -305,28 +306,25 @@ export async function getQuoteDeliveryAddresses(): Promise<SavedQuoteAddress[]> 
  * The checkout's rule, unchanged: a B2B contact whose role forbids adding an address
  * does not get one saved, and because one saved address can become the contact's
  * default BILLING as well as shipping (the first one always does), it takes BOTH
- * codes — exactly as `placeOrder` does on the single-page checkout. It is asked here
- * so the drawer can stop PRINTING a promise we then quietly do not keep.
+ * checkout codes — exactly as `placeOrder` does on the single-page checkout — and,
+ * since card H5JdsMrC, the address book's own main-contact-only add codes too. It is
+ * asked here so the drawer can stop PRINTING a promise we then quietly do not keep.
  *
  * Fails open on a lookup error, like every other role read on a customer path: the
  * worst case is an address saved for someone who could have added one anyway.
  */
-function mayFileAddressForRole(perms: {
-  isB2B: boolean;
-  accountId: number | null;
-  can: (code: string) => boolean;
-}): boolean {
-  if (!perms.isB2B || perms.accountId === null) return true;
-  return (
-    perms.can("add_shipping_address_in_checkout") && perms.can("add_billing_address_in_checkout")
-  );
-}
+// ONE name for the ROLE rule: `mayFileAddressInBook` (lib/account/address-authority.ts),
+// shared with `placeOrder` and the address book so the three writers into that
+// table cannot drift apart. The local `mayFileAddressForRole` alias is gone — two
+// names for one predicate is how a register entry comes to describe a rule nobody
+// can find. (`mayFileQuoteAddressInBook`, further down, is a different question
+// entirely: the AU-country test on the address itself.)
 
 export async function canSaveQuoteAddress(): Promise<boolean> {
   const session = await getSession();
   if (!session) return false;
   try {
-    return mayFileAddressForRole(await getContactPermissions(session.contactId));
+    return mayFileAddressInBook(await getContactPermissions(session.contactId));
   } catch (e) {
     console.error("[canSaveQuoteAddress] role read failed (non-fatal):", e);
     return true;
@@ -429,7 +427,7 @@ export async function submitQuote(form: QuoteRequestForm) {
   // "Needs details" the next time the customer reaches the checkout.
   if (newAddress) {
     try {
-      if (mayFileAddressForRole(perms) && mayFileQuoteAddressInBook(newAddress)) {
+      if (mayFileAddressInBook(perms) && mayFileQuoteAddressInBook(newAddress)) {
         await saveCheckoutAddressForContact(
           session.contactId,
           quoteAddressBookRow({ ...newAddress, country: String(shippingAddress.country ?? "") })

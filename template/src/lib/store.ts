@@ -346,13 +346,24 @@ export type SpecialistCta = {
 
 export type PaymentBadge = { name: string; image_url?: string };
 
-export type FooterColumnSetting = { heading: string; links: { label: string; href: string }[] };
+export type FooterLinkSetting = { label: string; href: string };
+export type FooterColumnSetting = {
+  heading: string;
+  links: FooterLinkSetting[];
+  /** A second headed group stacked under the column's own links, written by the
+   *  portal's Navigation editor (card aveLhTwr). */
+  extraHeading?: string;
+  extraLinks?: FooterLinkSetting[];
+};
 export type FooterSetting = {
   tagline?: string;
   columns?: FooterColumnSetting[];
   contact?: { phone?: string; email?: string; address?: string };
   social?: { platform: string; href: string }[];
   payment_badges?: PaymentBadge[];
+  /** Finance-partner logos the footer links out to (Industry Kitchens carries
+   *  SilverChef and SKOPE Funding). */
+  partners?: { name: string; image_url?: string; href?: string }[];
   legal?: string;
 };
 

@@ -10,6 +10,7 @@ import {
 } from "@/lib/store";
 import { applyAccountPrices, getListingMemberPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
+import { attachBrandLogos } from "@/lib/brand-logo-fallback";
 import type { HomeNativeData } from "./home-natives";
 import type { HomeSectionsInput } from "@keenan/services/builder";
 
@@ -91,7 +92,9 @@ export async function loadHomeNativeData(
   const scopedCarousels: Record<string, { products: CarouselProducts }> = {};
   let memberPriceMap: Record<number, number> = {};
   for (const [slug, entry] of Object.entries(carousels)) {
-    const scoped = await applyAccountPrices(await applyCatalogScope(entry.products));
+    const scoped = (await attachBrandLogos(
+      await applyAccountPrices(await applyCatalogScope(entry.products))
+    )) as unknown as CarouselProducts;
     scopedCarousels[slug] = { products: scoped };
     if (scoped.length) {
       memberPriceMap = { ...memberPriceMap, ...(await getListingMemberPrices(scoped)) };

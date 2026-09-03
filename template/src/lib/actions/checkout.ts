@@ -30,7 +30,8 @@ import { normaliseCustomerReference } from "@/lib/checkout/customer-reference";
 import { setLastOrder } from "@/lib/checkout/last-order";
 import { canViewOrderConfirmation } from "@/lib/checkout/confirmation-access";
 import { siteBaseUrl } from "@/lib/seo";
-import type { ConfirmBillingDetails } from "@/lib/payments/stripe-gateways";
+import { canTakeCardPayment, type ConfirmBillingDetails } from "@/lib/payments/stripe-gateways";
+import { resolveStripeGateway } from "@/lib/payments/gateway";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 import {
   ACCOUNT_REQUIRED_SETTING,
@@ -40,11 +41,13 @@ import {
 import {
   getContactPermissions,
   accountHasSavedAddress,
+  contactHasSavedAddress,
   sumContactOrderTotalSince,
   firstFailedOrderCondition,
   describeFailedCondition,
   resolveAccountEmailRecipients,
 } from "@/lib/role-permissions";
+import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import { applyAccountPricesToCart } from "@/lib/checkout/account-prices";
 import { saveCheckoutAddressForContact } from "@/lib/contact-addresses";
 import { blockedProductIds } from "@/lib/catalog-scope";
@@ -261,9 +264,20 @@ export async function placeOrder(
   ) {
     const known = await accountHasSavedAddress(perms.accountId, address1, postalCode);
     if (!known) {
+      // "Choose one already saved" is only an instruction if this shopper HAS a
+      // list to choose from — and the checkout's picker is CONTACT-scoped
+      // (`customerAddressService.listForContact`), while this gate is
+      // account-scoped. On production every contact who hits this has zero saved
+      // rows of their own (card H5JdsMrC), so the old sentence pointed at an empty
+      // picker and left them nowhere to go. Same refusal; the only wording of it
+      // that names something they can actually do.
+      // `perms.isB2B` can only be true for a signed-in contact, but the compiler
+      // cannot see that — and a guest with no picker gets the same wording anyway.
+      const canPick = session ? await contactHasSavedAddress(session.contactId) : false;
       return {
-        error:
-          "Your role on this account doesn't allow adding a new address during checkout. Please choose an address already saved on your account.",
+        error: canPick
+          ? "Your role on this account doesn't allow adding a new address during checkout. Please choose an address already saved on your account."
+          : "Your role on this account doesn't allow adding a new address during checkout, and there's no address saved to your profile yet. Please contact us and we'll add it for you.",
       };
     }
   }
@@ -562,6 +576,26 @@ export async function placeOrder(
   if (!isPaymentMethodOnChannel(paymentMethod, checkoutSettings.customerPaymentMethods)) {
     return { error: unavailablePaymentMethodError() };
   }
+  // (0b) …and can this storefront actually TAKE a card right now? (card OHDx84DK)
+  //
+  // The checkout page drops the Credit / Debit Card option whenever this channel
+  // has no usable Stripe credentials — its own account holds entries but no live
+  // one (the likeliest cutover slip: live keys pasted with the Add-gateway
+  // modal's "test mode" box still ticked), or the settings read refused. THIS is
+  // the authorization half, and it has to sit HERE, before the order row is
+  // written: `placeOrder` writes the order and only then calls Stripe, so a
+  // stale form, a second tab, or a submit racing a settings save used to leave a
+  // NUMBERED, UNPAID order behind and put a raw internal Stripe message in front
+  // of the shopper. Dropping the option on the page alone is exactly the
+  // show-≠-accept split the payment-methods register rule forbids.
+  //
+  // ONE predicate with the page — `canTakeCardPayment` — so the two halves
+  // cannot drift, and the same customer wording the channel-list refusal uses.
+  const { gateway: channelStripeGateway } = await resolveStripeGateway();
+  const cardUnavailable = !canTakeCardPayment(channelStripeGateway);
+  if (cardUnavailable && paymentMethod === "stripe") {
+    return { error: unavailablePaymentMethodError() };
+  }
   // (1) THEN the account's own two controls, and BOTH of them: the allow-list
   // (which methods this account may use at all) and the per-account staff-only
   // list (methods staff may key on the account's behalf but the customer may
@@ -603,18 +637,28 @@ export async function placeOrder(
     // refuse an order the page invited.
     settings: checkoutSettings.financeSettings,
   });
+  // A card this storefront cannot take is dropped from BOTH counts, exactly as
+  // the page drops it from both — otherwise a store whose only method is the card
+  // resolves a signed-in shopper to "account-restricted" and blames their account
+  // for a gateway a staff member has not finished setting up (card OHDx84DK).
   const offerableMethods = filterFinanceMethods(
     filterPaymentMethodsForAccount(
       checkoutSettings.customerPaymentMethods,
       accountOptions?.allowedPaymentMethods ?? null,
       accountOptions?.staffOnlyPaymentMethods ?? null
-    ).filter((m) => m.id !== "net_terms" || !!netTerms),
+    )
+      .filter((m) => m.id !== "net_terms" || !!netTerms)
+      .filter((m) => !cardUnavailable || m.id !== "stripe"),
     cartFinanceOffer.eligible
   );
   if (
     resolvePaymentAvailability(
-      filterFinanceMethods(checkoutSettings.customerPaymentMethods, cartFinanceOffer.eligible)
-        .length,
+      filterFinanceMethods(
+        checkoutSettings.customerPaymentMethods.filter(
+          (m) => !cardUnavailable || m.id !== "stripe"
+        ),
+        cartFinanceOffer.eligible
+      ).length,
       offerableMethods.length,
       // A guest has no account, so the account wording would name something they
       // have not got — they fall to the store state and the order is placed unpaid.
@@ -1032,16 +1076,16 @@ export async function placeOrder(
   // The role gate is re-checked server-side against the SAME `perms` the new-
   // address check above used — the checkbox is simply not rendered for a
   // restricted contact, and a hand-posted `saveAddress` must not bypass that.
+  // FILING is a change to what the account has saved, so since card H5JdsMrC it
+  // also takes the address book's own add codes (bill-to AND ship-to, which are
+  // main-contact-only): a colleague who is not the manager still gets their order,
+  // delivered to the address they typed — it is simply not added to the book.
   //
   // Wrapped whole in try/catch: the order already exists and is paid-for-real in
   // a moment. Failing to file an address in a book must never fail an order.
   if (session?.contactId && isAu && formData.get("saveAddress") === "on") {
     try {
-      const mayAddAddress =
-        !perms.isB2B ||
-        perms.accountId === null ||
-        (perms.can("add_billing_address_in_checkout") && perms.can("add_shipping_address_in_checkout"));
-      if (mayAddAddress) {
+      if (mayFileAddressInBook(perms)) {
         await saveCheckoutAddressForContact(session.contactId, {
           firstName,
           lastName,
@@ -1085,9 +1129,11 @@ export async function placeOrder(
   }
 
   // For Stripe: create PaymentIntent and return client secret for browser confirmation.
-  // Uses the global paymentService — credentials live in store_settings.payment_gateways
-  // (configured at /dashboard/settings/payments in the portal). Channel segmentation
-  // happens via metadata stamped by paymentService.
+  // paymentService resolves the gateway PER CHANNEL (card OHDx84DK): this
+  // storefront's own `channel_settings.payment_gateways` entries when it has
+  // them, the global `store_settings.payment_gateways` row when it does not.
+  // Both are configured at /dashboard/settings/payments in the portal. Metadata
+  // stamped by paymentService still identifies the channel on every intent.
   if (effectivePaymentMethod === "stripe") {
     try {
       const { clientSecret, billingDetails } = await paymentService.createStripePaymentIntent(order.id, {
@@ -1116,7 +1162,21 @@ export async function placeOrder(
       await setLastOrder(order.order_number, "stripe");
       return { stripe: { clientSecret, orderNumber: order.order_number, billingDetails } };
     } catch (err) {
-      return { error: err instanceof Error ? err.message : "Failed to create payment." };
+      // WHAT THE SHOPPER READS IS OURS, NOT STRIPE'S (card OHDx84DK).
+      //
+      // This returned `err.message` verbatim, which is how an internal
+      // configuration sentence — "This storefront has its own Stripe gateway but
+      // no live entry. Add its live keys under Settings > Payments." — reached a
+      // Chefs Depot customer. Nothing thrown here is shopper-actionable: a card
+      // DECLINE happens later, in the browser, at confirm time; everything at
+      // intent-CREATION time is our configuration or Stripe being unreachable.
+      // The internal text is logged where staff can read it (Product Brief: no
+      // internal vocabulary on a customer face).
+      console.error("[placeOrder] could not create the PaymentIntent:", err);
+      return {
+        error:
+          "We couldn't start the card payment. Please try again, or choose another payment method.",
+      };
     }
   }
 

@@ -10,6 +10,7 @@ import {
 import { CHANNEL_ID } from "@/lib/channel";
 import { getMemberContext, applyAccountPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
+import { attachBrandLogos } from "@/lib/brand-logo-fallback";
 import {
   composeBrandPagePayload,
   loadJsSandbox,
@@ -74,8 +75,12 @@ export async function renderBrandNodeBranch({
   if (!nodeTree) return null;
   if (!draft && !(await getFeatureFlag("node_brand_template_enabled"))) return null;
 
-  const scoped = (await applyAccountPrices(
-    await applyCatalogScope(products as { id: number }[])
+  // Card tSrCcnvx (Tim, 2026-08-19): the brand logo an authored tile falls back
+  // to when a product has no photo. Additive — every other field on the row is
+  // copied through — and the `product-card` master reads it as
+  // `props.card.brand_logo_url` (see `product-card-brand-logo.ts`).
+  const scoped = (await attachBrandLogos(
+    await applyAccountPrices(await applyCatalogScope(products as { id: number }[]))
   )) as unknown as BrandGridProduct[];
 
   const memberCtx = await getMemberContext().catch(() => null);

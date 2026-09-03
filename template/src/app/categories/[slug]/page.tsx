@@ -376,7 +376,15 @@ export default async function CategoryPage({
 
       {/* ═══ Bottom-of-page SEO content (xvz6pXB4) — last thing on the page, and nothing at
           all until a person has published it for this storefront. OUTSIDE the page
-          container: the block brings its own. ═══ */}
+          container: the block brings its own. ═══
+
+          `introHtml` is passed UNCONDITIONALLY here, unlike the live sites, and that
+          is not drift. Since nYxPgpvK a Category Page Template can PLACE this copy
+          itself, and both live routes withhold the intro when it does
+          (`categoryTreePlacesSeoCopy`) so it cannot print twice. This scaffold route
+          has no `renderCategoryNodeBranch` at all — there is no tree to place
+          anything — so the check would cost two loads to answer `false`. Add it in
+          the same change that gives this route a builder branch. ═══ */}
       <CategorySeo
         introHtml={seo.channel_seo_intro_html}
         faq={seo.channel_seo_faq}
