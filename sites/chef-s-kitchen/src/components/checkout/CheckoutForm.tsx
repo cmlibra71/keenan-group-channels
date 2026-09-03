@@ -16,6 +16,11 @@ import {
 } from "@/lib/checkout/au-address";
 import { CUSTOMER_REFERENCE_MAX_LENGTH } from "@/lib/checkout/customer-reference";
 import { cardConfirmParams } from "@/lib/payments/stripe-gateways";
+import {
+  cardEntryBlocksSubmit,
+  cardEntryMessage,
+  shouldConfirmStripeResult,
+} from "@/lib/checkout/card-entry";
 import { Price } from "@/components/ui/Price";
 import { backorderMessage } from "@keenan/services/backorder";
 import { gstSplit } from "@keenan/services/calc";
@@ -213,6 +218,15 @@ export function CheckoutForm({
   const [stripeError, setStripeError] = useState<string | null>(null);
   const [stripeProcessing, setStripeProcessing] = useState(false);
   const [cardReady, setCardReady] = useState(false);
+  // Stripe's own verdict on whether the card box holds a complete card, read from
+  // the SAME change event that already feeds `stripeError` (card TT3DGpsE). It is
+  // what lets a submit be refused before an order is written for a card nobody
+  // typed — the card data itself never reaches our server, so this is the only
+  // place the answer exists.
+  const [cardComplete, setCardComplete] = useState(false);
+  // Set when a submit was refused for an incomplete card, so the plain-English
+  // sentence appears only once the shopper has actually pressed Pay.
+  const [cardRefused, setCardRefused] = useState(false);
   // One upload session per checkout: the licence/Medicare photos are uploaded
   // as they are picked and claimed by this token when the order is placed.
   // The upload route only accepts a 36-char uuid shape (`/^[0-9a-f-]{36}$/i`),
@@ -270,8 +284,13 @@ export function CheckoutForm({
             if (mounted) setCardReady(true);
           });
 
-          card.on("change", (event: { error?: { message: string } }) => {
-            if (mounted) setStripeError(event.error ? event.error.message : null);
+          card.on("change", (event: { error?: { message: string }; complete?: boolean }) => {
+            if (!mounted) return;
+            setStripeError(event.error ? event.error.message : null);
+            setCardComplete(Boolean(event.complete));
+            // Once the card is complete our refusal is no longer true. Clear it
+            // rather than leave two messages arguing about one box.
+            if (event.complete) setCardRefused(false);
           });
         }
       } catch {
@@ -286,20 +305,43 @@ export function CheckoutForm({
       cardElementRef.current?.destroy();
       cardElementRef.current = null;
       setCardReady(false);
+      // Nothing about the card survives a switch to another payment method: a
+      // message left behind would be a second, contradicting error on screen.
+      setCardComplete(false);
+      setCardRefused(false);
+      setStripeError(null);
     };
   }, [selectedPaymentMethod, stripePublishableKey]);
 
-  // Handle Stripe payment response from server action
+  // Handle Stripe payment response from server action.
+  //
+  // ONE confirmation per placeOrder result (card TT3DGpsE). `stripeProcessing` used
+  // to be both the guard AND a dependency: a rejected confirmation set it back to
+  // false, which re-fired this effect on an unchanged result, which confirmed
+  // again, which failed again — the endless flicker between the card box and the
+  // order step. It is a guard, not an input, so it is out of the dependency list
+  // and the ref below is what actually stops a second run.
+  //
+  // The key is the RESULT, not the client secret, and that is deliberate: a retry
+  // after a decline reuses this cart's open awaiting_payment order and
+  // createStripePaymentIntent is idempotent on (orderId, amount), so the SAME
+  // secret comes back. Keying on the secret would refuse the retry and leave that
+  // shopper unable to pay at all. Each press of Pay yields a fresh result object.
+  const confirmedResultRef = useRef<object | null>(null);
   useEffect(() => {
-    if (!state?.stripe || stripeProcessing) return;
+    const stripeState = state?.stripe;
+    if (!stripeState) return;
+    if (!shouldConfirmStripeResult(confirmedResultRef.current, stripeState)) return;
+    confirmedResultRef.current = stripeState;
 
-    const { clientSecret, orderNumber, billingDetails } = state.stripe;
+    const { clientSecret, orderNumber, billingDetails } = stripeState;
 
     async function confirmPayment() {
       if (!stripeRef.current || !cardElementRef.current) return;
 
       setStripeProcessing(true);
       setStripeError(null);
+      setCardRefused(false);
 
       try {
         // The card the shopper just typed is confirmed WITH who they are — name,
@@ -331,7 +373,7 @@ export function CheckoutForm({
     }
 
     confirmPayment();
-  }, [state?.stripe, stripeProcessing, router]);
+  }, [state?.stripe, router]);
 
   // Refs for address autocomplete
   const address1Ref = useRef<HTMLInputElement>(null);
@@ -602,10 +644,40 @@ export function CheckoutForm({
   const summaryTotal =
     (pricesIncludeTax ? subtotal : subtotal + gstAmount) + shippingSplit.incTax;
 
+  // Refuse a card submit before the order is written, and say exactly ONE thing
+  // about it (card TT3DGpsE). Both decisions are pure and unit-pinned in
+  // `lib/checkout/card-entry.ts`.
+  const cardSubmitBlocked = cardEntryBlocksSubmit({
+    paymentMethod: selectedPaymentMethod,
+    cardFormMounted: Boolean(stripePublishableKey),
+    heldForSpecialised,
+    // The SAME inc-GST figure the Total row above shows, and the same basis as
+    // `placeOrder`'s `nothingToPay`: a $0 cart takes no payment method at all,
+    // so it must never be asked for a card (card NmAfwrdE).
+    payableTotalIncTax: summaryTotal,
+    cardComplete,
+  });
+  const cardError = cardEntryMessage(stripeError, cardRefused);
+  // A refused submit calls preventDefault(), so `state` is never refreshed: a
+  // stale error from an EARLIER failed placeOrder would otherwise sit above Pay
+  // Now while the reason the shopper is actually stuck sits only under the card
+  // box. When the card is what stopped this press, the card message wins here.
+  const summaryError = cardRefused ? cardError || state?.error : state?.error || cardError;
+
   return (
     <form
       action={formAction}
-      onSubmit={() => {
+      onSubmit={(event) => {
+        // A blank or half-typed card is refused HERE, before placeOrder writes an
+        // order that could never be paid (card TT3DGpsE). Card data lives inside
+        // Stripe's element and never reaches our server, so completeness is only
+        // knowable in the browser: this ADDS a page guard and moves no existing
+        // server-side refusal into the client.
+        if (cardSubmitBlocked) {
+          event.preventDefault();
+          setCardRefused(true);
+          return;
+        }
         fireShippingInfo(shippingCost);
         firePaymentInfo(selectedPaymentMethod);
       }}
@@ -1139,8 +1211,8 @@ export function CheckoutForm({
                           ref={cardContainerRef}
                           className="border border-steel-300 rounded-lg px-4 py-3 bg-white focus-within:ring-2 focus-within:ring-ink-900 focus-within:border-ink-900 transition-shadow"
                         />
-                        {stripeError && (
-                          <p className="text-sm text-sale mt-2">{stripeError}</p>
+                        {cardError && (
+                          <p className="text-sm text-sale mt-2">{cardError}</p>
                         )}
                       </div>
                     )}
@@ -1248,9 +1320,9 @@ export function CheckoutForm({
               </div>
             </div>
 
-            {(state?.error || stripeError) && (
+            {summaryError && (
               <div className="mt-4 p-3 bg-sale-bg text-sale-deep text-sm rounded-lg">
-                {state?.error || stripeError}
+                {summaryError}
               </div>
             )}
 
