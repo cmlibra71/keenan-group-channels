@@ -1,5 +1,8 @@
+import { publicQuoteUrl } from "@keenan/services";
+import { isUnpayableOrderStatus } from "@/lib/orders/pay-balance";
+
 /**
- * Where THIS customer's tax invoice PDF lives (card EizZjaY3).
+ * Where THIS customer's tax invoice PDF lives, and whether we may offer it at all (card EizZjaY3).
  *
  * Steve's complaint on that card is that a paid order's tax invoice existed — it is attached to
  * the confirmation email and named on every screen — and the customer had no way to fetch it
@@ -14,14 +17,81 @@
  * Keyed on the ORDER'S UUID, never its id: a Chefs Depot order number is an enumerable sequence
  * and this document is served without a session, so the credential has to be the unguessable one.
  *
- * `PORTAL_BASE_URL` is the same env var the quote acknowledgement, the finance application and the
- * checkout's staff alerts already resolve the portal through, with the same live default.
+ * ── THE HOST IS THIS STOREFRONT'S OWN, NOT THE PARENT GROUP'S ────────────────────────────────
+ * `https://quotes.chefsdepot.com.au/invoice/document?o=…` for a Chefs Depot customer, never
+ * `keenan-group.com.au`. This is the rule card 87IkgD2H settled for the quote acknowledgement
+ * (Tim, 2026-08-19) and card Mgt1FTOM/1xzObOdx settled for the finance application, and it
+ * generalises to "the other uuid-keyed portal page" by its own wording — which is precisely what
+ * this document is. Chefs Depot and Industry Kitchens are separate businesses (Product Brief
+ * section 3) and an address we send a CUSTOMER to is never the other one's; the parent group's
+ * root is the STAFF portal. It also matters that the SilverChef sheet on this very invoice already
+ * opens on `quotes.<apex>`: two links on one document must not disagree about whose business the
+ * customer is dealing with.
+ *
+ * The host is derived from `publicQuoteUrl` in `@keenan/services` — the same shared and tested
+ * rule the acknowledgement, the emailed quote link and the portal's own `buildPublicUrl` use — so
+ * the invoice link cannot drift from them. `src/lib/caddy.ts` in the portal proxies the WHOLE
+ * portal on `<public_subdomain>.<apex>`, so `/invoice/document` is already served there.
+ *
+ * `PORTAL_BASE_URL` survives ONLY as the fallback for a channel with no site row to build a host
+ * from, the same way the acknowledgement keeps it. It is unset in the deploy workflow, so that
+ * fallback is a real page rather than a dead one.
  *
  * Pure: an order with no uuid gets NO link rather than a link to a 404.
  */
-export function invoiceDocumentUrl(orderUuid: string | null | undefined): string | null {
+function originOf(url: string): string | null {
+  try {
+    return new URL(/^https?:\/\//.test(url) ? url : `https://${url}`).origin;
+  } catch {
+    return null;
+  }
+}
+
+export function invoiceDocumentUrl(
+  orderUuid: string | null | undefined,
+  site: { url?: string | null; publicSubdomain?: string | null } | null | undefined
+): string | null {
   const uuid = typeof orderUuid === "string" ? orderUuid.trim() : "";
   if (!uuid) return null;
-  const base = (process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/+$/, "");
+  // The quote link's host, reused rather than re-derived: one apex/subdomain rule for every
+  // customer-facing portal address this storefront hands out.
+  const onOwnHost = publicQuoteUrl({
+    siteUrl: site?.url,
+    publicSubdomain: site?.publicSubdomain,
+    uuid,
+  });
+  const base =
+    (onOwnHost ? originOf(onOwnHost) : null) ??
+    (process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/+$/, "");
   return `${base}/invoice/document?o=${encodeURIComponent(uuid)}`;
+}
+
+/**
+ * MAY this order be offered its tax invoice at all?
+ *
+ * Two refusals, and both are about not handing a customer a piece of paper we would not stand
+ * behind:
+ *
+ * 1. **No live lines.** That is the FIRST thing `buildOrderInvoiceDocument` refuses on ("This
+ *    order has no line items"), so the link would answer 404. A Download that 404s is worse than
+ *    no Download.
+ *
+ * 2. **A cancelled, declined or refunded order is not invoiced** — register `sf-account-orders`
+ *    (card D045H6Zh: "a cancelled order shows no outstanding figure and is never asked to pay")
+ *    and `order-money` (card UKue4u18). The document's closing line reads "Payment is due by
+ *    <date>" over an Amount-due band whenever nothing has been paid, so offering it here would put
+ *    a payment demand on the one screen that deliberately suppresses every payment ask — 890
+ *    Industry Kitchens orders, by that rule's own measurement. `closed` rides with them because
+ *    the portal route that renders the document refuses it too, and the page and the server must
+ *    agree about what they will serve.
+ */
+const CLOSED_TO_INVOICING: ReadonlySet<string> = new Set(["closed"]);
+
+export function offersInvoiceDocument(input: {
+  status: string | null | undefined;
+  hasLiveLines: boolean;
+}): boolean {
+  if (!input.hasLiveLines) return false;
+  if (isUnpayableOrderStatus(input.status)) return false;
+  return !CLOSED_TO_INVOICING.has(String(input.status ?? "").trim().toLowerCase());
 }

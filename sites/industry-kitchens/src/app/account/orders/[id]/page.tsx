@@ -12,6 +12,7 @@ import {
   getLinkableProductPaths,
   getCheckoutSettings,
   getAccountNetTermsDays,
+  getSiteConfig,
   CHANNEL_ID,
 } from "@/lib/store";
 import { canCustomerViewOrder } from "@/lib/orders/order-visibility";
@@ -28,7 +29,7 @@ import {
   isNetTermsMethod,
 } from "@/lib/orders/order-presentation";
 import { orderDocumentName } from "@/lib/orders/order-document-name";
-import { invoiceDocumentUrl } from "@/lib/orders/invoice-document-url";
+import { invoiceDocumentUrl, offersInvoiceDocument } from "@/lib/orders/invoice-document-url";
 import { customerOrderStage } from "@/lib/orders/order-status-label";
 import { readCustomerOrderNotes } from "@/lib/orders/customer-order-notes";
 import { EYEBROW_CLASS, PAGE_TITLE_CLASS, PANEL_TITLE_CLASS } from "@/lib/orders/order-page-styles";
@@ -259,6 +260,7 @@ export default async function OrderDetailPage({
     shipmentPage,
     accountNetTermsDays,
     orderContact,
+    siteConfig,
   ] = await Promise.all([
       productImageService.getThumbnailsForProducts(productIds) as Promise<
         { product_id: number; url_thumbnail: string | null; url_standard: string | null }[]
@@ -288,6 +290,10 @@ export default async function OrderDetailPage({
       // this page's data (card BIig1Zo1). Best effort: a contact panel must not be
       // able to 500 an order.
       loadOrderContactForOrder(orderId).catch(() => null),
+      // This storefront's own site row, for the tax-invoice host below (card EizZjaY3). Cached
+      // for an hour and shared with the rest of the storefront, so it costs nothing here. A
+      // failure means no site row, which the URL builder answers with its own fallback.
+      getSiteConfig().catch(() => ({ site: null })),
     ]);
 
   // May this person settle the balance by card, and with what control? THE one
@@ -331,11 +337,22 @@ export default async function OrderDetailPage({
   // rows as they stand right now, so it is the same piece of paper the invoice email attaches —
   // the same "Pro-Forma Tax Invoice" / "Paid Tax Invoice Receipt" naming the eyebrow above prints,
   // and the same balance owing the Payment section states.
-  // Gated on the order having live lines, because that is the FIRST thing the document build
-  // refuses on ("This order has no line items") — and `items` above is the identical set it reads,
-  // `order_items` with `cancelled_at IS NULL`. Offering a download that answers 404 is worse than
-  // offering none. This costs nothing: the lines are already loaded and already rendered below.
-  const invoiceHref = items.length > 0 ? invoiceDocumentUrl(order.uuid) : null;
+  //
+  // `offersInvoiceDocument` holds BOTH refusals, tested, in one place: no live lines (the first
+  // thing the document build refuses on — `items` here is the identical set, `order_items` with
+  // `cancelled_at IS NULL` — and a Download that answers 404 is worse than none), and a cancelled,
+  // declined, refunded or closed order, which is NEVER asked to pay (card D045H6Zh, the same
+  // `isUnpayableOrderStatus` the Payment section below suppresses its whole panel on). The
+  // document's closing line is "Payment is due by <date>" over an Amount-due band; on this screen
+  // that would be a payment demand we have already decided not to make.
+  //
+  // Served on THIS storefront's own quotes host, never the parent group's (card 87IkgD2H).
+  const invoiceHref = offersInvoiceDocument({
+    status: order.status,
+    hasLiveLines: items.length > 0,
+  })
+    ? invoiceDocumentUrl(order.uuid, siteConfig.site)
+    : null;
 
   const totalInc = money(order.total_inc_tax);
   const gst = money(order.total_tax);
