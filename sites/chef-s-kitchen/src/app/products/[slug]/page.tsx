@@ -11,6 +11,7 @@ import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { renderProductNodeBranch } from "@/builder/product-node-branch";
 import { readProductKit } from "@/lib/product-kit";
+import { readProductAddons } from "@keenan/services";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 import {
   ProductBuyBox,
@@ -276,6 +277,9 @@ export default async function ProductPage({
       // Grouped / bundle contents (Zoey product types, authored in the portal — they ride
       // products.metafields, which is portal-owned). Null for every other product.
       kit: readProductKit(product.metafields),
+      // Authored customisation groups — priced extras and free-text questions
+      // (cards 0CDcCYmO + kyMjCmAw). Null for every product that carries none.
+      addons: readProductAddons(product.metafields),
     },
     links: {
       brandRow:

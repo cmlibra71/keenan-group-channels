@@ -19,6 +19,12 @@ import { Price } from "@/components/ui/Price";
 import { PriceBlock } from "@/components/ui/PriceBlock";
 import { Minus, Plus, Truck, ShieldCheck } from "lucide-react";
 import { useProductPurchase } from "./ProductPurchaseProvider";
+import { ProductInstructionsPanel } from "./ProductInstructionsPanel";
+import {
+  unansweredAddonGroups,
+  type AddonSelectionInput,
+  type ProductAddons,
+} from "@keenan/services/product-addons";
 import { useGst } from "@/lib/gst";
 import { ProductKitBlock } from "./ProductKitBlock";
 import { defaultKitSelection, toKitChoices, type ProductKit } from "@/lib/product-kit";
@@ -27,7 +33,20 @@ import { defaultKitSelection, toKitChoices, type ProductKit } from "@/lib/produc
  * `kit` is present only for the two Zoey kit types (grouped / bundle). Every other caller — the
  * CMS v2 widgets, the builder natives — renders this exactly as before by simply not passing one.
  */
-export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
+export function ProductDetail({
+  kit,
+  addons,
+}: {
+  kit?: ProductKit | null;
+  /**
+   * The product's authored customisation groups (cards 0CDcCYmO + kyMjCmAw). This
+   * renderer holds the shopper's answers in its OWN state rather than the purchase
+   * provider, because two of the three site forks still run a local provider that
+   * predates extras — the panel component is shared, so the field the customer sees
+   * is identical either way (the same arrangement `ProductKitBlock` has).
+   */
+  addons?: ProductAddons | null;
+} = {}) {
   const {
     product,
     isMember,
@@ -64,6 +83,26 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
   const isBundle = kit?.kind === "bundle";
   const kitReady = !isBundle || kit.groups.every((g) => kitSelection[g.name] != null);
   const kitChoices = isBundle ? toKitChoices(kitSelection) : null;
+  // Free-text customisation (card kyMjCmAw). `addonText` is what the shopper has
+  // typed; `addonSelection` is the same thing in the shape both server actions take.
+  const [addonText, setAddonText] = useState<Record<string, string>>({});
+  const [instructionsPrompted, setInstructionsPrompted] = useState(false);
+  const addonSelection: AddonSelectionInput = Object.fromEntries(
+    Object.entries(addonText).map(([key, value]) => [key, value === "" ? [] : [value]])
+  );
+  const addonsUnanswered = unansweredAddonGroups(addons ?? null, addonSelection);
+  /** Pressed a buy button with a required box empty: mark the field rather than
+   *  greying the button, because this page carries no other wording that could
+   *  explain a dead control (`sf-product-page`, CXnP1lrL). */
+  const instructionsGuard = () => {
+    if (addonsUnanswered.length === 0) return true;
+    setInstructionsPrompted(true);
+    return false;
+  };
+  const buyProps = {
+    addons: addons ? addonSelection : undefined,
+    guard: instructionsGuard,
+  };
   // A bundle is never bought straight off the page — its configuration goes to a rep, so the
   // quantity stepper, Add to Cart and the mobile buy bar are all out.
   // Card 7vu2iEEZ: a product staff set to hide its price, refuse out-of-stock buys, or keep out of
@@ -160,6 +199,17 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
         />
       )}
 
+      {/* Free-text customisation — Zoey puts it directly above Qty and the buy
+          buttons on the Custom Stainless Steel page (card kyMjCmAw). */}
+      {addons && (
+        <ProductInstructionsPanel
+          groups={addons.groups}
+          values={addonText}
+          onChange={(groupKey, value) => setAddonText((prev) => ({ ...prev, [groupKey]: value }))}
+          missingLabels={instructionsPrompted ? addonsUnanswered : []}
+        />
+      )}
+
       {/* ═══ Qty + dual CTAs (design buy row) ═══ */}
       <div className="mt-6 flex flex-wrap items-stretch gap-3">
         {canBuyNow && (
@@ -194,12 +244,14 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
                 sku={product.sku}
                 price={displaySalePrice ?? displayPrice}
                 disabled={purchasingDisabled || !allOptionsSelected}
+                {...buyProps}
               />
               {!restrictAddToQuote && (
                 <AddToQuoteButton
                   productId={productId}
                   variantId={cartVariantId}
                   disabled={useGroupedMode && !allOptionsSelected}
+                  {...buyProps}
                 />
               )}
             </>
@@ -210,6 +262,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
               disabled={(useGroupedMode && !allOptionsSelected) || !kitReady}
               kitChoices={kitChoices}
               label="Add to Quote — request pricing"
+              {...buyProps}
             />
           )}
         </div>
@@ -249,6 +302,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
             price={displaySalePrice ?? displayPrice}
             size="sm"
             disabled={purchasingDisabled || !allOptionsSelected}
+            {...buyProps}
           />
         </div>
       )}

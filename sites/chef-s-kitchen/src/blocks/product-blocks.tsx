@@ -41,7 +41,7 @@ import { TabsShell } from "@/components/product/TabsShell";
 import { WIDGETS } from "@/blocks/widgets";
 import { TemplateRenderer } from "@/blocks/TemplateRenderer";
 import { effectiveSubBlocks } from "@/blocks/BlockRenderer";
-import { parseKtl, evaluateKtl, evaluateConditions, sanitizeConditions } from "@keenan/services";
+import { parseKtl, evaluateKtl, evaluateConditions, sanitizeConditions, readProductAddons } from "@keenan/services";
 
 type BlockProps = { props: Record<string, unknown>; ctx?: RenderContext };
 
@@ -209,6 +209,9 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
           optionValues: product.optionValues ?? [],
           variantOptionMappings: product.variantOptionMappings ?? [],
           bulkPricing: suppressCatalogPricing ? [] : (product.bulkPricing ?? []),
+          // Authored customisation groups — priced extras and free-text questions
+          // (cards 0CDcCYmO + kyMjCmAw). Null for every product that carries none.
+          addons: readProductAddons(product.metafields),
         }}
         memberPrice={memberPrice}
         memberPriceMap={memberPriceMap}

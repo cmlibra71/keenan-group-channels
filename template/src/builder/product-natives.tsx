@@ -25,6 +25,8 @@ import type { ProductKit } from "@/lib/product-kit";
 import { GstToggle } from "@/components/layout/GstToggle";
 import { SilverChefPanel } from "@/components/product/SilverChefPanel";
 import { ProductImageNotice } from "@/components/product/ProductImageNotice";
+import { ProductInstructionsPanel } from "@/components/product/ProductInstructionsPanel";
+import { useProductPurchase } from "@keenan/services/product-page";
 import { CdMemberPricingPanel } from "@/components/product/CdMemberPricingPanel";
 import type { CdMembershipData } from "@/lib/pricing/cd-member-pricing";
 
@@ -61,6 +63,12 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // member/contract price — and an authored tree cannot call the finance
     // calculator. It renders nothing for a product with no price.
     "silverchef-panel": () => <SilverChefPanel />,
+    // The free-text customisation groups — the "Instructions" box on Custom Stainless
+    // Steel (card kyMjCmAw). SEALED for the same reason the kit block is: it holds the
+    // customer's answer and that answer has to travel with whichever buy button is
+    // pressed, which an authored tree cannot do. It renders nothing for a product with
+    // no text groups, so the node is safe in front of every product page.
+    "product-instructions": () => <ProductInstructionsNative />,
     // "Images are for illustrative purposes only" (card 82HgV23q). Sealed rather than
     // authored because the supplied panel colour is not a token on either site, and a
     // colour class invented in a STORED tree has no rule in the deployed stylesheet.
@@ -79,4 +87,33 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
       <ProductImageNotice show={product.imageIsIllustrative === true} />
     ),
   };
+}
+
+/**
+ * The panel bound to the SHARED purchase provider.
+ *
+ * The typed answer lives in `selectedAddons` beside the ticked extras, which is
+ * what makes it travel with Add to Cart AND Add to Quote without either button
+ * knowing it exists (register rule 7bmpuqei, `sf-product-page`).
+ *
+ * `missingLabels` is the provider's own list of required groups still unanswered,
+ * shown only once the shopper has pressed a buy button — the bridge raises the
+ * prompt and this marks the field that is waiting, so the refusal is never a
+ * greyed control with nothing beside it.
+ */
+function ProductInstructionsNative() {
+  const purchase = useProductPurchase();
+  const groups = purchase.product.addons?.groups ?? [];
+  return (
+    <ProductInstructionsPanel
+      groups={groups}
+      values={purchase.addonText}
+      onChange={purchase.setAddonText}
+      // No inline error on this renderer: the node-tree page answers a press on an
+      // unanswered required group with the shared "Choose an option" dialog, which
+      // NAMES the field. Two refusals for one press would be one too many; the
+      // field's own asterisk and "Required" line explain it before the press.
+      missingLabels={[]}
+    />
+  );
 }

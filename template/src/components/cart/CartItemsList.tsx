@@ -6,6 +6,10 @@ import { updateCartItem, removeCartItem } from "@/lib/actions/cart";
 import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { backorderMessage } from "@keenan/services/backorder";
+import {
+  readStoredAddons,
+  describeAddonSelection,
+} from "@keenan/services/product-addons";
 import { Price } from "@/components/ui/Price";
 import { ga4AddToCart, ga4RemoveFromCart, type Ga4Item } from "@/components/analytics/ga4";
 
@@ -34,6 +38,14 @@ export type CartItemRow = {
   available_units?: number | null;
   /** deny | allow_silent | allow_notify — only allow_notify says anything to the shopper. */
   backorder_policy?: string | null;
+  /**
+   * What the shopper configured on the product page — ticked extras and typed
+   * answers, as stored on `cart_items.modifier_selections` (cards 0CDcCYmO +
+   * kyMjCmAw). Shown back to them here because two lines of the same product can
+   * now differ ONLY by what was typed into them: without it, a cart holding a
+   * 1200mm bench and an 800mm bench is two identical-looking rows.
+   */
+  modifier_selections?: unknown;
 };
 
 export function CartItemsList({
@@ -141,6 +153,8 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
     });
   }
 
+  const configuration = describeAddonSelection(readStoredAddons(item.modifier_selections));
+
   return (
     <div className={`py-4 flex items-center gap-4 ${isPending ? "opacity-50" : ""}`}>
       <div className="flex-1 min-w-0">
@@ -152,6 +166,13 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
         </a>
         {item.variant_option_name && (
           <p className="text-xs text-zinc-500 mt-0.5">{item.variant_option_name}</p>
+        )}
+        {configuration && (
+          // NO MONEY in this text — `describeAddonSelection` is what guarantees it,
+          // and it matters here because this row already prints a GST-aware price
+          // two lines below (an ex-GST figure beside it would be our own number
+          // contradicting our own number).
+          <p className="mt-0.5 whitespace-pre-line text-xs text-zinc-500">{configuration}</p>
         )}
         <p className="text-xs text-zinc-400 mt-0.5">
           SKU: {item.variant_sku || item.product_sku || "N/A"}

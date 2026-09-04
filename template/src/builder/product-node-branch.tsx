@@ -13,6 +13,7 @@ import { cmsFunctionService } from "@keenan/services/services";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { withSilverChefNode } from "@/builder/silverchef-node";
+import { withProductInstructionsNode } from "@/builder/product-instructions-node";
 import { withImageNoticeNode } from "@/builder/product-image-notice";
 import { withUpsellBlock } from "@/builder/upsell-node";
 import { attachBrandLogos } from "@/lib/brand-logo-fallback";
@@ -184,9 +185,17 @@ export async function renderProductNodeBranch({
   // it renders the join pitch WITHOUT prices, because retiring the savings percentage
   // took the stored teaser box off the Chefs Depot page and this is the only membership
   // call to action left on it.
+  // The free-text customisation panel (card kyMjCmAw) is PLACED here for the same
+  // reason as the placers around it: it has to be able to appear on any product on
+  // either site, and both sites render this page from a stored tree. It runs
+  // OUTERMOST of the placers so it anchors against the buy row the stored tree
+  // already carries, and it renders nothing at all for a product with no text
+  // groups authored — every other product page is unchanged.
   const nodeTree = guardBuyControls(
-    withCdMemberPricingNode(
-      withUpsellBlock(withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE)))
+    withProductInstructionsNode(
+      withCdMemberPricingNode(
+        withUpsellBlock(withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE)))
+      )
     )
   );
 
