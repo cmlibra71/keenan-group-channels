@@ -22,6 +22,10 @@ import {
 import { cmsFunctionService } from "@keenan/services/services";
 import { treePlacesSeoCopy } from "@/builder/seo-copy-placement";
 import {
+  withCategoryFacetComponents,
+  withCategoryFacetNodes,
+} from "@/builder/category-facet-injection";
+import {
   stripCategoryBannerBackdrop,
   findBannerBackdropNodes,
 } from "@/builder/category-banner-backdrop";
@@ -212,9 +216,18 @@ export async function renderCategoryNodeBranch({
   });
 
   const namedStyles = await getNamedStyles().catch(() => ({}));
-  const components = (await (draft ? getDraftComponents() : getComponents()).catch(
-    () => ({})
-  )) as Record<string, NodeTree>;
+  // The per-category attribute sections and the price slider, placed into the
+  // AUTHORED rail at render time (card C8G4f4U8). Which attributes a category
+  // offers is decided from that category's own data, so no designed page can
+  // carry a section for them; this is the same pure, idempotent, nothing-stored
+  // pass the illustrative-image banner uses on the product tree (82HgV23q). A
+  // component that does not repeat over the listing's facets is untouched.
+  const components = withCategoryFacetComponents(
+    (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<
+      string,
+      NodeTree
+    >
+  );
   const builderCss =
     ((await getChannelSetting("builder_published_css").catch(() => null)) as {
       css?: string;
@@ -235,7 +248,7 @@ export async function renderCategoryNodeBranch({
     <>
       {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
       <BuilderCategoryPage
-        tree={nodeTree}
+        tree={withCategoryFacetNodes(nodeTree)}
         payload={payload}
         listing={{
           products: scoped,
