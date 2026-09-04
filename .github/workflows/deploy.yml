@@ -183,6 +183,15 @@ jobs:
           GUARD_XFF_TRUSTED_HOPS=${{ vars.GUARD_XFF_TRUSTED_HOPS || '1' }}
           GUARD_ALLOW_IPS=${{ vars.GUARD_ALLOW_IPS }}
           GUARD_CONTACT=${{ vars.GUARD_CONTACT }}
+          # Attachment virus scanning (card UFprd4ED). OFF until the ClamAV
+          # container is running on the host and Tim has agreed the ~1.5 GB it
+          # holds resident. Repo variables, so turning it on is a settings change
+          # + redeploy rather than a code change; the scanner fails OPEN, so a
+          # wrong host here slows an enquiry upload by the timeout, it does not
+          # refuse one. See docs/uploads-virus-scanning.md in the portal repo.
+          UPLOAD_VIRUS_SCAN=${{ vars.UPLOAD_VIRUS_SCAN || 'off' }}
+          CLAMAV_HOST=${{ vars.CLAMAV_HOST || 'clamav' }}
+          CLAMAV_PORT=${{ vars.CLAMAV_PORT || '3310' }}
           EOF
           )
 
