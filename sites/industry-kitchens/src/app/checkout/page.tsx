@@ -1,6 +1,4 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Crown, ArrowRight } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
 import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
@@ -35,6 +33,7 @@ import {
 } from "@/lib/checkout/finance";
 import { financeApplicationForm } from "@/lib/checkout/finance-form";
 import { CheckoutForm } from "@/components/checkout/CheckoutForm";
+import { planPriceLine } from "@/lib/membership/checkout-join";
 import { StartedCheckoutTracker } from "@/components/analytics/StartedCheckoutTracker";
 
 export const metadata = {
@@ -370,10 +369,25 @@ export default async function CheckoutPage() {
     shippingEnabled = !!activeCard;
   } catch {}
 
-  // Check membership status for checkout banners
-  let showMemberBanner = false;
+  // The membership panel in the Order Summary rail (card pktBo874). It REPLACES the two thin
+  // banners that ran across the top of this page: one place on the screen talks about membership,
+  // in the empty rail space Tim's "Membership Real Estate" screenshot circles, and no shopper
+  // meets the same offer twice.
+  //
+  // What did NOT change: the pitch still quotes no estimated saving (card Nyp8bkPm — the flat
+  // `member_savings_percentage` figure is deleted and must not come back), and the MEMBER's line
+  // is still list value minus what is actually charged, the measured figure the register
+  // protects. The old `subtotal > 0` render guard survives as the `subtotal > 0` test below: it
+  // was never about a savings figure, it was about there being a basket.
+  //
+  // `membership` stays null on a storefront that sells no membership (Industry Kitchens has
+  // `subscriptions_enabled` unset), so nothing membership-shaped is drawn or computed there.
   let isMember = false;
-  let memberSavings = 0;
+  let membership: {
+    planName: string;
+    priceLine: string | null;
+    memberSavings: number;
+  } | null = null;
 
   const subscriptionsEnabled = await getFeatureFlag("subscriptions_enabled");
   if (subscriptionsEnabled) {
@@ -381,19 +395,24 @@ export default async function CheckoutPage() {
       const activeSub = await getActiveSubscriptionForContact(session.contactId);
       isMember = !!activeSub;
     }
-    if (isMember) {
-      // Member savings flow through item salePrice (cart.discountAmount stays
-      // 0): the saving is full list value minus what's actually charged.
-      const listValue = (cart.items as { list_price: string | null; quantity: number }[]).reduce(
-        (sum, i) => sum + (i.list_price ? parseFloat(i.list_price) : 0) * i.quantity,
-        0
-      );
-      memberSavings = Math.max(0, Math.round((listValue - subtotal) * 100) / 100);
-    } else {
-      const plans = await getSubscriptionPlans();
-      if (plans.length > 0) {
-        showMemberBanner = true;
-      }
+    const plans = await getSubscriptionPlans();
+    const plan = plans[0] as
+      | { name?: string; price?: string; billing_interval?: string }
+      | undefined;
+    if (plan && (isMember || subtotal > 0)) {
+      // Member savings flow through item salePrice (cart.discountAmount stays 0): the saving is
+      // full list value minus what's actually charged.
+      const listValue = isMember
+        ? (cart.items as { list_price: string | null; quantity: number }[]).reduce(
+            (sum, i) => sum + (i.list_price ? parseFloat(i.list_price) : 0) * i.quantity,
+            0
+          )
+        : 0;
+      membership = {
+        planName: plan.name || "Membership",
+        priceLine: planPriceLine(plan.price, plan.billing_interval),
+        memberSavings: isMember ? Math.max(0, Math.round((listValue - subtotal) * 100) / 100) : 0,
+      };
     }
   }
 
@@ -406,42 +425,12 @@ export default async function CheckoutPage() {
       />
       <h1 className="text-3xl font-bold text-zinc-900 mb-8">Checkout</h1>
 
-      {isMember && memberSavings > 0 && (
-        <div className="mb-6 flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-          <Crown className="h-4 w-4 text-green-600 shrink-0" />
-          <span className="text-sm text-green-800">
-            You&apos;re saving ${memberSavings.toFixed(2)} with your membership on this order
-          </span>
-        </div>
-      )}
-
-      {/* The join pitch, in Tim's words (card Nyp8bkPm; his widget kit's cart
-          upsell). It used to print "Members save up to $X on this order", X being
-          the basket times a flat 15% held in `member_savings_percentage` — a
-          figure with no measured basis, retired across the site. The `> 0` guard
-          it carried is kept, moved onto the BASKET, so an empty cart still gets
-          no pitch. */}
-      {showMemberBanner && subtotal > 0 && (
-        <div className="mb-6 flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-          <div className="flex items-center gap-2 text-sm text-amber-800">
-            <Crown className="h-4 w-4 text-amber-600 shrink-0" />
-            Join the buying group and every line reprices from your next order.
-          </div>
-          <Link
-            href="/membership"
-            className="inline-flex items-center gap-1 text-sm font-semibold text-amber-700 hover:text-amber-800 shrink-0"
-          >
-            Join now
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-      )}
-
       <CheckoutForm
         items={cart.items}
         subtotal={subtotal}
         gstAmount={gstAmount}
         isMember={isMember}
+        membership={membership}
         pricesIncludeTax={pricesIncludeTax}
         customerEmail={session?.email}
         isSignedIn={!!session}
