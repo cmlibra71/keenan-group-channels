@@ -255,7 +255,15 @@ export function planOrderFromPaidQuote(
   // logic's FK step; `metafields.sales_agent` feeds the Order Information
   // drop-down — filled from the resolved rep ONLY when the quote's own
   // copy-to-order attributes did not already bring a value, so a carried
-  // `sales_agent` is never overwritten and the two screens cannot disagree.
+  // `sales_agent` is never overwritten.
+  //
+  // The two screens can still differ where the quote's OWN `sales_rep_id`
+  // disagrees with the `sales_agent` text it carries — that is the portal's
+  // shipped two-step rule and predates this path. What this card's two extra
+  // arms may NOT do is create such a disagreement: `resolveQuoteOrderRep`
+  // refuses the account and desk arms whenever the quote carries a name it could
+  // not match, so nothing here ever stamps a rep the customer's paperwork never
+  // mentioned.
   const rep = ctx.salesRep ?? null;
   const metafields = buildOrderMetafields(quote, ctx.copyAttributeCodes ?? new Set());
   if (rep?.name && !scalarText(metafields.sales_agent).trim()) {

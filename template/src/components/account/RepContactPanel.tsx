@@ -17,9 +17,19 @@ import type { QuoteContact } from "@keenan/services";
  * it is read from the record's OWN channel, so a Chefs Depot page can never show
  * Industry Kitchens' number.
  *
- * A line with no value is not rendered. On Chefs Depot no quote has a rep and no
- * rep has a phone number, so what a customer reads today is Customer Service,
- * cs@chefsdepot.com.au, and the storefront's general number once it is set.
+ * A line with no value is not rendered. No active rep holds a mobile, so the
+ * number under a named rep is the storefront's own, labelled as the desk.
+ *
+ * WHAT A CHEFS DEPOT CUSTOMER READS, re-measured 2026-09-04. Still Customer
+ * Service, cs@chefsdepot.com.au and 1800 671 143 on everything the desk owns —
+ * but that is no longer because CD records carry no rep. Card QRA0m4vh's ladder
+ * now stamps CD's cs@ rep row (2215) on an order raised by a website payment
+ * that nobody else owns, and that row is NAMED "Fiona Robinson". It reads as the
+ * desk here because `resolveQuoteContact` tests the rep's ADDRESS against the
+ * storefront's own cs@ mailbox, not their name — a customer handed a shared
+ * mailbox is talking to the desk, and naming one person promises them somebody
+ * who may not answer. A rep who is genuinely their own (a quote's Sales Agent
+ * pick, an account assignment) is still named in full.
  */
 export function RepContactPanel({
   contact,
