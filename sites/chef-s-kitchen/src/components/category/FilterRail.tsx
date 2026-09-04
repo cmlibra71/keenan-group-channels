@@ -588,7 +588,24 @@ export function PriceSliderFacet({ facets }: { facets: CategoryFacets }) {
 }
 
 /** Generic removable teal chips for the active facet selections (toolbar row). */
-export function FacetChips({ groups }: { groups: FacetGroupDef[] }) {
+/**
+ * `selected` overrides what the URL says is filtering, per param.
+ *
+ * A chip is a claim about the grid beside it, so it has to come from the values
+ * the page ACTUALLY filtered on, not from the address bar, wherever the two can
+ * differ. They differ in one place: a `?category=` naming a category removed
+ * from this storefront (`hidden_category_ids`, card ZVbjSoKN) is dropped before
+ * the search runs, and a chip still claiming it would say "filtered by Chefs Hat
+ * Sydney" over an unfiltered result set. Omit the prop and the URL is read, which
+ * is what the category page does.
+ */
+export function FacetChips({
+  groups,
+  selected,
+}: {
+  groups: FacetGroupDef[];
+  selected?: Record<string, string[]>;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -598,7 +615,8 @@ export function FacetChips({ groups }: { groups: FacetGroupDef[] }) {
 
   const chips: { param: string; value: string; label: string }[] = [];
   for (const g of groups) {
-    const raw = searchParams.get(g.param);
+    const override = selected?.[g.param];
+    const raw = override !== undefined ? override.join(",") : searchParams.get(g.param);
     if (!raw) continue;
     // A slider is ONE chip naming its window ("Width 600–900mm"), not one chip
     // per value — and removing it clears the whole window.
