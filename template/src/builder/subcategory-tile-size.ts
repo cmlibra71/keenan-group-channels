@@ -43,17 +43,42 @@ import type { NodeTree, BuilderNode } from "@keenan/services/builder";
 // Measured in a browser on 2026-09-05, and it cost an hour: the authored tree
 // renders inside `[data-kg-nodes]`, and the channel's published builder CSS
 // (`channel_settings.builder_published_css`, injected as `<style
-// id="kg-builder-css">`) re-declares 545 utilities SCOPED to that wrapper. A
+// id="kg-builder-css">`) re-declares its utilities SCOPED to that wrapper. A
 // scoped `[data-kg-nodes] .lg\:grid-cols-4` is specificity 0-2-0 and beats
 // Tailwind's own `.xl\:grid-cols-6` at 0-1-0, so inside an authored tree a
 // class the builder stylesheet does not carry is not merely unstyled — it
-// silently loses to the neighbour it was meant to override. That vocabulary
-// stops at `xl:grid-cols-5`, which is why this grid does too, and it is also why
-// the tree's own `xl:grid-cols-5` has been inert on the live page all along (the
-// strip has been four across at every desktop width). Every other class this
-// module writes was checked against that stylesheet in the same session and is
+// silently loses to the neighbour it was meant to override.
+//
+// The vocabulary is `{sm,md,lg,xl}:grid-cols-{1..5}` and it STOPS there, which
+// is why this grid does too. Read off channel 1's published sheet on
+// 2026-09-05: `.lg\:grid-cols-4{` at byte 55885 and `.xl\:grid-cols-5{` at
+// 60566 — same specificity, xl declared LATER, so the tree's own
+// `xl:grid-cols-5` DOES work and the strip is genuinely five across at >=80rem
+// and four at >=64rem. `.xl\:grid-cols-6` is absent from the sheet entirely,
+// so THAT is the class that would silently render as four across. Every other
+// class this module writes was checked against the same stylesheet and is
 // present in it. Check any new one the same way — a probe element appended to
-// `<body>` will happily style itself and tell you nothing.
+// `<body>` sits outside `[data-kg-nodes]`, will happily style itself, and tells
+// you nothing.
+//
+// A BLIND SPOT WORTH KNOWING
+// -------------------------
+// The pass and its post-condition walk `children`/`emptyChildren` on the PAGE
+// tree only. If the strip is ever moved into a component master (`cms_components`,
+// reached through a `ref`/`componentKey` node) the tile reverts to the small
+// thumbnail AND `findSmallSubcategoryThumbs` stays quiet — the one failure it
+// was written to catch. Follow the ref, or move this pass, if that day comes.
+//
+// WHY THE TILE IS CAPPED BY COUNT
+// -------------------------------
+// Steve's screenshot is a six-tile strip and that is the shape the big tile is
+// for. Industry Kitchens also has 13 categories whose children are a DIRECTORY
+// rather than a strip — `/categories/brands` has 395 of them — and there the
+// big tile is actively worse: measured in a browser 2026-09-05, the strip grows
+// from 6,782px to 22,689px and the whole page from 19,908px to 35,815px, so the
+// products the shopper came for sit three extra screens further down. Above
+// `LARGE_TILE_MAX_SUBCATEGORIES` the authored tile is left exactly as it is
+// today. 705 of IK's 718 parent categories (98%) are under the cap.
 //
 // SCOPE — this is an Industry Kitchens ask and it is gated on the CHANNEL, not
 // left to the data. `builder/category-node-branch.tsx` is a shared module
@@ -70,6 +95,15 @@ import type { NodeTree, BuilderNode } from "@keenan/services/builder";
 export const LARGE_SUBCATEGORY_TILE_CHANNEL_IDS: readonly number[] = [1];
 
 /**
+ * The most subcategories that still read as a STRIP. Above this the children
+ * are a directory and keep the tile the page has today — see "WHY THE TILE IS
+ * CAPPED BY COUNT" above. 24 is five full rows at `xl` and six at `lg`, so the
+ * strip never pushes the product listing more than about a screen and a half
+ * down, and it covers 705 of Industry Kitchens' 718 parent categories.
+ */
+export const LARGE_TILE_MAX_SUBCATEGORIES = 24;
+
+/**
  * The section the strip lives in. Matched by LABEL first — that is what an
  * author names the thing and what the node panel shows — with the id from the
  * published tree as the fallback for a section somebody renamed.
@@ -84,14 +118,15 @@ export const SUBCATEGORY_SECTION_IDS = ["n-msh8i4pb-8w1d4"] as const;
  *                on a wide desktop, four at `lg`, two on a phone — so Steve's
  *                six tiles still lay out on one or two rows. Only the gutter
  *                grows, because the tiles now carry a picture. Do NOT reach for
- *                a sixth column: see the note on the builder stylesheet below.
+ *                a sixth column: `xl:grid-cols-6` is not in the builder
+ *                stylesheet and would render as FOUR — see the header.
  * - `tile`       a column instead of a row, clipped so the picture takes the
  *                card's rounded corners.
  * - `thumb`      a full-width square. `relative` stays: the image is a
  *                `fill` image and would collapse without it.
  * - `image`      `object-contain`, not `object-cover`. These are cut-out
  *                product photographs on white; at 48px cropping was invisible,
- *                at ~190px `object-cover` would slice the top and bottom off a
+ *                at ~230px `object-cover` would slice the top and bottom off a
  *                tall fridge. The padding keeps it off the tile's edges.
  * - `no-thumb`   the same square in grey with the package icon, so a category
  *                with no picture keeps the tile's shape (gRLRF8yu: the grey box
@@ -150,6 +185,13 @@ export interface SubcategoryTileResult {
   tree: NodeTree;
   /** Labels actually rewritten, in tree order. Empty = nothing matched. */
   rewritten: string[];
+  /**
+   * Whether this page is one the big tile applies to at all — right channel,
+   * and a strip rather than a directory. False means the tree came back
+   * untouched ON PURPOSE, which is what the caller's post-condition must not
+   * complain about.
+   */
+  applied: boolean;
 }
 
 // Structural walk, for the reason `category-banner-backdrop` spells out:
@@ -202,6 +244,20 @@ function visit(node: NodeRecord, rewritten: string[]): NodeRecord {
   return mapChildren(node, (child) => visit(child, rewritten));
 }
 
+/** What decides whether this page gets the big tile. */
+export interface SubcategoryTileOptions {
+  /**
+   * How many subcategories this page is about to render. Omitted means "no
+   * idea", which is treated as within the cap — a caller that cannot count
+   * still gets the card's behaviour rather than silently losing it.
+   */
+  subcategoryCount?: number;
+  /** Override for tests. */
+  channels?: readonly number[];
+  /** Override for tests. */
+  maxSubcategories?: number;
+}
+
 /**
  * Enlarge the subcategory tiles in a stored category-layout tree.
  *
@@ -209,18 +265,27 @@ function visit(node: NodeRecord, rewritten: string[]): NodeRecord {
  * is running it once — and a no-op on a tree with no `subcategories` section
  * (Chefs Depot's), which comes back untouched with `rewritten: []`.
  *
- * Returns the tree unchanged for any channel outside
- * `LARGE_SUBCATEGORY_TILE_CHANNEL_IDS`.
+ * Returns the tree unchanged, with `applied: false`, for any channel outside
+ * `LARGE_SUBCATEGORY_TILE_CHANNEL_IDS` and for any page whose subcategory count
+ * is over `LARGE_TILE_MAX_SUBCATEGORIES`.
  */
 export function enlargeSubcategoryTiles(
   tree: NodeTree,
   channelId: number,
-  channels: readonly number[] = LARGE_SUBCATEGORY_TILE_CHANNEL_IDS
+  options: SubcategoryTileOptions = {}
 ): SubcategoryTileResult {
-  if (!channels.includes(channelId)) return { tree, rewritten: [] };
+  const channels = options.channels ?? LARGE_SUBCATEGORY_TILE_CHANNEL_IDS;
+  const max = options.maxSubcategories ?? LARGE_TILE_MAX_SUBCATEGORIES;
+  const count = options.subcategoryCount;
+  if (!channels.includes(channelId)) return { tree, rewritten: [], applied: false };
+  if (typeof count === "number" && count > max) return { tree, rewritten: [], applied: false };
   const rewritten: string[] = [];
   const root = visit(tree.root as unknown as NodeRecord, rewritten);
-  return { tree: { ...tree, root: root as unknown as BuilderNode } as NodeTree, rewritten };
+  return {
+    tree: { ...tree, root: root as unknown as BuilderNode } as NodeTree,
+    rewritten,
+    applied: true,
+  };
 }
 
 /**

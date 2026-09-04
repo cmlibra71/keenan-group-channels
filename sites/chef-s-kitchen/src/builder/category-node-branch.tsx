@@ -163,7 +163,11 @@ export async function renderCategoryNodeBranch({
   // full-width picture with the name under it. Same render-time, nothing-stored
   // pass as the strip above, and gated on the CHANNEL rather than on the data —
   // Chefs Depot keeps the tile it has. See `builder/subcategory-tile-size.ts`.
-  const enlarged = enlargeSubcategoryTiles(stripped.tree, CHANNEL_ID);
+  // `subcategoryCount` is the cap: above it the children are a directory, not a
+  // strip, and the big tile buries the listing (`/categories/brands` has 395).
+  const enlarged = enlargeSubcategoryTiles(stripped.tree, CHANNEL_ID, {
+    subcategoryCount: subcategories?.length,
+  });
   const nodeTree = enlarged.tree;
 
   // The post-condition, and it is not belt-and-braces. The strip matches on node
@@ -190,7 +194,10 @@ export async function renderCategoryNodeBranch({
   // page with nothing anywhere saying the fix had stopped working. This asks the
   // acceptance question structurally instead — is any subcategory thumbnail
   // still pinned to a 48px box?
-  const smallThumbs = findSmallSubcategoryThumbs(nodeTree);
+  // Only where the pass was MEANT to run. Chefs Depot is excluded on purpose and
+  // so is a directory-sized strip, and a warning on either is noise about a tile
+  // nobody asked to change — logged on every category render, forever.
+  const smallThumbs = enlarged.applied ? findSmallSubcategoryThumbs(nodeTree) : [];
   if (smallThumbs.length > 0) {
     console.warn(
       `[MN702iBv] subcategory tile still renders a 48px thumbnail: ${smallThumbs.join(", ")}` +

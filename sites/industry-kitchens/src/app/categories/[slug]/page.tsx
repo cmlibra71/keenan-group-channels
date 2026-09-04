@@ -35,6 +35,10 @@ import { FilterRail, FilterChips, SortSelect } from "@/components/category/Filte
 import { RichContent } from "@/components/content/RichContent";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { CategorySeo } from "@/components/category/CategorySeo";
+import {
+  LARGE_TILE_IMAGE_SIZES,
+  LARGE_TILE_MAX_SUBCATEGORIES,
+} from "@/builder/subcategory-tile-size";
 
 // Emit category SEO (CMS category-page meta if set, else the category record).
 export async function generateMetadata({
@@ -186,6 +190,10 @@ export default async function CategoryPage({
   ]);
 
   const { products, total } = listing;
+  // Card MN702iBv: the picture carries the tile, but only where the children are
+  // a STRIP. The same cap the authored-tree pass applies, read from the same
+  // constant so the two renderers cannot drift.
+  const largeTiles = subcategories.length <= LARGE_TILE_MAX_SUBCATEGORIES;
   // Every renderer (sealed rail, CMS blocks, authored node tree) reads these
   // facets, so applying the configuration here is what switches a facet off
   // site-wide rather than in one component.
@@ -363,7 +371,13 @@ export default async function CategoryPage({
       {subcategories.length > 0 && (
         <div className="mb-10">
           <h2 className="text-lg font-semibold text-zinc-900 mb-4">Subcategories</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          <div
+            className={
+              largeTiles
+                ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"
+                : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3"
+            }
+          >
             {/*
               `image_url`, not `imageUrl`: the service snake-cases every key on
               the way out (see CategoryChildSlim). The row is left un-annotated
@@ -390,28 +404,53 @@ export default async function CategoryPage({
               carries it, and this file is what makes Tailwind generate them —
               change one and change both.
             */}
+            {/*
+              THE CAP. Steve's screenshot is a six-tile strip and that is the
+              shape the big tile is for. Industry Kitchens also has 13 categories
+              whose children are a DIRECTORY — `/categories/brands` has 395 — and
+              there the big tile grows the page from 19,908px to 35,815px and
+              buries the listing three screens down. Over the cap the tile stays
+              exactly as it was. Both class sets are written out in full because
+              a class only exists if Tailwind has seen the literal string.
+            */}
             {subcategories.map((sub) => (
               <Link
                 key={sub.id}
                 href={`/categories/${sub.slug}`}
-                className="group flex flex-col overflow-hidden rounded-lg border border-zinc-200 hover:border-zinc-400 hover:shadow-sm transition-all"
+                className={
+                  largeTiles
+                    ? "group flex flex-col overflow-hidden rounded-lg border border-zinc-200 hover:border-zinc-400 hover:shadow-sm transition-all"
+                    : "group flex items-center gap-3 rounded-lg border border-zinc-200 p-3 hover:border-zinc-400 hover:shadow-sm transition-all"
+                }
               >
                 {sub.image_url && isAllowedImageUrl(sub.image_url) ? (
-                  <div className="relative aspect-square w-full bg-white">
+                  <div className={largeTiles ? "relative aspect-square w-full bg-white" : "relative h-12 w-12 flex-shrink-0"}>
                     <Image
                       src={sub.image_url}
                       alt={sub.name}
                       fill
-                      sizes="(min-width: 1280px) 240px, (min-width: 1024px) 23vw, (min-width: 640px) 31vw, 48vw"
-                      className="object-contain p-3"
+                      sizes={largeTiles ? LARGE_TILE_IMAGE_SIZES : "48px"}
+                      className={largeTiles ? "object-contain p-3" : "rounded object-cover"}
                     />
                   </div>
                 ) : (
-                  <div className="flex aspect-square w-full items-center justify-center bg-zinc-100">
-                    <Package className="h-8 w-8 text-zinc-300" />
+                  <div
+                    className={
+                      largeTiles
+                        ? "flex aspect-square w-full items-center justify-center bg-zinc-100"
+                        : "h-12 w-12 rounded bg-zinc-100 flex items-center justify-center flex-shrink-0"
+                    }
+                  >
+                    <Package className={largeTiles ? "h-8 w-8 text-zinc-300" : "h-5 w-5 text-zinc-300"} />
                   </div>
                 )}
-                <span className="border-t border-zinc-200 px-3 py-2.5 text-center text-sm font-medium text-zinc-700 group-hover:text-zinc-900 line-clamp-2">
+                <span
+                  className={
+                    largeTiles
+                      ? "border-t border-zinc-200 px-3 py-2.5 text-center text-sm font-medium text-zinc-700 group-hover:text-zinc-900 line-clamp-2"
+                      : "text-sm font-medium text-zinc-700 group-hover:text-zinc-900 line-clamp-2"
+                  }
+                >
                   {sub.name}
                 </span>
               </Link>

@@ -5,6 +5,7 @@ import {
   enlargeSubcategoryTiles,
   findSmallSubcategoryThumbs,
   LARGE_TILE_IMAGE_SIZES,
+  LARGE_TILE_MAX_SUBCATEGORIES,
 } from "./subcategory-tile-size";
 
 const IK = 1;
@@ -333,4 +334,54 @@ test("a 48px box OUTSIDE the strip is not reported", () => {
   const grid = byId(tree, "div-seed-18") as Rec;
   grid.classes = ["h-12", "w-12"];
   assert.deepEqual(findSmallSubcategoryThumbs(tree), []);
+});
+
+// ---------------------------------------------------------------------------
+// The cap. Steve's screenshot is a six-tile strip; Industry Kitchens also has
+// categories whose children are a DIRECTORY (`/categories/brands`: 395), where
+// the big tile grows the page from 19,908px to 35,815px and buries the listing.
+// ---------------------------------------------------------------------------
+
+test("a directory-sized strip keeps the tile it has, and says so", () => {
+  const result = enlargeSubcategoryTiles(ikCategoryTree(), IK, { subcategoryCount: 395 });
+  assert.equal(result.applied, false, "the big tile must not apply to a 395-child directory");
+  assert.deepEqual(result.rewritten, []);
+  assert.equal(JSON.stringify(result.tree), JSON.stringify(ikCategoryTree()));
+});
+
+test("the cap is inclusive, and one over it is out", () => {
+  const at = enlargeSubcategoryTiles(ikCategoryTree(), IK, {
+    subcategoryCount: LARGE_TILE_MAX_SUBCATEGORIES,
+  });
+  assert.equal(at.applied, true);
+  assert.ok(at.rewritten.includes("tile"));
+
+  const over = enlargeSubcategoryTiles(ikCategoryTree(), IK, {
+    subcategoryCount: LARGE_TILE_MAX_SUBCATEGORIES + 1,
+  });
+  assert.equal(over.applied, false);
+  assert.deepEqual(over.rewritten, []);
+});
+
+test("an unknown count still gets the card's tile", () => {
+  // A caller that cannot count must not silently lose the fix.
+  const result = enlargeSubcategoryTiles(ikCategoryTree(), IK, {});
+  assert.equal(result.applied, true);
+  assert.ok(result.rewritten.includes("tile"));
+});
+
+test("`applied` is false for the wrong channel, so the caller's warning stays quiet", () => {
+  const cd = enlargeSubcategoryTiles(ikCategoryTree(), CD, { subcategoryCount: 6 });
+  assert.equal(cd.applied, false);
+  // And this is the case the post-condition would otherwise shout about on
+  // every Chefs Depot category render: a 48px thumb the pass left alone ON PURPOSE.
+  assert.ok(findSmallSubcategoryThumbs(cd.tree).length > 0);
+});
+
+test("the cap is overridable, so the threshold lives in one place", () => {
+  const result = enlargeSubcategoryTiles(ikCategoryTree(), IK, {
+    subcategoryCount: 30,
+    maxSubcategories: 40,
+  });
+  assert.equal(result.applied, true);
 });
