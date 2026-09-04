@@ -36,6 +36,8 @@ import {
 } from "@/lib/checkout/card-entry";
 import { Price } from "@/components/ui/Price";
 import { backorderMessage } from "@keenan/services/backorder";
+// The client-safe SUBPATH again, never the barrel — see the note above.
+import { readStoredAddons, describeAddonSelection } from "@keenan/services/product-addons";
 import { gstSplit } from "@keenan/services/calc";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
 import { FinanceApplicationPanel } from "@/components/checkout/FinanceApplicationPanel";
@@ -89,6 +91,14 @@ type CartItem = {
   /** Back-order facts carried by readCart (card 7vu2iEEZ). See CartItemsList for why. */
   available_units?: number | null;
   backorder_policy?: string | null;
+  /**
+   * What the shopper configured on the product page, as stored on
+   * `cart_items.modifier_selections` (cards 0CDcCYmO + kyMjCmAw). Printed on the
+   * summary row because two lines of the SAME product can now differ only by what
+   * was typed into them — without it, the last screen before paying shows two
+   * identical rows and the shopper cannot check their own order.
+   */
+  modifier_selections?: unknown;
 };
 
 type Country = {
@@ -1469,6 +1479,12 @@ export function CheckoutForm({
                   },
                   item.quantity
                 );
+                // What was ticked or typed on this line, in the shopper's own words.
+                // NO MONEY in it — `describeAddonSelection` guarantees that, and it
+                // matters here because the row prints a GST-aware figure beside it.
+                const configuration = describeAddonSelection(
+                  readStoredAddons(item.modifier_selections)
+                );
                 return (
                   <div key={i} className="py-2 text-sm">
                     <div className="flex justify-between">
@@ -1477,6 +1493,11 @@ export function CheckoutForm({
                       </span>
                       <Price amount={price * item.quantity} className="font-medium" />
                     </div>
+                    {configuration && (
+                      <p className="mt-0.5 whitespace-pre-line text-xs text-steel-500">
+                        {configuration}
+                      </p>
+                    )}
                     {backorderNote && (
                       <p className="mt-1.5 rounded border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs text-sky-800">
                         {backorderNote}

@@ -209,9 +209,9 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
           optionValues: product.optionValues ?? [],
           variantOptionMappings: product.variantOptionMappings ?? [],
           bulkPricing: suppressCatalogPricing ? [] : (product.bulkPricing ?? []),
-    // Authored customisation groups — priced extras and free-text questions
-    // (cards 0CDcCYmO + kyMjCmAw). Null for every product that carries none.
-    addons: readProductAddons(product.metafields),
+          // Authored customisation groups — priced extras and free-text questions
+          // (cards 0CDcCYmO + kyMjCmAw). Null for every product that carries none.
+          addons: readProductAddons(product.metafields),
         }}
         memberPrice={memberPrice}
         memberPriceMap={memberPriceMap}

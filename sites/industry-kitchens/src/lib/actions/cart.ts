@@ -7,7 +7,6 @@ import {
   accountLineKey,
   readProductAddons,
   resolveAddonSelection,
-  unansweredAddonGroups,
   addonSelectionKey,
   readStoredAddons,
   withAddonSurcharge,
@@ -24,6 +23,7 @@ import { backorderFactsForProducts, backorderFactsForProduct } from "@/lib/cart/
 import { availableUnits, canPurchaseQuantity, resolveBackorderPolicy } from "@keenan/services/backorder";
 import { getSession } from "@/lib/auth";
 import { pickBestBulkUnit, layerCartPrice } from "@/lib/pricing/cart-pricing";
+import { customisationRefusal } from "@/lib/product-customisation";
 
 async function getOrCreateCart() {
   const uuid = await getCartUuid();
@@ -185,27 +185,35 @@ export async function addToCart(
   // even by poking the action directly (the listing/PDP guards are UX; THIS is the enforcement).
   if (!(await isProductVisibleToViewer(productId))) return { error: RESTRICTED_PRODUCT_ERROR };
 
-  const cart = await getOrCreateCart();
-
   // ── Customisation the shopper configured on the page ────────────────────────
   // The same re-resolution the quote does. A `text` answer resolves at $0.00, so a
   // typed instruction changes nothing about the money; a PRICED extra does, and
   // `withAddonSurcharge` below is what keeps the till agreeing with the page (the
   // provider's `displayPrice` already includes the extras).
-  let resolvedAddons: ResolvedAddon[] = [];
-  if (addons !== undefined) {
-    const productRow = (await productService.getById(productId)) as { metafields?: unknown } | null;
-    if (!productRow) return { error: "Product not found" };
-    const productAddons = readProductAddons(productRow.metafields);
-    const unanswered = unansweredAddonGroups(productAddons, addons);
-    // Worded, never silent: this page carries no wording that could explain a control
-    // that quietly did nothing (`sf-product-page`, CXnP1lrL + 7vu2iEEZ).
-    if (unanswered.length > 0) {
-      return { error: `Please fill in ${unanswered.join(" and ")} before adding this to your cart.` };
-    }
-    resolvedAddons = resolveAddonSelection(productAddons, addons);
-  }
+  const productRow = (await productService.getById(productId)) as { metafields?: unknown } | null;
+  if (!productRow) return { error: "Product not found" };
+  const productAddons = readProductAddons(productRow.metafields);
+
+  // THE REQUIRED-ANSWER CHECK RUNS WHETHER OR NOT A PANEL WAS OFFERED — the same
+  // rule, and the same reason, as the matching block in `addToQuote`. A listing
+  // tile, a related-products rail and the authored `product-card` master call this
+  // with no `addons` argument, and 7vu2iEEZ's rule for those surfaces is that the
+  // tile keeps its button and the CART is what refuses. Skipping the check when the
+  // argument is absent turned that refusal into a silent success.
+  // Worded, never silent: this page carries no wording that could explain a control
+  // that quietly did nothing (`sf-product-page`, CXnP1lrL + 7vu2iEEZ).
+  const customisationError = customisationRefusal(productAddons, addons, "cart");
+  if (customisationError) return { error: customisationError };
+
+  // `undefined` means "this renderer offered no panel": nothing is resolved, so the
+  // line keys as unconfigured and behaves exactly as it did before this card.
+  const resolvedAddons: ResolvedAddon[] =
+    addons === undefined ? [] : resolveAddonSelection(productAddons, addons);
   const wantedConfiguration = addonSelectionKey(resolvedAddons);
+
+  // The cart row is only created once the add can actually succeed: a refusal above
+  // must not leave an empty cart behind for a shopper who was turned away.
+  const cart = await getOrCreateCart();
 
   // Is this product/variant already in the cart AS THIS CONFIGURATION? Two benches
   // with different measurements are two lines, not one line of quantity 2 carrying
