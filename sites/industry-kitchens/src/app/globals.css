@@ -299,3 +299,35 @@ html, body {
    no bracket and never matched; the routes that render this copy without a node
    tree set `max-w-none` themselves. */
 [data-kg-nodes] [class*="max-w-[70ch]"]:has(:is(.kg-category-copy, .kg-page-copy)) { max-width: none; }
+
+/* ── The promotional tile tag (card FNYihLHk) ────────────────────────────────
+   The pill a listing tile draws under the brand, name and price when this site
+   names a tag in `src/lib/promo-tag.ts`. It is DECLARED here and unused while
+   that constant is null, on purpose: the same wording is inserted into the
+   authored `product-card` master by `@/lib/store`, and a class that appears in
+   a stored tree may only be one the deployed CSS already carries (the rule the
+   brand-intro paragraphs are bound by). Declaring it means typing a wording in
+   that one file is the whole opt-in, rather than an opt-in plus a stylesheet
+   nobody remembers.
+
+   Plain properties, not `@apply`, and NEUTRAL: this stylesheet carries no
+   design-system badge family and no savings colour of its own, so the default
+   is a legible grey pill a site re-colours by redefining `.badge-promo` (Chefs
+   Depot does exactly that, in its own gold). In the COMPONENTS layer so a
+   utility an author puts on the element still wins — the mistake `.content-prose`
+   made on Chefs Depot. */
+@layer components {
+  .badge-promo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 5px 10px;
+    border-radius: 0.125rem;
+    font-size: 12.5px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.01em;
+    background-color: #f4f4f5;
+    color: #18181b;
+  }
+}

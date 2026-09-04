@@ -1,4 +1,7 @@
 import { unstable_cache } from "next/cache";
+import type { NodeTree } from "@keenan/services/builder";
+import { withPromoTagInComponents } from "@/builder/promo-tag-node";
+import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
 import { initCommerceDb, createChannelStore, getCommerceClient } from "@keenan/services";
 import {
   channelService,
@@ -115,13 +118,45 @@ export const {
   getCmsCategoryPage,
   getCmsTemplate,
   getNamedStyles,
-  getComponents,
-  getDraftComponents,
   getDesignTokens,
   getDraftDesignTokens,
   getCheckoutSettings,
   calculateShipping,
 } = _store;
+
+// ============================================================================
+// Component masters, with the promotional tile tag placed at read time.
+//
+// Card FNYihLHk: a storefront that names a tile tag in `lib/promo-tag.ts` gets
+// it on EVERY tile — the React `ProductCard.tsx` draws the tiles this site
+// renders in React, and every AUTHORED page (category, brand, home, product's
+// "You may also like" rail, `/pages/[slug]`) repeats the stored `product-card`
+// master instead.
+//
+// It is placed HERE, once, and not in each node branch that loads components,
+// for the reason card tSrCcnvx placed the brand-logo fallback here: a branch
+// that forgot the call would carry the tag on one of our own screens and not on
+// the next, for the same product. Nothing is written to the stored tree — see
+// `builder/promo-tag-node.ts`.
+//
+// `template/` holds null in `lib/promo-tag.ts`, so this is a no-op here and
+// returns the very same map. Typing a wording in that one file is the whole
+// opt-in for a site forked from this template.
+// ============================================================================
+
+type ComponentMap = Awaited<ReturnType<typeof _store.getComponents>>;
+
+const withPromoTag = (components: ComponentMap): ComponentMap =>
+  withPromoTagInComponents(
+    components as Record<string, NodeTree>,
+    PROMO_TAG_LABEL
+  ) as ComponentMap;
+
+export const getComponents = async (): Promise<ComponentMap> =>
+  withPromoTag(await _store.getComponents());
+
+export const getDraftComponents = async (): Promise<ComponentMap> =>
+  withPromoTag((await _store.getDraftComponents()) as ComponentMap);
 
 // ============================================================================
 // Channel settings (raw accessor)
