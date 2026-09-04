@@ -9,6 +9,7 @@ import {
   financeApplicationFields,
 } from "@keenan/services/finance";
 import { FinanceApplicationForm } from "@/components/finance/FinanceApplicationForm";
+import { FinanceApplyLogo } from "@/components/finance/FinanceApplyLogo";
 import { ensureFinanceApplyPage, FINANCE_APPLY_SLUGS } from "@keenan/services/services";
 import { CHANNEL_ID } from "@/lib/channel";
 import { getCmsPage } from "@/lib/store";
@@ -71,6 +72,10 @@ export default async function FinanceApplyPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
       <header>
+        {/* SilverChef's own mark, from the file Steve attached to card
+            XlDVUsuC — never Skope's. The published CMS page gets the same
+            masthead at render time (`lib/finance/finance-apply-logo.ts`). */}
+        <FinanceApplyLogo funder="silverchef" />
         <Link
           href="/silverchef"
           className="text-sm text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
