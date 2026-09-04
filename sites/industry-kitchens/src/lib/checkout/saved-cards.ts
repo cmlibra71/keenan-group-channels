@@ -28,6 +28,11 @@
 // widens what a shopper may pay with; `placeOrder` re-checks the method first and
 // the card second.
 //
+// AND IT IS NOT A WAY PAST THE TWO NO-PAYMENT SHAPES EITHER (card NmAfwrdE). A
+// held specialised bulky delivery and a ZERO-VALUE cart both carry an EMPTY
+// payment method, so neither is offered a card on file and neither is offered
+// the save tick — see `takesNoPayment` below.
+//
 // Pure. No imports beyond the shared card shape, no I/O.
 // ============================================================================
 
@@ -56,34 +61,79 @@ export function chosenSavedCard(
 }
 
 /**
+ * THE TWO SHAPES THAT TAKE NO PAYMENT METHOD AT ALL (card NmAfwrdE).
+ *
+ * `placeOrder` sets `effectivePaymentMethod` to `""` for a held specialised
+ * bulky delivery and for a ZERO-VALUE cart, and that empty string is what the
+ * order row, the metafields, the card idempotency lookup, the Stripe branch,
+ * both emails and the confirmation redirect all read. The sf-checkout register
+ * states the consequence as a rule binding every control on this screen:
+ * **anything that gates on the payment method must exclude these two cases as
+ * well as the specialised one.** `cardEntryBlocksSubmit` next door was the first
+ * to obey it; a saved-card offer is the same kind of gate and obeys it here.
+ *
+ * Getting it wrong is not a cosmetic slip on Chefs Depot: Credit/Debit Card is
+ * the DEFAULT method there and ~1,968 visible products carry no price, so a $0
+ * cart is easy to land in. Without this the returning shopper would be shown
+ * "Pay with Mastercard ••••5556", pre-ticked, with the card box hidden, plus an
+ * offer to save the card — on an order where nothing is charged, nothing is
+ * saved and no payment method is recorded. A promise the server silently does
+ * not keep, on a money surface.
+ *
+ * `!(x > 0)` on purpose, exactly as `cardEntryBlocksSubmit` writes it: a NaN
+ * total is not something to charge for either.
+ */
+function takesNoPayment(input: { heldForSpecialised: boolean; payableTotalIncTax: number }): boolean {
+  return input.heldForSpecialised || !(input.payableTotalIncTax > 0);
+}
+
+/**
  * Is this shopper allowed to be OFFERED saved cards at all?
  *
- * Signed in (a card belongs to a person), paying by card, and the storefront can
- * actually take one. The last is not belt and braces: when a channel has no
- * usable Stripe credentials the page drops the card method entirely (card
- * OHDx84DK), and drawing a card picker under a method that is not there would be
- * a control with nothing behind it.
+ * Signed in (a card belongs to a person), paying by card, the storefront can
+ * actually take one, and there is genuinely something to pay. The third is not
+ * belt and braces: when a channel has no usable Stripe credentials the page
+ * drops the card method entirely (card OHDx84DK), and drawing a card picker
+ * under a method that is not there would be a control with nothing behind it.
+ * The fourth is the NmAfwrdE rule above.
  */
 export function mayOfferSavedCards(input: {
   signedIn: boolean;
   paymentMethod: string;
   cardPaymentAvailable: boolean;
+  /** Specialised bulky delivery: the order is held and no card is taken. */
+  heldForSpecialised: boolean;
+  /**
+   * What the shopper is being asked to pay, GST-INCLUSIVE — the same figure the
+   * summary's Total row shows, and the same basis as `placeOrder`'s
+   * `nothingToPay`. Required, not optional: a silent default here is a card
+   * picker offered on an order that takes no card.
+   */
+  payableTotalIncTax: number;
 }): boolean {
+  if (takesNoPayment(input)) return false;
   return input.signedIn && input.paymentMethod === "stripe" && input.cardPaymentAvailable;
 }
 
 /**
  * May we offer to KEEP the card the shopper is about to type?
  *
- * Only for a signed-in shopper typing a NEW card. Offering it to a guest is a
- * promise we cannot honour — there is no person to save it against — and
- * offering it beside a card already on file is meaningless.
+ * Only for a signed-in shopper typing a NEW card on an order that actually takes
+ * one. Offering it to a guest is a promise we cannot honour — there is no person
+ * to save it against — offering it beside a card already on file is meaningless,
+ * and offering it on a $0 or held order is a promise nothing keeps: no intent is
+ * created, so `setup_future_usage` never runs and no card is ever attached.
  */
 export function mayOfferToSaveCard(input: {
   signedIn: boolean;
   paymentMethod: string;
   usingSavedCard: boolean;
+  /** Specialised bulky delivery: the order is held and no card is taken. */
+  heldForSpecialised: boolean;
+  /** Inc-GST total, as above. Required for the same reason. */
+  payableTotalIncTax: number;
 }): boolean {
+  if (takesNoPayment(input)) return false;
   return input.signedIn && input.paymentMethod === "stripe" && !input.usingSavedCard;
 }
 

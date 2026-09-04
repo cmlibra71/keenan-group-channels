@@ -6,7 +6,12 @@ import { getSession } from "@/lib/auth";
 import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
 import { getContactPermissions } from "@/lib/role-permissions";
 import { mayFileAddressInBook } from "@/lib/account/address-authority";
-import { summariseLinesFreight, listSavedCardsForContact, type SavedCard } from "@keenan/services";
+import {
+  summariseLinesFreight,
+  listSavedCardsForContact,
+  RENDER_PATH_TIMEOUT_MS,
+  type SavedCard,
+} from "@keenan/services";
 import { gstSplit } from "@keenan/services/calc";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
 import { canTakeCardPayment } from "@/lib/payments/stripe-gateways";
@@ -291,12 +296,21 @@ export default async function CheckoutPage() {
   //
   // `available: false` means Stripe could not be reached, NOT "no cards". The
   // form says so and still shows the card box: this never blocks a payment.
+  //
+  // ON A SHORT LEASH, because this is the first third-party call on the checkout
+  // render path and the register's discipline for that is explicit (checkout is
+  // the critical path; "an account page must not wait on Stripe", card TdTuvgQq).
+  // `RENDER_PATH_TIMEOUT_MS` is 4s with retries OFF, so a degraded Stripe costs a
+  // signed-in card shopper their picker and nothing else — and costs a bank
+  // transfer, net terms, SilverChef or Finance shopper nothing at all, because
+  // the read is skipped entirely unless the card method survived to them.
   let savedCards: SavedCard[] = [];
   let savedCardsUnavailable = false;
   if (session && offeredPaymentMethods.some((m) => m.id === "stripe")) {
     const result = await listSavedCardsForContact({
       channelId: CHANNEL_ID,
       contactId: session.contactId,
+      timeoutMs: RENDER_PATH_TIMEOUT_MS,
       // The ephemeral test checkout session has to reach the cards too, or a test
       // shopper is offered a live account's cards that this browser's key cannot
       // charge.

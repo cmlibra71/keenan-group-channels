@@ -44,7 +44,13 @@ test("an expired card falls back to the card box rather than refusing the order"
 });
 
 test("only a signed-in card payer is offered saved cards", () => {
-  const base = { signedIn: true, paymentMethod: "stripe", cardPaymentAvailable: true };
+  const base = {
+    signedIn: true,
+    paymentMethod: "stripe",
+    cardPaymentAvailable: true,
+    heldForSpecialised: false,
+    payableTotalIncTax: 129.95,
+  };
   assert.equal(mayOfferSavedCards(base), true);
   // A guest has no person record to hang a card on (card LiuLvc5b is the sibling).
   assert.equal(mayOfferSavedCards({ ...base, signedIn: false }), false);
@@ -55,11 +61,89 @@ test("only a signed-in card payer is offered saved cards", () => {
 });
 
 test("the offer to keep a card appears only where there is a person and a new card", () => {
-  const base = { signedIn: true, paymentMethod: "stripe", usingSavedCard: false };
+  const base = {
+    signedIn: true,
+    paymentMethod: "stripe",
+    usingSavedCard: false,
+    heldForSpecialised: false,
+    payableTotalIncTax: 129.95,
+  };
   assert.equal(mayOfferToSaveCard(base), true);
   assert.equal(mayOfferToSaveCard({ ...base, signedIn: false }), false);
   assert.equal(mayOfferToSaveCard({ ...base, usingSavedCard: true }), false);
   assert.equal(mayOfferToSaveCard({ ...base, paymentMethod: "net_terms" }), false);
+});
+
+// ---------------------------------------------------------------------------
+// The two shapes that take NO payment method at all (card NmAfwrdE, sf-checkout
+// register). Card is the DEFAULT method on Chefs Depot and ~1,968 visible
+// products carry no price, so a $0 cart on the card method is a live shape —
+// and `placeOrder` sets `effectivePaymentMethod` to `""` for it. A picker there
+// would say "Pay with Mastercard ••••5556" with the card box hidden, and a save
+// tick would promise to keep a card no intent is ever created for.
+// ---------------------------------------------------------------------------
+
+test("a ZERO-VALUE cart is offered neither a card on file nor the save tick", () => {
+  const offer = {
+    signedIn: true,
+    paymentMethod: "stripe",
+    cardPaymentAvailable: true,
+    heldForSpecialised: false,
+  };
+  const save = { signedIn: true, paymentMethod: "stripe", usingSavedCard: false, heldForSpecialised: false };
+  assert.equal(mayOfferSavedCards({ ...offer, payableTotalIncTax: 0 }), false);
+  assert.equal(mayOfferToSaveCard({ ...save, payableTotalIncTax: 0 }), false);
+  // A negative total is the same nothing-to-charge shape.
+  assert.equal(mayOfferSavedCards({ ...offer, payableTotalIncTax: -12.5 }), false);
+  assert.equal(mayOfferToSaveCard({ ...save, payableTotalIncTax: -12.5 }), false);
+});
+
+test("an unusable total is treated as nothing to charge, never as a reason to offer a card", () => {
+  // `!(x > 0)`, the same NaN treatment `cardEntryBlocksSubmit` uses next door: a
+  // total we cannot read must never turn into a control the server ignores.
+  const offer = {
+    signedIn: true,
+    paymentMethod: "stripe",
+    cardPaymentAvailable: true,
+    heldForSpecialised: false,
+    payableTotalIncTax: Number.NaN,
+  };
+  assert.equal(mayOfferSavedCards(offer), false);
+  assert.equal(
+    mayOfferToSaveCard({
+      signedIn: true,
+      paymentMethod: "stripe",
+      usingSavedCard: false,
+      heldForSpecialised: false,
+      payableTotalIncTax: Number.NaN,
+    }),
+    false
+  );
+});
+
+test("a HELD specialised bulky order is offered neither, however big the total", () => {
+  // Quoted and paid later: no card is taken now, so neither control has anything
+  // behind it (card NmAfwrdE).
+  assert.equal(
+    mayOfferSavedCards({
+      signedIn: true,
+      paymentMethod: "stripe",
+      cardPaymentAvailable: true,
+      heldForSpecialised: true,
+      payableTotalIncTax: 4200,
+    }),
+    false
+  );
+  assert.equal(
+    mayOfferToSaveCard({
+      signedIn: true,
+      paymentMethod: "stripe",
+      usingSavedCard: false,
+      heldForSpecialised: true,
+      payableTotalIncTax: 4200,
+    }),
+    false
+  );
 });
 
 test("a card is pre-ticked only where the choice is unambiguous", () => {

@@ -738,10 +738,16 @@ export function CheckoutForm({
   // A returning customer's own card (card JiaDTjr1). All three decisions are pure
   // and unit-pinned in `lib/checkout/saved-cards.ts`, and `placeOrder` reaches the
   // same verdict about the id this form posts — show equals accept.
+  // Both offers carry the SAME two no-payment exclusions the submit guard below
+  // does — a held specialised delivery and a $0 cart take no payment method at
+  // all (card NmAfwrdE, sf-checkout register), so there is nothing to pay with a
+  // card on file and nothing for a save tick to keep.
   const offerSavedCards = mayOfferSavedCards({
     signedIn: isSignedIn,
     paymentMethod: selectedPaymentMethod,
     cardPaymentAvailable: Boolean(stripePublishableKey),
+    heldForSpecialised,
+    payableTotalIncTax: summaryTotal,
   });
   const activeSavedCard = offerSavedCards ? chosenSavedCard(savedCards, savedCardChoice) : null;
   const usingSavedCard = !!activeSavedCard;
@@ -751,6 +757,8 @@ export function CheckoutForm({
       signedIn: isSignedIn,
       paymentMethod: selectedPaymentMethod,
       usingSavedCard,
+      heldForSpecialised,
+      payableTotalIncTax: summaryTotal,
     });
 
   const cardSubmitBlocked = cardEntryBlocksSubmit({
