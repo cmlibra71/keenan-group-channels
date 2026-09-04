@@ -21,7 +21,7 @@ import { useCartQuoteCounts, useHeaderPanels } from "@/lib/cart-quote-counts";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { BuilderTree, type NativeComponents } from "@keenan/services/builder-react";
 import { BuilderActionsProvider } from "@keenan/services/builder-react";
-import { useFormHandlers } from "./use-form-handlers";
+import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 import { productNatives } from "./product-natives";
 
 // ============================================================================
@@ -150,6 +150,10 @@ function ActionsBridge({
   // goBack drives the exploded back-to-products master's click Action — mirrors
   // the old BackButton native (history-back with a /products fallback).
   const formHandlers = useFormHandlers();
+  // A form success panel shows its form's authored confirmation message when
+  // one is set (card XBOxpQmd). Identity-returning when the page carries no
+  // form, which is almost every page.
+  const confirmed = useFormConfirmations(tree, components);
   const actionHandlers = React.useMemo(
     () => ({
       ...handlers,
@@ -187,12 +191,12 @@ function ActionsBridge({
   return (
     <BuilderActionsProvider handlers={actionHandlers} navigate={(to) => router.push(to)}>
       <BuilderTree
-        tree={tree}
+        tree={confirmed.tree}
         payload={livePayload}
         namedStyles={namedStyles}
         jsFunctions={jsFunctions}
         callResults={callResults}
-        components={components}
+        components={confirmed.components}
         nativeComponents={nativeComponents}
         linkComponent={Link as unknown as React.ComponentType<Record<string, unknown>>}
         imageComponent={BuilderImage}

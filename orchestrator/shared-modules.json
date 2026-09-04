@@ -154,6 +154,8 @@
     "lib/finance/finance-rates.ts",
     "lib/finance/product-finance.test.ts",
     "lib/finance/product-finance.ts",
+    "lib/forms/post-submit.test.ts",
+    "lib/forms/post-submit.ts",
     "lib/google-claims.test.ts",
     "lib/google-claims.ts",
     "lib/gst-cookie.test.ts",
