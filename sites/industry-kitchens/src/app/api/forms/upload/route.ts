@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cmsFormService, cmsFormSubmissionFileService } from "@keenan/services/services";
 import { declaredUploadType, isAcceptableUpload } from "@keenan/services";
+import { checkUploadAllowed } from "@keenan/services/upload-guard";
+import { INFECTED_REFUSAL, describeScan, scanUpload } from "@keenan/services/upload-scan";
 import { CHANNEL_ID } from "@/lib/channel";
 import { slidingWindowAllow } from "@/lib/rate-limit";
 import { formUploadKey, putFormUpload, sizeLabel } from "@/lib/form-uploads";
@@ -91,8 +93,37 @@ export async function POST(req: NextRequest) {
   // altogether for some legitimate files (Chrome on Windows sends no type at
   // all for .heic), so fall back to the filename — the bytes still decide.
   const declaredType = declaredUploadType(file.name, file.type);
+
+  // The shared allow-list (card UFprd4ED) — the same one the portal's staff
+  // uploads check, so "what may be uploaded" has ONE answer across the business.
+  // It also refuses by EXTENSION, which the byte check below cannot: a file
+  // called `plan.exe` sent as application/pdf carries real PDF bytes and passes
+  // a magic-byte test.
+  const allowed = checkUploadAllowed({
+    fileName: file.name,
+    declaredType,
+    size: bytes.byteLength,
+    maxBytes,
+    policy: "public-form",
+  });
+  if (!allowed.ok) return fail(415, allowed.reason);
+
   const verdict = isAcceptableUpload(declaredType, new Uint8Array(bytes.subarray(0, 32)));
   if (!verdict.ok) return fail(415, verdict.reason ?? "That file type isn't accepted.");
+
+  // Virus scan, BEFORE the bytes are stored — this is the one upload path in the
+  // business that holds the file itself, so it is the one that can scan first.
+  // Shipped OFF (UPLOAD_VIRUS_SCAN unset), and it FAILS OPEN: a scanner that is
+  // down must never be the reason a customer cannot send us an enquiry, so an
+  // unreachable clamd logs a line and the file goes through.
+  const scan = await scanUpload(bytes);
+  if (scan.status === "infected") {
+    console.warn("[forms/upload] refused:", describeScan(scan), file.name);
+    return fail(415, INFECTED_REFUSAL);
+  }
+  if (scan.status === "unavailable") {
+    console.warn("[forms/upload] stored unscanned:", describeScan(scan), file.name);
+  }
 
   const key = formUploadKey(CHANNEL_ID, uploadToken, file.name);
   try {
