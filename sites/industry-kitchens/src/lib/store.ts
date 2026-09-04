@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import type { MegaNavItem } from "./mega-menu";
 import { initCommerceDb, createChannelStore, getCommerceClient } from "@keenan/services";
 import {
   channelService,
@@ -339,6 +340,50 @@ export const getHeaderNav = unstable_cache(
   [`header-nav-${CHANNEL_ID}`],
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
 );
+
+/** The department bar's own items (Navigation editor → `nav_structure.header`):
+ *  the ORDER and the EXTRAS. Departments the editor does not mention are added
+ *  automatically by `resolveNavItems` (cards 9wau4Tx9, mOTgYEvX). Distinct from
+ *  `getHeaderNav` above, which is the older FLAT `{label, href}` projection the
+ *  utility strip still reads. */
+export const getMegaMenuNav = unstable_cache(
+  async (): Promise<MegaNavItem[]> => {
+    const nav = await getJsonSetting<{ header?: unknown } | null>("nav_structure", null);
+    return normalizeNavItems(nav?.header);
+  },
+  [`mega-menu-nav-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
+/** Departments switched off in the portal (Storefront > Navigation > Mega menu).
+ *  Kept OUT of getMegaMenu: that department tree also feeds the homepage
+ *  category blocks and /categories, and this switch is about the MENU only. */
+export const getMegaMenuHidden = unstable_cache(
+  async (): Promise<number[]> => {
+    const value = await getJsonSetting<unknown>("mega_menu_hidden_categories", []);
+    return Array.isArray(value) ? value.filter((v): v is number => typeof v === "number") : [];
+  },
+  [`mega-menu-hidden-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
+/** Saved items carry a type; anything hand-written or older is read as a link
+ *  so one odd row cannot take the header down. */
+function normalizeNavItems(value: unknown): MegaNavItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((i): i is Record<string, unknown> => !!i && typeof i === "object")
+    .map((i) => ({
+      type: (i.type as MegaNavItem["type"]) ?? "link",
+      label: typeof i.label === "string" ? i.label : "",
+      url: typeof i.url === "string" ? i.url : undefined,
+      categoryId: typeof i.categoryId === "number" ? i.categoryId : undefined,
+      pageSlug: typeof i.pageSlug === "string" ? i.pageSlug : undefined,
+      newTab: i.newTab === true,
+      children: normalizeNavItems(i.children),
+    }))
+    .filter((i) => i.label);
+}
 
 export const getHeaderConfig = unstable_cache(
   async () => getJsonSetting<HeaderConfig>("header", {}),
