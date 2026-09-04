@@ -363,7 +363,7 @@ export default async function CategoryPage({
       {subcategories.length > 0 && (
         <div className="mb-10">
           <h2 className="text-lg font-semibold text-zinc-900 mb-4">Subcategories</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {/*
               `image_url`, not `imageUrl`: the service snake-cases every key on
               the way out (see CategoryChildSlim). The row is left un-annotated
@@ -376,28 +376,42 @@ export default async function CategoryPage({
               a 403 draws the browser's broken-image glyph, which is the tile
               Steve was explicitly promised we would not ship (gRLRF8yu).
             */}
+            {/*
+              Card MN702iBv (Steve, 2026-08-24, "IK - Increase size of images"):
+              the picture, not the white space, carries the tile — a full-width
+              square above the name rather than a 48px thumbnail beside it.
+              `object-contain`, not `cover`: these are cut-out product photos, and
+              at this size cropping would slice the top off a tall cabinet.
+
+              THESE CLASS NAMES ARE ALSO DATA. The live Industry Kitchens
+              category page renders from the authored Site Builder tree, and
+              `builder/subcategory-tile-size.ts` writes exactly these classes onto
+              it at render time. A class only exists if the deployed stylesheet
+              carries it, and this file is what makes Tailwind generate them —
+              change one and change both.
+            */}
             {subcategories.map((sub) => (
               <Link
                 key={sub.id}
                 href={`/categories/${sub.slug}`}
-                className="group flex items-center gap-3 rounded-lg border border-zinc-200 p-3 hover:border-zinc-400 hover:shadow-sm transition-all"
+                className="group flex flex-col overflow-hidden rounded-lg border border-zinc-200 hover:border-zinc-400 hover:shadow-sm transition-all"
               >
                 {sub.image_url && isAllowedImageUrl(sub.image_url) ? (
-                  <div className="relative h-12 w-12 flex-shrink-0">
+                  <div className="relative aspect-square w-full bg-white">
                     <Image
                       src={sub.image_url}
                       alt={sub.name}
                       fill
-                      sizes="48px"
-                      className="rounded object-cover"
+                      sizes="(min-width: 1280px) 240px, (min-width: 1024px) 23vw, (min-width: 640px) 31vw, 48vw"
+                      className="object-contain p-3"
                     />
                   </div>
                 ) : (
-                  <div className="h-12 w-12 rounded bg-zinc-100 flex items-center justify-center flex-shrink-0">
-                    <Package className="h-5 w-5 text-zinc-300" />
+                  <div className="flex aspect-square w-full items-center justify-center bg-zinc-100">
+                    <Package className="h-8 w-8 text-zinc-300" />
                   </div>
                 )}
-                <span className="text-sm font-medium text-zinc-700 group-hover:text-zinc-900 line-clamp-2">
+                <span className="border-t border-zinc-200 px-3 py-2.5 text-center text-sm font-medium text-zinc-700 group-hover:text-zinc-900 line-clamp-2">
                   {sub.name}
                 </span>
               </Link>
