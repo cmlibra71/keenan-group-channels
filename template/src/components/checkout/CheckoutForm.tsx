@@ -55,6 +55,7 @@ import { ga4AddShippingInfo, ga4AddPaymentInfo, rowToGa4Item } from "@/component
 import { BulkyDeliveryChoice } from "@/components/checkout/BulkyDeliveryChoice";
 import { holdsPayment, type DeliveryService } from "@/lib/checkout/bulky-delivery";
 import { backorderMessage } from "@keenan/services/backorder";
+import { MembershipJoinPanel } from "@/components/checkout/MembershipJoinPanel";
 
 declare global {
   interface Window {
@@ -152,11 +153,26 @@ export function CheckoutForm({
   finance = null,
   savedCards = [],
   savedCardsUnavailable = false,
+  membership = null,
 }: {
   items: CartItem[];
   subtotal: number;
   gstAmount: number;
   isMember?: boolean;
+  /**
+   * The membership panel in the Order Summary rail (card pktBo874). Null on a storefront that
+   * does not sell a membership, which is how Industry Kitchens draws nothing at all.
+   */
+  membership?: {
+    planName: string;
+    /** "$14.95 per month", off the plan — null when it carries no usable price. */
+    priceLine: string | null;
+    /**
+     * What the membership actually saved on this order: list value minus what is charged. The
+     * MEASURED figure — there is deliberately no estimated one, see MembershipJoinPanel.
+     */
+    memberSavings: number;
+  } | null;
   pricesIncludeTax?: boolean;
   customerEmail?: string;
   /** Is there a session? Guests are offered the sign-in / create-account drawer,
@@ -1450,7 +1466,11 @@ export function CheckoutForm({
 
         {/* Order Summary */}
         <div className="lg:col-span-2">
-          <div className="border border-zinc-200 rounded-lg p-6 sticky top-24">
+          {/* `sticky` moved OFF the summary card and onto this wrapper so the membership panel
+              below travels with it — the empty rail space is exactly where Tim's screenshot puts
+              the join (card pktBo874). */}
+          <div className="sticky top-24">
+          <div className="border border-zinc-200 rounded-lg p-6">
             <h2 className="text-lg font-semibold text-zinc-900 mb-4">Order Summary</h2>
 
             <div className="divide-y divide-zinc-100">
@@ -1595,6 +1615,18 @@ export function CheckoutForm({
                   : "Enter a delivery postcode to calculate shipping."}
               </p>
             )}
+          </div>
+
+          {membership && (
+            <MembershipJoinPanel
+              isMember={!!isMember}
+              memberSavings={membership.memberSavings}
+              planPriceLine={membership.priceLine}
+              planName={membership.planName}
+              isSignedIn={isSignedIn}
+              contactEmail={email}
+            />
+          )}
           </div>
         </div>
       </div>

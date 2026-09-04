@@ -28,6 +28,13 @@ import { matchBrandSpecial } from "@/lib/checkout/free-shipping-brands-policy";
 import { normaliseAuState, isValidAuPostcode } from "@/lib/checkout/au-address";
 import { normaliseCustomerReference } from "@/lib/checkout/customer-reference";
 import { setLastOrder } from "@/lib/checkout/last-order";
+import {
+  MEMBERSHIP_DOB_FIELD,
+  MEMBERSHIP_JOIN_FIELD,
+  membershipJoinIntent,
+  wantsMembershipJoin,
+} from "@/lib/membership/checkout-join";
+import { captureMembershipJoin } from "@/lib/membership/join-capture";
 import { canViewOrderConfirmation } from "@/lib/checkout/confirmation-access";
 import { siteBaseUrl } from "@/lib/seo";
 import { canTakeCardPayment, type ConfirmBillingDetails } from "@/lib/payments/stripe-gateways";
@@ -1012,17 +1019,52 @@ export async function placeOrder(
       weeklyAmount: weeklyAmountForMethod(effectivePaymentMethod, financeOffer) ?? 0,
       testMode: isTestMode,
     });
+    // Written back into `orderMetafields` itself, not just into this one UPDATE: the membership
+    // join below stamps the same column from the same object, and a second `{ ...orderMetafields }`
+    // spread built from a stale copy would silently drop whichever stamp ran first.
+    orderMetafields.finance_application_uuid = filed.submissionUuid;
+    orderMetafields.finance_application_notified = filed.notified;
+    if (filed.error) orderMetafields.finance_application_error = filed.error;
     try {
-      await orderService.update(order.id, {
-        metafields: {
-          ...orderMetafields,
-          finance_application_uuid: filed.submissionUuid,
-          finance_application_notified: filed.notified,
-          ...(filed.error ? { finance_application_error: filed.error } : {}),
-        },
-      });
+      await orderService.update(order.id, { metafields: { ...orderMetafields } });
     } catch (e) {
       console.error("[placeOrder] finance application not stamped on the order (non-fatal):", e);
+    }
+  }
+
+  // Ticking "Join Chefs Depot Member" in the Order Summary rail (card pktBo874).
+  //
+  // NOTHING IS CHARGED HERE, and the panel says so above the tick. This records the join against
+  // the person and emails them an activation link; the membership itself is confirmed with a card
+  // on the subscribe page, so no subscription row exists until somebody has actually paid for one.
+  //
+  // Runs for EVERY payment method — it sits before the Stripe early-return for the same reason the
+  // below-cost alert does — and is entirely best-effort: a join that cannot be captured is stamped
+  // on the order and never mentioned to the shopper, because losing an order over a membership
+  // opt-in would be far worse than losing the opt-in.
+  const joinIntent = membershipJoinIntent({
+    joinTicked: wantsMembershipJoin(formData.get(MEMBERSHIP_JOIN_FIELD)),
+    email,
+    firstName,
+    lastName,
+    phone,
+    dateOfBirth: formData.get(MEMBERSHIP_DOB_FIELD) as string | null,
+  });
+  if (joinIntent) {
+    const joined = await captureMembershipJoin(joinIntent, {
+      id: order.id,
+      number: order.order_number,
+    });
+    orderMetafields.membership_join = {
+      requested: true,
+      contact_id: joined.contactId,
+      activation_emailed: joined.emailed,
+      ...(joined.reason ? { error: joined.reason } : {}),
+    };
+    try {
+      await orderService.update(order.id, { metafields: { ...orderMetafields } });
+    } catch (e) {
+      console.error("[placeOrder] membership join not stamped on the order (non-fatal):", e);
     }
   }
 
