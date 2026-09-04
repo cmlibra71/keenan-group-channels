@@ -41,6 +41,8 @@
     "builder/builder-image.tsx",
     "builder/category-banner-backdrop.test.ts",
     "builder/category-banner-backdrop.ts",
+    "builder/category-facet-injection.test.ts",
+    "builder/category-facet-injection.ts",
     "builder/category-node-branch.tsx",
     "builder/home-node-branch.tsx",
     "builder/live-gst.ts",
