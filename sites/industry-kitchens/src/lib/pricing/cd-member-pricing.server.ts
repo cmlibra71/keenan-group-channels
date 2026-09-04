@@ -20,12 +20,27 @@ import "server-only";
 //   getLadderVariantPrices()   `priceVariantsAtLevel`, the same call the pricing
 //                              engine's overlay makes, staleness gate included.
 //
-// THE SWITCH. Everything below returns null unless the channel's ladder is
-// ENABLED (`channel_settings.cd_member_ladder`, off on every channel until one
-// is written). That is deliberate: it is what lets this merge without changing a
-// single price on a live storefront, and it is the same switch that governs the
-// engine actually doing the pricing — so the panel cannot come up before the
-// prices it describes are real.
+// TWO GATES, NOT ONE, AND THEY GATE DIFFERENT THINGS.
+//
+//   THE PLAN gates the join pitch. A channel that publishes a subscription plan
+//   sells a membership, so a non-member on it gets the pitch and the Join
+//   button. Channel 2 has one ($14.95); channel 1 has none, which is how
+//   Industry Kitchens is excluded — by its own data rather than by a site name.
+//
+//   THE LADDER gates the PRICES. Everything drawn from `cd_sku_prices` waits on
+//   `channel_settings.cd_member_ladder` being enabled — the same switch that
+//   governs the engine actually doing the pricing, so the panel cannot publish a
+//   price before the price is real. It is absent on both live channels, so this
+//   merges with the prices dark.
+//
+// SPLITTING THEM IS THE POINT, and it is the review finding that sent the first
+// cut back. Gating the whole panel on the ladder meant that on merge a Chefs
+// Depot product page carried NO membership call to action at all: retiring the
+// savings percentage takes channel 2's stored teaser box off the screen
+// (`purchase.showMemberTeaser` = `memberSavingsPct > 0`) and the stored join
+// strip never fires for a guest (`hasSave && !isMember`). The register's
+// `sf-product-page` rule — the join funnel is never gated on there being a
+// member price — is what this split keeps true.
 // ============================================================================
 
 import { cache } from "react";
@@ -36,13 +51,15 @@ import {
   getMemberLadderLevelId,
   getMemberTrailingSpend,
 } from "@/lib/store";
-import type { CdLadderStep, CdMembershipData, CdVariantPrices } from "./cd-member-pricing";
+import type {
+  CdLadderStep,
+  CdMembershipData,
+  CdMembershipPitch,
+  CdVariantPrices,
+} from "./cd-member-pricing";
 
 /** What one `getLadderVariantPrices` call comes back with — null off a ladder. */
 type LadderPricesAtLevel = Awaited<ReturnType<typeof getLadderVariantPrices>>;
-
-/** Tim's fee, GST inclusive. The plan's own price wins where the channel carries one. */
-const DEFAULT_MEMBERSHIP_MONTHLY = 14.95;
 
 /**
  * Where a shopper joins. Tim's pack flags `/account/register` as its own guess;
@@ -101,29 +118,55 @@ export interface CdMembershipInput {
    * cannot land on different rungs of the same ladder in one page load.
    */
   ladderLevelId: string | null;
-  /** GST-inclusive plan price as a string, where the channel publishes one. */
+  /**
+   * GST-inclusive plan price as a string, where the channel publishes one. This
+   * is the membership gate: no plan, no panel, which is what keeps Industry
+   * Kitchens out (its route passes null; it has no `subscription_plans` row).
+   */
   planPrice: string | null;
   product: {
-    /** RRP, ex GST — `products.price`. */
-    price: string | null;
     variants: Array<{ id: number }>;
   };
 }
 
 /**
- * The panel's data, or null when there is nothing true to show: no ladder on
- * this channel, no priceable variant, or no trade rows for this product.
+ * The panel's data.
+ *
+ * Returns the PITCH-ONLY payload whenever this channel sells a membership but
+ * has no ladder prices to publish for this shopper — no ladder switched on, no
+ * priceable variant, no trade row — because the Join CTA has to survive all
+ * three (see the header note). Returns null only where there is no membership to
+ * pitch at all, or where the shopper is already a member and there are no
+ * figures to show them.
  */
 export async function buildCdMembershipData(
   input: CdMembershipInput
 ): Promise<CdMembershipData | null> {
+  const planPriceRaw = input.planPrice == null ? NaN : parseFloat(input.planPrice);
+  const sellsMembership = Number.isFinite(planPriceRaw) && planPriceRaw > 0;
+  // No plan on this channel = no membership model = nothing to say. Industry
+  // Kitchens stops here, and so would Chefs Depot if the plan were retired.
+  if (!sellsMembership) return null;
+
+  const base = {
+    isMember: input.isMember,
+    loggedIn: input.loggedIn,
+    membershipMonthly: planPriceRaw,
+    joinHref: JOIN_HREF,
+  };
+  // A member has nothing to join, so a pitch with no prices on it is an empty
+  // box. Everyone else keeps the funnel.
+  const pitch: CdMembershipPitch | null = input.isMember
+    ? null
+    : { ...base, ladderEnabled: false };
+
   const config = await ladderConfig().catch(() => null);
-  // THE SWITCH — see the header note. Industry Kitchens never gets past here,
-  // and neither does Chefs Depot until the setting is written.
-  if (!config?.enabled || config.levels.length === 0) return null;
+  // THE LADDER SWITCH — see the header note. Absent on both live channels, so
+  // this is the branch that actually merges.
+  if (!config?.enabled || config.levels.length === 0) return pitch;
 
   const variantIds = input.product.variants.map((v) => v.id).filter((id) => Number.isFinite(id));
-  if (variantIds.length === 0) return null;
+  if (variantIds.length === 0) return pitch;
 
   // The shopper's own rung — the one the payload was priced at. Anyone who is
   // not a member is shown the ENTRY rung, which is what joining buys today: the
@@ -158,14 +201,9 @@ export async function buildCdMembershipData(
   const byLevel = new Map(priced);
 
   const ladderPrices = byLevel.get(levelId) ?? null;
-  if (!ladderPrices) return null;
+  if (!ladderPrices) return pitch;
   const entryPrices = byLevel.get(entryLevelId) ?? null;
   const deepestPrices = byLevel.get(deepestLevelId) ?? null;
-
-  const planPrice = input.planPrice == null ? NaN : parseFloat(input.planPrice);
-
-  const rrpRaw = input.product.price == null ? NaN : parseFloat(input.product.price);
-  const rrp = Number.isFinite(rrpRaw) && rrpRaw > 0 ? Math.round(rrpRaw * 100) / 100 : null;
 
   const pricesByVariant: Record<number, CdVariantPrices> = {};
   for (const variantId of variantIds) {
@@ -181,14 +219,13 @@ export async function buildCdMembershipData(
       return r?.levelId ? r.price : null;
     };
     pricesByVariant[variantId] = {
-      rrp,
       mates: row.mates,
       entry: atLevel(entryPrices),
       deepest: atLevel(deepestPrices),
       member: resolved?.levelId ? resolved.price : null,
     };
   }
-  if (Object.keys(pricesByVariant).length === 0) return null;
+  if (Object.keys(pricesByVariant).length === 0) return pitch;
 
   const levelIndex = Math.max(
     0,
@@ -208,8 +245,8 @@ export async function buildCdMembershipData(
   const spend = memberKey ? await getMemberTrailingSpend(memberKey).catch(() => null) : null;
 
   return {
-    isMember: input.isMember,
-    loggedIn: input.loggedIn,
+    ...base,
+    ladderEnabled: true,
     advertisesMates: config.advertisedPrice === "mates",
     levelId: level.id,
     levelLabel: level.label,
@@ -222,9 +259,6 @@ export async function buildCdMembershipData(
     spendToNext:
       spend && next ? Math.max(0, Math.round((next.threshold - spend.spend) * 100) / 100) : null,
     nextLevelLabel: next?.label ?? null,
-    membershipMonthly:
-      Number.isFinite(planPrice) && planPrice > 0 ? planPrice : DEFAULT_MEMBERSHIP_MONTHLY,
-    joinHref: JOIN_HREF,
     pricesByVariant,
     entryLevelLabel: config.levels[0].label,
     deepestLevelLabel: config.levels[config.levels.length - 1].label,
@@ -234,7 +268,7 @@ export async function buildCdMembershipData(
     // multi-variant product's headline is the PRODUCT's price until the shopper
     // picks — and picking "the lowest variant id" would let the panel quote a
     // different machine from the headline on a 162-variant SKU. Null here means
-    // the panel simply waits for a selection.
+    // the panel publishes no prices until a selection is made (it still pitches).
     defaultVariantId: variantIds.length === 1 ? variantIds[0] : null,
   };
 }

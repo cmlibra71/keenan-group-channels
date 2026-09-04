@@ -178,27 +178,33 @@ export async function renderProductNodeBranch({
   // Chefs Depot's prices and the spend-more-save-more ladder (card Nyp8bkPm) are
   // PLACED here for the same reason: the panel has to reach every product page on a site
   // that renders from a stored tree. It goes after the SilverChef panel, so the money
-  // block reads price, weekly rent, then ladder. The leaf renders NULL on a channel with
-  // no ladder switched on, on a product whose price is hidden and on a SKU with no IK
-  // trade row, so placing it on every product page is safe.
+  // block reads price, weekly rent, then ladder. The leaf renders NULL on a channel that
+  // sells no membership (Industry Kitchens: no `subscription_plans` row) and on a product
+  // whose price is hidden; with no ladder switched on, or on a SKU with no IK trade row,
+  // it renders the join pitch WITHOUT prices, because retiring the savings percentage
+  // took the stored teaser box off the Chefs Depot page and this is the only membership
+  // call to action left on it.
   const nodeTree = guardBuyControls(
     withCdMemberPricingNode(
       withUpsellBlock(withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE)))
     )
   );
 
-  // The panel's figures, resolved ONCE per request. A sealed native cannot read the
+  // The panel's data, resolved ONCE per request. A sealed native cannot read the
   // database, so the prices and this shopper's ladder position ride the route's own
-  // `nativeData` bag, exactly as the kit contents do. Null unless this channel has the
-  // buying-group ladder switched on, which is no channel until one is.
+  // `nativeData` bag, exactly as the kit contents do. Null on a channel that sells no
+  // membership; the PITCH-ONLY payload (join funnel, no prices) on a channel that does
+  // but has no ladder switched on, which is every channel until one is.
   const cdMembership = await buildCdMembershipData({
     isMember: member.isMember,
     loggedIn: member.loggedIn,
     accountId: member.accountId,
     planPrice: member.planPrice,
     ladderLevelId,
+    // No RRP is passed: the panel reads the page's OWN headline base amount for
+    // the active variant off the purchase provider, so a product-level price can
+    // never sit beside per-variant ladder figures (card Nyp8bkPm, review fix).
     product: {
-      price: payload.product.price ?? null,
       variants: payload.product.variants ?? [],
     },
   }).catch(() => null);

@@ -11,6 +11,23 @@
 // `builder/cd-member-pricing-node.ts`, so it lands on the stored tree without
 // anybody re-authoring a template.
 //
+// TWO THINGS RENDER HERE AND THEY ARE GATED SEPARATELY.
+//
+//   THE JOIN FUNNEL — Tim's pitch sentence and the Join button — renders on any
+//   channel that sells a membership, to any non-member, WHETHER OR NOT the
+//   ladder is switched on and whether or not this SKU has any ladder price. That
+//   is not a preference: retiring the savings percentage takes channel 2's
+//   stored `member-teaser-x25` box off the screen (its only condition is
+//   `purchase.showMemberTeaser` = `memberSavingsPct > 0`) and the stored
+//   `join-strip-x18` never fires for a Chefs Depot guest (`hasSave && !isMember`
+//   — a guest has no member price). Gate this on the ladder too, as the first
+//   cut did, and a Chefs Depot product page merges with NO membership call to
+//   action at all. The register's `sf-product-page` rule says it in terms: the
+//   join funnel is not gated on there being a member price.
+//
+//   THE PRICES wait for `channel_settings.cd_member_ladder`. They are money and
+//   they merge dark.
+//
 // THE PAYMENT CLAIM IS MADE BY COMPARISON, NEVER BY ASSUMPTION. "What you pay
 // today" is attached to whichever row equals the price the buy box is actually
 // charging, and to none of them if none match. That is the guard: an earlier
@@ -19,26 +36,19 @@
 // suppresses the shared sale price and a guest pays RRP. A label that is derived
 // from the page's own number cannot drift from it.
 //
+// THE RRP ROW IS THE PAGE'S OWN HEADLINE AMOUNT FOR THE ACTIVE VARIANT, read
+// from the purchase provider (`displayBasePrice` = `activeVariant.price ??
+// product.price`) rather than handed down from the product row. On the 156 Chefs
+// Depot products whose variants differ in price, a product-level RRP would sit
+// beside per-variant ladder figures and a per-variant headline — "RRP $17,960"
+// next to a $31,310 machine. Reading the same number the headline shows makes
+// that impossible rather than unlikely.
+//
 // THE TOP-TIER PRICE AND THE RANGE ARE PUBLISHED AS FIGURES. The card asks for
 // the "GMC / top-tier discount price" and for a widget naming the min and max
 // available on spend. Both ends of the ladder are PRICES at a configured rung —
 // read from the same engine at the first and last levels — so they are named in
 // dollars, for the SKU on screen, without deriving a percentage.
-//
-// THIS PANEL CARRIES THE ONLY JOIN CTA ON A CHEFS DEPOT PRODUCT PAGE, and that
-// is not a style choice. `components/ui/PriceBlock.tsx` does NOT draw the gold
-// box on this site: channel 2's stored `price-panel` Site Builder component does
-// (nodes `join-strip-x18` and `member-teaser-x25`), and the only one a guest
-// ever sees is the teaser, conditioned on `purchase.showMemberTeaser` =
-// `memberSavingsPct > 0`. Retiring the percentage takes that box off the screen
-// — verified by rendering the real channel-2 page — so without a button here a
-// Chefs Depot product page would carry no membership call to action at all.
-// Checked against the database: `2/price-panel` is the ONLY stored component in
-// either channel that uses the teaser or a price native, so there is no tree on
-// which this button and PriceBlock's can both appear.
-//
-// The words are Tim's own "Product page price note" (gk23c1VK,
-// `05-widget-kit.html`), which is what that box should have been saying anyway.
 //
 // NO PERCENTAGE. Not per product, not site-wide. The M-to-R spread differs SKU
 // by SKU, so there is no single discount percentage in this system and one
@@ -48,9 +58,14 @@
 // substantiation. What is rendered instead is what the data does support: the
 // ladder position, and the dollars to the next rung.
 //
-// A HIDDEN PRICE HIDES ALL OF IT. `products.hide_price` masks the purchase
-// amounts in the shared provider; publishing more prices beside a suppressed one
-// would not suppress anything, so the panel returns null.
+// A HIDDEN PRICE HIDES ALL OF IT, THE PITCH INCLUDED. `products.hide_price`
+// masks the purchase amounts in the shared provider; a product that sells by
+// quote gets no join box, which is the rule Chefs Depot's own
+// `components/ui/PriceBlock.tsx` already carries on `showJoin` ("no join box on
+// a product with no price"; that file and `lib/member-policy.ts` exist only in
+// `sites/chef-s-kitchen`). Nor is membership pitched at someone already on
+// account pricing — they have a negotiated contract and `derivePriceDisplay`
+// has never pitched to them either.
 // ============================================================================
 
 import { useProductPurchase } from "@keenan/services/product-page";
@@ -58,10 +73,12 @@ import { adjustForGst } from "@keenan/services/calc";
 import { useGst } from "@/lib/gst";
 import { bestVisiblePrice } from "@/lib/finance/product-finance";
 import {
+  decidePriceRows,
   formatWholeDollars,
-  isChargedAmount,
   pricesForVariant,
+  type CdMembershipBase,
   type CdMembershipData,
+  type CdMembershipLadder,
 } from "@/lib/pricing/cd-member-pricing";
 
 /** Ex-GST money in, the figure this shopper's GST switch says, out. */
@@ -104,21 +121,69 @@ function PriceRow({
   );
 }
 
-export function CdMemberPricingPanel({ data }: { data: CdMembershipData | null }) {
+/**
+ * Tim's "Product page price note", verbatim (gk23c1VK attachment
+ * `05-widget-kit.html`; his model approved 2026-08-24). The same sentence Chefs
+ * Depot's `components/ui/PriceBlock.tsx` already carries on the surfaces IT
+ * draws, so one storefront never shows two versions of his copy. He owns these
+ * words — do not reword them.
+ */
+function JoinPitch() {
+  return (
+    <p className="text-sm text-text-secondary">
+      <strong className="text-text-primary">You&rsquo;re seeing our standard price.</strong>{" "}
+      Members buy this line lower &mdash; and almost 40,000 others &mdash; lower again as their
+      twelve-month spend grows.
+    </p>
+  );
+}
+
+/**
+ * The one membership CTA on a Chefs Depot product page — see the header note for
+ * why it has to be here rather than on the price block above.
+ */
+function JoinButton({ data }: { data: CdMembershipBase }) {
+  return (
+    <a
+      href={data.joinHref}
+      className="mt-4 inline-flex items-center justify-center rounded-[6px] bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover"
+    >
+      {`Join the buying group — $${data.membershipMonthly.toLocaleString("en-AU", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}/month`}
+    </a>
+  );
+}
+
+/**
+ * The funnel on its own, with no prices under it. This is what a Chefs Depot
+ * product page carries TODAY, on every channel with the ladder unwritten, and it
+ * is the box that replaces the retired "Members save up to X%" teaser.
+ */
+function MembershipPitchPanel({ data }: { data: CdMembershipBase }) {
+  return (
+    <section
+      className="mt-4 rounded-[12px] bg-member-bg p-4"
+      aria-label="Chefs Depot membership"
+    >
+      <JoinPitch />
+      <JoinButton data={data} />
+    </section>
+  );
+}
+
+function CdLadderPanel({ data }: { data: CdMembershipLadder }) {
   const purchase = useProductPurchase();
   const money = useMoney();
   const { inclusive, pricesIncludeTax } = useGst();
 
-  if (!data) return null;
-  // A product whose price is hidden hides these figures and the widget with
-  // them — see the header note.
-  if (purchase.hidePrice) return null;
-  // A product with no price at all sells by quote; there is nothing to ladder.
-  if (!(purchase.displayPrice > 0) && !(purchase.displaySalePrice ?? 0)) return null;
-
-  const prices = pricesForVariant(data, purchase.activeVariantId);
-  // No trade row for this variant: nothing to show. Never a partial claim.
-  if (!prices) return null;
+  const exGst = (value: number | null) =>
+    value != null && Number.isFinite(value) && value > 0
+      ? pricesIncludeTax
+        ? value / 1.1
+        : value
+      : null;
 
   // What the buy box is charging for ONE unit of the product itself.
   //
@@ -134,79 +199,31 @@ export function CdMemberPricingPanel({ data }: { data: CdMembershipData | null }
   // reason. Normalised to ex GST because the ladder's figures are ex GST.
   const memberBase =
     purchase.activeMemberPrice == null ? null : purchase.activeMemberPrice - purchase.addonTotal;
-  const chargedRaw = bestVisiblePrice({
-    displayPrice: purchase.displayBasePrice,
-    displaySalePrice: purchase.displayBaseSalePrice,
-    memberPrice: memberBase,
-  });
-  const chargedExGst =
-    Number.isFinite(chargedRaw) && chargedRaw > 0
-      ? pricesIncludeTax
-        ? chargedRaw / 1.1
-        : chargedRaw
-      : null;
+  const chargedExGst = exGst(
+    bestVisiblePrice({
+      displayPrice: purchase.displayBasePrice,
+      displaySalePrice: purchase.displayBaseSalePrice,
+      memberPrice: memberBase,
+    })
+  );
+  // The RRP row IS the headline's own base amount for the variant on screen —
+  // see the header note.
+  const rrpExGst = exGst(purchase.displayBasePrice);
 
-  // WHICH ROWS ARE TRUE depends on what this channel advertises, and only true
-  // rows are rendered.
-  //
-  //  - `catalogue` (today, and the only live setting): the shopper pays the
-  //    channel's own catalogue price, so RRP is real and M is a trade price
-  //    nobody on this site can buy at. RRP + member price.
-  //  - `mates`: the ladder has replaced the advertised price with M, so
-  //    `payload.product.price` IS the Mates Rates figure and the page no longer
-  //    carries an RRP for this panel to quote. Mates Rates + member price.
-  //    Restoring the third row means the page's own headline chip stops saying
-  //    "RRP" first — `components/ui/PriceBlock.tsx`, which is card gk23c1VK's
-  //    work and part of the same switch. Printing a second, different "RRP"
-  //    beside a headline chip that still says RRP would make the screen
-  //    contradict itself, which is the failure this panel already had once.
-  const showMates = data.advertisesMates && prices.mates != null;
-  const showRrp = !data.advertisesMates && prices.rrp != null;
+  const prices = pricesForVariant(data, purchase.activeVariantId);
+  const rows = decidePriceRows({ data, prices, rrpExGst, chargedExGst });
 
-  // THE MEMBER ROW.
-  //
-  // For a MEMBER it is not a second opinion about their price — it IS the price
-  // the buy box is charging, labelled with the rung that produced it. It renders
-  // only while the page is charging at or under the ladder figure, which is what
-  // "the ladder is pricing this shopper" means: on the nose normally, under it
-  // when a clearance or a contract price beat the ladder (the engine takes the
-  // better of the two and never stacks them). Charged ABOVE the ladder figure
-  // means the ladder is NOT in force for this shopper, and the panel says
-  // nothing rather than print a member price they are not being given. One
-  // machine, one member price, on every one of our screens.
-  //
-  // For everyone else it is the ENTRY rung — what joining would buy today —
-  // labelled as such and never as an offer. A guest is still charged the
-  // standard price (`sf-product-page`: a guest is never PRICED at a member tier).
-  const memberCharged =
-    data.isMember && prices.member != null && chargedExGst != null
-      ? chargedExGst <= prices.member + 0.005
-      : false;
-  const memberAmount = data.isMember ? (memberCharged ? chargedExGst : null) : prices.member;
-  const showMember = memberAmount != null;
-
-  // THE TOP-TIER ROW — the card's third figure, and the deep end of the range.
-  //
-  // It is the ladder's price for THIS SKU at the last configured rung, read from
-  // the engine at that level. It is suppressed only when it would repeat a row
-  // already on screen: a member already at the deepest rung is looking at their
-  // own price, and printing it twice under two labels reads as two prices for
-  // one machine — the failure this panel is fenced against.
-  const deepestIsDuplicate =
-    data.atDeepestLevel ||
-    (memberAmount != null && Math.abs((prices.deepest ?? NaN) - memberAmount) < 0.005);
-  const showDeepest = prices.deepest != null && !deepestIsDuplicate;
-
-  if (!showMember && !showMates && !showRrp && !showDeepest) return null;
+  // No trade row for this variant, or nothing true to publish for it — a HELD
+  // SKU, or a multi-variant product with nothing picked yet. The prices stand
+  // down; the funnel does not.
+  if (!prices || !rows.anyRow) {
+    return data.isMember ? null : <MembershipPitchPanel data={data} />;
+  }
 
   const gstLabel = inclusive ? "inc GST" : "ex GST";
   const paying = "what you pay today";
-  const rrpIsCharged = showRrp && isChargedAmount(prices.rrp, chargedExGst);
-  const matesIsCharged = showMates && isChargedAmount(prices.mates, chargedExGst);
-  const deepestIsCharged = showDeepest && isChargedAmount(prices.deepest, chargedExGst);
-
-  const reachedIndex = data.levelIndex;
-  const railFill = data.ladder.length > 1 ? (reachedIndex / (data.ladder.length - 1)) * 100 : 0;
+  const railFill =
+    data.ladder.length > 1 ? (data.levelIndex / (data.ladder.length - 1)) * 100 : 0;
 
   return (
     <section
@@ -214,36 +231,36 @@ export function CdMemberPricingPanel({ data }: { data: CdMembershipData | null }
       aria-label="Chefs Depot member pricing"
     >
       <div className="divide-y divide-border">
-        {showRrp && (
+        {rows.showRrp && (
           <PriceRow
             label="RRP"
-            amount={money(prices.rrp as number)}
-            note={rrpIsCharged ? paying : undefined}
-            emphasis={rrpIsCharged}
+            amount={money(rrpExGst as number)}
+            note={rows.rrpIsCharged ? paying : undefined}
+            emphasis={rows.rrpIsCharged}
           />
         )}
-        {showMates && (
+        {rows.showMates && (
           <PriceRow
             label="Mates Rates"
             amount={money(prices.mates as number)}
-            note={matesIsCharged ? paying : undefined}
-            emphasis={matesIsCharged}
+            note={rows.matesIsCharged ? paying : undefined}
+            emphasis={rows.matesIsCharged}
           />
         )}
-        {showMember && (
+        {rows.showMember && (
           <PriceRow
             label={data.isMember ? `Your member price · ${data.levelLabel}` : "Member price"}
-            amount={money(memberAmount as number)}
+            amount={money(rows.memberAmount as number)}
             note={data.isMember ? paying : `${data.levelLabel} — what joining buys today`}
             emphasis={data.isMember}
           />
         )}
-        {showDeepest && (
+        {rows.showDeepest && (
           <PriceRow
             label={`Our deepest trade price · ${data.deepestLevelLabel}`}
             amount={money(prices.deepest as number)}
-            note={deepestIsCharged ? paying : "at the top of the ladder"}
-            emphasis={deepestIsCharged}
+            note={rows.deepestIsCharged ? paying : "at the top of the ladder"}
+            emphasis={rows.deepestIsCharged}
           />
         )}
       </div>
@@ -342,11 +359,9 @@ export function CdMemberPricingPanel({ data }: { data: CdMembershipData | null }
             )}
           </p>
         ) : (
-          <p className="mt-3 text-sm text-text-secondary">
-            <strong className="text-text-primary">You&rsquo;re seeing our standard price.</strong>{" "}
-            Members buy this line lower &mdash; and almost 40,000 others &mdash; lower again as
-            their twelve-month spend grows.
-          </p>
+          <div className="mt-3">
+            <JoinPitch />
+          </div>
         )}
 
         <p className="mt-3 text-[11px] leading-relaxed text-text-muted">
@@ -354,20 +369,26 @@ export function CdMemberPricingPanel({ data }: { data: CdMembershipData | null }
           distance between the ends differs product by product.
         </p>
 
-        {/* The one membership CTA on this page — see the header note for why it
-            has to be here rather than on the price block above. */}
-        {!data.isMember && (
-          <a
-            href={data.joinHref}
-            className="mt-4 inline-flex items-center justify-center rounded-[6px] bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover"
-          >
-            {`Join the buying group — $${data.membershipMonthly.toLocaleString("en-AU", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}/month`}
-          </a>
-        )}
+        {!data.isMember && <JoinButton data={data} />}
       </div>
     </section>
   );
+}
+
+export function CdMemberPricingPanel({ data }: { data: CdMembershipData | null }) {
+  const purchase = useProductPurchase();
+
+  if (!data) return null;
+  // A product whose price is hidden hides these figures, the widget and the
+  // join box with them — see the header note.
+  if (purchase.hidePrice) return null;
+  // A product with no price at all sells by quote; there is nothing to ladder
+  // and nothing to pitch against.
+  if (!(purchase.displayPrice > 0) && !(purchase.displaySalePrice ?? 0)) return null;
+  // Someone on a negotiated contract price is not a join target, exactly as
+  // `derivePriceDisplay` has always had it.
+  if (purchase.accountPricing && !data.isMember) return null;
+
+  if (!data.ladderEnabled) return <MembershipPitchPanel data={data} />;
+  return <CdLadderPanel data={data} />;
 }

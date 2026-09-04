@@ -191,6 +191,7 @@
     "lib/payments/stripe-gateways.ts",
     "lib/pricing/cart-pricing.test.ts",
     "lib/pricing/cart-pricing.ts",
+    "lib/pricing/cd-member-pricing.test.ts",
     "lib/pricing/cd-member-pricing.server.ts",
     "lib/pricing/cd-member-pricing.ts",
     "lib/quote.ts",
