@@ -12,8 +12,9 @@ import { derivePriceDisplay } from "./price-display";
  *
  * Who sees what:
  *   Public   $1,683.00 ex GST · RRP
- *            (pdp) gold box: Members save up to 20% — join from $14.95/mo to see
- *            member pricing [Join]
+ *            (pdp) gold box, Tim's price note: "You're seeing our standard
+ *            price. Members buy this line lower — and almost 40,000 others —
+ *            lower again as their twelve-month spend grows." [See member pricing]
  *   Member   $1,346.40 ex GST [★ MEMBER PRICE] / RRP ~~$1,683~~ · You save $337 (20%)
  *   Account  $1,500.00 ex GST · Your account price / RRP ~~$1,683~~
  *
@@ -27,7 +28,6 @@ export function PriceBlock({
   rrp,
   memberPrice,
   isMember,
-  planPrice,
   accountPricing = false,
   memberSavingsPct = 0,
   size = "card",
@@ -36,6 +36,13 @@ export function PriceBlock({
   rrp: number;
   memberPrice?: number | null;
   isMember?: boolean;
+  /**
+   * The cheapest plan's monthly price. NO LONGER RENDERED: Tim's price note
+   * (card Nyp8bkPm, his widget kit) does not quote the fee — it lives on
+   * `/membership` and in the cart upsell, which is his own split. The prop stays
+   * because every listing tile and the PDP already thread it, and dropping it
+   * would be a rename across eight call sites for nothing.
+   */
   planPrice?: string | null;
   /** The memberPrice is a negotiated B2B contract price, not a member price. */
   accountPricing?: boolean;
@@ -56,7 +63,6 @@ export function PriceBlock({
   if (d.hidden) return null;
 
   const big = size === "pdp" ? "text-[33px]" : "text-lg";
-  const join = planPrice ? parseFloat(planPrice).toFixed(2) : null;
 
   return (
     <div className={className}>
@@ -116,29 +122,38 @@ export function PriceBlock({
         </p>
       )}
 
-      {/* Join funnel. Deliberately NOT nested inside "there is a member price" —
-          the people this is aimed at are exactly the ones who have none. */}
+      {/* Join funnel — Tim's "Product page price note", verbatim (card gk23c1VK
+          attachment `05-widget-kit.html`; his model approved 2026-08-24).
+          Deliberately NOT nested inside "there is a member price": the people
+          this is aimed at are exactly the ones who have none.
+
+          IT NO LONGER CLAIMS THE MEMBER PRICE IS HIDDEN. It used to read
+          "Members save up to X% — join from $14.95/mo to see member pricing",
+          and when card Nyp8bkPm retired that percentage at source the branch
+          underneath it read "Members get wholesale pricing — join to see member
+          pricing." Both are now wrong wherever the ladder is on: the panel
+          PUBLISHES the member price, and a member's entry price is `W x 1.01`,
+          one percent ABOVE wholesale rather than at it. Tim's sentence is true
+          in both respects, and his open item 8 is about retiring exactly this
+          class of unsubstantiated claim.
+
+          WHERE THIS BOX ACTUALLY RENDERS, AND WHERE IT DOES NOT. Not on the
+          Chefs Depot product page: that page draws its gold box from channel 2's
+          stored `price-panel` Site Builder component, whose teaser node is
+          conditioned on `memberSavingsPct > 0` and therefore disappears with the
+          percentage. `2/price-panel` is the only stored component in either
+          channel that uses that teaser or a price native, so this box and
+          `CdMemberPricingPanel`'s Join button cannot both appear on one screen
+          today. This one covers the surfaces PriceBlock does drive — the
+          non-builder product detail, the node preview and the template tree. */}
       {d.showJoin && size === "pdp" && (
         <div className="mt-3.5 flex items-center justify-between gap-3 rounded-btn bg-member-bg px-3.5 py-[11px] text-[12.5px] text-member-text">
           <span>
-            {d.teaserPct > 0 ? (
-              <>
-                Members save up to <b>{d.teaserPct}%</b> on this item
-              </>
-            ) : (
-              <>Members get wholesale pricing</>
-            )}
-            {join ? (
-              <>
-                {" — "}
-                <b>join from ${join}/mo</b> to see member pricing.
-              </>
-            ) : (
-              <> — join to see member pricing.</>
-            )}
+            <b>You&rsquo;re seeing our standard price.</b> Members buy this line lower &mdash; and
+            almost 40,000 others &mdash; lower again as their twelve-month spend grows.
           </span>
           <Link href="/membership" className="btn-gold btn-sm shrink-0">
-            Join
+            See member pricing
           </Link>
         </div>
       )}
