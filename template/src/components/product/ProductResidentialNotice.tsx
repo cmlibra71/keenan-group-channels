@@ -36,7 +36,7 @@ export function ProductResidentialNotice({ show }: { show: boolean }) {
   return (
     <p
       data-testid="product-residential-notice"
-      className="mt-3 text-sm font-semibold leading-snug text-[#C0392B]"
+      className="mt-3 text-sm font-semibold leading-snug text-red-600"
     >
       {RESIDENTIAL_PRODUCT_NOTICE}
     </p>

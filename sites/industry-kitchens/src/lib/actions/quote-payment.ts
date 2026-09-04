@@ -420,6 +420,10 @@ export async function payQuote(
               cost_ex_tax: plan.shipTo.costExTax,
               cost_inc_tax: plan.shipTo.costIncTax,
               cost_tax: plan.shipTo.costTax,
+              // Card HMtUxvwZ. The portal's conversion writes this column too, so a
+              // quote whose Ship To says residential becomes an order that says
+              // residential no matter which side converted it.
+              address_type: plan.shipTo.addressType ?? null,
               items_total: plan.items.length,
             });
           }

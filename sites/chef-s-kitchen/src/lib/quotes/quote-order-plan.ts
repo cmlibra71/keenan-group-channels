@@ -19,6 +19,7 @@
  * same values either way.
  */
 import { gstSplit } from "@keenan/services/calc";
+import { normaliseAddressType } from "@keenan/services/residential";
 import { quoteGstTotals, MONEY_EPSILON, type QuoteGstInput } from "./quote-gst";
 import { resolveQuoteTotal } from "./price-visibility";
 import { quoteFreightStillPending } from "./freight-pending";
@@ -102,6 +103,13 @@ export interface PlannedShipTo {
   costExTax: string;
   costIncTax: string;
   costTax: string;
+  /**
+   * Residential vs commercial, carried off the quote's own address snapshot (card
+   * HMtUxvwZ). The PORTAL's conversion carries it too, and both paths write the same
+   * `order_shipping_addresses.address_type`, so the two cannot disagree about one
+   * record. Null when the quote never carried one — the order then reads commercial.
+   */
+  addressType?: string | null;
 }
 
 export interface QuoteOrderPlan {
@@ -306,6 +314,9 @@ export function planOrderFromPaidQuote(
       countryCode: s.country_code ?? null,
       email: s.email ?? null,
       phone: s.phone ?? s.telephone ?? null,
+      // Card HMtUxvwZ — the quote's Ship To said residential, so the order it becomes
+      // says residential too, whichever side converted it.
+      addressType: normaliseAddressType(s.address_type ?? s.addressType),
       ...freightMoney,
     };
   } else if (ctx.fallbackShipTo) {

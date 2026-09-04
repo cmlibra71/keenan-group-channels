@@ -188,8 +188,10 @@ export async function renderProductNodeBranch({
   const nodeTree = guardBuyControls(
     withCdMemberPricingNode(
       withUpsellBlock(
-      withResidentialNoticeNode(withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE)))
-    )
+        withResidentialNoticeNode(
+          withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE))
+        )
+      )
     )
   );
 

@@ -20,6 +20,9 @@ type Props = {
     state: string;
     postalCode: string;
     countryCode: string;
+    /** Residential vs commercial, derived from this same pick by the details lookup
+     *  (card HMtUxvwZ). Null when the place carried no signal we trust. */
+    addressType: string | null;
   }) => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
 };
@@ -80,6 +83,7 @@ export function AddressAutocomplete({ onSelect, inputRef }: Props) {
           state: details.state,
           postalCode: details.postalCode,
           countryCode: details.countryCode,
+          addressType: details.addressType ?? null,
         });
       }
     },

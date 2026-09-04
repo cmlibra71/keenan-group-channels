@@ -22,6 +22,11 @@
 // the action" rule (checkout-freight.md > sf-checkout) is about REFUSALS, and this
 // is not one.
 //
+// TOKENS. This file is deliberately NOT byte-shared with template/: Chefs Depot's
+// checkout speaks `steel-*`/`ink-*` and Industry Kitchens speaks `zinc-*`, so a
+// shared copy would look borrowed on one of the two. Only the wording is shared, and
+// that lives in `@keenan/services/residential`.
+//
 // It is dismissed per browser tab, not remembered: a shopper who reloads the
 // checkout is reading the page again, and a note about equipment they are about to
 // pay for is worth showing again.
@@ -45,13 +50,13 @@ export function CommercialApplianceNotice({ productNames }: { productNames: stri
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
     >
       <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-        <h2 className="text-lg font-semibold text-zinc-900">
+        <h2 className="text-lg font-semibold text-ink-900">
           {COMMERCIAL_APPLIANCE_NOTICE_HEADING}
         </h2>
-        <p className="mt-3 text-sm leading-relaxed text-zinc-700">
+        <p className="mt-3 text-sm leading-relaxed text-ink-700">
           {COMMERCIAL_APPLIANCE_NOTICE}
         </p>
-        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-zinc-600">
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-steel-500">
           {productNames.map((name) => (
             <li key={name}>{name}</li>
           ))}
@@ -59,7 +64,7 @@ export function CommercialApplianceNotice({ productNames }: { productNames: stri
         <button
           type="button"
           onClick={() => setDismissed(true)}
-          className="mt-5 w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+          className="mt-5 w-full rounded-md bg-ink-900 px-4 py-2 text-sm font-medium text-white hover:bg-ink-800"
         >
           I understand
         </button>

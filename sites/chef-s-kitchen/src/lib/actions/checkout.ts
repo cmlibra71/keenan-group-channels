@@ -10,6 +10,7 @@ import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrd
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, type BelowCostLine } from "@/lib/checkout/order-draft";
 import { backorderFactsForProducts } from "@/lib/cart/backorder-facts";
 import { canPurchaseQuantity } from "@keenan/services/backorder";
+import { normaliseAddressType } from "@keenan/services/residential";
 import { getLineCosts } from "@/lib/store";
 import { sendStaffNotification } from "@/lib/staff-email";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
@@ -1075,6 +1076,13 @@ export async function placeOrder(
       postal_code: postalCode,
       country,
       country_code: country,
+      // Residential vs commercial for THIS delivery (card HMtUxvwZ). Derived by the
+      // details lookup from the shopper's own Places pick and posted as a hidden field;
+      // null when nothing was picked or the pick said nothing, which reads commercial —
+      // exactly how every order behaves today. It refuses NOTHING: it is what lets the
+      // order screen print RESIDENTIAL ADDRESS and raise the commercial-only flag on an
+      // order raised here, which is the highest-volume way an order is created at all.
+      address_type: normaliseAddressType(formData.get("address_type")),
       shipping_method: heldForSpecialised
         ? "Specialised delivery — to be quoted"
         : deliveryServiceType === "curbside"
