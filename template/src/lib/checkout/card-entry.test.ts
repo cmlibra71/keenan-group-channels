@@ -13,10 +13,18 @@ const base = {
   heldForSpecialised: false,
   payableTotalIncTax: 100,
   cardComplete: false,
+  usingSavedCard: false,
 };
 
 test("a blank card on the card method stops the submit", () => {
   assert.equal(cardEntryBlocksSubmit(base), true);
+});
+
+test("a card already on file needs no card box (card JiaDTjr1)", () => {
+  // The intent is created against that payment method and Stripe confirms it
+  // without the element, so demanding a complete card box would refuse the one
+  // submit where the shopper has done nothing at all wrong.
+  assert.equal(cardEntryBlocksSubmit({ ...base, usingSavedCard: true }), false);
 });
 
 test("a complete card lets the submit through", () => {
