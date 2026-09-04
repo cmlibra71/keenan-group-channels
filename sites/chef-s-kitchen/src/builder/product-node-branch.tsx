@@ -175,7 +175,7 @@ export async function renderProductNodeBranch({
   // and renders nothing at all for a product with no upsells. It runs BEFORE guardBuyControls
   // so the cloned tiles are guarded exactly like the ones they were cloned from.
   //
-  // Chefs Depot's three prices and the spend-more-save-more ladder (card Nyp8bkPm) are
+  // Chefs Depot's prices and the spend-more-save-more ladder (card Nyp8bkPm) are
   // PLACED here for the same reason: the panel has to reach every product page on a site
   // that renders from a stored tree. It goes after the SilverChef panel, so the money
   // block reads price, weekly rent, then ladder. The leaf renders NULL on a channel with

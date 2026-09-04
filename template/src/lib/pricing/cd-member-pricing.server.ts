@@ -38,6 +38,9 @@ import {
 } from "@/lib/store";
 import type { CdLadderStep, CdMembershipData, CdVariantPrices } from "./cd-member-pricing";
 
+/** What one `getLadderVariantPrices` call comes back with — null off a ladder. */
+type LadderPricesAtLevel = Awaited<ReturnType<typeof getLadderVariantPrices>>;
+
 /** Tim's fee, GST inclusive. The plan's own price wins where the channel carries one. */
 const DEFAULT_MEMBERSHIP_MONTHLY = 14.95;
 
@@ -57,6 +60,12 @@ const ladderConfig = cache(() => getLadderConfig());
 
 /**
  * The shopper's rung, resolved ONCE per request.
+ *
+ * "Once" is a guarantee of the CALL SITE, not of `cache()`: the argument is a
+ * fresh object literal every time, so React's memo key never matches and this
+ * would re-run if it were called twice. It is called once, by the route, which
+ * then hands the answer to both consumers below. `cache()` is kept only so a
+ * future second caller is cheap to make correct, not because it is load-bearing.
  *
  * It is deliberately available on its own, before the payload is built: the
  * pricing call that resolves what the buy box CHARGES takes the same rung
@@ -86,14 +95,14 @@ export interface CdMembershipInput {
   loggedIn: boolean;
   /** The shopper's buying account, or null. */
   accountId: number | null;
-  /** GST-inclusive plan price as a string, where the channel publishes one. */
-  planPrice: string | null;
   /**
    * The rung the PAYLOAD was priced at — {@link resolveCdLadderLevelId}'s answer,
    * threaded through `getProductPageData` as well, so the panel and the buy box
    * cannot land on different rungs of the same ladder in one page load.
    */
   ladderLevelId: string | null;
+  /** GST-inclusive plan price as a string, where the channel publishes one. */
+  planPrice: string | null;
   product: {
     /** RRP, ex GST — `products.price`. */
     price: string | null;
@@ -128,8 +137,32 @@ export async function buildCdMembershipData(
       }
     : null;
 
-  const ladderPrices = await getLadderVariantPrices(variantIds, levelId).catch(() => null);
+  // THE TWO ENDS OF THE RANGE, as prices.
+  //
+  // The card asks for the top-tier ("GMC") price and for a widget naming the min
+  // and max available. Both are PRICES at a configured rung, so both come out of
+  // the same `priceVariantsAtLevel` call at a different level — never derived,
+  // never a percentage. Deduped by level id (a non-member sits ON the entry rung,
+  // a top-rung member ON the deepest) so the common case is two reads, not three,
+  // and issued together rather than in series.
+  const entryLevelId = config.levels[0].id;
+  const deepestLevelId = config.levels[config.levels.length - 1].id;
+  const wantedLevels = Array.from(new Set([levelId, entryLevelId, deepestLevelId]));
+  const priced = await Promise.all(
+    wantedLevels.map((id) =>
+      getLadderVariantPrices(variantIds, id)
+        .catch(() => null)
+        .then((result) => [id, result] as const)
+    )
+  );
+  const byLevel = new Map(priced);
+
+  const ladderPrices = byLevel.get(levelId) ?? null;
   if (!ladderPrices) return null;
+  const entryPrices = byLevel.get(entryLevelId) ?? null;
+  const deepestPrices = byLevel.get(deepestLevelId) ?? null;
+
+  const planPrice = input.planPrice == null ? NaN : parseFloat(input.planPrice);
 
   const rrpRaw = input.product.price == null ? NaN : parseFloat(input.product.price);
   const rrp = Number.isFinite(rrpRaw) && rrpRaw > 0 ? Math.round(rrpRaw * 100) / 100 : null;
@@ -139,12 +172,19 @@ export async function buildCdMembershipData(
     const row = ladderPrices.rows.get(variantId);
     if (!row) continue;
     const resolved = ladderPrices.prices.get(variantId);
+    // Same rule for every ladder figure: `levelId` comes back null when the
+    // ladder did NOT apply — a HELD row, or trade data past its freshness
+    // window. Both cases price at M for everybody, so there is no ladder figure
+    // to show at that rung and none is invented.
+    const atLevel = (result: LadderPricesAtLevel) => {
+      const r = result?.prices.get(variantId);
+      return r?.levelId ? r.price : null;
+    };
     pricesByVariant[variantId] = {
       rrp,
       mates: row.mates,
-      // `levelId` comes back null when the ladder did NOT apply — a HELD row, or
-      // trade data past its freshness window. Both cases price at M for
-      // everybody, so there is no member figure to show and none is invented.
+      entry: atLevel(entryPrices),
+      deepest: atLevel(deepestPrices),
       member: resolved?.levelId ? resolved.price : null,
     };
   }
@@ -167,8 +207,6 @@ export async function buildCdMembershipData(
   // The spend the widget reports, on the same key the rung was resolved from.
   const spend = memberKey ? await getMemberTrailingSpend(memberKey).catch(() => null) : null;
 
-  const planPrice = input.planPrice == null ? NaN : parseFloat(input.planPrice);
-
   return {
     isMember: input.isMember,
     loggedIn: input.loggedIn,
@@ -188,6 +226,9 @@ export async function buildCdMembershipData(
       Number.isFinite(planPrice) && planPrice > 0 ? planPrice : DEFAULT_MEMBERSHIP_MONTHLY,
     joinHref: JOIN_HREF,
     pricesByVariant,
+    entryLevelLabel: config.levels[0].label,
+    deepestLevelLabel: config.levels[config.levels.length - 1].label,
+    atDeepestLevel: levelIndex === config.levels.length - 1,
     // ONLY a single-variant product has a variant the page can be said to have
     // "opened on". The purchase provider starts with no variant selected, so a
     // multi-variant product's headline is the PRODUCT's price until the shopper

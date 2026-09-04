@@ -14,6 +14,11 @@ import { Crown, Truck, ArrowRight } from "lucide-react";
 // catalogue. His compliance note is why it is a hard rule and not a preference:
 // a published saving has to survive an Australian Consumer Law challenge on
 // substantiation. The pitch stands; the invented dollar figure does not.
+//
+// THE WORDS ARE TIM'S. His widget kit (gk23c1VK, `05-widget-kit.html`, "Cart
+// upsell") already ships the replacement, and its order-exclusive phrasing is
+// deliberate: membership reprices from the NEXT order, not this one. This box
+// was written fresh first; his version says it better and is the approved copy.
 // ============================================================================
 
 export function MembershipCartUpsell({
@@ -37,10 +42,10 @@ export function MembershipCartUpsell({
       <div className="flex items-start gap-3 mb-3">
         <Crown className="h-5 w-5 text-member-text shrink-0 mt-0.5" />
         <div>
-          <h3 className="font-semibold text-ink-900">Members buy this basket lower</h3>
+          <h3 className="font-semibold text-ink-900">Buying for a commercial kitchen?</h3>
           <p className="text-sm text-steel-500 mt-1">
-            Membership prices every line off your rolling twelve-month spend, and steps down as
-            that spend grows.
+            Join the buying group and every line reprices from your next order &mdash; then keeps
+            stepping down as your spend builds.
           </p>
         </div>
       </div>

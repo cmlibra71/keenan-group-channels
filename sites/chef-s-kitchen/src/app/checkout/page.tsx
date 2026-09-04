@@ -370,11 +370,17 @@ export default async function CheckoutPage() {
         </div>
       )}
 
-      {showMemberBanner && (
+      {/* The join pitch, in Tim's words (card Nyp8bkPm; his widget kit's cart
+          upsell). It used to print "Members save up to $X on this order", X being
+          the basket times a flat 15% held in `member_savings_percentage` — a
+          figure with no measured basis, retired across the site. The `> 0` guard
+          it carried is kept, moved onto the BASKET, so an empty cart still gets
+          no pitch. */}
+      {showMemberBanner && subtotal > 0 && (
         <div className="mb-6 flex items-center justify-between bg-member-bg border border-member/40 rounded-lg px-4 py-3">
           <div className="flex items-center gap-2 text-sm text-member-text">
             <Crown className="h-4 w-4 text-member-text shrink-0" />
-            Members buy every line lower, and lower again as their twelve-month spend grows.
+            Join the buying group and every line reprices from your next order.
           </div>
           <Link
             href="/membership"

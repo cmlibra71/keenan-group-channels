@@ -19,6 +19,27 @@
 // suppresses the shared sale price and a guest pays RRP. A label that is derived
 // from the page's own number cannot drift from it.
 //
+// THE TOP-TIER PRICE AND THE RANGE ARE PUBLISHED AS FIGURES. The card asks for
+// the "GMC / top-tier discount price" and for a widget naming the min and max
+// available on spend. Both ends of the ladder are PRICES at a configured rung —
+// read from the same engine at the first and last levels — so they are named in
+// dollars, for the SKU on screen, without deriving a percentage.
+//
+// THIS PANEL CARRIES THE ONLY JOIN CTA ON A CHEFS DEPOT PRODUCT PAGE, and that
+// is not a style choice. `components/ui/PriceBlock.tsx` does NOT draw the gold
+// box on this site: channel 2's stored `price-panel` Site Builder component does
+// (nodes `join-strip-x18` and `member-teaser-x25`), and the only one a guest
+// ever sees is the teaser, conditioned on `purchase.showMemberTeaser` =
+// `memberSavingsPct > 0`. Retiring the percentage takes that box off the screen
+// — verified by rendering the real channel-2 page — so without a button here a
+// Chefs Depot product page would carry no membership call to action at all.
+// Checked against the database: `2/price-panel` is the ONLY stored component in
+// either channel that uses the teaser or a price native, so there is no tree on
+// which this button and PriceBlock's can both appear.
+//
+// The words are Tim's own "Product page price note" (gk23c1VK,
+// `05-widget-kit.html`), which is what that box should have been saying anyway.
+//
 // NO PERCENTAGE. Not per product, not site-wide. The M-to-R spread differs SKU
 // by SKU, so there is no single discount percentage in this system and one
 // cannot be derived; Tim's pack forbids publishing any figure until the spread
@@ -163,12 +184,26 @@ export function CdMemberPricingPanel({ data }: { data: CdMembershipData | null }
       : false;
   const memberAmount = data.isMember ? (memberCharged ? chargedExGst : null) : prices.member;
   const showMember = memberAmount != null;
-  if (!showMember && !showMates && !showRrp) return null;
+
+  // THE TOP-TIER ROW — the card's third figure, and the deep end of the range.
+  //
+  // It is the ladder's price for THIS SKU at the last configured rung, read from
+  // the engine at that level. It is suppressed only when it would repeat a row
+  // already on screen: a member already at the deepest rung is looking at their
+  // own price, and printing it twice under two labels reads as two prices for
+  // one machine — the failure this panel is fenced against.
+  const deepestIsDuplicate =
+    data.atDeepestLevel ||
+    (memberAmount != null && Math.abs((prices.deepest ?? NaN) - memberAmount) < 0.005);
+  const showDeepest = prices.deepest != null && !deepestIsDuplicate;
+
+  if (!showMember && !showMates && !showRrp && !showDeepest) return null;
 
   const gstLabel = inclusive ? "inc GST" : "ex GST";
   const paying = "what you pay today";
   const rrpIsCharged = showRrp && isChargedAmount(prices.rrp, chargedExGst);
   const matesIsCharged = showMates && isChargedAmount(prices.mates, chargedExGst);
+  const deepestIsCharged = showDeepest && isChargedAmount(prices.deepest, chargedExGst);
 
   const reachedIndex = data.levelIndex;
   const railFill = data.ladder.length > 1 ? (reachedIndex / (data.ladder.length - 1)) * 100 : 0;
@@ -201,6 +236,14 @@ export function CdMemberPricingPanel({ data }: { data: CdMembershipData | null }
             amount={money(memberAmount as number)}
             note={data.isMember ? paying : `${data.levelLabel} — what joining buys today`}
             emphasis={data.isMember}
+          />
+        )}
+        {showDeepest && (
+          <PriceRow
+            label={`Our deepest trade price · ${data.deepestLevelLabel}`}
+            amount={money(prices.deepest as number)}
+            note={deepestIsCharged ? paying : "at the top of the ladder"}
+            emphasis={deepestIsCharged}
           />
         )}
       </div>
@@ -239,9 +282,29 @@ export function CdMemberPricingPanel({ data }: { data: CdMembershipData | null }
           })}
         </div>
 
-        <div className="mt-6 flex justify-between text-[11px] text-text-muted">
-          <span>Where member pricing starts</span>
-          <span className="text-right">Our deepest trade price</span>
+        {/* THE RANGE, IN DOLLARS. The card asks for the min and max available on
+            spend; the honest form of that on this system is the two ends of the
+            ladder priced for the SKU on screen, because the distance between
+            them differs product by product. Tim's own end labels, now carrying
+            the figures they name. A figure the engine did not return is simply
+            absent — the label still stands. */}
+        <div className="mt-6 flex justify-between gap-3 text-[11px] text-text-muted">
+          <span>
+            Where member pricing starts
+            {prices.entry != null && (
+              <b className="mt-0.5 block text-[13px] tabular-nums text-text-primary">
+                {money(prices.entry)}
+              </b>
+            )}
+          </span>
+          <span className="text-right">
+            Our deepest trade price
+            {prices.deepest != null && (
+              <b className="mt-0.5 block text-[13px] tabular-nums text-text-primary">
+                {money(prices.deepest)}
+              </b>
+            )}
+          </span>
         </div>
 
         {/* What the ladder means for THIS shopper. A member gets their own
@@ -280,8 +343,9 @@ export function CdMemberPricingPanel({ data }: { data: CdMembershipData | null }
           </p>
         ) : (
           <p className="mt-3 text-sm text-text-secondary">
-            Membership prices every line on the site off your rolling twelve-month spend, and steps
-            down as that spend grows.
+            <strong className="text-text-primary">You&rsquo;re seeing our standard price.</strong>{" "}
+            Members buy this line lower &mdash; and almost 40,000 others &mdash; lower again as
+            their twelve-month spend grows.
           </p>
         )}
 
@@ -290,6 +354,8 @@ export function CdMemberPricingPanel({ data }: { data: CdMembershipData | null }
           distance between the ends differs product by product.
         </p>
 
+        {/* The one membership CTA on this page — see the header note for why it
+            has to be here rather than on the price block above. */}
         {!data.isMember && (
           <a
             href={data.joinHref}
