@@ -49,6 +49,7 @@ import {
 } from "@keenan/services";
 import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
+import { withBrandLogoFallback, targetsForChannel } from "@/builder/product-card-brand-logo";
 import type { MegaNavItem } from "./mega-menu";
 import {
   STOREFRONT_FILTERS_SETTING_KEY,
@@ -122,11 +123,42 @@ export const {
   calculateShipping,
   getProductPageData,
   getNamedStyles,
-  getComponents,
-  getDraftComponents,
 } = _store;
 
 export type { MegaMenuNode, MegaMenuFeatured, ContentPage } from "@keenan/services";
+
+// ============================================================================
+// Component masters, with the brand-logo image fallback placed at read time.
+//
+// Card tSrCcnvx: a product with no image — or a broken one — shows its BRAND's
+// logo instead of the grey package box, on the listing tile as well as the
+// product page. Tim asked for it on Industry Kitchens (2026-08-19); Steve asked
+// for the same on Chefs Depot on 2026-08-24, "until the missing images are
+// sourced". Chefs Depot's CATEGORY pages render their tiles from the stored
+// `product-card` master rather than from `ProductCard.tsx`
+// (`node_category_template_enabled` is on for channel 2), so a React-only fix
+// would have left every category page grey.
+//
+// It is placed HERE, once, rather than in each of the node branches that load
+// components (category, brand, home, product), because a branch that forgot the
+// call would serve grey boxes on one screen and logos on the next. Nothing is
+// written to the stored tree — see `product-card-brand-logo.ts`.
+//
+// WHICH masters are rewritten is this CHANNEL's business, so the target list is
+// resolved here and passed in: the transform itself is shared code and never
+// reads the ambient channel. A channel that has not opted in gets an empty list
+// and the call is a pass-through by reference.
+// ============================================================================
+
+type ComponentMap = Awaited<ReturnType<typeof _store.getComponents>>;
+
+const BRAND_LOGO_TARGETS = targetsForChannel(CHANNEL_ID);
+
+export const getComponents = async (): Promise<ComponentMap> =>
+  withBrandLogoFallback(await _store.getComponents(), BRAND_LOGO_TARGETS);
+
+export const getDraftComponents = async (): Promise<ComponentMap> =>
+  withBrandLogoFallback((await _store.getDraftComponents()) as ComponentMap, BRAND_LOGO_TARGETS);
 
 // Contact-keyed active subscription (identity unification: the session subject
 // is a CONTACT id, so the member badge / pricing / checkout all key off it).

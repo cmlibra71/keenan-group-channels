@@ -49,6 +49,8 @@
     "builder/home-node-branch.tsx",
     "builder/live-gst.ts",
     "builder/master-leaves.tsx",
+    "builder/product-card-brand-logo.test.ts",
+    "builder/product-card-brand-logo.ts",
     "builder/product-image-notice.test.ts",
     "builder/product-image-notice.ts",
     "builder/product-node-branch.tsx",

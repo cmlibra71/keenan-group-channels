@@ -27,9 +27,17 @@ import { SilverChefPanel } from "@/components/product/SilverChefPanel";
 import { ProductImageNotice } from "@/components/product/ProductImageNotice";
 import { CdMemberPricingPanel } from "@/components/product/CdMemberPricingPanel";
 import type { CdMembershipData } from "@/lib/pricing/cd-member-pricing";
+import { usableBrandLogo } from "@/lib/brand-logo-url";
 
 export function productNatives({ payload, variantImageUrl, data }: ProductNativesArgs): NativeComponents {
   const product = (payload.product ?? {}) as Record<string, unknown>;
+  // Card tSrCcnvx: a missing or broken photo falls back to the brand's logo.
+  // `payload.brand` is the same slice the brand-logo link above the title
+  // already binds (`enrichProductPayload`), so no extra read is needed and the
+  // two can never disagree about which logo this product's brand has.
+  const brand = (payload.brand ?? null) as { imageUrl?: string | null; name?: string | null } | null;
+  const brandLogoUrl = usableBrandLogo(brand?.imageUrl);
+
   return {
     // The gallery keeps its real zoom/pan/thumbnail behaviour.
     "product-gallery": () => (
@@ -38,6 +46,8 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
         productName={String(product.name ?? "")}
         variantImageUrl={variantImageUrl}
         videos={(product.videos ?? []) as never}
+        brandLogoUrl={brandLogoUrl}
+        brandName={brand?.name ?? null}
       />
     ),
     // Storewide ex/inc-GST switch, now that it has left the masthead. Sealed

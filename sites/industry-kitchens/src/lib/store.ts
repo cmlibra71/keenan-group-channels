@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import type { MegaNavItem } from "./mega-menu";
 import { initCommerceDb, createChannelStore, getCommerceClient } from "@keenan/services";
 import {
   channelService,
@@ -47,7 +48,7 @@ import {
 } from "@keenan/services";
 import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
-import { withBrandLogoFallback } from "@/builder/product-card-brand-logo";
+import { withBrandLogoFallback, targetsForChannel } from "@/builder/product-card-brand-logo";
 import {
   STOREFRONT_FILTERS_SETTING_KEY,
   normalizeStorefrontFilters,
@@ -135,15 +136,22 @@ export const {
 // load components (category, brand, home, product), because a branch that
 // forgot the call would serve grey boxes on one screen and logos on the next.
 // Nothing is written to the stored tree — see `product-card-brand-logo.ts`.
+//
+// WHICH masters are rewritten is this CHANNEL's business, so the target list is
+// resolved here and passed in: the transform itself is shared code and never
+// reads the ambient channel. A channel that has not opted in gets an empty list
+// and the call is a pass-through by reference.
 // ============================================================================
 
 type ComponentMap = Awaited<ReturnType<typeof _store.getComponents>>;
 
+const BRAND_LOGO_TARGETS = targetsForChannel(CHANNEL_ID);
+
 export const getComponents = async (): Promise<ComponentMap> =>
-  withBrandLogoFallback(await _store.getComponents());
+  withBrandLogoFallback(await _store.getComponents(), BRAND_LOGO_TARGETS);
 
 export const getDraftComponents = async (): Promise<ComponentMap> =>
-  withBrandLogoFallback((await _store.getDraftComponents()) as ComponentMap);
+  withBrandLogoFallback((await _store.getDraftComponents()) as ComponentMap, BRAND_LOGO_TARGETS);
 
 // ============================================================================
 // Channel settings (raw accessor)
@@ -339,6 +347,50 @@ export const getHeaderNav = unstable_cache(
   [`header-nav-${CHANNEL_ID}`],
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
 );
+
+/** The department bar's own items (Navigation editor → `nav_structure.header`):
+ *  the ORDER and the EXTRAS. Departments the editor does not mention are added
+ *  automatically by `resolveNavItems` (cards 9wau4Tx9, mOTgYEvX). Distinct from
+ *  `getHeaderNav` above, which is the older FLAT `{label, href}` projection the
+ *  utility strip still reads. */
+export const getMegaMenuNav = unstable_cache(
+  async (): Promise<MegaNavItem[]> => {
+    const nav = await getJsonSetting<{ header?: unknown } | null>("nav_structure", null);
+    return normalizeNavItems(nav?.header);
+  },
+  [`mega-menu-nav-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
+/** Departments switched off in the portal (Storefront > Navigation > Mega menu).
+ *  Kept OUT of getMegaMenu: that department tree also feeds the homepage
+ *  category blocks and /categories, and this switch is about the MENU only. */
+export const getMegaMenuHidden = unstable_cache(
+  async (): Promise<number[]> => {
+    const value = await getJsonSetting<unknown>("mega_menu_hidden_categories", []);
+    return Array.isArray(value) ? value.filter((v): v is number => typeof v === "number") : [];
+  },
+  [`mega-menu-hidden-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
+/** Saved items carry a type; anything hand-written or older is read as a link
+ *  so one odd row cannot take the header down. */
+function normalizeNavItems(value: unknown): MegaNavItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((i): i is Record<string, unknown> => !!i && typeof i === "object")
+    .map((i) => ({
+      type: (i.type as MegaNavItem["type"]) ?? "link",
+      label: typeof i.label === "string" ? i.label : "",
+      url: typeof i.url === "string" ? i.url : undefined,
+      categoryId: typeof i.categoryId === "number" ? i.categoryId : undefined,
+      pageSlug: typeof i.pageSlug === "string" ? i.pageSlug : undefined,
+      newTab: i.newTab === true,
+      children: normalizeNavItems(i.children),
+    }))
+    .filter((i) => i.label);
+}
 
 export const getHeaderConfig = unstable_cache(
   async () => getJsonSetting<HeaderConfig>("header", {}),
