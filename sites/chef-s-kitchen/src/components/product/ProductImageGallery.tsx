@@ -15,31 +15,68 @@ export interface ProductImage {
   isThumbnail: boolean | null;
 }
 
+/** Stable identity for a gallery image — the variant stand-in has no real id. */
+function imageKey(img: ProductImage): string {
+  return img.id === -1 ? `variant:${img.urlStandard}` : `img:${img.id}`;
+}
+
 export function ProductImageGallery({
   images,
   productName,
   variantImageUrl,
   videos = [],
+  brandLogoUrl = null,
+  brandName = null,
 }: {
   images: ProductImage[];
   productName: string;
   variantImageUrl?: string | null;
   /** Product videos — shown after the image thumbnails, played in place. */
   videos?: FacadeVideo[];
+  /**
+   * Card tSrCcnvx: a product with no image — or whose image FILE is broken —
+   * shows its BRAND's logo instead of the grey package box. Null when the
+   * product has no brand, or the brand has no usable logo, and then the grey
+   * box stays exactly as it was.
+   */
+  brandLogoUrl?: string | null;
+  /** The brand's name: the fallback image's ALT text. */
+  brandName?: string | null;
 }) {
+  /**
+   * Images whose FILE turned out not to be there. Half of what the card asks
+   * for is BROKEN images, and a dead file is invisible to the server — the row
+   * exists, the URL is well formed, and only the browser finds out. An image
+   * that errors is dropped from the list, so a product whose every picture is
+   * broken falls through to the same empty state an imageless product hits and
+   * gets the same brand logo, instead of the browser's broken-image glyph.
+   */
+  const [brokenKeys, setBrokenKeys] = useState<Set<string>>(() => new Set());
+  const markBroken = useCallback((key: string) => {
+    setBrokenKeys((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+  }, []);
+  /** The logo file can be missing too; then there is nothing left but the grey box. */
+  const [brandLogoBroken, setBrandLogoBroken] = useState(false);
+  const logoUrl = brandLogoBroken ? null : brandLogoUrl;
+
   // Build effective image list: prepend variant image if available
   const effectiveImages = useMemo(() => {
-    if (!variantImageUrl) return images;
-    const variantImage: ProductImage = {
-      id: -1,
-      urlStandard: variantImageUrl,
-      urlThumbnail: variantImageUrl,
-      urlZoom: variantImageUrl,
-      altText: productName,
-      isThumbnail: null,
-    };
-    return [variantImage, ...images];
-  }, [images, variantImageUrl, productName]);
+    const withVariant: ProductImage[] = !variantImageUrl
+      ? images
+      : [
+          {
+            id: -1,
+            urlStandard: variantImageUrl,
+            urlThumbnail: variantImageUrl,
+            urlZoom: variantImageUrl,
+            altText: productName,
+            isThumbnail: null,
+          },
+          ...images,
+        ];
+    if (brokenKeys.size === 0) return withVariant;
+    return withVariant.filter((img) => !brokenKeys.has(imageKey(img)));
+  }, [images, variantImageUrl, productName, brokenKeys]);
 
   // The chosen variation's photograph IS the displayed image, not merely an
   // extra thumbnail: it sits at index 0 of `effectiveImages` and index 0 is
@@ -47,11 +84,16 @@ export function ProductImageGallery({
   // gallery that MOUNTS with a variation already chosen opens on that
   // variation's picture, rather than painting the product thumbnail first and
   // correcting itself a frame later. (Card 0CDcCYmO.)
-  const [selectedIndex, setSelectedIndex] = useState(() => {
+  const [rawSelectedIndex, setSelectedIndex] = useState(() => {
     if (variantImageUrl) return 0;
     const thumbIdx = images.findIndex((img) => img.isThumbnail);
     return thumbIdx >= 0 ? thumbIdx : 0;
   });
+  // Dropping a broken image shortens the list under the selection, so the index
+  // is clamped on READ rather than chased with a second effect — the selection
+  // the shopper made is preserved, it just cannot point past the end.
+  const selectedIndex =
+    effectiveImages.length === 0 ? 0 : Math.min(rawSelectedIndex, effectiveImages.length - 1);
   const [isZooming, setIsZooming] = useState(false);
   // Which video (if any) has taken over the main viewport. Null = showing an image.
   const [playingVideoId, setPlayingVideoId] = useState<number | null>(null);
@@ -113,11 +155,30 @@ export function ProductImageGallery({
   }
 
   if (effectiveImages.length === 0 && videos.length === 0) {
+    // Card tSrCcnvx: the brand's logo stands in for the missing photo. Contained
+    // and padded, never `object-cover` — brand logos are normalised to 600x300,
+    // and cropping one to fill the stage makes it unreadable. No usable logo
+    // (no brand, or a brand carrying none) keeps the grey box that shipped
+    // before.
     return (
       <div className="h-80 overflow-hidden bg-surface-secondary">
-        <div className="h-full w-full flex items-center justify-center text-text-muted">
-          <Package className="h-24 w-24" strokeWidth={1.5} />
-        </div>
+        {logoUrl ? (
+          <div className="h-full w-full flex items-center justify-center p-10">
+            <Image
+              src={logoUrl}
+              alt={brandName || productName}
+              width={600}
+              height={300}
+              sizes="(max-width: 1024px) 100vw, 50vw"
+              className="max-h-full w-auto max-w-full object-contain"
+              onError={() => setBrandLogoBroken(true)}
+            />
+          </div>
+        ) : (
+          <div className="h-full w-full flex items-center justify-center text-text-muted">
+            <Package className="h-24 w-24" strokeWidth={1.5} />
+          </div>
+        )}
       </div>
     );
   }
@@ -151,8 +212,10 @@ export function ProductImageGallery({
           onMouseLeave={() => setIsZooming(false)}
         >
           <Image
+            key={imageKey(selected)}
             src={selected.urlStandard}
             alt={selected.altText || productName}
+            onError={() => markBroken(imageKey(selected))}
             width={800}
             height={800}
             sizes="(max-width: 1024px) 100vw, 50vw"
@@ -196,6 +259,7 @@ export function ProductImageGallery({
               <Image
                 src={img.urlThumbnail || img.urlStandard}
                 alt={img.altText || productName}
+                onError={() => markBroken(imageKey(img))}
                 fill
                 sizes="80px"
                 className="object-contain"
