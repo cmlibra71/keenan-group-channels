@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cmsFormService, cmsFormSubmissionFileService } from "@keenan/services/services";
-import { declaredUploadType, isAcceptableUpload } from "@keenan/services";
+import { declaredUploadType, isAcceptableUpload, recordAudit } from "@keenan/services";
 import { checkUploadAllowed } from "@keenan/services/upload-guard";
 import { INFECTED_REFUSAL, describeScan, scanUpload } from "@keenan/services/upload-scan";
 import { CHANNEL_ID } from "@/lib/channel";
@@ -94,6 +94,33 @@ export async function POST(req: NextRequest) {
   // all for .heic), so fall back to the filename — the bytes still decide.
   const declaredType = declaredUploadType(file.name, file.type);
 
+  // A refused or unscanned upload is written to `audit_log`, exactly as the
+  // portal's staff seam writes one (card UFprd4ED). "Somebody tried to send us
+  // something we would not take" is the event a security question is answered
+  // from later, and a line in a container's stdout is not an answer — it is gone
+  // at the next deploy. The row carries no actor because there is none: this is
+  // an anonymous visitor, so the IP is what identifies them, the same way the
+  // storefront's rate limiter records one.
+  const audit = (action: string, extra: Record<string, unknown>) =>
+    recordAudit(
+      {
+        action,
+        entityType: "uploads",
+        newValues: {
+          surface: "storefront-form-upload",
+          channel_id: CHANNEL_ID,
+          form_key: formKey,
+          field_name: fieldName,
+          file_name: file.name,
+          declared_type: file.type || null,
+          resolved_type: declaredType,
+          size_bytes: bytes.byteLength,
+          ...extra,
+        },
+      },
+      { ipAddress: ip }
+    ).catch(() => {});
+
   // The shared allow-list (card UFprd4ED) — the same one the portal's staff
   // uploads check, so "what may be uploaded" has ONE answer across the business.
   // It also refuses by EXTENSION, which the byte check below cannot: a file
@@ -106,10 +133,16 @@ export async function POST(req: NextRequest) {
     maxBytes,
     policy: "public-form",
   });
-  if (!allowed.ok) return fail(415, allowed.reason);
+  if (!allowed.ok) {
+    await audit("upload.refused", { refused_because: allowed.code, message: allowed.reason });
+    return fail(415, allowed.reason);
+  }
 
   const verdict = isAcceptableUpload(declaredType, new Uint8Array(bytes.subarray(0, 32)));
-  if (!verdict.ok) return fail(415, verdict.reason ?? "That file type isn't accepted.");
+  if (!verdict.ok) {
+    await audit("upload.refused", { refused_because: "content", message: verdict.reason ?? null });
+    return fail(415, verdict.reason ?? "That file type isn't accepted.");
+  }
 
   // Virus scan, BEFORE the bytes are stored — this is the one upload path in the
   // business that holds the file itself, so it is the one that can scan first.
@@ -119,10 +152,12 @@ export async function POST(req: NextRequest) {
   const scan = await scanUpload(bytes);
   if (scan.status === "infected") {
     console.warn("[forms/upload] refused:", describeScan(scan), file.name);
+    await audit("upload.infected", { signature: scan.signature, scanner: scan.scanner });
     return fail(415, INFECTED_REFUSAL);
   }
   if (scan.status === "unavailable") {
     console.warn("[forms/upload] stored unscanned:", describeScan(scan), file.name);
+    await audit("upload.unscanned", { reason: describeScan(scan) });
   }
 
   const key = formUploadKey(CHANNEL_ID, uploadToken, file.name);
