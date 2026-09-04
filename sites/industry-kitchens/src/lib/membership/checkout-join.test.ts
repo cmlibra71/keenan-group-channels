@@ -8,6 +8,7 @@ import {
   wantsMembershipJoin,
   MEMBERSHIP_JOIN_PITCH,
   MEMBERSHIP_JOIN_NOTHING_CHARGED,
+  membershipJoinMetafieldPatch,
 } from "./checkout-join";
 
 test("the tick is read the same way whichever shape the form posts", () => {
@@ -108,4 +109,45 @@ test("an unusable birthday leaves the join standing — it is optional on Tim's 
   });
   assert.ok(intent);
   assert.equal(intent.dateOfBirth, null);
+});
+
+test("a brand-new contact gets the birthday and the phone the checkout typed", () => {
+  const patch = membershipJoinMetafieldPatch(
+    { phone: "0419032788", dateOfBirth: "1975-04-01" },
+    null,
+    new Date("2026-09-05T01:02:03.000Z")
+  );
+  assert.deepEqual(patch, {
+    membership_join_requested_at: "2026-09-05T01:02:03.000Z",
+    date_of_birth: "1975-04-01",
+    checkout_phone: "0419032788",
+  });
+});
+
+test("a guest checkout may NEVER overwrite a birthday or phone we already hold", () => {
+  // Chefs Depot allows guest checkout, so this is a stranger typing a known customer's address.
+  const patch = membershipJoinMetafieldPatch(
+    { phone: "0400000000", dateOfBirth: "1901-01-01" },
+    { date_of_birth: "1975-04-01", checkout_phone: "0419032788" },
+    new Date("2026-09-05T01:02:03.000Z")
+  );
+  assert.deepEqual(patch, { membership_join_requested_at: "2026-09-05T01:02:03.000Z" });
+});
+
+test("a blank value we hold is still a blank — the join fills it", () => {
+  const patch = membershipJoinMetafieldPatch(
+    { phone: "0419032788", dateOfBirth: "1975-04-01" },
+    { date_of_birth: "  ", checkout_phone: null }
+  );
+  assert.equal(patch.date_of_birth, "1975-04-01");
+  assert.equal(patch.checkout_phone, "0419032788");
+});
+
+test("the join stamp is always written — it is the record that somebody asked", () => {
+  const patch = membershipJoinMetafieldPatch(
+    { phone: "", dateOfBirth: null },
+    { date_of_birth: "1975-04-01" }
+  );
+  assert.equal(Object.keys(patch).length, 1);
+  assert.ok(typeof patch.membership_join_requested_at === "string");
 });

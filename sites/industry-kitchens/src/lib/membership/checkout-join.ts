@@ -160,3 +160,39 @@ export function membershipJoinIntent(input: {
     dateOfBirth: normaliseDateOfBirth(input.dateOfBirth ?? null),
   };
 }
+
+/**
+ * What a join may write onto the CONTACT's own metafields.
+ *
+ * Chefs Depot keeps guest checkout ON (`require_account_to_checkout` is false on that channel), so
+ * anybody can type a known customer's email address at the checkout and tick Join. The emailed
+ * activation link is safe — it only ever arrives in that address's own inbox — but the birthday and
+ * the phone are that PERSON'S record, not this one order's, and the birthday is the input to a
+ * birthday reward. So on a contact this join did not create we only ever fill a BLANK: what the
+ * customer has already told us always beats what a stranger typed at a checkout. On a brand-new
+ * contact (`held` empty) both are written.
+ *
+ * `membership_join_requested_at` is always stamped: it records that a join was asked for with this
+ * address, which is the whole point of the tick, and it overwrites nothing a customer authored.
+ */
+export function membershipJoinMetafieldPatch(
+  intent: Pick<MembershipJoinIntent, "phone" | "dateOfBirth">,
+  held: Record<string, unknown> | null | undefined,
+  now: Date = new Date()
+): Record<string, unknown> {
+  const alreadyHeld = (key: string) => {
+    const value = (held ?? {})[key];
+    return value !== undefined && value !== null && String(value).trim() !== "";
+  };
+
+  const patch: Record<string, unknown> = {
+    membership_join_requested_at: now.toISOString(),
+  };
+  if (intent.dateOfBirth && !alreadyHeld("date_of_birth")) {
+    patch.date_of_birth = intent.dateOfBirth;
+  }
+  if (intent.phone && !alreadyHeld("checkout_phone")) {
+    patch.checkout_phone = intent.phone;
+  }
+  return patch;
+}

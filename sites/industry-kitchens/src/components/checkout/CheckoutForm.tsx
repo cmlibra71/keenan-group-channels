@@ -35,8 +35,6 @@ import {
   shouldConfirmStripeResult,
 } from "@/lib/checkout/card-entry";
 import { Price } from "@/components/ui/Price";
-import { backorderMessage } from "@keenan/services/backorder";
-import { MembershipJoinPanel } from "@/components/checkout/MembershipJoinPanel";
 import { gstSplit } from "@keenan/services/calc";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
 import { FinanceApplicationPanel } from "@/components/checkout/FinanceApplicationPanel";
@@ -56,6 +54,8 @@ import { useHeaderPanels } from "@/lib/cart-quote-counts";
 import { ga4AddShippingInfo, ga4AddPaymentInfo, rowToGa4Item } from "@/components/analytics/ga4";
 import { BulkyDeliveryChoice } from "@/components/checkout/BulkyDeliveryChoice";
 import { holdsPayment, type DeliveryService } from "@/lib/checkout/bulky-delivery";
+import { backorderMessage } from "@keenan/services/backorder";
+import { MembershipJoinPanel } from "@/components/checkout/MembershipJoinPanel";
 
 declare global {
   interface Window {

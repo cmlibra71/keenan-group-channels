@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getFeatureFlag } from "@/lib/store";
+import { getSession } from "@/lib/auth";
 import { readActivation } from "@/lib/membership/activation-server";
 import { formatDateOfBirth } from "@/lib/membership/checkout-join";
 import { ActivateMembershipForm } from "./ActivateForm";
@@ -63,13 +64,48 @@ export default async function ActivateMembershipPage({
     );
   }
 
-  // Somebody who already has a password signs in rather than setting a new one over the top of it.
-  // A link minted from an address typed at a checkout must never become a second password-reset
-  // channel — see the note on `validateAccountStep`.
+  // Somebody who already has a password does NOT set a new one here — a link minted from an
+  // address typed at a checkout must never become a second password-reset channel (see the note on
+  // `validateAccountStep`). What is left for them is the last step: the card.
   if (context.prefill.hasPassword) {
-    const next = encodeURIComponent(
-      context.planSlug ? `/account/membership/subscribe/${context.planSlug}` : "/membership"
-    );
+    const subscribeHref = context.planSlug
+      ? `/account/membership/subscribe/${context.planSlug}`
+      : "/membership";
+    const session = await getSession();
+
+    // Already signed in as the person this link was minted for — there is nothing to sign in to,
+    // so go straight to the last step. This is the COMMON case, not an edge: everyone who ticks
+    // Join, activates (which sets a password) and then abandons the card step is in this branch on
+    // their very next order, and the session outlives the token. Drawing a "Sign in" card at them
+    // was a dead end, because `/account` only honours `?next=` when there is NO session.
+    if (session && session.contactId === context.prefill.contactId) {
+      redirect(subscribeHref);
+    }
+
+    // Signed in as somebody ELSE. We cannot finish this join on the signed-in person's account, so
+    // say plainly what has to happen rather than sending them somewhere that will not do it.
+    if (session) {
+      return (
+        <div className="mx-auto max-w-lg px-4 sm:px-6 lg:px-8 py-12">
+          <h1 className="text-2xl font-bold text-ink-900 mb-3">Sign in to finish joining</h1>
+          <p className="text-text-secondary mb-6">
+            This link belongs to the account for <strong>{context.prefill.email}</strong>, and
+            you&apos;re signed in with a different one. Sign out, sign back in with that email, and
+            your membership is one step away.
+          </p>
+          <Link
+            href="/account"
+            className="inline-block rounded-lg bg-brand px-6 py-3 font-semibold text-white hover:bg-brand-deep"
+          >
+            Go to my account
+          </Link>
+        </div>
+      );
+    }
+
+    // Signed out. The link goes to the last step itself: its own guard bounces a signed-out
+    // visitor to the sign-in panel carrying `?next=`, and returns them here afterwards — which is
+    // what this page promises and what `/account?next=` alone could not deliver.
     return (
       <div className="mx-auto max-w-lg px-4 sm:px-6 lg:px-8 py-12">
         <h1 className="text-2xl font-bold text-ink-900 mb-3">Sign in to finish joining</h1>
@@ -78,7 +114,7 @@ export default async function ActivateMembershipPage({
           we&apos;ll take you straight to the last step.
         </p>
         <Link
-          href={`/account?next=${next}`}
+          href={subscribeHref}
           className="inline-block rounded-lg bg-brand px-6 py-3 font-semibold text-white hover:bg-brand-deep"
         >
           Sign in
