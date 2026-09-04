@@ -25,6 +25,8 @@ import type { ProductKit } from "@/lib/product-kit";
 import { GstToggle } from "@/components/layout/GstToggle";
 import { SilverChefPanel } from "@/components/product/SilverChefPanel";
 import { ProductImageNotice } from "@/components/product/ProductImageNotice";
+import { CdMemberPricingPanel } from "@/components/product/CdMemberPricingPanel";
+import type { CdMembershipData } from "@/lib/pricing/cd-member-pricing";
 
 export function productNatives({ payload, variantImageUrl, data }: ProductNativesArgs): NativeComponents {
   const product = (payload.product ?? {}) as Record<string, unknown>;
@@ -63,6 +65,16 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // authored because the supplied panel colour is not a token on either site, and a
     // colour class invented in a STORED tree has no rule in the deployed stylesheet.
     // Renders null unless this product carries the tick.
+    // Chefs Depot's three prices (RRP / Mates Rates / this shopper's member price)
+    // and the spend-more-save-more ladder (card Nyp8bkPm). Sealed rather than
+    // authored because the figures follow the LIVE purchase state — which variant
+    // is selected, whether this product's price is hidden — and an authored tree
+    // cannot call a pricing engine. `data.cdMembership` is built ONCE per request
+    // by the product branch; the native never fetches. Renders null on a channel
+    // that does not run the membership model, so Industry Kitchens is untouched.
+    "cd-member-pricing": () => (
+      <CdMemberPricingPanel data={(data.cdMembership ?? null) as CdMembershipData | null} />
+    ),
     "product-image-notice": () => (
       <ProductImageNotice show={product.imageIsIllustrative === true} />
     ),

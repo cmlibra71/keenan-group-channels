@@ -327,7 +327,6 @@ export default async function CheckoutPage() {
 
   // Check membership status for checkout banners
   let showMemberBanner = false;
-  let estimatedSavings = 0;
   let isMember = false;
   let memberSavings = 0;
 
@@ -349,7 +348,6 @@ export default async function CheckoutPage() {
       const plans = await getSubscriptionPlans();
       if (plans.length > 0) {
         showMemberBanner = true;
-        estimatedSavings = Math.round(subtotal * (checkoutSettings.memberSavingsPercentage / 100) * 100) / 100;
       }
     }
   }
@@ -372,11 +370,17 @@ export default async function CheckoutPage() {
         </div>
       )}
 
-      {showMemberBanner && estimatedSavings > 0 && (
+      {/* The join pitch, in Tim's words (card Nyp8bkPm; his widget kit's cart
+          upsell). It used to print "Members save up to $X on this order", X being
+          the basket times a flat 15% held in `member_savings_percentage` — a
+          figure with no measured basis, retired across the site. The `> 0` guard
+          it carried is kept, moved onto the BASKET, so an empty cart still gets
+          no pitch. */}
+      {showMemberBanner && subtotal > 0 && (
         <div className="mb-6 flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
           <div className="flex items-center gap-2 text-sm text-amber-800">
             <Crown className="h-4 w-4 text-amber-600 shrink-0" />
-            Members save up to ${estimatedSavings.toFixed(2)} on this order.
+            Join the buying group and every line reprices from your next order.
           </div>
           <Link
             href="/membership"
