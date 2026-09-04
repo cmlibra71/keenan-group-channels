@@ -15,6 +15,7 @@ import {
 } from "@/lib/store";
 import {
   quoteAttributeService,
+  loadQuoteOrderRep,
   withTransaction,
   runWithOrderOrigin,
   wantsStripeTestMode,
@@ -325,8 +326,30 @@ export async function payQuote(
     /* carry nothing rather than leaking every attribute */
   }
 
+  // WHO OWNS THIS ORDER (card QRA0m4vh, Steve 2026-09-03: "When a customer pays
+  // a quote on the website, it needs to carry the rep across. If no rep is
+  // associated with that customer, the rep should be cs@(domain)").
+  //
+  // One shared ladder in `@keenan/services`, the same one the portal's staff
+  // conversion resolves its first two steps from: the quote's `sales_agent`
+  // pick, else its own `sales_rep_id`, else the rep standing against the
+  // customer's ACCOUNT (storefront-scoped, so a Chefs Depot order never takes an
+  // Industry Kitchens rep), else the ACTIVE rep row on this storefront's own cs@
+  // address. Tolerated like the attribute codes above: a failed lookup carries no
+  // rep — exactly what every quote paid here did before this card — and never
+  // stops a customer paying.
+  const salesRep = await loadQuoteOrderRep({
+    channelId: quote.channel_id as number,
+    salesRepId: (quote.sales_rep_id as number | null) ?? null,
+    // "no rep associated with that CUSTOMER": the quote's account, else the one
+    // this buyer signs in under.
+    accountId: (quote.account_id as number | null) ?? perms.accountId ?? null,
+    attributes: quote.attributes,
+  }).catch(() => ({ id: null, name: null, source: null as null }));
+
   const plan = planOrderFromPaidQuote(quote, {
     gstRate,
+    salesRep,
     copyAttributeCodes,
     fallbackShipTo,
     fallbackBilling: fallbackShipTo
