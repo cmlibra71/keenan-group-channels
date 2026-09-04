@@ -1,5 +1,7 @@
 "use client";
 import type { NativeComponents } from "@keenan/services/builder-react";
+import { AttributeFacetSections, PriceSliderFacet } from "@/components/category/FilterRail";
+import type { CategoryFacets } from "@/components/category/FilterRail";
 import type { CategoryListingCtx } from "./BuilderCategoryPage";
 
 // Industry Kitchens seals nothing on the category page any more.
@@ -12,7 +14,23 @@ import type { CategoryListingCtx } from "./BuilderCategoryPage";
 // ignored in favour of this.
 //
 // The signature stays so the wrapper keeps its seam.
-export function categoryNatives(_args: { listing: CategoryListingCtx }): NativeComponents {
-  void _args;
-  return {};
+//
+// The per-category attribute sections and the Price slider (card C8G4f4U8).
+// These are NOT legacy: which attributes a category offers is decided from that
+// category's own product data, so an author cannot place a section per
+// attribute per category. `builder/category-facet-injection.ts` places both
+// leaves inside the AUTHORED rail at render time — after the last authored
+// facet group, and in place of the Price group's three legacy band tick boxes —
+// and they draw whatever this listing earned. Neither key is a master, so
+// nothing is shadowed.
+export function categoryNatives({ listing }: { listing: CategoryListingCtx }): NativeComponents {
+  return {
+    // `CategoryFacets`, not `as never`: `CategoryListingCtx.facets` is
+    // `unknown`, so `as never` would satisfy any prop shape at all and hide a
+    // future mismatch at this seam instead of failing the typecheck.
+    "category-attribute-facets": () => (
+      <AttributeFacetSections facets={listing.facets as CategoryFacets} />
+    ),
+    "facet-price-slider": () => <PriceSliderFacet facets={listing.facets as CategoryFacets} />,
+  };
 }

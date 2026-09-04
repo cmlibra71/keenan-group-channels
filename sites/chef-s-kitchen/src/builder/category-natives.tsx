@@ -1,8 +1,17 @@
 "use client";
 import Link from "next/link";
 import type { NativeComponents } from "@keenan/services/builder-react";
-import { FilterRail, FilterChips, SortSelect, FacetCheckbox, MobileFilterRail } from "@/components/category/FilterRail";
+import {
+  FilterRail,
+  FilterChips,
+  SortSelect,
+  FacetCheckbox,
+  MobileFilterRail,
+  AttributeFacetSections,
+  PriceSliderFacet,
+} from "@/components/category/FilterRail";
 import { ProductGridClient, type GridProduct } from "@/components/product/ProductGridClient";
+import type { CategoryFacets } from "@/components/category/FilterRail";
 import type { CategoryListingCtx } from "./BuilderCategoryPage";
 
 // Chefs Depot's sealed leaves for the category template. Lifted verbatim out of
@@ -11,8 +20,23 @@ import type { CategoryListingCtx } from "./BuilderCategoryPage";
 // These are all LEGACY: filter-rail, clear-filters, filter-drawer, facet-option
 // and filter-controls are component MASTERS now. Natives win over same-key
 // masters, so none of those keys may ever be added here.
+// The per-category attribute sections and the Price slider (card C8G4f4U8).
+// These are NOT legacy: which attributes a category offers is decided from that
+// category's own product data, so an author cannot place a section per
+// attribute per category. `builder/category-facet-injection.ts` places both
+// leaves inside the AUTHORED rail at render time — after the last authored
+// facet group, and in place of the Price group's three legacy band tick boxes —
+// and they draw whatever this listing earned. Neither key is a master, so
+// nothing is shadowed.
 export function categoryNatives({ listing }: { listing: CategoryListingCtx }): NativeComponents {
   return {
+    // `CategoryFacets`, not `as never`: `CategoryListingCtx.facets` is
+    // `unknown`, so `as never` would satisfy any prop shape at all and hide a
+    // future mismatch at this seam instead of failing the typecheck.
+    "category-attribute-facets": () => (
+      <AttributeFacetSections facets={listing.facets as CategoryFacets} />
+    ),
+    "facet-price-slider": () => <PriceSliderFacet facets={listing.facets as CategoryFacets} />,
     "facet-toggle": (props: Record<string, unknown>) => (
       <FacetCheckbox
         param={String(props.param ?? "")}
