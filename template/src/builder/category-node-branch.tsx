@@ -22,6 +22,14 @@ import {
 import { cmsFunctionService } from "@keenan/services/services";
 import { treePlacesSeoCopy } from "@/builder/seo-copy-placement";
 import {
+  withCategoryFacetComponents,
+  withCategoryFacetNodes,
+} from "@/builder/category-facet-injection";
+import {
+  stripCategoryBannerBackdrop,
+  findBannerBackdropNodes,
+} from "@/builder/category-banner-backdrop";
+import {
   BuilderCategoryPage,
   type CategoryGridProduct,
 } from "@/builder/BuilderCategoryPage";
@@ -132,9 +140,38 @@ export async function renderCategoryNodeBranch({
   const catTemplate = (await getCmsTemplate("category_layout", draft).catch(() => null)) as {
     node_tree?: unknown;
   } | null;
-  const nodeTree = (catTemplate?.node_tree as NodeTree | null) ?? null;
-  if (!nodeTree) return null;
+  const storedTree = (catTemplate?.node_tree as NodeTree | null) ?? null;
+  if (!storedTree) return null;
   if (!draft && !(await getFeatureFlag("node_category_template_enabled"))) return null;
+
+  // Card TnQJpunl (Steve, 2026-08-26): the category feature image is not also
+  // the stretched backdrop behind the header — "just the main green site colour,
+  // no image". Applied to the tree on the way to the renderer rather than
+  // written back to the stored tree, so there is nothing to undo on a rollback
+  // and a republish from the designer cannot quietly reinstate it. A no-op on a
+  // tree that never had one — Industry Kitchens' is authored clean — so this
+  // shared module changes exactly one storefront. See
+  // `builder/category-banner-backdrop.ts`.
+  const stripped = stripCategoryBannerBackdrop(storedTree);
+  const nodeTree = stripped.tree;
+
+  // The post-condition, and it is not belt-and-braces. The strip matches on node
+  // id and on label; an author who rebuilds the backdrop under a fresh name
+  // defeats both, and Steve's screenshot comes straight back with nothing
+  // anywhere saying the fix stopped working. `findBannerBackdropNodes` asks the
+  // acceptance question structurally instead — is anything still stretching
+  // `category.image_url` across the banner (`absolute` + `inset-0`) — so a
+  // silent regression announces itself in the logs of the site it happened on.
+  // It cannot fire on a subcategory tile or the `/categories` index: those bind
+  // the same field in flow, without the full-bleed positioning.
+  const survivingBackdrop = findBannerBackdropNodes(nodeTree);
+  if (survivingBackdrop.length > 0) {
+    console.warn(
+      `[TnQJpunl] category banner backdrop survived the strip: ${survivingBackdrop.join(", ")}` +
+        ` (removed by id/label: ${stripped.removed.join(", ") || "none"}).` +
+        " Add its label to BANNER_BACKDROP_LABELS in builder/category-banner-backdrop.ts."
+    );
+  }
 
   // Card tSrCcnvx (Tim, 2026-08-19): the brand logo an authored tile falls back
   // to when a product has no photo. Additive — every other field on the row is
@@ -179,9 +216,18 @@ export async function renderCategoryNodeBranch({
   });
 
   const namedStyles = await getNamedStyles().catch(() => ({}));
-  const components = (await (draft ? getDraftComponents() : getComponents()).catch(
-    () => ({})
-  )) as Record<string, NodeTree>;
+  // The per-category attribute sections and the price slider, placed into the
+  // AUTHORED rail at render time (card C8G4f4U8). Which attributes a category
+  // offers is decided from that category's own data, so no designed page can
+  // carry a section for them; this is the same pure, idempotent, nothing-stored
+  // pass the illustrative-image banner uses on the product tree (82HgV23q). A
+  // component that does not repeat over the listing's facets is untouched.
+  const components = withCategoryFacetComponents(
+    (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<
+      string,
+      NodeTree
+    >
+  );
   const builderCss =
     ((await getChannelSetting("builder_published_css").catch(() => null)) as {
       css?: string;
@@ -202,7 +248,7 @@ export async function renderCategoryNodeBranch({
     <>
       {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
       <BuilderCategoryPage
-        tree={nodeTree}
+        tree={withCategoryFacetNodes(nodeTree)}
         payload={payload}
         listing={{
           products: scoped,

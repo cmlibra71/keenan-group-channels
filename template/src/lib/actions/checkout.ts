@@ -6,7 +6,7 @@ import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogS
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { hasTestCheckoutSession } from "@/lib/checkout/test-session";
-import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveOrderBusinessName, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, siteAccessProfileService, loadOrderContactForOrder, type EmailLineItem } from "@keenan/services";
+import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveOrderBusinessName, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, siteAccessProfileService, loadOrderContactForOrder, ensureContactStripeCustomerForGateway, listSavedCardsForContact, type EmailLineItem } from "@keenan/services";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, type BelowCostLine } from "@/lib/checkout/order-draft";
 import { backorderFactsForProducts } from "@/lib/cart/backorder-facts";
 import { canPurchaseQuantity } from "@keenan/services/backorder";
@@ -30,7 +30,9 @@ import { normaliseCustomerReference } from "@/lib/checkout/customer-reference";
 import { setLastOrder } from "@/lib/checkout/last-order";
 import { canViewOrderConfirmation } from "@/lib/checkout/confirmation-access";
 import { siteBaseUrl } from "@/lib/seo";
-import type { ConfirmBillingDetails } from "@/lib/payments/stripe-gateways";
+import { canTakeCardPayment, type ConfirmBillingDetails } from "@/lib/payments/stripe-gateways";
+import { resolveStripeGateway, resolveScopedStripeGateway } from "@/lib/payments/gateway";
+import { chosenSavedCard } from "@/lib/checkout/saved-cards";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 import {
   ACCOUNT_REQUIRED_SETTING,
@@ -105,6 +107,21 @@ type PlaceOrderResult = {
      * card EInDib45 exists to keep true.
      */
     billingDetails?: ConfirmBillingDetails | null;
+    /**
+     * THE SERVER'S VERDICT ON THE POSTED CARD (card JiaDTjr1): the payment-method
+     * id this intent was actually created against, or null when none was — either
+     * because none was posted, or because the one that was is not this person's,
+     * has expired, or could not be re-read.
+     *
+     * It is returned because the BROWSER confirms the payment, and it must confirm
+     * with what the server accepted, not with what the form believed at submit
+     * time. Those two disagree whenever the re-read declines the card, and
+     * confirming a customer-attached payment method against an intent that carries
+     * no customer is a Stripe error in front of a shopper whose order is already
+     * written. Nulling it here is what puts the card box back in front of them —
+     * a fallback, never a refusal.
+     */
+    savedCardId?: string | null;
   };
 };
 
@@ -200,6 +217,11 @@ export async function placeOrder(
   // never a reason to refuse an order — and normalised (one line, capped at the
   // varchar(100) column) so a pasted value can never make the insert fail.
   const customerReference = normaliseCustomerReference(formData.get("customerReference"));
+  // A card the shopper already has on file, and whether to keep the one they are
+  // about to type (card JiaDTjr1). Both are CLAIMS at this point; neither is
+  // acted on until the id has been checked against this person's own cards below.
+  const postedSavedCardId = (formData.get("savedCardId") as string)?.trim() || "";
+  const wantsCardSaved = formData.get("saveCard") === "on";
 
   if (!email || !firstName || !lastName || !address1 || !city || !postalCode) {
     return { error: "Please fill in all required fields." };
@@ -575,6 +597,26 @@ export async function placeOrder(
   if (!isPaymentMethodOnChannel(paymentMethod, checkoutSettings.customerPaymentMethods)) {
     return { error: unavailablePaymentMethodError() };
   }
+  // (0b) …and can this storefront actually TAKE a card right now? (card OHDx84DK)
+  //
+  // The checkout page drops the Credit / Debit Card option whenever this channel
+  // has no usable Stripe credentials — its own account holds entries but no live
+  // one (the likeliest cutover slip: live keys pasted with the Add-gateway
+  // modal's "test mode" box still ticked), or the settings read refused. THIS is
+  // the authorization half, and it has to sit HERE, before the order row is
+  // written: `placeOrder` writes the order and only then calls Stripe, so a
+  // stale form, a second tab, or a submit racing a settings save used to leave a
+  // NUMBERED, UNPAID order behind and put a raw internal Stripe message in front
+  // of the shopper. Dropping the option on the page alone is exactly the
+  // show-≠-accept split the payment-methods register rule forbids.
+  //
+  // ONE predicate with the page — `canTakeCardPayment` — so the two halves
+  // cannot drift, and the same customer wording the channel-list refusal uses.
+  const { gateway: channelStripeGateway } = await resolveStripeGateway();
+  const cardUnavailable = !canTakeCardPayment(channelStripeGateway);
+  if (cardUnavailable && paymentMethod === "stripe") {
+    return { error: unavailablePaymentMethodError() };
+  }
   // (1) THEN the account's own two controls, and BOTH of them: the allow-list
   // (which methods this account may use at all) and the per-account staff-only
   // list (methods staff may key on the account's behalf but the customer may
@@ -616,18 +658,28 @@ export async function placeOrder(
     // refuse an order the page invited.
     settings: checkoutSettings.financeSettings,
   });
+  // A card this storefront cannot take is dropped from BOTH counts, exactly as
+  // the page drops it from both — otherwise a store whose only method is the card
+  // resolves a signed-in shopper to "account-restricted" and blames their account
+  // for a gateway a staff member has not finished setting up (card OHDx84DK).
   const offerableMethods = filterFinanceMethods(
     filterPaymentMethodsForAccount(
       checkoutSettings.customerPaymentMethods,
       accountOptions?.allowedPaymentMethods ?? null,
       accountOptions?.staffOnlyPaymentMethods ?? null
-    ).filter((m) => m.id !== "net_terms" || !!netTerms),
+    )
+      .filter((m) => m.id !== "net_terms" || !!netTerms)
+      .filter((m) => !cardUnavailable || m.id !== "stripe"),
     cartFinanceOffer.eligible
   );
   if (
     resolvePaymentAvailability(
-      filterFinanceMethods(checkoutSettings.customerPaymentMethods, cartFinanceOffer.eligible)
-        .length,
+      filterFinanceMethods(
+        checkoutSettings.customerPaymentMethods.filter(
+          (m) => !cardUnavailable || m.id !== "stripe"
+        ),
+        cartFinanceOffer.eligible
+      ).length,
       offerableMethods.length,
       // A guest has no account, so the account wording would name something they
       // have not got — they fall to the store state and the order is placed unpaid.
@@ -709,6 +761,52 @@ export async function placeOrder(
   //   - isTestMode tags the order/emails so test data can be cleared later.
   const testCheckoutSession = await hasTestCheckoutSession();
   const isTestMode = testCheckoutSession || (await wantsStripeTestMode(CHANNEL_ID));
+
+  // ── THE PERSON'S OWN CARD (card JiaDTjr1) ─────────────────────────────────
+  //
+  // The AUTHORIZATION half of the picker the checkout page drew. Everything the
+  // browser posted about a card is a claim: the id is re-read off THIS person's
+  // own file, on THIS storefront's Stripe account, and anything else — somebody
+  // else's card id, a card that has since expired, a card posted by a guest — is
+  // simply not used. It falls back to the card box rather than refusing the
+  // order, because there is a working way to pay either way and a dead end is
+  // the worse failure (`chosenSavedCard`, unit-pinned).
+  //
+  // A saved card is a way of paying by CARD, never a way past the method gate: it
+  // is resolved only for `stripe`, and only after the channel list, the account
+  // allow-list and the account staff-only list have already accepted that method
+  // above (NmAfwrdE, N8kE8arY).
+  //
+  // The Stripe CUSTOMER is resolved on the gateway this checkout already chose,
+  // so the customer id and the key can never come from two different accounts
+  // (OHDx84DK) — one is `resource_missing`, not a fallback.
+  let stripeCustomerId: string | null = null;
+  let savedCardId: string | null = null;
+  if (effectivePaymentMethod === "stripe" && session?.contactId) {
+    const wantsCard = !!postedSavedCardId || wantsCardSaved;
+    if (wantsCard) {
+      const scoped = await resolveScopedStripeGateway().catch(() => null);
+      if (scoped) {
+        const ensured = await ensureContactStripeCustomerForGateway(scoped, session.contactId, {
+          name: [firstName, lastName].filter(Boolean).join(" "),
+          email,
+        }).catch(() => null);
+        stripeCustomerId = ensured?.customerId ?? null;
+      }
+    }
+    if (stripeCustomerId && postedSavedCardId) {
+      const onFile = await listSavedCardsForContact({
+        channelId: CHANNEL_ID,
+        contactId: session.contactId,
+        ...(testCheckoutSession ? { testMode: true } : {}),
+      }).catch(() => null);
+      savedCardId = chosenSavedCard(onFile?.cards ?? [], postedSavedCardId)?.id ?? null;
+    }
+  }
+  // Keep the card only where there is a person to keep it against, and only when
+  // a NEW card is being typed — re-saving one already on file is a no-op that
+  // would nonetheless ask Stripe to re-consent.
+  const saveThisCard = !!stripeCustomerId && wantsCardSaved && !savedCardId;
 
   // Stamp test-mode marker + (for net-terms orders) the actual term length used,
   // so the confirmation page / invoice email show the customer's real terms.
@@ -811,11 +909,21 @@ export async function placeOrder(
           // Per-call only; nothing persisted. Refused rather than charged live if
           // no test gateway is configured.
           test_mode: testCheckoutSession,
+          // The person, and optionally the card of theirs this is pointed at
+          // (card JiaDTjr1). All three are inert without a customer, and the
+          // card choice is part of the idempotency key — so a shopper who
+          // pressed Pay on a saved card and then switched to "use a different
+          // card" for the same amount is not handed the first intent back.
+          ...(stripeCustomerId ? { customer_id: stripeCustomerId } : {}),
+          ...(savedCardId ? { payment_method_id: savedCardId } : {}),
+          ...(saveThisCard ? { save_card: true } : {}),
         });
         // Breadcrumb BEFORE handing off to the card form — see the fresh-order
         // branch below for why it can't wait for confirmStripePayment.
         await setLastOrder(existing.order_number, "stripe");
-        return { stripe: { clientSecret, orderNumber: existing.order_number, billingDetails } };
+        return {
+          stripe: { clientSecret, orderNumber: existing.order_number, billingDetails, savedCardId },
+        };
       }
     } catch (e) {
       console.error("[placeOrder] idempotency reuse check failed (non-fatal):", e);
@@ -1098,9 +1206,11 @@ export async function placeOrder(
   }
 
   // For Stripe: create PaymentIntent and return client secret for browser confirmation.
-  // Uses the global paymentService — credentials live in store_settings.payment_gateways
-  // (configured at /dashboard/settings/payments in the portal). Channel segmentation
-  // happens via metadata stamped by paymentService.
+  // paymentService resolves the gateway PER CHANNEL (card OHDx84DK): this
+  // storefront's own `channel_settings.payment_gateways` entries when it has
+  // them, the global `store_settings.payment_gateways` row when it does not.
+  // Both are configured at /dashboard/settings/payments in the portal. Metadata
+  // stamped by paymentService still identifies the channel on every intent.
   if (effectivePaymentMethod === "stripe") {
     try {
       const { clientSecret, billingDetails } = await paymentService.createStripePaymentIntent(order.id, {
@@ -1110,6 +1220,11 @@ export async function placeOrder(
         // Per-call only; nothing persisted. Refused rather than charged live if
         // no test gateway is configured.
         test_mode: testCheckoutSession,
+        // The person, and optionally the card of theirs this is pointed at, or
+        // the instruction to keep the card they are about to type (JiaDTjr1).
+        ...(stripeCustomerId ? { customer_id: stripeCustomerId } : {}),
+        ...(savedCardId ? { payment_method_id: savedCardId } : {}),
+        ...(saveThisCard ? { save_card: true } : {}),
       });
 
       // IMPORTANT: do NOT clear the cart here. Returning from a server action
@@ -1127,9 +1242,23 @@ export async function placeOrder(
       // that ordering irrelevant. Harmless if the shopper abandons the card form
       // — the cart is still full, so the guard never fires.
       await setLastOrder(order.order_number, "stripe");
-      return { stripe: { clientSecret, orderNumber: order.order_number, billingDetails } };
+      return { stripe: { clientSecret, orderNumber: order.order_number, billingDetails, savedCardId } };
     } catch (err) {
-      return { error: err instanceof Error ? err.message : "Failed to create payment." };
+      // WHAT THE SHOPPER READS IS OURS, NOT STRIPE'S (card OHDx84DK).
+      //
+      // This returned `err.message` verbatim, which is how an internal
+      // configuration sentence — "This storefront has its own Stripe gateway but
+      // no live entry. Add its live keys under Settings > Payments." — reached a
+      // Chefs Depot customer. Nothing thrown here is shopper-actionable: a card
+      // DECLINE happens later, in the browser, at confirm time; everything at
+      // intent-CREATION time is our configuration or Stripe being unreachable.
+      // The internal text is logged where staff can read it (Product Brief: no
+      // internal vocabulary on a customer face).
+      console.error("[placeOrder] could not create the PaymentIntent:", err);
+      return {
+        error:
+          "We couldn't start the card payment. Please try again, or choose another payment method.",
+      };
     }
   }
 

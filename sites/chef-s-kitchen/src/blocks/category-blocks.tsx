@@ -9,7 +9,6 @@
 // Keep the JSX in exact sync with the legacy page until that path is deleted.
 // ============================================================================
 import Link from "next/link";
-import Image from "next/image";
 import { ChevronRight } from "lucide-react";
 import type { RenderContext } from "@keenan/services";
 import {
@@ -138,13 +137,9 @@ async function CategoryHeaderBlock({ props, ctx }: BlockProps) {
   if (CMS_V2_ON(props, ctx)) {
     const env = await v2Env("category_header", props, ctx);
     return (
+      /* Brand green only — no backdrop image (card TnQJpunl). See the note on
+         the legacy branch below. */
       <section className="relative overflow-hidden bg-gradient-to-br from-brand-mid to-brand-deep">
-        {category.image_url && (
-          <>
-            <Image src={category.image_url} alt="" fill sizes="100vw" className="object-cover opacity-30" />
-            <div className="absolute inset-0 bg-gradient-to-r from-brand-deep/80 to-brand-deep/40" />
-          </>
-        )}
         <div className="container-page relative py-10 lg:py-12">
           {env.subBlocks.map((sb) => (
             <div key={sb.id} data-cms-subblock-key={ctx?.draft ? sb.key : undefined}>
@@ -168,19 +163,14 @@ async function CategoryHeaderBlock({ props, ctx }: BlockProps) {
   const showDescription = props.show_description !== false;
 
   return (
+    /* Brand green only — deliberately NO backdrop image. Card TnQJpunl (Steve,
+       2026-08-26): "just the main green site colour, no image". The stretched
+       `category.image_url` at opacity-30 and its `brand-deep` scrim used to sit
+       here; do not reinstate them. The feature image itself still draws the
+       subcategory tiles and the `/categories` index — only the banner backdrop
+       is gone, and the copy that actually reaches a shopper is stripped from the
+       Site Builder tree by `builder/category-banner-backdrop.ts`. */
     <section className="relative overflow-hidden bg-gradient-to-br from-brand-mid to-brand-deep">
-      {category.image_url && (
-        <>
-          <Image
-            src={category.image_url}
-            alt=""
-            fill
-            sizes="100vw"
-            className="object-cover opacity-30"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-brand-deep/80 to-brand-deep/40" />
-        </>
-      )}
       <div className="container-page relative py-10 lg:py-12">
         <nav className="mb-3 flex flex-wrap items-center gap-1.5 text-[13px] text-white/70">
           <Link href="/" className="transition-colors hover:text-white">Home</Link>

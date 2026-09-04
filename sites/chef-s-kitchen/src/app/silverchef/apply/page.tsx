@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   FINANCE_APPLICATION_FORM_KEY,
   FINANCE_APPLICATION_INTRO,
@@ -8,6 +9,9 @@ import {
   financeApplicationFields,
 } from "@keenan/services/finance";
 import { FinanceApplicationForm } from "@/components/finance/FinanceApplicationForm";
+import { ensureFinanceApplyPage, FINANCE_APPLY_SLUGS } from "@keenan/services/services";
+import { CHANNEL_ID } from "@/lib/channel";
+import { getCmsPage } from "@/lib/store";
 
 // ============================================================================
 // The finance application form (card 6f47rFeT).
@@ -42,7 +46,26 @@ export const metadata: Metadata = {
     "Apply for SilverChef Rent-Try-Buy equipment finance. A few minutes to fill in, nothing is charged, and you are not committed to anything by applying.",
 };
 
+// ── CMS-page resolver (Chris, 2026-08-25) ────────────────────────────────────
+// The channel's own PUBLISHED CMS page wins, exactly as /silverchef resolves:
+// this route seeds a draft copy of itself into the CMS on first visit
+// (create-only — staff edits are never overwritten), and the moment staff
+// publish it, this coded body retires itself behind a redirect. Until then the
+// coded page serves, so the product panel's Apply link always has a
+// destination. The coded URL stays forever; only the body moves to the CMS.
+let seedOnce: Promise<unknown> | null = null;
+function seedCmsPage() {
+  seedOnce ??= ensureFinanceApplyPage(CHANNEL_ID, "silverchef").catch((e) => {
+    seedOnce = null; // retry on the next visit — seeding must never cost the page
+    console.error("[silverchef/apply] CMS page seeding failed:", e);
+  });
+}
+
 export default async function FinanceApplyPage() {
+  seedCmsPage();
+  const cms = await getCmsPage(FINANCE_APPLY_SLUGS.silverchef).catch(() => null);
+  if (cms) redirect(`/pages/${FINANCE_APPLY_SLUGS.silverchef}`);
+
   const fields = financeApplicationFields().filter((f) => f.name !== "order_number");
 
   return (

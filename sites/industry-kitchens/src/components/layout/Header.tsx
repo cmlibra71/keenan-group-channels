@@ -4,8 +4,8 @@ import { Phone, Mail } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
-import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, drawEntryService, CHANNEL_ID } from "@/lib/store";
-import type { HeaderNavItem, HeaderConfig } from "@/lib/store";
+import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, getMegaMenuNav, getMegaMenuHidden, drawEntryService, CHANNEL_ID } from "@/lib/store";
+import type { HeaderConfig } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 import { HeaderPanels } from "./HeaderPanels";
 import { HeaderSearch } from "./HeaderSearch";
@@ -17,13 +17,11 @@ export async function Header({
   storeName,
   logoUrl,
   logoAlt,
-  nav = [],
   config = {},
 }: {
   storeName: string;
   logoUrl?: string | null;
   logoAlt?: string | null;
-  nav?: HeaderNavItem[];
   config?: HeaderConfig;
 }) {
   // The Header renders in the root layout — ABOVE the page's error boundary — so
@@ -31,10 +29,12 @@ export async function Header({
   // wrong loading the site"), and it re-runs on every refresh()
   // from a cart/quote mutation. Degrade gracefully (empty badge / nav) on a
   // transient DB failure instead of taking down the whole storefront.
-  const [cart, quote, megaMenu] = await Promise.all([
+  const [cart, quote, megaMenu, megaNav, hiddenDepartments] = await Promise.all([
     getCart().catch(() => null),
     getQuote().catch(() => null),
     getMegaMenu().catch(() => ({ departments: [], featured: {} })),
+    getMegaMenuNav().catch(() => []),
+    getMegaMenuHidden().catch(() => []),
   ]);
   const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   // QuoteService.getWithItems types its items loosely (Record<string,unknown>) unlike
@@ -164,9 +164,13 @@ export async function Header({
                   variant="compact"
                 />
                 <span className="p-2 text-zinc-700 xl:hidden">
-                  <MobileNavDrawer departments={megaMenu.departments} />
+                  <MobileNavDrawer
+                    departments={megaMenu.departments}
+                    items={megaNav}
+                    hiddenCategoryIds={hiddenDepartments}
+                  />
                 </span>
-                <MobileNav nav={nav} />
+                <MobileNav />
               </div>
             </div>
           </div>
@@ -198,21 +202,17 @@ export async function Header({
           </div>
         </div>
 
-        {/* Navigation row — nav links and contact buttons share one row */}
+        {/* Contact row.
+            It used to lead with a thin strip of the Navigation editor's header
+            links, drawn from the flat `header_nav` projection. The department
+            bar below now renders THOSE VERY ITEMS (card mOTgYEvX) — both rows
+            come from the same Storefront > Navigation Header tab — so the strip
+            printed all ten of them twice on one screen. The links live on the
+            bar, which is the row carrying the drop-downs; Chefs Depot has never
+            drawn a second copy either. Contact Us and the phone number stay. */}
         <div className="hidden xl:block border-b border-zinc-200">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between gap-4 py-2">
-              <nav className="flex items-center gap-x-4 2xl:gap-x-6">
-                {nav.map((item) => (
-                  <Link
-                    key={item.href + item.label}
-                    href={item.href}
-                    className="text-[11px] font-semibold text-zinc-700 hover:text-[#D94B2B] whitespace-nowrap transition-colors"
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </nav>
+            <div className="flex items-center justify-end gap-4 py-2">
               <div className="flex items-center gap-2 shrink-0">
                 <Link
                   href="/pages/contact"
@@ -235,8 +235,16 @@ export async function Header({
           </div>
         </div>
 
-        {/* Department nav + mega panels — dark bar below the nav row */}
-        <MegaMenu departments={megaMenu.departments} featured={megaMenu.featured} />
+        {/* Department nav + mega panels — dark bar below the nav row.
+            Every department by default, in the editor's order,
+            minus the ones switched off in Storefront > Navigation (cards
+            9wau4Tx9, mOTgYEvX). */}
+        <MegaMenu
+          departments={megaMenu.departments}
+          featured={megaMenu.featured}
+          items={megaNav}
+          hiddenCategoryIds={hiddenDepartments}
+        />
       </header>
 
       {/* The header's slide-out panels — rendered ONCE here, NOT inside

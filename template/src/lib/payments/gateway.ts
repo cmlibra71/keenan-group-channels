@@ -11,13 +11,27 @@
 // stripe-gateways.ts. This module is the thin impure adapter that fetches the
 // setting and combines the two.
 //
+// PER CHANNEL since card OHDx84DK. Until then this read only the GLOBAL
+// `store_settings.payment_gateways` row, which has no channel column — so every
+// Chefs Depot checkout charged the Industry Kitchens B2C account even though the
+// intent it created was stamped `channel_id: 2`. A channel may now hold its OWN
+// entries in `channel_settings.payment_gateways`; a channel with no override
+// keeps reading the global row exactly as before, so Industry Kitchens is
+// untouched. The choice itself stays pure, in checkout-stripe-mode.ts.
+//
 // Returns the resolved test-mode flag alongside the gateway because callers need
 // it too: the publishable-key choice AND the "TEST MODE" checkout banner.
 // ============================================================================
 
-import { CHANNEL_ID, storeSettingsService } from "@/lib/store";
-import { wantsStripeTestMode } from "@keenan/services";
-import { enabledStripeGateways, type StripeGatewayEntry } from "@/lib/payments/stripe-gateways";
+import { CHANNEL_ID } from "@/lib/store";
+import {
+  wantsStripeTestMode,
+  readChannelGatewayLists,
+  enabledGatewaysOfProvider,
+  resolveScopedChannelStripeGateway,
+  type ScopedStripeGateway,
+} from "@keenan/services";
+import { type StripeGatewayEntry } from "@/lib/payments/stripe-gateways";
 import { hasTestCheckoutSession } from "@/lib/checkout/test-session";
 import { resolveCheckoutStripeMode } from "@/lib/payments/checkout-stripe-mode";
 
@@ -36,10 +50,11 @@ export type ResolvedStripeGateway = {
 };
 
 /**
- * Resolves the channel's active Stripe gateway from the global payment_gateways
- * setting. Applies the test-vs-live mode match + prod-safe fallback via
- * selectGateway (D7). Never throws — returns `{ gateway: null }` if the setting
- * is missing/unconfigured (callers decide whether that is fatal).
+ * Resolves this channel's active Stripe gateway — its OWN payment_gateways
+ * entries first, the global ones when it has none. Applies the test-vs-live mode
+ * match + prod-safe fallback via selectChannelGateway (D7 + card OHDx84DK).
+ * Never throws — returns `{ gateway: null }` if nothing usable is configured
+ * (callers decide whether that is fatal; everywhere money moves, it is).
  */
 export async function resolveStripeGateway(): Promise<ResolvedStripeGateway> {
   // An EPHEMERAL test checkout session (short-lived signed cookie on this one
@@ -48,24 +63,64 @@ export async function resolveStripeGateway(): Promise<ResolvedStripeGateway> {
   const testSession = await hasTestCheckoutSession();
   const envWantsTestMode = await wantsStripeTestMode(CHANNEL_ID);
   try {
-    // `payment_gateways` is a SENSITIVE setting (it holds secret_key), so the
-    // default read path masks setting_value to "***REDACTED***". This resolver runs
-    // server-side and needs the real gateway array (publishable_key here, and
-    // secret_key via getStripeProvider), so read it unredacted. Without this the
-    // cast below yields a string, `.filter` throws, and every gateway lookup fails
-    // ("Payment is not properly configured").
-    const setting = await storeSettingsService.getByKey("payment_gateways", { includeSensitive: true });
-    const gateways = (setting.setting_value as StripeGatewayEntry[]) || [];
+    // The global `payment_gateways` row is SENSITIVE (it holds secret_key), so
+    // the services reader takes it with getSecret — the default read path masks
+    // setting_value to "***REDACTED***", which used to make `.filter` throw and
+    // every gateway lookup fail ("Payment is not properly configured").
+    const lists = await readChannelGatewayLists(CHANNEL_ID);
     // The safety-critical choice itself is pure and exhaustively tested in
     // checkout-stripe-mode.ts: no test session means the live key exactly as
     // today; a test session means the TEST gateway or nothing, never a live
-    // fallback.
+    // fallback; and this channel's own account always beats the global one.
     return resolveCheckoutStripeMode({
-      enabled: enabledStripeGateways(gateways),
+      channelEnabled: enabledGatewaysOfProvider(lists.channel, "stripe") as StripeGatewayEntry[],
+      globalEnabled: enabledGatewaysOfProvider(lists.global, "stripe") as StripeGatewayEntry[],
       testSession,
       envWantsTestMode,
     });
   } catch {
     return { gateway: null, wantTestMode: testSession || envWantsTestMode, testSession };
   }
+}
+
+/**
+ * The same resolution, but saying WHICH Stripe account the answer came out of
+ * (card JiaDTjr1, on card OHDx84DK's scope stamp).
+ *
+ * A PaymentIntent needs no stamp — an order is charged once and carries its
+ * channel — but a Stripe CUSTOMER is long-lived, exists inside one account only,
+ * and is invisible from every other. So the customer this storefront saves a card
+ * against has to be minted and read under the SAME account the intent will be
+ * created on, and "the same account" is the entry that was actually chosen, never
+ * a second resolution a moment later.
+ *
+ * `resolveScopedChannelStripeGateway` decides the stamp by IDENTITY of the chosen
+ * entry: in test mode a configured channel can legitimately be handed the GLOBAL
+ * test entry, and calling that `channel:2` would lose every customer minted under
+ * it.
+ *
+ * AND IT ASKS THE SAME QUESTION THE INTENT ASKS. An ephemeral test checkout
+ * session is STRICT on both sides: `PaymentService.getDefaultGateway` demands a
+ * real test entry (`selectTestGatewayStrict`) and refuses rather than fall back,
+ * so this must too. Without `strictTestMode` the two disagree — on a channel with
+ * no test entry anywhere, `selectChannelGateway`'s test arm falls through to a
+ * LIVE entry, so the Stripe CUSTOMER would be minted on the live account and,
+ * because that entry is not `testMode`, PERSISTED onto the real contact, while
+ * the intent that was meant to use it throws. The customer and the key come out
+ * of one rule or not at all.
+ *
+ * Returns null when nothing usable is configured — the caller then simply does
+ * not offer, or save, a card, exactly as it behaves today.
+ */
+export async function resolveScopedStripeGateway(): Promise<ScopedStripeGateway | null> {
+  const testSession = await hasTestCheckoutSession();
+  const envWantsTestMode = await wantsStripeTestMode(CHANNEL_ID);
+  return resolveScopedChannelStripeGateway({
+    channelId: CHANNEL_ID,
+    wantTestMode: testSession || envWantsTestMode,
+    // Only the ephemeral SESSION is strict. The environment default (test keys on
+    // a dev build) keeps `selectChannelGateway`'s dev convenience, which is
+    // exactly what `getDefaultGateway` does when `forceTestMode` is undefined.
+    ...(testSession ? { strictTestMode: true } : {}),
+  }).catch(() => null);
 }

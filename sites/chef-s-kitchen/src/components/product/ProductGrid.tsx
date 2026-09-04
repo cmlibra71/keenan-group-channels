@@ -1,5 +1,6 @@
 import { applyAccountPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
+import { attachBrandLogos } from "@/lib/brand-logo-fallback";
 import { ProductGridClient } from "./ProductGridClient";
 
 interface ProductWithImage {
@@ -14,6 +15,14 @@ interface ProductWithImage {
   inventoryLevel?: number | null;
   inventoryTracking?: string | null;
   thumbnailImage?: { urlStandard: string; urlThumbnail: string | null } | null;
+  /**
+   * Card tSrCcnvx: the brand's logo, drawn instead of the grey package box when
+   * the product has no photo (or its file is broken). Attached below, never by
+   * a caller — every listing card in the site funnels through here.
+   */
+  brand_logo_url?: string | null;
+  /** The brand's NAME — the fallback image's ALT text. Attached with the URL. */
+  brand_name?: string | null;
 }
 
 /**
@@ -76,6 +85,12 @@ export async function ProductGrid({
   // are hidden from them too).
   products = await applyCatalogScope(products);
   products = await applyAccountPrices(products);
+  // Card tSrCcnvx: the brand logo the tile falls back to when a product has no
+  // photo, or when its photo's file turns out to be missing. Resolved for EVERY
+  // row (not only the visibly imageless ones) because a broken file is only
+  // discovered in the browser, where no further server read is available. One
+  // primary-key lookup per grid, and a no-op on a channel that has not opted in.
+  products = await attachBrandLogos(products);
   if (products.length === 0) {
     if (!renderEmpty) return null;
     return (

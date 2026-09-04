@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import type { MegaNavItem } from "./mega-menu";
 import { initCommerceDb, createChannelStore, getCommerceClient } from "@keenan/services";
 import {
   channelService,
@@ -47,7 +48,7 @@ import {
 } from "@keenan/services";
 import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
-import { withBrandLogoFallback } from "@/builder/product-card-brand-logo";
+import { withBrandLogoFallback, targetsForChannel } from "@/builder/product-card-brand-logo";
 import { withPromoTagInComponents } from "@/builder/promo-tag-node";
 import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
 import type { NodeTree } from "@keenan/services/builder";
@@ -102,6 +103,13 @@ export const {
   getActiveSubscription,
   getMemberPriceMap,
   applyAccountPricesToProducts,
+  // The Chefs Depot buying-group ladder (cards gk23c1VK / Nyp8bkPm). All four are
+  // no-ops on a channel with no ladder in `channel_settings`, which is every
+  // channel until one is written.
+  getMemberLadderLevelId,
+  getLadderConfig,
+  getLadderVariantPrices,
+  getMemberTrailingSpend,
   getUpcomingDraws,
   getPartnerOffers,
   getFeatureFlag,
@@ -127,26 +135,33 @@ export const {
 // (`node_category_template_enabled` is on for channel 1), so the rule has to
 // reach the master too.
 //
-// It is placed HERE, once, rather than in each of the five node branches that
-// load components (category, brand, home, product, content page), because a
-// branch that forgot the call would serve grey boxes on one screen and logos on
-// the next. Nothing is written to the stored tree — see
+// It is placed HERE, once, rather than in each of the node branches that load
+// components (category, brand, home, product, `/pages/[slug]`), because a branch
+// that forgot the call would serve grey boxes on one screen and logos on the
+// next. Nothing is written to the stored tree — see
 // `product-card-brand-logo.ts`.
+//
+// WHICH masters are rewritten is this CHANNEL's business, so the target list is
+// resolved here and passed in: the transform itself is shared code and never
+// reads the ambient channel. A channel that has not opted in gets an empty list
+// and the call is a pass-through by reference.
 //
 // The promotional tile tag (card FNYihLHk) rides the same read for the same
 // reason. It is INERT on this site: `lib/promo-tag.ts` holds null here, so
 // `withPromoTagInComponents` returns the map untouched. That is the channel
 // gate — "Buy more & save" is a Chefs Depot promise, and Industry Kitchens has
-// its own trade wording. It is composed in anyway so that a day this site does
+// its own trade wording. It is composed in anyway so that the day this site does
 // name a tag, the tag is on every authored surface rather than on whichever
 // branch someone remembered.
 // ============================================================================
 
 type ComponentMap = Awaited<ReturnType<typeof _store.getComponents>>;
 
+const BRAND_LOGO_TARGETS = targetsForChannel(CHANNEL_ID);
+
 const withMasterTransforms = (components: ComponentMap): ComponentMap =>
   withPromoTagInComponents(
-    withBrandLogoFallback(components) as Record<string, NodeTree>,
+    withBrandLogoFallback(components, BRAND_LOGO_TARGETS) as Record<string, NodeTree>,
     PROMO_TAG_LABEL
   ) as ComponentMap;
 
@@ -350,6 +365,50 @@ export const getHeaderNav = unstable_cache(
   [`header-nav-${CHANNEL_ID}`],
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
 );
+
+/** The department bar's own items (Navigation editor → `nav_structure.header`):
+ *  the ORDER and the EXTRAS. Departments the editor does not mention are added
+ *  automatically by `resolveNavItems` (cards 9wau4Tx9, mOTgYEvX). Distinct from
+ *  `getHeaderNav` above, which is the older FLAT `{label, href}` projection the
+ *  utility strip still reads. */
+export const getMegaMenuNav = unstable_cache(
+  async (): Promise<MegaNavItem[]> => {
+    const nav = await getJsonSetting<{ header?: unknown } | null>("nav_structure", null);
+    return normalizeNavItems(nav?.header);
+  },
+  [`mega-menu-nav-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
+/** Departments switched off in the portal (Storefront > Navigation > Mega menu).
+ *  Kept OUT of getMegaMenu: that department tree also feeds the homepage
+ *  category blocks and /categories, and this switch is about the MENU only. */
+export const getMegaMenuHidden = unstable_cache(
+  async (): Promise<number[]> => {
+    const value = await getJsonSetting<unknown>("mega_menu_hidden_categories", []);
+    return Array.isArray(value) ? value.filter((v): v is number => typeof v === "number") : [];
+  },
+  [`mega-menu-hidden-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
+/** Saved items carry a type; anything hand-written or older is read as a link
+ *  so one odd row cannot take the header down. */
+function normalizeNavItems(value: unknown): MegaNavItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((i): i is Record<string, unknown> => !!i && typeof i === "object")
+    .map((i) => ({
+      type: (i.type as MegaNavItem["type"]) ?? "link",
+      label: typeof i.label === "string" ? i.label : "",
+      url: typeof i.url === "string" ? i.url : undefined,
+      categoryId: typeof i.categoryId === "number" ? i.categoryId : undefined,
+      pageSlug: typeof i.pageSlug === "string" ? i.pageSlug : undefined,
+      newTab: i.newTab === true,
+      children: normalizeNavItems(i.children),
+    }))
+    .filter((i) => i.label);
+}
 
 export const getHeaderConfig = unstable_cache(
   async () => getJsonSetting<HeaderConfig>("header", {}),

@@ -52,6 +52,7 @@ import {
 } from "@keenan/services";
 import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
+import { withBrandLogoFallback, targetsForChannel } from "@/builder/product-card-brand-logo";
 import type { MegaNavItem } from "./mega-menu";
 import {
   STOREFRONT_FILTERS_SETTING_KEY,
@@ -104,6 +105,13 @@ export const {
   getMemberPriceMap,
   getMemberSavingsPctMap,
   applyAccountPricesToProducts,
+  // The Chefs Depot buying-group ladder (cards gk23c1VK / Nyp8bkPm). All four are
+  // no-ops on a channel with no ladder in `channel_settings`, which is every
+  // channel until one is written.
+  getMemberLadderLevelId,
+  getLadderConfig,
+  getLadderVariantPrices,
+  getMemberTrailingSpend,
   getUpcomingDraws,
   getPartnerOffers,
   getFeatureFlag,
@@ -121,39 +129,52 @@ export const {
 } = _store;
 
 // ============================================================================
-// Component masters, with the "Buy more & save" tile tag placed at read time.
+// Component masters, with the two read-time transforms this storefront applies.
 //
-// Card FNYihLHk (Steve, 2026-08-23): every Chefs Depot product tile carries the
-// tagline pill under the brand, name and price. The React `ProductCard.tsx`
-// covers the tiles this site draws in React; every AUTHORED page — category,
-// brand, home, product (its "You may also like" rail) and `/pages/[slug]` —
-// repeats the stored `product-card` master instead, so the rule has to reach
-// the master too.
+// They compose in this order:
 //
-// It is placed HERE, once, and not in each of the five node branches that load
-// components, for exactly the reason card tSrCcnvx placed the Industry Kitchens
-// brand-logo fallback here: a branch that forgot the call would carry the tag on
-// one of our own screens and not on the next, for the same product. The category
-// page and the product page's upsell rail render the SAME master.
+//   1. the brand-logo image fallback (card tSrCcnvx) — a product with no image,
+//      or a broken one, shows its BRAND's logo instead of the grey package box.
+//      Tim asked for it on Industry Kitchens (2026-08-19); Steve asked for the
+//      same on Chefs Depot on 2026-08-24, "until the missing images are
+//      sourced". WHICH masters are rewritten is this CHANNEL's business, so the
+//      target list is resolved here and passed in: the transform itself is
+//      shared code and never reads the ambient channel.
+//   2. the "Buy more & save" tile tag (card FNYihLHk, Steve 2026-08-23) — every
+//      Chefs Depot product tile carries the tagline pill under the brand, name
+//      and price. The wording comes from this site's own `lib/promo-tag.ts`.
 //
-// Nothing is written to the stored tree — see `builder/promo-tag-node.ts`. On a
-// site whose `lib/promo-tag.ts` holds null this returns the map untouched, which
-// is the channel gate.
+// BOTH are placed HERE, once, rather than in each of the node branches that
+// load components (category, brand, home, product, `/pages/[slug]`), because a
+// branch that forgot the call would serve grey boxes — or drop the tag — on one
+// of our own screens and not on the next, for the same product. Chefs Depot's
+// category pages render their tiles from the stored `product-card` master
+// rather than from `ProductCard.tsx` (`node_category_template_enabled` is on
+// for channel 2) and the product page's "You may also like" rail repeats that
+// very same master, so a React-only fix would miss the busiest listing surfaces
+// on the site.
+//
+// Nothing is written to the stored tree — see `product-card-brand-logo.ts` and
+// `builder/promo-tag-node.ts`. A channel with no brand-logo targets gets a
+// pass-through by reference, and a site whose `lib/promo-tag.ts` holds null gets
+// the map back untouched, which is the tag's channel gate.
 // ============================================================================
 
 type ComponentMap = Awaited<ReturnType<typeof _store.getComponents>>;
 
-const withPromoTag = (components: ComponentMap): ComponentMap =>
+const BRAND_LOGO_TARGETS = targetsForChannel(CHANNEL_ID);
+
+const withMasterTransforms = (components: ComponentMap): ComponentMap =>
   withPromoTagInComponents(
-    components as Record<string, NodeTree>,
+    withBrandLogoFallback(components, BRAND_LOGO_TARGETS) as Record<string, NodeTree>,
     PROMO_TAG_LABEL
   ) as ComponentMap;
 
 export const getComponents = async (): Promise<ComponentMap> =>
-  withPromoTag(await _store.getComponents());
+  withMasterTransforms(await _store.getComponents());
 
 export const getDraftComponents = async (): Promise<ComponentMap> =>
-  withPromoTag((await _store.getDraftComponents()) as ComponentMap);
+  withMasterTransforms((await _store.getDraftComponents()) as ComponentMap);
 
 export type { MegaMenuNode, MegaMenuFeatured, ContentPage } from "@keenan/services";
 
