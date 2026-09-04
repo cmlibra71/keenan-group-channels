@@ -2,7 +2,19 @@
 
 import { cache } from "react";
 import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, CHANNEL_ID } from "@/lib/store";
-import { resolveAccountLinePrices, accountLineKey } from "@keenan/services";
+import {
+  resolveAccountLinePrices,
+  accountLineKey,
+  readProductAddons,
+  resolveAddonSelection,
+  unansweredAddonGroups,
+  addonSelectionKey,
+  readStoredAddons,
+  withAddonSurcharge,
+  storedAddonsAsSelection,
+  type AddonSelectionInput,
+  type ResolvedAddon,
+} from "@keenan/services";
 import { getAccountId } from "@/lib/member";
 import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice } from "@/lib/store";
@@ -157,28 +169,78 @@ async function refuseCartQuantity(productId: number, quantity: number): Promise<
   return null;
 }
 
-export async function addToCart(productId: number, variantId?: number | null, quantity: number = 1) {
+export async function addToCart(
+  productId: number,
+  variantId?: number | null,
+  quantity: number = 1,
+  /**
+   * What the shopper configured on the page: ticked extras and typed answers, in one
+   * bag (cards 0CDcCYmO + kyMjCmAw). Re-resolved SERVER-SIDE below against this
+   * product's own definition, so a hand-made request can neither invent a choice nor
+   * slip past a required one. Undefined means "this renderer offered no panel".
+   */
+  addons?: AddonSelectionInput | null
+) {
   // "What we show is what we accept" — a product restricted away from this shopper is not addable,
   // even by poking the action directly (the listing/PDP guards are UX; THIS is the enforcement).
   if (!(await isProductVisibleToViewer(productId))) return { error: RESTRICTED_PRODUCT_ERROR };
 
   const cart = await getOrCreateCart();
 
-  // Check if this product/variant is already in the cart
-  const existing = await cartItemService.findByProductVariant(cart.id, productId, variantId) as {
-    id: number;
-    quantity: number;
+  // ── Customisation the shopper configured on the page ────────────────────────
+  // The same re-resolution the quote does. A `text` answer resolves at $0.00, so a
+  // typed instruction changes nothing about the money; a PRICED extra does, and
+  // `withAddonSurcharge` below is what keeps the till agreeing with the page (the
+  // provider's `displayPrice` already includes the extras).
+  let resolvedAddons: ResolvedAddon[] = [];
+  if (addons !== undefined) {
+    const productRow = (await productService.getById(productId)) as { metafields?: unknown } | null;
+    if (!productRow) return { error: "Product not found" };
+    const productAddons = readProductAddons(productRow.metafields);
+    const unanswered = unansweredAddonGroups(productAddons, addons);
+    // Worded, never silent: this page carries no wording that could explain a control
+    // that quietly did nothing (`sf-product-page`, CXnP1lrL + 7vu2iEEZ).
+    if (unanswered.length > 0) {
+      return { error: `Please fill in ${unanswered.join(" and ")} before adding this to your cart.` };
+    }
+    resolvedAddons = resolveAddonSelection(productAddons, addons);
+  }
+  const wantedConfiguration = addonSelectionKey(resolvedAddons);
+
+  // Is this product/variant already in the cart AS THIS CONFIGURATION? Two benches
+  // with different measurements are two lines, not one line of quantity 2 carrying
+  // whichever instruction was typed first (card kyMjCmAw). A line with no
+  // configuration keys as "", so every pre-existing line behaves exactly as before.
+  const cartRows = (await cartService.getWithItems(cart.id)) as {
+    items?: {
+      id: number;
+      product_id: number;
+      variant_id: number | null;
+      quantity: number;
+      modifier_selections?: unknown;
+    }[];
   } | null;
+  const existing =
+    (cartRows?.items ?? []).find(
+      (item) =>
+        item.product_id === productId &&
+        (item.variant_id ?? null) === (variantId ?? null) &&
+        addonSelectionKey(readStoredAddons(item.modifier_selections)) === wantedConfiguration
+    ) ?? null;
 
   const finalQty = existing ? existing.quantity + Math.max(1, quantity) : Math.max(1, quantity);
 
   const refusal = await refuseCartQuantity(productId, finalQty);
   if (refusal) return { error: refusal };
 
-  // Price for the FINAL quantity (so crossing a bulk tier re-prices the whole line).
+  // Price for the FINAL quantity (so crossing a bulk tier re-prices the whole line),
+  // then the extras on top of BOTH stored amounts — see `withAddonSurcharge`.
   let pricing: { listPrice: string; salePrice: string | null };
   try {
-    pricing = await resolveItemPricing(productId, variantId, finalQty);
+    pricing = withAddonSurcharge(
+      await resolveItemPricing(productId, variantId, finalQty),
+      resolvedAddons
+    );
   } catch {
     return { error: "Product not found" };
   }
@@ -196,10 +258,40 @@ export async function addToCart(productId: number, variantId?: number | null, qu
       quantity: finalQty,
       listPrice: pricing.listPrice,
       salePrice: pricing.salePrice,
+      // The picks, never a total: a stored total would be a second copy of the money
+      // and the two would drift the moment staff re-price an extra.
+      modifierSelections: resolvedAddons,
     });
   }
 
   return { success: true, cartCount: await countCartItems(cart.id) };
+}
+
+/**
+ * Re-price ONE cart line at a new quantity, carrying the configuration it already
+ * holds.
+ *
+ * A line's stored picks are re-read through the product's CURRENT definition rather
+ * than trusted, so an extra staff have since re-priced or deleted moves or drops out
+ * on the next quantity change — the same promise the catalogue price on the line
+ * makes. A `text` answer round-trips unchanged and adds nothing, which is what makes
+ * this safe to run over every line (card kyMjCmAw).
+ */
+async function repriceConfiguredLine(
+  productId: number,
+  variantId: number | null,
+  quantity: number,
+  storedModifiers: unknown
+): Promise<{ listPrice: string; salePrice: string | null }> {
+  const base = await resolveItemPricing(productId, variantId, quantity);
+  const stored = readStoredAddons(storedModifiers);
+  if (stored.length === 0) return base;
+  const productRow = (await productService.getById(productId)) as { metafields?: unknown } | null;
+  const resolved = resolveAddonSelection(
+    readProductAddons(productRow?.metafields),
+    storedAddonsAsSelection(stored)
+  );
+  return withAddonSurcharge(base, resolved);
 }
 
 export async function updateCartItem(itemId: number, quantity: number) {
@@ -227,7 +319,13 @@ export async function updateCartItem(itemId: number, quantity: number) {
     // getWithItems returns snake_case rows — read product_id / variant_id (reading
     // the camelCase keys yielded undefined, so re-pricing threw on every change).
     const item = full?.items.find((i: { id: number }) => i.id === itemId) as
-      | { id: number; product_id: number; variant_id: number | null; quantity: number }
+      | {
+          id: number;
+          product_id: number;
+          variant_id: number | null;
+          quantity: number;
+          modifier_selections?: unknown;
+        }
       | undefined;
 
     // Line already gone (raced with a concurrent remove) — nothing to update.
@@ -247,7 +345,12 @@ export async function updateCartItem(itemId: number, quantity: number) {
     // change — fall back to updating just the quantity, matching addToCart.
     let pricing: { listPrice: string; salePrice: string | null } | null = null;
     try {
-      pricing = await resolveItemPricing(item.product_id, item.variant_id, quantity);
+      pricing = await repriceConfiguredLine(
+        item.product_id,
+        item.variant_id,
+        quantity,
+        item.modifier_selections
+      );
     } catch {
       pricing = null;
     }
@@ -301,12 +404,18 @@ export async function repriceCartForSession(): Promise<{ repriced: number }> {
       quantity: number;
       list_price: string | null;
       sale_price: string | null;
+      modifier_selections?: unknown;
     }[];
 
     let repriced = 0;
     for (const item of items) {
       try {
-        const pricing = await resolveItemPricing(item.product_id, item.variant_id, item.quantity);
+        const pricing = await repriceConfiguredLine(
+          item.product_id,
+          item.variant_id,
+          item.quantity,
+          item.modifier_selections
+        );
         const sameList = pricing.listPrice === item.list_price;
         const sameSale = (pricing.salePrice ?? null) === (item.sale_price ?? null);
         if (sameList && sameSale) continue;

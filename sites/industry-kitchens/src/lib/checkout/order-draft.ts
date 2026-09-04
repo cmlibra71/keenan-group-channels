@@ -19,6 +19,7 @@
 
 import { gstSplit } from "@keenan/services/calc";
 import { backorderedUnits, type StockFacts } from "@keenan/services/backorder";
+import { readStoredAddons, addonsAsOrderOptions } from "@keenan/services";
 
 export type PaymentStatus = "pending" | "awaiting_payment" | "pending_payment" | "net_terms";
 
@@ -64,6 +65,13 @@ export type CartLineInput = {
   quantity: number;
   list_price: string;
   sale_price: string | null;
+  /**
+   * What the shopper configured on the product page — ticked extras and typed
+   * answers, as stored on `cart_items.modifier_selections` (cards 0CDcCYmO +
+   * kyMjCmAw). Carried onto the order line so a warehouse and a rep can read what
+   * was actually asked for; a line without one is unchanged.
+   */
+  modifier_selections?: unknown;
 };
 
 /** A line item ready for orderItemService.createManyForParent (camelCase contract). */
@@ -95,6 +103,15 @@ export type OrderLineDraft = {
    * every order placed before this shipped.
    */
   backorderedQuantity?: number;
+  /**
+   * The configuration this line was bought as, for `order_items.product_options` —
+   * `{ "Instructions": "1200mm bench, sink on the left" }`. NO MONEY in the text:
+   * `addonsAsOrderOptions` is what guarantees that, and it matters because this bag
+   * prints to the CUSTOMER on `/account/orders/[id]` beside GST-inclusive figures.
+   * Omitted (never `{}`) on a line with no configuration, so every ordinary order
+   * line is byte-identical to before.
+   */
+  productOptions?: Record<string, string>;
 };
 
 export type MoneySplit = { exTax: number; incTax: number; tax: number };
@@ -127,12 +144,15 @@ export function buildLineItems(items: CartLineInput[], pricesIncludeTax: boolean
     subIncTax += lineCalc.incTax;
     itemsTotal += item.quantity;
 
+    const configuration = addonsAsOrderOptions(readStoredAddons(item.modifier_selections));
+
     return {
       productId: item.product_id,
       variantId: item.variant_id,
       name: item.product_name,
       sku: item.product_sku,
       quantity: item.quantity,
+      ...(Object.keys(configuration).length > 0 ? { productOptions: configuration } : {}),
       basePrice: String(unitPrice),
       priceExTax: String(unitCalc.exTax),
       priceIncTax: String(unitCalc.incTax),

@@ -296,3 +296,55 @@ test("withBackorderedQuantities leaves a line whose product it could not read al
   ).lineItems;
   assert.equal(withBackorderedQuantities(lines, new Map())[0].backorderedQuantity, undefined);
 });
+
+// ── The configuration a line was bought as (cards 0CDcCYmO + kyMjCmAw) ───────
+
+const configuredLine: CartLineInput = {
+  product_id: 8820,
+  variant_id: null,
+  product_name: "Custom Stainless Steel",
+  product_sku: "Custom-Stainless-Steel",
+  quantity: 1,
+  list_price: "1000",
+  sale_price: null,
+  modifier_selections: [
+    {
+      groupKey: "instructions",
+      groupLabel: "Instructions",
+      optionKey: "text",
+      optionLabel: "1200mm bench, sink on the left",
+      price: "0.00",
+      url: null,
+    },
+  ],
+};
+
+test("buildLineItems carries the typed instruction onto the order line", () => {
+  const { lineItems } = buildLineItems([configuredLine], false);
+  assert.deepEqual(lineItems[0].productOptions, {
+    Instructions: "1200mm bench, sink on the left",
+  });
+});
+
+test("the instruction moves no money — the line totals are the bare price", () => {
+  const withText = buildLineItems([configuredLine], false);
+  const withoutText = buildLineItems([{ ...configuredLine, modifier_selections: [] }], false);
+  assert.equal(withText.subtotal.exTax, withoutText.subtotal.exTax);
+  assert.equal(withText.lineItems[0].totalIncTax, withoutText.lineItems[0].totalIncTax);
+});
+
+test("a line with no configuration carries NO product_options key at all", () => {
+  // Never `{}`: an empty object would rewrite 73,439 historic lines' shape for
+  // nothing, and the portal renders the key's presence.
+  const { lineItems } = buildLineItems([{ ...configuredLine, modifier_selections: undefined }], false);
+  assert.equal("productOptions" in lineItems[0], false);
+});
+
+test("the configuration survives the cost and back-order passes", () => {
+  const { lineItems } = buildLineItems([configuredLine], false);
+  const costed = withLineCosts(lineItems, new Map([["8820:0", 600]]));
+  const stamped = withBackorderedQuantities(costed, new Map());
+  assert.deepEqual(stamped[0].productOptions, {
+    Instructions: "1200mm bench, sink on the left",
+  });
+});

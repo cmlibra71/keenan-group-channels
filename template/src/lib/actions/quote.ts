@@ -18,6 +18,13 @@ import {
   resolveKitChoices,
   type KitChoice,
 } from "@/lib/product-kit";
+import {
+  readProductAddons,
+  resolveAddonSelection,
+  describeAddonSelection,
+  unansweredAddonGroups,
+  type AddonSelectionInput,
+} from "@keenan/services";
 import { slidingWindowAllow } from "@/lib/rate-limit";
 import { resolveCustomerRequestState } from "@keenan/services";
 import {
@@ -81,7 +88,15 @@ async function countQuoteItems(quoteId: number): Promise<number> {
 export async function addToQuote(
   productId: number,
   variantId?: number | null,
-  kitChoices?: KitChoice[] | null
+  kitChoices?: KitChoice[] | null,
+  /**
+   * What the shopper configured on the page: ticked extras and typed answers, in
+   * one bag (cards 0CDcCYmO + kyMjCmAw). Re-resolved SERVER-SIDE against this
+   * product's own definition below, so a hand-made request can neither invent a
+   * choice nor slip past a required one. Undefined means "this renderer offered
+   * no panel" — leave whatever the line already carries alone.
+   */
+  addons?: AddonSelectionInput | null
 ) {
   // getById returns snake_case — read sale_price (reading salePrice was undefined,
   // so quotes silently used RRP instead of the catalog sale price).
@@ -132,6 +147,39 @@ export async function addToQuote(
     lineNotes = describeKitContents(kit);
   }
 
+  // ── Customisation the shopper configured on the page ──────────────────────
+  // Same re-resolution the kit build gets, and for the same reason: the client
+  // states what was ticked or typed, never what it costs or whether it exists.
+  // A `text` answer resolves at $0.00, so nothing here moves the line's money —
+  // it is a record of what the customer asked for, which the rep prices on review.
+  const productAddons = readProductAddons(product.metafields);
+  const resolvedAddons = addons === undefined ? null : resolveAddonSelection(productAddons, addons);
+  if (resolvedAddons) {
+    // The page makes this refusal too, so reaching it means a stale tab or a
+    // hand-posted action. Worded, never silent — the customer has to be able to
+    // tell what is missing (`sf-product-page`, 7vu2iEEZ + CXnP1lrL).
+    const unanswered = unansweredAddonGroups(productAddons, addons);
+    if (unanswered.length > 0) {
+      return {
+        error: `Please fill in ${unanswered.join(" and ")} before adding this to your quote.`,
+      };
+    }
+    if (resolvedAddons.length > 0) {
+      // MERGED into the bag, never over it: `quote_items.attributes` has other
+      // owners (see docs/behaviour/quotes.md > quote-editor).
+      lineAttributes = { ...(lineAttributes ?? {}), addon_selection: resolvedAddons };
+      const addonNote = describeAddonSelection(resolvedAddons);
+      // NO MONEY in this note — it prints to the CUSTOMER on /q/<uuid>, outside
+      // the hide-prices gate. `describeAddonSelection` is what guarantees that.
+      lineNotes = [lineNotes, addonNote].filter(Boolean).join("\n") || null;
+    } else if (lineAttributes === null) {
+      // A deliberate clear-down: the shopper emptied the box and pressed the
+      // button again, so the line's configuration goes with it.
+      lineAttributes = {};
+      lineNotes = null;
+    }
+  }
+
   let listPrice = product.price;
   let catalogSalePrice: string | null = product.sale_price;
 
@@ -177,16 +225,34 @@ export async function addToQuote(
     id: number;
     quantity: number;
     customer_notes?: string | null;
+    attributes?: Record<string, unknown> | null;
   } | null;
 
   if (existing) {
     // A quote may hold only ONE line per product+variant, so re-configuring a bundle REPLACES the
     // captured configuration on the line the customer already has (and does not stack a second
     // quantity onto a different build). Everything else keeps counting up as before.
-    const reconfigured = kit?.kind === "bundle" && lineNotes !== existing.customer_notes;
+    //
+    // A re-typed INSTRUCTION is the same event (card kyMjCmAw): a shopper who changes "1200mm
+    // bench" to "800mm bench" and presses the button again is correcting the request, not
+    // ordering a second bench — stacking would leave the rep one line, quantity 2, and only the
+    // newer set of measurements. A custom fabrication is not a countable stock item.
+    const reconfigured =
+      (kit?.kind === "bundle" || (resolvedAddons?.length ?? 0) > 0) &&
+      lineNotes !== existing.customer_notes;
     await quoteItemService.updateForParent(quote.id, existing.id, {
       quantity: reconfigured ? existing.quantity : existing.quantity + 1,
-      ...(lineAttributes ? { attributes: lineAttributes, customerNotes: lineNotes } : {}),
+      // MERGED into the bag, never over it. `quote_items.attributes` is replaced
+      // WHOLESALE on write and has several owners — a rep's `indent` tick, a
+      // `custom_line` marker, `zoey_item_id` on 62,351 ingested rows — so a
+      // wholesale write here takes a rep's indent tick off a quote the customer is
+      // already reading (docs/behaviour/quotes.md > quote-editor).
+      ...(lineAttributes
+        ? {
+            attributes: { ...(existing.attributes ?? {}), ...lineAttributes },
+            customerNotes: lineNotes,
+          }
+        : {}),
     });
   } else {
     await quoteItemService.createForParent(quote.id, {

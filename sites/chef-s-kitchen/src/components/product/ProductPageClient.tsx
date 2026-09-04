@@ -17,15 +17,20 @@ import {
 } from "./ProductPurchaseProvider";
 
 import type { ProductKit } from "@/lib/product-kit";
+import type { ProductAddons } from "@keenan/services/product-addons";
 
 function ProductOverviewInner({
   brandName,
   reviewSummary,
   kit,
+  addons,
 }: {
   brandName?: string | null;
   reviewSummary?: { avg: number; count: number } | null;
   kit?: ProductKit | null;
+  /** Authored customisation groups — priced extras and free-text questions
+   *  (cards 0CDcCYmO + kyMjCmAw). Read off products.metafields by the route. */
+  addons?: ProductAddons | null;
 }) {
   const { product, variantImageUrl } = useProductPurchase();
 
@@ -69,7 +74,7 @@ function ProductOverviewInner({
           </div>
         )}
 
-        <ProductDetail kit={kit} />
+        <ProductDetail kit={kit} addons={addons} />
       </div>
     </div>
   );
@@ -86,6 +91,7 @@ export function ProductPageClient({
   brandName,
   reviewSummary,
   kit,
+  addons,
 }: {
   product: PurchaseProduct;
   memberPrice?: number | null;
@@ -100,6 +106,9 @@ export function ProductPageClient({
   reviewSummary?: { avg: number; count: number } | null;
   /** Grouped / bundle contents, read off products.metafields by the route. */
   kit?: ProductKit | null;
+  /** Authored customisation groups — priced extras and free-text questions
+   *  (cards 0CDcCYmO + kyMjCmAw). Read off products.metafields by the route. */
+  addons?: ProductAddons | null;
 }) {
   return (
     <ProductPurchaseProvider
@@ -111,7 +120,7 @@ export function ProductPageClient({
       accountPricing={accountPricing ?? false}
       membershipTeaser={membershipTeaser ?? null}
     >
-      <ProductOverviewInner brandName={brandName} reviewSummary={reviewSummary} kit={kit} />
+      <ProductOverviewInner brandName={brandName} reviewSummary={reviewSummary} kit={kit} addons={addons} />
     </ProductPurchaseProvider>
   );
 }

@@ -21,6 +21,7 @@ import { OptionSelector } from "@/components/product/OptionSelector";
 import { Price } from "@/components/ui/Price";
 import { PriceBlock } from "@/components/ui/PriceBlock";
 import { useProductPurchaseOptional } from "@/components/product/ProductPurchaseProvider";
+import { ProductInstructionsPanel } from "@/components/product/ProductInstructionsPanel";
 
 export type WidgetComponent = FC<{ attrs: Record<string, unknown>; ctx?: RenderContext }>;
 
@@ -189,6 +190,27 @@ export const QuantityWidget: WidgetComponent = () => {
         <Plus className="h-3.5 w-3.5" />
       </button>
     </div>
+  );
+};
+
+/**
+ * The free-text customisation panel as a v2 widget (card kyMjCmAw).
+ *
+ * Registered so this renderer can show the same field the node-tree page places
+ * automatically. It must exist: the provider now knows about required
+ * customisation groups, and `allOptionsSelected` goes false while one is
+ * unanswered — a renderer with no panel to fill in would grey the buy button
+ * with nothing beside it, which `sf-product-page` forbids outright.
+ */
+export const ProductInstructionsWidget: WidgetComponent = () => {
+  const purchase = useProductPurchaseOptional();
+  if (!purchase) return <NoProvider name="product_instructions" />;
+  return (
+    <ProductInstructionsPanel
+      groups={purchase.product.addons?.groups ?? []}
+      values={purchase.addonText}
+      onChange={purchase.setAddonText}
+    />
   );
 };
 
