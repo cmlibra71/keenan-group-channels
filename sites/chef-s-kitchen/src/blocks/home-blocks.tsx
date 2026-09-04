@@ -26,6 +26,7 @@ import {
 } from "@/lib/store";
 import { getListingPricing, applyAccountPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
+import { attachBrandLogos } from "@/lib/brand-logo-fallback";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { TrustBar } from "@/components/home/TrustBar";
 import { SeoFaq } from "@/components/home/SeoFaq";
@@ -471,7 +472,15 @@ async function ClearanceSpotlightBlock(props: Record<string, unknown> = {}, ctx?
   const { products: clearanceRaw } = await getProducts({ limit: 9, onSale: true });
   // Shared cached rows → overlay this shopper's account prices at read time (guests: no-op).
   // Read-time visibility THEN price (the rail's rows come from the shared cache).
-  const clearanceProducts = await applyAccountPrices(await applyCatalogScope(clearanceRaw));
+  // Card tSrCcnvx: plus the brand logo each tile falls back to when a product has
+  // no photo (or its photo's file is missing) — `ClearanceSpotlight` and
+  // `ClearanceRail` both draw their tiles with `ProductCard`, which reads it off
+  // the row. Attached in EVERY server path that feeds this rail, so which home
+  // renders (legacy, CMS v2.1 or the authored tree via `builder/home-data.ts`)
+  // cannot silently change the answer.
+  const clearanceProducts = await attachBrandLogos(
+    await applyAccountPrices(await applyCatalogScope(clearanceRaw))
+  );
 
   // CMS v2.1: editable heading template + component-owned rail.
   if (homeV2On(props, ctx)) {

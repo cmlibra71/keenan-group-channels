@@ -47,7 +47,7 @@ import {
 } from "@keenan/services";
 import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
-import { withBrandLogoFallback } from "@/builder/product-card-brand-logo";
+import { withBrandLogoFallback, targetsForChannel } from "@/builder/product-card-brand-logo";
 import {
   STOREFRONT_FILTERS_SETTING_KEY,
   normalizeStorefrontFilters,
@@ -135,15 +135,22 @@ export const {
 // load components (category, brand, home, product), because a branch that
 // forgot the call would serve grey boxes on one screen and logos on the next.
 // Nothing is written to the stored tree — see `product-card-brand-logo.ts`.
+//
+// WHICH masters are rewritten is this CHANNEL's business, so the target list is
+// resolved here and passed in: the transform itself is shared code and never
+// reads the ambient channel. A channel that has not opted in gets an empty list
+// and the call is a pass-through by reference.
 // ============================================================================
 
 type ComponentMap = Awaited<ReturnType<typeof _store.getComponents>>;
 
+const BRAND_LOGO_TARGETS = targetsForChannel(CHANNEL_ID);
+
 export const getComponents = async (): Promise<ComponentMap> =>
-  withBrandLogoFallback(await _store.getComponents());
+  withBrandLogoFallback(await _store.getComponents(), BRAND_LOGO_TARGETS);
 
 export const getDraftComponents = async (): Promise<ComponentMap> =>
-  withBrandLogoFallback((await _store.getDraftComponents()) as ComponentMap);
+  withBrandLogoFallback((await _store.getDraftComponents()) as ComponentMap, BRAND_LOGO_TARGETS);
 
 // ============================================================================
 // Channel settings (raw accessor)
