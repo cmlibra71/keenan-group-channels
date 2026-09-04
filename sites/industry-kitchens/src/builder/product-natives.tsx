@@ -7,6 +7,7 @@ import { WarrantyDirectory } from "@/components/product/WarrantyDirectory";
 import { GstToggle } from "@/components/layout/GstToggle";
 import { SilverChefPanel } from "@/components/product/SilverChefPanel";
 import { ProductImageNotice } from "@/components/product/ProductImageNotice";
+import { ProductResidentialNotice } from "@/components/product/ProductResidentialNotice";
 import { usableBrandLogo } from "@/lib/brand-logo-url";
 import { CdMemberPricingPanel } from "@/components/product/CdMemberPricingPanel";
 import type { CdMembershipData } from "@/lib/pricing/cd-member-pricing";
@@ -99,6 +100,14 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     ),
     "product-image-notice": () => (
       <ProductImageNotice show={product.imageIsIllustrative === true} />
+    ),
+    // "This product can not be shipped to a residential address" (card HMtUxvwZ). Sealed
+    // for the same reason as the banner above: the line has to be able to appear on any
+    // product on either site, and both sites render this page from a stored tree. It
+    // WARNS ONLY — Add to Cart and Add to Quote are untouched. Renders null unless this
+    // product carries the tick.
+    "product-residential-notice": () => (
+      <ProductResidentialNotice show={product.restrictResidentialPurchase === true} />
     ),
   };
 }

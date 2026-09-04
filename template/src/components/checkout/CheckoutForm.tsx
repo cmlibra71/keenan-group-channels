@@ -54,6 +54,7 @@ import { useHeaderPanels } from "@/lib/cart-quote-counts";
 import { ga4AddShippingInfo, ga4AddPaymentInfo, rowToGa4Item } from "@/components/analytics/ga4";
 import { BulkyDeliveryChoice } from "@/components/checkout/BulkyDeliveryChoice";
 import { holdsPayment, type DeliveryService } from "@/lib/checkout/bulky-delivery";
+import { CommercialApplianceNotice } from "@/components/checkout/CommercialApplianceNotice";
 import { backorderMessage } from "@keenan/services/backorder";
 
 declare global {
@@ -146,6 +147,7 @@ export function CheckoutForm({
   brandSpecial = null,
   shippingEnabled = false,
   bulkyProductNames = [],
+  commercialProductNames = [],
   stripePublishableKey,
   testMode = false,
   testModeCardUnavailable = false,
@@ -185,6 +187,10 @@ export function CheckoutForm({
   /** Names of the cart's bulky products (card Wxjp8wpg). Non-empty ⇒ the shopper must choose
    *  curbside vs specialised delivery before this order can be placed. */
   bulkyProductNames?: string[];
+  /** Names of the cart's commercial-only products (card HMtUxvwZ). Non-empty ⇒ the
+   *  commercial-appliance note is shown once when the page opens. It refuses nothing,
+   *  so — unlike every filter on this form — it has no counterpart in `placeOrder`. */
+  commercialProductNames?: string[];
   stripePublishableKey?: string;
   /**
    * True ONLY while this browser holds an ephemeral test checkout session (a
@@ -783,6 +789,10 @@ export function CheckoutForm({
   const summaryError = cardRefused ? cardError || state?.error : state?.error || cardError;
 
   return (
+    <>
+    {/* Card HMtUxvwZ — the commercial-appliance note, in the card's own words. Shown on
+        arrival, dismissible, and it never disables Place Order. */}
+    <CommercialApplianceNotice productNames={commercialProductNames} />
     <form
       action={formAction}
       onSubmit={(event) => {
@@ -1599,5 +1609,6 @@ export function CheckoutForm({
         </div>
       </div>
     </form>
+    </>
   );
 }
