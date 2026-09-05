@@ -218,9 +218,13 @@ export const AddToCartWidget: WidgetComponent = ({ attrs }) => {
   return (
     <AddToCartButton
       productId={product.id}
-      // The ticked extras travel with the click (card 0CDcCYmO) — their price is already
-      // in the displayed price, and the server re-resolves it from the product itself.
-      addons={purchase.selectedAddons}
+      // The ticked extras travel with the click (card 0CDcCYmO) — their price is already in
+      // the displayed price, and the server re-resolves every amount from the product itself.
+      // Posted only where the panel was actually OFFERED, exactly as the quote control below is:
+      // this renderer builds its provider payload BY HAND and passes no `addons`, so it shows no
+      // extras panel — and handing it `{}` would answer a required group the shopper was never
+      // asked, refusing the add with "Please choose X" on a page carrying no such control.
+      addons={purchase.addonGroupsOffered ? purchase.selectedAddons : undefined}
       variantId={cartVariantId}
       quantity={quantity}
       size={attrs.size === "sm" ? "sm" : undefined}
@@ -334,8 +338,11 @@ export const MobileBuyBarWidget: WidgetComponent = () => {
         variantId={cartVariantId}
         quantity={quantity}
         // The mobile bar buys the same configuration the panel above it shows — the ticked
-        // extras are already in the price beside this button (card 0CDcCYmO).
-        addons={purchase.selectedAddons}
+        // extras are already in the price beside this button (card 0CDcCYmO). Posted only where
+        // that panel was actually OFFERED: this renderer builds its provider payload by hand and
+        // passes no `addons`, and `{}` would read as an answer to a question never asked, refusing
+        // the add over a required group with no control on screen to satisfy it.
+        addons={purchase.addonGroupsOffered ? purchase.selectedAddons : undefined}
         size="sm"
         disabled={purchasingDisabled || !allOptionsSelected}
       />

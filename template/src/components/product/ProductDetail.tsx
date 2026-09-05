@@ -208,7 +208,10 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
             // Card 0CDcCYmO. This renderer is the fallback both sites fall back to when
             // `node_product_template_enabled` is switched off, so it carries the extras too
             // — a buy path that silently dropped them would charge the bare product price.
-            addons={selectedAddons}
+            // Posted only where the panel was actually OFFERED, exactly as the quote control
+            // below is: `{}` from a renderer with no panel answers a required group the shopper
+            // was never asked, and the add is refused over a control that is not on screen.
+            addons={addonGroupsOffered ? selectedAddons : undefined}
             disabled={purchasingDisabled || !allOptionsSelected}
           />
         )}

@@ -101,7 +101,7 @@ export type OrderLineDraft = {
   backorderedQuantity?: number;
   /**
    * The paid extras this line was configured with (card 0CDcCYmO), as
-   * `{ "Slicers": "Slicer 4mm (+$245.00)" }` — the shape the portal's order lines table
+   * `{ "Slicers": "Slicer 4mm, Slicer 6mm" }` — the shape the portal's order lines table
    * already renders under the product name. The MONEY is in the line's own prices; this is
    * the only record on the order of what the customer actually chose. Omitted (never `{}`)
    * on a line with no extras, so an order placed before this shipped is indistinguishable

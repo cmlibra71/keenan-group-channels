@@ -203,8 +203,10 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
             productId={productId}
             // Card 0CDcCYmO — this renderer is the fallback if the product design is switched
             // off, so it carries the ticked extras too; dropping them would charge the bare
-            // product price for a configuration the shopper priced on screen.
-            addons={selectedAddons}
+            // product price for a configuration the shopper priced on screen. Posted only where
+            // the panel was actually OFFERED, exactly as the quote control is: `{}` from a
+            // renderer with no panel answers a required group the shopper was never asked.
+            addons={addonGroupsOffered ? selectedAddons : undefined}
             variantId={cartVariantId}
             productName={product.name}
             sku={product.sku}

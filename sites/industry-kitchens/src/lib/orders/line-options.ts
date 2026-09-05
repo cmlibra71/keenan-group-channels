@@ -15,8 +15,11 @@
  *
  *   * an ARRAY of `{ display_name, display_value }` — how Zoey-synced lines carry variant
  *     wording, and what this page was written against;
- *   * an OBJECT of `{ "Slicers": "Slicer 4mm (+$245.00)" }` — what the storefront checkout
- *     writes for the paid add-on extras a shopper ticks (card 0CDcCYmO).
+ *   * an OBJECT of `{ "Slicers": "Slicer 4mm, Slicer 6mm" }` — what the storefront checkout
+ *     writes for the paid add-on extras a shopper ticks (card 0CDcCYmO). NO MONEY in the text,
+ *     deliberately: this row prints to the customer directly above a GST-INCLUSIVE unit price
+ *     and line total, and an ex-GST "+$245.00" beside a $269.50 inclusive figure is one of our
+ *     own numbers contradicting another. The extras are already inside the line's price.
  *
  * The object shape used to read as nothing here, so a line priced hundreds of dollars above the
  * catalogue had no explanation anywhere the BUYER could see while the portal's own lines table

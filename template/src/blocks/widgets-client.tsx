@@ -178,6 +178,7 @@ export const AddToCartWidget: WidgetComponent = () => {
     purchasingDisabled,
     allOptionsSelected,
     selectedAddons,
+    addonGroupsOffered,
   } = purchase;
   // A product staff switched off for cart, or set to refuse out-of-stock buys, shows NO button at
   // all rather than a greyed one — there is no availability wording left on this site to explain a
@@ -192,9 +193,13 @@ export const AddToCartWidget: WidgetComponent = () => {
     <AddToCartButton
       productId={product.id}
       variantId={cartVariantId}
-      // The ticked extras travel with the click (card 0CDcCYmO) — their price is already
-      // in `displayPrice` above, and the server re-resolves it from the product itself.
-      addons={selectedAddons}
+      // The ticked extras travel with the click (card 0CDcCYmO) — their price is already in
+      // the displayed price, and the server re-resolves every amount from the product itself.
+      // Posted only where the panel was actually OFFERED, exactly as the quote control below is:
+      // this renderer builds its provider payload BY HAND and passes no `addons`, so it shows no
+      // extras panel — and handing it `{}` would answer a required group the shopper was never
+      // asked, refusing the add with "Please choose X" on a page carrying no such control.
+      addons={addonGroupsOffered ? selectedAddons : undefined}
       disabled={purchasingDisabled || !allOptionsSelected}
     />
   );
