@@ -7,7 +7,7 @@ import { usableBrandLogo } from "@/lib/brand-logo-url";
 //
 // "Missing or broken images to default to brand logo."
 //
-// INDUSTRY KITCHENS ONLY, AND THE GATE IS THE CHANNEL — not the tree. The four
+// BOTH STOREFRONTS, AND THE GATE IS THE CHANNEL — not the tree. The four
 // builder files that call this (`{brand,category,product}-node-branch.tsx`,
 // `builder-image.tsx`) are declared channel-agnostic in
 // `orchestrator/shared-modules.json` and must stay byte-identical across
@@ -16,12 +16,19 @@ import { usableBrandLogo } from "@/lib/brand-logo-url";
 // per site instead would have unpicked the seam that stops template fixes
 // silently failing to reach a storefront.
 //
-// WHY IK ONLY. Tim asked for it on an IK card, and Steve's opposite ruling
-// (gRLRF8yu, 2026-08-10 — "the grey box stays, the fix is finding the
-// products") still stands on Chefs Depot. Tim is the final word on
-// customer-facing behaviour and his instruction is newer, so IK changes and CD
-// does not. Recorded as a supersession in docs/behaviour/catalogue.md and the
-// decision vault. Adding a channel here is the whole change needed to extend it.
+// WHO RULED WHAT. Tim asked for it on an Industry Kitchens card (2026-08-19)
+// and IK shipped first. Steve had ruled the opposite on gRLRF8yu (2026-08-10 —
+// "the grey box stays, the fix is finding the products"), so Chefs Depot was
+// deliberately left out; Tim is the final word on customer-facing behaviour and
+// his instruction was newer, which is a recorded SUPERSESSION rather than two
+// live rulings. Steve then asked for the same thing on this card for Chefs
+// Depot on 2026-08-24 — "Please implement the same temporary fix for Chefs
+// Depot, until the missing images are sourced" — so gRLRF8yu's grey-box ruling
+// is now superseded on BOTH storefronts by its own author. It is TEMPORARY by
+// Steve's own words: finding the real pictures is still the fix, and Products →
+// Missing Images is still where a gap gets chased. Recorded in
+// docs/behaviour/catalogue.md and the decision vault. Turning it off for a
+// storefront again is one number in the set below.
 //
 // WHAT THE FALLBACK IS. The brand's normalised logo (`brands.image_url`, the
 // 600x300 pipeline; 412 of 418 brands carry one on 2026-08-22). A product whose
@@ -38,10 +45,12 @@ import { usableBrandLogo } from "@/lib/brand-logo-url";
 
 /**
  * Channels on which an imageless or broken-image product falls back to its
- * brand's logo. 1 = Industry Kitchens. Chefs Depot (2) is deliberately absent —
- * see the supersession note above.
+ * brand's logo. 1 = Industry Kitchens (Tim, 2026-08-19), 2 = Chefs Depot
+ * (Steve, 2026-08-24, as a temporary measure until the pictures are sourced).
+ * A channel absent from this set renders exactly the storefront it was before
+ * the card — no query, no field, no copies of its rows.
  */
-const BRAND_LOGO_FALLBACK_CHANNELS = new Set<number>([1]);
+const BRAND_LOGO_FALLBACK_CHANNELS = new Set<number>([1, 2]);
 
 /** True when this storefront's channel has opted into the brand-logo fallback. */
 export function brandLogoFallbackEnabled(): boolean {

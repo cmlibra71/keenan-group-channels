@@ -11,6 +11,7 @@ import {
 } from "@/lib/store";
 import { getListingPricing, applyAccountPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
+import { attachBrandLogos } from "@/lib/brand-logo-fallback";
 import { getMembershipContext, copy } from "@/blocks/home-blocks";
 import type { HomeNativeData } from "./BuilderHomePage";
 import type { GridProduct } from "@/components/product/ProductGridClient";
@@ -79,8 +80,15 @@ export async function loadHomeNativeData(
         : null,
     ]);
 
+  // Card tSrCcnvx: the brand logo a home-rail tile falls back to when a product
+  // has no photo, or when its photo's file turns out to be missing. Additive —
+  // every other field on the row is copied through — and a no-op on a channel
+  // that has not opted in. Both rails below draw their tiles with `ProductCard`,
+  // which reads `brand_logo_url` / `brand_name` off the row.
   const scopePrice = async (rows: Record<string, unknown>[]) =>
-    (await applyAccountPrices(await applyCatalogScope(rows as never))) as unknown as GridProduct[];
+    (await attachBrandLogos(
+      await applyAccountPrices(await applyCatalogScope(rows as never))
+    )) as unknown as GridProduct[];
 
   const clearanceProducts = clearanceRes ? await scopePrice(clearanceRes.products as never) : [];
   const featuredProducts = featuredRes ? await scopePrice(featuredRes.products as never) : [];

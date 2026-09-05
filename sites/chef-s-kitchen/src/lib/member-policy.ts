@@ -12,7 +12,8 @@
  * This site used to hand guests the base member group so the page could show them the
  * member price as a "join and pay this" funnel. That published trade pricing to the
  * open internet, and on a cost-plus channel at 0% markup it published the buy price.
- * The funnel survives as `teaserCustomerGroupId`, which resolves a PERCENTAGE only.
+ * The funnel then survived as `teaserCustomerGroupId`, a rounded PERCENTAGE only —
+ * and that is now retired too (card Nyp8bkPm): see the note on the guest branch.
  */
 
 export interface MemberPricingFacts {
@@ -69,13 +70,35 @@ export function resolveMemberPricing(facts: MemberPricingFacts): MemberPricingDe
   }
 
   // Guest, or signed in without an active subscription. No pricing group: the page
-  // will fall back to RRP everywhere. The base plan group is passed separately and
-  // is used ONLY to derive a rounded savings percentage for the join teaser.
+  // will fall back to RRP everywhere.
+  //
+  // NO SAVINGS PERCENTAGE (card Nyp8bkPm; Tim's membership pack, approved on the
+  // board 2026-08-24). `teaserCustomerGroupId` used to carry the cheapest plan's
+  // group so a rounded whole percentage — "Members save up to 19%" — could be put
+  // on the product page and every listing tile. Under Tim's model that number
+  // cannot honestly be produced: a member's price is interpolated between the
+  // Wholesale and Reseller trade prices, and the spread between them differs SKU
+  // by SKU, so the system has no single discount percentage and one cannot be
+  // derived. His pack forbids publishing any figure until the M-to-R spread
+  // distribution has been measured across the catalogue, and its compliance note
+  // is explicit that a published claim has to survive an Australian Consumer Law
+  // challenge on substantiation.
+  //
+  // Returning null here is the ONE seam that retires it: `memberSavingsPct` falls
+  // to 0 everywhere, so the gold "Members save up to X%" box on the product page
+  // and the badge on every tile stop rendering without a single component edit,
+  // and the number cannot leak back through a surface nobody remembered. What
+  // replaces it is the member-pricing panel on the product page — the actual RRP,
+  // Mates Rates and member figures, and the ladder — which says more than the
+  // percentage did and is true.
+  //
+  // Restoring the percentage means measuring the spread first. Do not set this
+  // back to `facts.basePlanGroupId` to "fix" a missing badge.
   return {
     isMember: false,
     loggedIn: hasSession,
     customerGroupId: null,
-    teaserCustomerGroupId: facts.basePlanGroupId,
+    teaserCustomerGroupId: null,
     planPrice: facts.basePlanPrice,
     accountId,
   };
