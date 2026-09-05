@@ -172,7 +172,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
             >
               <Minus className="h-3.5 w-3.5" />
             </button>
-            <span className="w-8 text-center text-sm font-semibold">{quantity}</span>
+            <span className="min-w-8 px-1 text-center text-sm font-semibold">{quantity}</span>
             <button
               type="button"
               onClick={() => setQuantity(quantity + 1)}

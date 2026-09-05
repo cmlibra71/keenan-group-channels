@@ -233,34 +233,44 @@ export async function updateQuoteItem(itemId: number, quantity: number) {
     const quote = (await quoteService.getByUuid(uuid)) as QuoteRow | null;
     if (!quote) return { error: "Quote not found" };
 
+    // ONE `getWithItems` for the whole action. It is by far the heaviest read here and this is a
+    // customer-facing screen, so the pack size and the badge count both come off this single
+    // snapshot: a keystroke costs one read, not the two it cost when the pack lookup and
+    // `countQuoteItems` each fetched the quote. The lines already carry the pack columns, so no
+    // product round trip is added either.
+    const full = (await quoteService.getWithItems(quote.id)) as {
+      items?: Record<string, unknown>[];
+    } | null;
+    const items = full?.items ?? [];
+    const line = items.find((i) => Number(i.id) === itemId) as
+      | {
+          quantity?: number | null;
+          product_sell_pack_size?: number | null;
+          product_sell_pack_unit?: string | null;
+        }
+      | undefined;
+    const previousQuantity = Number(line?.quantity ?? 0);
+
+    let nextQuantity = 0;
     if (quantity <= 0) {
       await quoteItemService.deleteForParent(quote.id, itemId);
     } else {
-      // Whole packs here too. `getWithItems` is the read this page already goes through and it
-      // ALREADY selects the pack columns onto every line, so the size is taken from the line in
-      // hand rather than fetched again — this is a customer-facing screen and a second product
-      // round trip per keystroke is not free. Best-effort: a lookup that fails leaves the typed
-      // quantity alone rather than blocking the change; a quote is a request, and the rep sees it.
-      let nextQuantity = quantity;
-      try {
-        const full = await quoteService.getWithItems(quote.id);
-        const line = (full?.items ?? []).find(
-          (i: Record<string, unknown>) => Number(i.id) === itemId
-        ) as { product_sell_pack_size?: number | null; product_sell_pack_unit?: string | null } | undefined;
-        nextQuantity = snapToPack(
-          quantity,
-          resolvePackSize({
-            sellPackSize: line?.product_sell_pack_size ?? null,
-            sellPackUnit: line?.product_sell_pack_unit ?? null,
-          })
-        );
-      } catch (e) {
-        console.error("[updateQuoteItem] pack lookup skipped (non-fatal):", e);
-      }
+      // Whole packs here too — the size is read off the line in hand, never fetched again.
+      nextQuantity = snapToPack(
+        quantity,
+        resolvePackSize({
+          sellPackSize: line?.product_sell_pack_size ?? null,
+          sellPackUnit: line?.product_sell_pack_unit ?? null,
+        })
+      );
       await quoteItemService.updateForParent(quote.id, itemId, { quantity: nextQuantity });
     }
 
-    return { success: true, quoteCount: await countQuoteItems(quote.id) };
+    // The badge is the snapshot's total adjusted by the one line this call moved, so it reflects
+    // the write we just made without re-reading the quote to find out.
+    const quoteCount =
+      items.reduce((sum, i) => sum + Number(i.quantity ?? 0), 0) - previousQuantity + nextQuantity;
+    return { success: true, quoteCount };
   } catch (e) {
     console.error("[updateQuoteItem] failed (non-fatal):", e);
     return { error: "Could not update quote" };

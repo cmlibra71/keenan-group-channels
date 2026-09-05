@@ -51,8 +51,8 @@ export function ProductPackNote() {
   // affordance with no wording, which is the exact collision the behaviour register exists to
   // catch. What is dropped is the carton PRICE, which is the part that would leak the figure.
   return (
-    <p className="mt-3 text-sm text-zinc-700">
-      <span className="font-semibold text-zinc-900">{packNote}</span>
+    <p className="mt-3 text-sm text-text-secondary">
+      <span className="font-semibold text-text-primary">{packNote}</span>
       {unit > 0 && (
         <>
           {" · "}

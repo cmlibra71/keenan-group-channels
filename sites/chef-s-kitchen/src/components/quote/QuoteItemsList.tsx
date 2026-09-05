@@ -135,7 +135,7 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
         >
           <Minus className="h-3 w-3" />
         </button>
-        <span className="w-8 text-center text-sm font-medium">{displayQty}</span>
+        <span className="min-w-8 px-1 text-center text-sm font-medium">{displayQty}</span>
         <button
           onClick={() => handleQuantity(item.quantity + packSize)}
           disabled={isPending}
