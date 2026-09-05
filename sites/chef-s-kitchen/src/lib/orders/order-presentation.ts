@@ -98,9 +98,23 @@ const FAMILY_LABELS: Record<PaymentMethodFamily, string> = {
   free: "No payment required",
 };
 
-/** Ids that are a wording of their own rather than a way of paying. */
+/**
+ * Ids that are a wording of their own rather than a way of paying.
+ *
+ * Store credit belongs HERE and not in the family map, deliberately. It is a settlement out of a
+ * balance the customer already holds with us, not an arrangement to pay — so there is no "here is
+ * how to settle the rest" block it could ever produce, and `outstandingGuidance` falling through
+ * to the plain contact-us sentence is the correct answer rather than a gap. It reaches an order
+ * only where that order carried NO method at all (portal card OmIgGv2C records it there and
+ * nowhere else, precisely so a part-settled bank-transfer order keeps its bank details and
+ * reference for the balance still owing). "Store credit" is the wording this same page already
+ * uses for the money — see the "Store credit applied" adjustment row below and the `/account/quotes`
+ * total block — so the customer meets one word for one thing.
+ */
 const FALLBACK_METHOD_LABELS: Record<string, string> = {
   manual: "Recorded by our team",
+  store_credit: "Store credit",
+  storecredit: "Store credit",
 };
 
 function methodId(value: string | null | undefined): string {

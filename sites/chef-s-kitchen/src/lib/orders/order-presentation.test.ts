@@ -53,6 +53,41 @@ test("method label ignores a configured entry with a blank name", () => {
   assert.equal(paymentMethodLabel("stripe", [{ id: "stripe", name: "   " }]), "Card");
 });
 
+test("an order settled out of the customer's balance names it, not 'Not recorded'", () => {
+  // The portal's Capture Payment screen can settle an invoice out of an account's store credit
+  // (card OmIgGv2C) and stamps `store_credit` on an order that carried no method at all. Without
+  // an entry here the customer's own page would read "Not recorded" while the portal read
+  // "Store Credit" — two of our screens disagreeing about one record.
+  assert.equal(paymentMethodLabel("store_credit", []), "Store credit");
+  assert.equal(paymentMethodLabel("storecredit", []), "Store credit");
+  assert.equal(paymentMethodLabel("Store_Credit", []), "Store credit");
+});
+
+test("store credit is not a family, so a balance owing still gets the contact-us sentence", () => {
+  // Deliberate: spending a balance is not an arrangement to pay, so there is no bank-details or
+  // account-terms block it could produce. What it must NOT do is answer "nothing".
+  assert.equal(paymentMethodFamily("store_credit"), null);
+  assert.equal(
+    outstandingGuidance({
+      methodId: "store_credit",
+      orderPayable: true,
+      owed: 2295,
+      explainedElsewhere: false,
+    }),
+    "contact_us"
+  );
+  // Fully settled: nothing owing, so nothing to say.
+  assert.equal(
+    outstandingGuidance({
+      methodId: "store_credit",
+      orderPayable: true,
+      owed: 0,
+      explainedElsewhere: false,
+    }),
+    null
+  );
+});
+
 // ── Legacy Zoey / Magento method ids (Industry Kitchens) ─────────────────────
 //
 // The exact ids and counts on production 2026-08-15, over channel-1 orders
