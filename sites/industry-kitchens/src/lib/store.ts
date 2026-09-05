@@ -45,6 +45,10 @@ import {
   shippingRateCardService,
   blogService,
   loadAccountStatement,
+  // The free months on a membership, once per person, ever (card ASTb3tCf).
+  readPriorFreeTrial,
+  readQualifyingOrder,
+  membershipNumber,
 } from "@keenan/services";
 import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
@@ -257,6 +261,43 @@ export const getMemberSince = async (contactId: number): Promise<string | null> 
     return earliest;
   } catch {
     // A membership date is decoration on an account page — never cost the page.
+    return null;
+  }
+};
+
+/**
+ * This person's membership NUMBER on this site (card ASTb3tCf, "Membership number on
+ * the account").
+ *
+ * Derived from the EARLIEST subscription — the same row `getMemberSince` reads — so the
+ * number and the join date can never describe different memberships, and a member who
+ * re-subscribed keeps the number they have always had. Null when they hold none.
+ *
+ * ORDERED BY created_at THEN id, which is not decoration: the portal derives the very
+ * same number in SQL (`lib/membership/member-number.ts`,
+ * `array_agg(s.id ORDER BY s.created_at ASC, s.id ASC)`) and prints it on the customer
+ * record a rep is looking at while the customer reads this one. Two rows stamped the
+ * same second — which is exactly what a double-submit produces — would otherwise be
+ * broken differently on each side and the two screens would print different numbers.
+ */
+export const getMembershipNumber = async (contactId: number): Promise<string | null> => {
+  try {
+    const rows = (await subscriptionService.listForContact(contactId, CHANNEL_ID)) as Array<{
+      id: number;
+      created_at: string | null;
+    }>;
+    let earliest: { id: number; at: number } | null = null;
+    for (const row of rows) {
+      if (!row.created_at) continue;
+      const id = Number(row.id);
+      const at = new Date(row.created_at).getTime();
+      if (!Number.isFinite(id) || Number.isNaN(at)) continue;
+      if (!earliest || at < earliest.at || (at === earliest.at && id < earliest.id)) {
+        earliest = { id, at };
+      }
+    }
+    return membershipNumber(earliest?.id ?? null);
+  } catch {
     return null;
   }
 };
@@ -884,5 +925,11 @@ export {
   getEffectivePrices,
   shippingRateCalculator,
   shippingRateCardService,
+  // The free-membership rule's two database questions (card ASTb3tCf): has this
+  // person already had their free months, and have they placed an order big enough
+  // to earn them. Both contact-keyed; the channel is passed by the caller.
+  readPriorFreeTrial,
+  readQualifyingOrder,
+  membershipNumber,
   CHANNEL_ID,
 };

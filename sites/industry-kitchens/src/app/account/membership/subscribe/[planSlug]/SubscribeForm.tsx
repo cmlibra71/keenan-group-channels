@@ -114,7 +114,32 @@ export function SubscribeForm({
         return;
       }
 
-      if (result.clientSecret) {
+      // WHICH SECRET CAME BACK DECIDES WHAT WE CONFIRM (card ASTb3tCf).
+      //
+      // Paid first period  -> `clientSecret`, an invoice PaymentIntent: charge the card.
+      // FREE first period  -> `setupClientSecret`, a SetupIntent: nothing is due today,
+      //                      so there is no PaymentIntent at all. Confirming it is what
+      //                      files the card against the customer and makes it the
+      //                      subscription's default payment method, so the free months
+      //                      can roll into the paid month exactly as this page promised.
+      //                      Skip it and the card the shopper just typed is discarded,
+      //                      and the membership dies on its first real invoice.
+      // Neither             -> the customer already has a usable card on file.
+      if (result.setupClientSecret) {
+        const { error: stripeError } = await stripeRef.current.confirmCardSetup(
+          result.setupClientSecret,
+          {
+            payment_method: {
+              card: cardElementRef.current,
+            },
+          }
+        );
+
+        if (stripeError) {
+          setError(stripeError.message || "We could not save that card");
+          return;
+        }
+      } else if (result.clientSecret) {
         const { error: stripeError } = await stripeRef.current.confirmCardPayment(
           result.clientSecret,
           {

@@ -3,7 +3,14 @@ import { redirect } from "next/navigation";
 import { Crown, ArrowRight } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getMembershipNumber, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
+import { resolveFreeTrialOffer } from "@/lib/membership/free-trial";
+import {
+  checkoutOfferCopy,
+  JOIN_PITCH,
+  memberStateLine,
+  type FreeTrialView,
+} from "@/lib/membership/free-trial-copy";
 import { getContactPermissions } from "@/lib/role-permissions";
 import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import {
@@ -374,6 +381,13 @@ export default async function CheckoutPage() {
   let showMemberBanner = false;
   let isMember = false;
   let memberSavings = 0;
+  // The MEMBER's own state (card ASTb3tCf, item 4: "the checkout shows the shopper's
+  // current membership state"). Their number, so the line is about THEIR membership and
+  // not memberships in general.
+  let memberNumber: string | null = null;
+  // The free months on offer, if any (card ASTb3tCf). Null keeps the banner on Tim's
+  // plain join pitch, which is what every shopper saw before this rule existed.
+  let joinOffer: { view: FreeTrialView; planSlug: string | null } | null = null;
 
   const subscriptionsEnabled = await getFeatureFlag("subscriptions_enabled");
   if (subscriptionsEnabled) {
@@ -381,7 +395,7 @@ export default async function CheckoutPage() {
       const activeSub = await getActiveSubscriptionForContact(session.contactId);
       isMember = !!activeSub;
     }
-    if (isMember) {
+    if (isMember && session) {
       // Member savings flow through item salePrice (cart.discountAmount stays
       // 0): the saving is full list value minus what's actually charged.
       const listValue = (cart.items as { list_price: string | null; quantity: number }[]).reduce(
@@ -389,13 +403,44 @@ export default async function CheckoutPage() {
         0
       );
       memberSavings = Math.max(0, Math.round((listValue - subtotal) * 100) / 100);
-    } else {
+      memberNumber = await getMembershipNumber(session.contactId).catch(() => null);
+    } else if (!isMember) {
       const plans = await getSubscriptionPlans();
       if (plans.length > 0) {
         showMemberBanner = true;
+        // The free-membership offer, decided against THIS basket. The basket is
+        // GST-inclusive here because the threshold is (Product Brief §3: a figure a
+        // customer recognises), and because the order this basket becomes carries
+        // freight on top — so a basket that clears the threshold always becomes an
+        // order that clears it. The offer can under-promise, never over-promise.
+        const basketIncTax = pricesIncludeTax
+          ? subtotal
+          : Math.round((subtotal + gstAmount) * 100) / 100;
+        const offer = await resolveFreeTrialOffer({
+          contactId: session?.contactId ?? null,
+          trialDays: Number(plans[0].trial_period_days) || 0,
+          planPrice: plans[0].price,
+          basketIncTax,
+        }).catch(() => null);
+        joinOffer = offer
+          ? { view: offer.view, planSlug: (plans[0].slug as string | null) ?? null }
+          : null;
       }
     }
   }
+
+  // What the join banner says, how loudly, and where its button goes — all decided in
+  // the shared wording module, not re-derived from `view.kind` here. Three trees render
+  // this banner and "is it free" stopped being the same question as "may we promise it
+  // to THIS visitor" the moment a signed-out shopper could see it.
+  const joinCopy = joinOffer
+    ? checkoutOfferCopy(joinOffer.view)
+    : { headline: JOIN_PITCH, detail: null, cta: "Join members", highlight: false, linkToPlan: false };
+  const joinHref =
+    joinCopy.linkToPlan && joinOffer?.planSlug
+      ? `/account/membership/subscribe/${joinOffer.planSlug}`
+      : "/membership";
+  const joinIsFree = joinCopy.highlight;
 
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
@@ -406,11 +451,21 @@ export default async function CheckoutPage() {
       />
       <h1 className="text-3xl font-bold text-zinc-900 mb-8">Checkout</h1>
 
-      {isMember && memberSavings > 0 && (
+      {/* THE MEMBER'S OWN STATE (card ASTb3tCf, item 4). It used to render only when
+          the measured saving was above zero — and that saving is list value minus what
+          is charged, so a basket whose lines carry no `list_price` produced nothing and
+          a paying member read no acknowledgement of their membership at all on the one
+          screen where they are spending money. The MEASURED sentence is unchanged in
+          substance (card Nyp8bkPm keeps it, and it must never become a percentage); all
+          that changed is that a member with no measurable saving now gets a line too. */}
+      {isMember && (
         <div className="mb-6 flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
           <Crown className="h-4 w-4 text-green-600 shrink-0" />
           <span className="text-sm text-green-800">
-            You&apos;re saving ${memberSavings.toFixed(2)} with your membership on this order
+            {memberStateLine({
+              savingsLabel: memberSavings > 0 ? `$${memberSavings.toFixed(2)}` : null,
+              membershipNumber: memberNumber,
+            })}
           </span>
         </div>
       )}
@@ -420,18 +475,47 @@ export default async function CheckoutPage() {
           the basket times a flat 15% held in `member_savings_percentage` — a
           figure with no measured basis, retired across the site. The `> 0` guard
           it carried is kept, moved onto the BASKET, so an empty cart still gets
-          no pitch. */}
+          no pitch.
+
+          Card ASTb3tCf adds what the offer IS. Where this basket earns the free
+          months the button stops saying "Join members" and says
+          "Free membership — 3 months"; where the shopper has already had their
+          free months it says so, naming the date they ran, rather than letting
+          them find the charge on a statement. The wording is shared with the
+          subscribe page (`lib/membership/free-trial-copy.ts`) so the promise made
+          here is the promise honoured there. That module also decides whether the
+          button may point straight at the plan: it may not while the order that earns
+          the free months has yet to be placed, and it may not for a visitor we cannot
+          identify, who has to sign in before anything can be granted to them. Nothing
+          here reintroduces the retired savings estimate. */}
       {showMemberBanner && subtotal > 0 && (
-        <div className="mb-6 flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-          <div className="flex items-center gap-2 text-sm text-amber-800">
-            <Crown className="h-4 w-4 text-amber-600 shrink-0" />
-            Join the buying group and every line reprices from your next order.
+        <div
+          className={`mb-6 flex flex-col gap-2 rounded-lg border px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${
+            joinIsFree ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"
+          }`}
+        >
+          <div className="flex items-start gap-2">
+            <Crown
+              className={`h-4 w-4 shrink-0 mt-0.5 ${joinIsFree ? "text-green-600" : "text-amber-600"}`}
+            />
+            <div className={`text-sm ${joinIsFree ? "text-green-800" : "text-amber-800"}`}>
+              <span className={joinIsFree ? "font-semibold" : undefined}>{joinCopy.headline}</span>
+              {joinCopy.detail && (
+                <span className={`block ${joinIsFree ? "text-green-700" : "text-amber-700"}`}>
+                  {joinCopy.detail}
+                </span>
+              )}
+            </div>
           </div>
           <Link
-            href="/membership"
-            className="inline-flex items-center gap-1 text-sm font-semibold text-amber-700 hover:text-amber-800 shrink-0"
+            href={joinHref}
+            className={`inline-flex items-center gap-1 text-sm font-semibold shrink-0 ${
+              joinIsFree
+                ? "text-green-700 hover:text-green-800"
+                : "text-amber-700 hover:text-amber-800"
+            }`}
           >
-            Join now
+            {joinCopy.cta}
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </div>
