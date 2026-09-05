@@ -13,6 +13,7 @@ import { cmsFunctionService } from "@keenan/services/services";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { withSilverChefNode } from "@/builder/silverchef-node";
+import { withAddonsNode } from "@/builder/product-addons-node";
 import { withImageNoticeNode } from "@/builder/product-image-notice";
 import { withUpsellBlock } from "@/builder/upsell-node";
 import { attachBrandLogos } from "@/lib/brand-logo-fallback";
@@ -167,13 +168,22 @@ export async function renderProductNodeBranch({
   // than being written into the stored trees so there is nothing to undo on a rollback and a site
   // that re-authors its buy row keeps the behaviour. It wraps the PLACED nodes as well as the
   // stored ones, so a buy control introduced by a future placed node is guarded too.
+  //
+  // Card 0CDcCYmO — the paid-extras panel is placed the same way and for the same reason
+  // (an authored tree cannot hold the shopper's picks or add their money to the price). It
+  // goes ABOVE the buy buttons: ticking an extra changes what Add to Cart will charge, so
+  // the shopper has to meet them first. Applied after the SilverChef pass so the live order
+  // reads price -> weekly rent -> extras -> buy; neither pass can displace the other.
+  //
   // The upsell rail (card fYqTM5Ot) is PLACED here for the third time on this page and for
   // the same reason: Zoey shows upsells as their own block, the data has been sitting in
   // `product_upsells` since the import, and nothing on either stored tree reads it. The pass
   // clones the tree's OWN related block so the rail keeps that site's tile component — which
   // is what keeps the listing-tile rules (no stock wording, Add to Cart intact) true of it —
   // and renders nothing at all for a product with no upsells. It runs BEFORE guardBuyControls
-  // so the cloned tiles are guarded exactly like the ones they were cloned from.
+  // so the cloned tiles are guarded exactly like the ones they were cloned from. It runs AFTER the
+  // extras pass so the two cannot contend: the extras pass refuses to descend into a
+  // `repeat`, which is what the cloned rail is, so a tile can never sprout an extras panel.
   //
   // Chefs Depot's prices and the spend-more-save-more ladder (card Nyp8bkPm) are
   // PLACED here for the same reason: the panel has to reach every product page on a site
@@ -186,7 +196,9 @@ export async function renderProductNodeBranch({
   // call to action left on it.
   const nodeTree = guardBuyControls(
     withCdMemberPricingNode(
-      withUpsellBlock(withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE)))
+      withUpsellBlock(
+        withAddonsNode(withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE)))
+      )
     )
   );
 

@@ -104,7 +104,10 @@ export const PriceWidget: WidgetComponent = () => {
 export const BulkPricingWidget: WidgetComponent = () => {
   const purchase = useProductPurchaseOptional();
   if (!purchase) return null;
-  const { product, displayPrice } = purchase;
+  // The product's OWN price, without any paid extras the shopper has ticked (card
+  // 0CDcCYmO). A quantity break is a discount off the MACHINE, so working a percent tier
+  // off a price that already carries $480 of blades would quietly discount the blades too.
+  const { product, displayBasePrice: displayPrice } = purchase;
   if (product.bulkPricing.length === 0 || displayPrice <= 0) return null;
   return (
     <div className="mt-4">
@@ -174,6 +177,8 @@ export const AddToCartWidget: WidgetComponent = () => {
     restrictAddToCart,
     purchasingDisabled,
     allOptionsSelected,
+    selectedAddons,
+    addonGroupsOffered,
   } = purchase;
   // A product staff switched off for cart, or set to refuse out-of-stock buys, shows NO button at
   // all rather than a greyed one — there is no availability wording left on this site to explain a
@@ -188,6 +193,13 @@ export const AddToCartWidget: WidgetComponent = () => {
     <AddToCartButton
       productId={product.id}
       variantId={cartVariantId}
+      // The ticked extras travel with the click (card 0CDcCYmO) — their price is already in
+      // the displayed price, and the server re-resolves every amount from the product itself.
+      // Posted only where the panel was actually OFFERED, exactly as the quote control below is:
+      // this renderer builds its provider payload BY HAND and passes no `addons`, so it shows no
+      // extras panel — and handing it `{}` would answer a required group the shopper was never
+      // asked, refusing the add with "Please choose X" on a page carrying no such control.
+      addons={addonGroupsOffered ? selectedAddons : undefined}
       disabled={purchasingDisabled || !allOptionsSelected}
     />
   );
@@ -196,15 +208,31 @@ export const AddToCartWidget: WidgetComponent = () => {
 export const AddToQuoteWidget: WidgetComponent = () => {
   const purchase = useProductPurchaseOptional();
   if (!purchase) return <NoProvider name="add_to_quote" />;
-  const { product, cartVariantId, useGroupedMode, allOptionsSelected, restrictAddToQuote } =
-    purchase;
+  const {
+    product,
+    cartVariantId,
+    useGroupedMode,
+    allOptionsSelected,
+    restrictAddToQuote,
+    selectedAddons,
+    addonGroupsUnanswered,
+    addonGroupsOffered,
+  } = purchase;
   // Zoey "Restrict Add to Quote" — the button simply is not offered for this product (7vu2iEEZ).
   if (restrictAddToQuote) return null;
   return (
     <AddToQuoteButton
       productId={product.id}
       variantId={cartVariantId}
-      disabled={useGroupedMode && !allOptionsSelected}
+      // Card 0CDcCYmO. This renderer is the fallback both sites fall back to when
+      // `node_product_template_enabled` is switched off, so the ticked extras travel with THIS
+      // button too — a quote path that silently dropped them hands the rep a bare machine. A
+      // required group greys the button here as it does on the coded buy box, and the action
+      // refuses it again server-side. A selection is posted only where the panel was actually
+      // OFFERED: this renderer builds its provider input by hand and does not pass `addons`, and
+      // an empty object would read as a deliberate clear-down of a configuration made elsewhere.
+      addons={addonGroupsOffered ? selectedAddons : undefined}
+      disabled={(useGroupedMode && !allOptionsSelected) || addonGroupsUnanswered.length > 0}
     />
   );
 };

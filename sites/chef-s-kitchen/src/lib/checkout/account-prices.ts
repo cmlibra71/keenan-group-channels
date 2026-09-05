@@ -1,5 +1,13 @@
 import { resolveAccountLinePrices, accountLineKey } from "@keenan/services";
-import { cartItemService } from "@/lib/store";
+import {
+  readProductAddons,
+  readStoredAddons,
+  resolveAddonSelection,
+  storedAddonsAsSelection,
+  type ResolvedAddon,
+} from "@keenan/services/product-addons";
+import { cartItemService, productService } from "@/lib/store";
+import { decideAccountPriceWrite } from "./account-prices-policy";
 import { getAccountId } from "@/lib/member";
 
 /** The cart-line shape checkout works with (snake_case, straight off cartService.getWithItems). */
@@ -9,6 +17,30 @@ export interface CartLine {
   variant_id: number | null;
   list_price: string | null;
   sale_price: string | null;
+  /**
+   * The line's paid extras as stored (card 0CDcCYmO). Also holds the variant-modifier object the
+   * REST API writes on lines that have nothing to do with extras, which is why every reader goes
+   * through `readStoredAddons` rather than trusting the column's shape.
+   */
+  modifier_selections?: unknown;
+}
+
+/**
+ * A line's extras re-resolved against the PRODUCT'S CURRENT definition — the rule every re-price
+ * on this repo follows. The stored bag records WHAT was chosen; the product records what it costs.
+ * A lookup failure falls back to the stored picks rather than to nothing: charging the shopper for
+ * the configuration they were shown beats silently dropping the accessories off the price.
+ */
+async function resolveLineAddons(line: CartLine): Promise<ResolvedAddon[]> {
+  const stored = readStoredAddons(line.modifier_selections);
+  if (stored.length === 0) return [];
+  try {
+    const product = (await productService.getById(line.product_id)) as { metafields?: unknown } | null;
+    return resolveAddonSelection(readProductAddons(product?.metafields), storedAddonsAsSelection(stored));
+  } catch (e) {
+    console.error("[account-prices] addon re-resolve failed (non-fatal):", e);
+    return stored;
+  }
 }
 
 /**
@@ -35,13 +67,21 @@ export async function applyAccountPricesToCart(cartId: number, lines: CartLine[]
   for (const line of lines) {
     const record = prices.get(accountLineKey({ productId: line.product_id, variantId: line.variant_id }));
     if (!record) continue;
-    if (line.list_price === record.price && (line.sale_price ?? null) === record.salePrice) continue;
-    line.list_price = record.price;
-    line.sale_price = record.salePrice;
+    const next = decideAccountPriceWrite({
+      record,
+      // Only read the product back for a line that actually carries extras — this runs on every
+      // order for every account-priced line, and the overwhelming majority carry none.
+      resolvedAddons: await resolveLineAddons(line),
+      currentListPrice: line.list_price,
+      currentSalePrice: line.sale_price,
+    });
+    if (!next.changed) continue;
+    line.list_price = next.listPrice;
+    line.sale_price = next.salePrice;
     try {
       await cartItemService.updateForParent(cartId, line.id, {
-        listPrice: record.price,
-        salePrice: record.salePrice,
+        listPrice: next.listPrice,
+        salePrice: next.salePrice,
       });
     } catch (e) {
       // Non-fatal: the in-memory line (what we charge) is already correct.

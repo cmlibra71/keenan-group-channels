@@ -1,13 +1,22 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { cartService, cartItemService, orderService, orderItemService, orderShippingAddressService, CHANNEL_ID, getEffectivePrice, productVariantService, channelSettingsService, getCheckoutSettings, paymentService, couponService } from "@/lib/store";
+import { cartService, cartItemService, orderService, orderItemService, orderShippingAddressService, CHANNEL_ID, getEffectivePrice, productVariantService, productService, channelSettingsService, getCheckoutSettings, paymentService, couponService } from "@/lib/store";
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { hasTestCheckoutSession } from "@/lib/checkout/test-session";
 import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveOrderBusinessName, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, siteAccessProfileService, loadOrderContactForOrder, ensureContactStripeCustomerForGateway, listSavedCardsForContact, type EmailLineItem } from "@keenan/services";
-import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, type BelowCostLine } from "@/lib/checkout/order-draft";
+import {
+  addonSurcharge,
+  addonSelectionKey,
+  readProductAddons,
+  readStoredAddons,
+  resolveAddonSelection,
+  storedAddonsAsSelection,
+  type ResolvedAddon,
+} from "@keenan/services/product-addons";
+import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, forOrderInsert, type BelowCostLine } from "@/lib/checkout/order-draft";
 import { backorderFactsForProducts } from "@/lib/cart/backorder-facts";
 import { canPurchaseQuantity } from "@keenan/services/backorder";
 import { getLineCosts } from "@/lib/store";
@@ -124,6 +133,27 @@ type PlaceOrderResult = {
     savedCardId?: string | null;
   };
 };
+
+/**
+ * A cart line's paid extras, re-resolved against the PRODUCT'S CURRENT definition (card
+ * 0CDcCYmO) — the same rule `lib/actions/cart.ts` follows on every other re-price. The stored
+ * bag is the record of WHAT was chosen; the product is the record of what it costs.
+ */
+async function resolveLineAddons(
+  productId: number,
+  storedModifierSelections: unknown
+): Promise<ResolvedAddon[]> {
+  const stored = readStoredAddons(storedModifierSelections);
+  if (stored.length === 0) return [];
+  try {
+    const product = (await productService.getById(productId)) as { metafields?: unknown } | null;
+    return resolveAddonSelection(readProductAddons(product?.metafields), storedAddonsAsSelection(stored));
+  } catch (e) {
+    // Never block a checkout on this lookup: the line keeps the extras it was configured with.
+    console.error("[placeOrder] addon re-resolve failed (non-fatal):", e);
+    return stored;
+  }
+}
 
 export async function placeOrder(
   _prev: PlaceOrderResult | null,
@@ -320,6 +350,9 @@ export async function placeOrder(
       const suppressCatalogSale = await shouldSuppressCatalogSalePrice();
       let pricesChanged = false;
       const repriced: typeof fullCart.items = [];
+      // The re-resolved picks per line id, so the persist below writes the RECORD with the
+      // money it produced — a withdrawn extra must not survive on the line it no longer bills.
+      const addonsAfterReprice = new Map<number, ResolvedAddon[]>();
       for (const item of fullCart.items) {
         if (item.sale_price && item.list_price) {
           const oldPrice = item.sale_price;
@@ -332,7 +365,24 @@ export async function placeOrder(
             const pricingVariantId = variantId || (await productVariantService.listForParent(item.product_id, { page: 1, limit: 1, sort: "id", direction: "asc" }))?.data[0]?.id;
             if (pricingVariantId) {
               const pricing = await getEffectivePrice(pricingVariantId as number, CHANNEL_ID, null);
-              item.sale_price = pricing.salePrice || null;
+              // The line's paid extras stay ON the recomputed price (card 0CDcCYmO). The
+              // membership expiring changes what the MACHINE costs, not what its accessories
+              // cost, and `getEffectivePrice` knows nothing about them — dropping them here
+              // would charge for a configuration at the bare product's price. (The other
+              // branch needs no such fix: clearing sale_price falls back to list_price, which
+              // already carries the surcharge.)
+              //
+              // RE-RESOLVED against the product, never read off the line: this is a re-price,
+              // and `sf-cart`'s rule is that every re-price re-reads the extras from the
+              // product's current definition — otherwise an extra staff withdrew is still
+              // charged here, on the one path where the shopper is being told their prices
+              // just changed.
+              const lineAddons = await resolveLineAddons(item.product_id, item.modifier_selections);
+              addonsAfterReprice.set(item.id, lineAddons);
+              const surcharge = addonSurcharge(lineAddons);
+              item.sale_price = pricing.salePrice
+                ? (Number(pricing.salePrice) + surcharge).toFixed(2)
+                : null;
             }
           }
           if (item.sale_price !== oldPrice) {
@@ -348,7 +398,17 @@ export async function placeOrder(
         // the same "prices updated" wall forever.
         for (const item of repriced) {
           try {
-            await cartItemService.updateForParent(cartWithItems.id, item.id, { salePrice: item.sale_price });
+            const nextAddons = addonsAfterReprice.get(item.id);
+            const storedAddons = readStoredAddons(item.modifier_selections);
+            const addonsMoved =
+              nextAddons != null &&
+              addonSelectionKey(nextAddons) !== addonSelectionKey(storedAddons);
+            await cartItemService.updateForParent(cartWithItems.id, item.id, {
+              salePrice: item.sale_price,
+              // Only when this line actually has extras and they moved — the column also holds
+              // the variant-modifier object the REST API writes, which is not ours to stamp.
+              ...(addonsMoved ? { modifierSelections: nextAddons } : {}),
+            });
           } catch (e) {
             console.error("[placeOrder] failed to persist re-priced cart item (non-fatal):", e);
           }
@@ -971,7 +1031,7 @@ export async function placeOrder(
 
   // Create order items (line items precomputed by buildLineItems above)
   try {
-    await orderItemService.createManyForParent(order.id, lineItems);
+    await orderItemService.createManyForParent(order.id, forOrderInsert(lineItems));
   } catch (err) {
     // Compensate so we never leave an order with no line items. The delete can itself fail
     // (e.g. a DB blip mid-checkout) — don't swallow it: retry once, and if it still fails,
