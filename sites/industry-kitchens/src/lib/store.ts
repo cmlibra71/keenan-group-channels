@@ -91,6 +91,10 @@ export const {
   getCategoryStats,
   getCategoryBreadcrumbs,
   getProductBreadcrumbs,
+  // Names of the categories REMOVED from this storefront (channel_settings
+  // `hidden_category_ids`, card ZVbjSoKN). Every category read resolves the
+  // removal by id; the /search facet rail speaks NAMES, so it needs these.
+  getRemovedCategoryNames,
   getCategoryById,
   getBrandsForChannel,
   getBrandBySlug,
