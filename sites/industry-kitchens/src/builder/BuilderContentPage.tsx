@@ -5,7 +5,7 @@ import BuilderImage from "./builder-image";
 import { useRouter } from "next/navigation";
 import type { NodeTree } from "@keenan/services/builder";
 import { BuilderTree, BuilderActionsProvider, type NativeComponents } from "@keenan/services/builder-react";
-import { useFormHandlers } from "./use-form-handlers";
+import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 import { contentNatives } from "./content-natives";
 
 // ============================================================================
@@ -45,15 +45,19 @@ export function BuilderContentPage({
   // Content/landing pages are exactly where enquiry forms go, and they
   // registered NO actions at all until now.
   const formHandlers = useFormHandlers();
+  // A form success panel shows its form's authored confirmation message when
+  // one is set (card XBOxpQmd). Identity-returning when the page carries no
+  // form, which is almost every page.
+  const confirmed = useFormConfirmations(tree, components);
   return (
     <BuilderActionsProvider handlers={formHandlers} navigate={(to) => router.push(to)}>
       <BuilderTree
-        tree={tree}
+        tree={confirmed.tree}
         payload={payload}
         namedStyles={namedStyles}
         jsFunctions={jsFunctions}
         callResults={callResults}
-        components={components}
+        components={confirmed.components}
         nativeComponents={nativeComponents}
         linkComponent={Link as unknown as React.ComponentType<Record<string, unknown>>}
         imageComponent={BuilderImage}

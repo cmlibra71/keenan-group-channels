@@ -1,5 +1,8 @@
 "use client";
 import * as React from "react";
+import { useRouter } from "next/navigation";
+import type { NodeTree } from "@keenan/services/builder";
+import { withFormConfirmations, withFormConfirmationsIn } from "@keenan/services/builder";
 import { submitForm } from "@/lib/actions/forms";
 
 // ============================================================================
@@ -38,6 +41,7 @@ async function uploadOne(
 }
 
 export function useFormHandlers() {
+  const router = useRouter();
   return React.useMemo(
     () => ({
       submitForm: async (args: Record<string, unknown>) => {
@@ -77,7 +81,7 @@ export function useFormHandlers() {
           }
         }
 
-        return submitForm({
+        const result = await submitForm({
           formKey,
           values,
           uploadToken,
@@ -86,8 +90,41 @@ export function useFormHandlers() {
           turnstileToken,
           pagePath: typeof window !== "undefined" ? window.location.pathname : undefined,
         });
+        // A destination the form's author set wins over the confirmation
+        // message (card XBOxpQmd). It is always a site-relative path — the
+        // action re-checks it through the same guard the redirect table uses —
+        // so this is a client navigation, never a jump off the storefront.
+        // The result is still returned: if the navigation is slow, the success
+        // panel is what the visitor looks at meanwhile, and their enquiry is
+        // already stored either way.
+        if (result.success && result.redirectTo) router.push(result.redirectTo);
+        return result;
       },
     }),
-    []
+    [router]
   );
 }
+
+/**
+ * The tree and component masters a page renders, with every form success panel
+ * able to show its form's AUTHORED confirmation message (card XBOxpQmd).
+ *
+ * Pure and data-free: a page with no form gets its own objects back, so this
+ * costs one walk and changes nothing. It exists because the panels already
+ * published — including the shared `enquiry-form` master both storefronts place
+ * on their contact page — carry sentences written into the tree, and would
+ * otherwise ignore anything Steve types on the Forms screen.
+ */
+export function useFormConfirmations(
+  tree: NodeTree,
+  components: Record<string, NodeTree> | undefined
+): { tree: NodeTree; components: Record<string, NodeTree> } {
+  const given = components ?? EMPTY_COMPONENTS;
+  return {
+    tree: React.useMemo(() => withFormConfirmations(tree), [tree]),
+    components: React.useMemo(() => withFormConfirmationsIn(given), [given]),
+  };
+}
+
+/** Stable identity so a page that passes no masters never remounts the memo. */
+const EMPTY_COMPONENTS: Record<string, NodeTree> = {};
