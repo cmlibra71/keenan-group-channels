@@ -242,17 +242,18 @@ export async function updateQuoteItem(itemId: number, quantity: number) {
       // round trip per keystroke is not free. Best-effort: a lookup that fails leaves the typed
       // quantity alone rather than blocking the change; a quote is a request, and the rep sees it.
       let nextQuantity = quantity;
-      let packSize = 1;
       try {
         const full = await quoteService.getWithItems(quote.id);
         const line = (full?.items ?? []).find(
           (i: Record<string, unknown>) => Number(i.id) === itemId
         ) as { product_sell_pack_size?: number | null; product_sell_pack_unit?: string | null } | undefined;
-        packSize = resolvePackSize({
-          sellPackSize: line?.product_sell_pack_size ?? null,
-          sellPackUnit: line?.product_sell_pack_unit ?? null,
-        });
-        nextQuantity = snapToPack(quantity, packSize);
+        nextQuantity = snapToPack(
+          quantity,
+          resolvePackSize({
+            sellPackSize: line?.product_sell_pack_size ?? null,
+            sellPackUnit: line?.product_sell_pack_unit ?? null,
+          })
+        );
       } catch (e) {
         console.error("[updateQuoteItem] pack lookup skipped (non-fatal):", e);
       }
