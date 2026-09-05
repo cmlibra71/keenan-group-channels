@@ -19,6 +19,7 @@
 
 import { gstSplit } from "@keenan/services/calc";
 import { backorderedUnits, type StockFacts } from "@keenan/services/backorder";
+import { addonsAsOrderOptions, addonSurcharge, readStoredAddons } from "@keenan/services/product-addons";
 
 export type PaymentStatus = "pending" | "awaiting_payment" | "pending_payment" | "net_terms";
 
@@ -64,6 +65,9 @@ export type CartLineInput = {
   quantity: number;
   list_price: string;
   sale_price: string | null;
+  /** Paid extras this line was configured with (card 0CDcCYmO) — their price is already
+   *  inside `sale_price`/`list_price`; this is the RECORD of what was chosen. */
+  modifier_selections?: unknown;
 };
 
 /** A line item ready for orderItemService.createManyForParent (camelCase contract). */
@@ -95,6 +99,30 @@ export type OrderLineDraft = {
    * every order placed before this shipped.
    */
   backorderedQuantity?: number;
+  /**
+   * The paid extras this line was configured with (card 0CDcCYmO), as
+   * `{ "Slicers": "Slicer 4mm (+$245.00)" }` — the shape the portal's order lines table
+   * already renders under the product name. The MONEY is in the line's own prices; this is
+   * the only record on the order of what the customer actually chose. Omitted (never `{}`)
+   * on a line with no extras, so an order placed before this shipped is indistinguishable
+   * from one with none.
+   *
+   * WHO ACTUALLY READS IT, today: the portal's order lines table
+   * (`dashboard/orders/[id]/_components/lines-table.tsx`) and the customer's own order page
+   * (`/account/orders/[id]`). The packing slip, the invoice PDF and the refund screens render
+   * nothing from this column — putting it on those is its own job.
+   */
+  productOptions?: Record<string, string>;
+  /**
+   * What the ticked extras add to ONE unit of this line, ex GST — DRAFT-ONLY, never inserted
+   * (`orderItems` has no such column and Drizzle drops the key).
+   *
+   * `findBelowCostLines` needs it: `priceExTax` now carries the accessories while the cost map
+   * is keyed by product+variant and holds the MACHINE's buy cost, so a $43 machine sold under
+   * cost with $725 of blades on it reads as $768 against $50 and falls off the sentry
+   * altogether. Subtracting this puts the machine's price back beside the machine's cost.
+   */
+  addonSurchargeExTax?: number;
 };
 
 export type MoneySplit = { exTax: number; incTax: number; tax: number };
@@ -127,12 +155,19 @@ export function buildLineItems(items: CartLineInput[], pricesIncludeTax: boolean
     subIncTax += lineCalc.incTax;
     itemsTotal += item.quantity;
 
+    const lineAddons = readStoredAddons(item.modifier_selections);
+    const addonOptions = addonsAsOrderOptions(lineAddons);
+    const addonUnitExTax = addonSurcharge(lineAddons);
+
     return {
       productId: item.product_id,
       variantId: item.variant_id,
       name: item.product_name,
       sku: item.product_sku,
       quantity: item.quantity,
+      ...(Object.keys(addonOptions).length > 0
+        ? { productOptions: addonOptions, addonSurchargeExTax: addonUnitExTax }
+        : {}),
       basePrice: String(unitPrice),
       priceExTax: String(unitCalc.exTax),
       priceIncTax: String(unitCalc.incTax),
@@ -170,6 +205,13 @@ export type BelowCostLine = {
  * `costs` is keyed `${productId}:${variantId ?? 0}` (see store.getLineCosts);
  * lines with no known cost are skipped. A half-cent tolerance avoids flagging
  * pure GST-split rounding noise.
+ *
+ * PAID ADD-ON EXTRAS come off the price before the comparison (card 0CDcCYmO). The cost map
+ * holds what the MACHINE cost us — an accessory authored in `metafields.addons` has no buy
+ * cost of its own anywhere — so comparing a price carrying $725 of blades against a $50
+ * machine cost would let a genuinely below-cost machine walk straight past this sentry. The
+ * reported `unitExTax` is the machine's own price for the same reason: a manager reading the
+ * warning has to see the two figures that are actually being compared.
  */
 export function findBelowCostLines(
   lineItems: OrderLineDraft[],
@@ -179,8 +221,12 @@ export function findBelowCostLines(
   for (const line of lineItems) {
     const cost = costs.get(`${line.productId}:${line.variantId ?? 0}`);
     if (cost == null) continue;
-    const unitExTax = parseFloat(line.priceExTax);
-    if (!Number.isFinite(unitExTax)) continue;
+    const charged = parseFloat(line.priceExTax);
+    if (!Number.isFinite(charged)) continue;
+    const surcharge = Number.isFinite(line.addonSurchargeExTax ?? 0)
+      ? line.addonSurchargeExTax ?? 0
+      : 0;
+    const unitExTax = charged - surcharge;
     if (unitExTax < cost - 0.005) {
       out.push({
         productId: line.productId,
@@ -194,6 +240,21 @@ export function findBelowCostLines(
     }
   }
   return out;
+}
+
+/**
+ * The draft rows as the INSERT wants them — draft-only fields dropped.
+ *
+ * `addonSurchargeExTax` exists so `findBelowCostLines` can put the machine's price back beside
+ * the machine's cost; `order_items` has no such column. Drizzle would ignore the key silently,
+ * which is exactly the kind of "it happens to work" this file should not rely on, so it comes
+ * off here, in one place, on the way to the table.
+ */
+export function forOrderInsert(lineItems: OrderLineDraft[]): Record<string, unknown>[] {
+  return lineItems.map((line) => {
+    const { addonSurchargeExTax: _draftOnly, ...row } = line;
+    return row as Record<string, unknown>;
+  });
 }
 
 /**

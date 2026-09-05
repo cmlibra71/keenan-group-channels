@@ -10,6 +10,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { AddToCartButton } from "./AddToCartButton";
+import { ProductAddons } from "./ProductAddons";
 import { AddToQuoteButton } from "./AddToQuoteButton";
 import { OptionSelector } from "./OptionSelector";
 import { Price } from "@/components/ui/Price";
@@ -41,6 +42,10 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
     purchasingDisabled,
     allOptionsSelected,
     cartVariantId,
+    selectedAddons,
+    addonGroupsUnanswered,
+    addonGroupsOffered,
+    displayBasePrice,
   } = useProductPurchase();
 
   const { id: productId, options, optionValues, bulkPricing } = product;
@@ -114,7 +119,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
       )}
 
       {/* Bulk Pricing Tiers */}
-      {bulkPricing.length > 0 && displayPrice > 0 && (
+      {bulkPricing.length > 0 && displayBasePrice > 0 && (
         <div className="mt-4">
           <h3 className="text-sm font-semibold text-zinc-700 mb-2">Bulk Pricing</h3>
           <div className="rounded-lg border border-zinc-200 overflow-hidden">
@@ -128,8 +133,10 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
               <tbody className="divide-y divide-zinc-100">
                 {bulkPricing.map((rule) => {
                   const amount = parseFloat(rule.amount);
+                  // The MACHINE's price, never one carrying the shopper's ticked extras: a
+                  // quantity break discounts the product, not the accessories (card 0CDcCYmO).
                   const tierPrice = rule.type === "percent"
-                    ? displayPrice * (1 - amount / 100)
+                    ? displayBasePrice * (1 - amount / 100)
                     : amount;
                   return (
                     <tr key={rule.id} className="text-zinc-700">
@@ -178,6 +185,10 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
         />
       )}
 
+      {/* Paid extras (card 0CDcCYmO) — above the buy buttons, because ticking one changes
+          what Add to Cart will charge. Renders nothing for a product with none. */}
+      <ProductAddons />
+
       {/* Add to Cart / Quote */}
       <div className="mt-8 space-y-3">
         {/* A bundle is never bought straight off the page — the configuration goes to a rep. */}
@@ -194,6 +205,10 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
             productName={product.name}
             sku={product.sku}
             price={displaySalePrice ?? displayPrice}
+            // Card 0CDcCYmO. This renderer is the fallback both sites fall back to when
+            // `node_product_template_enabled` is switched off, so it carries the extras too
+            // — a buy path that silently dropped them would charge the bare product price.
+            addons={selectedAddons}
             disabled={purchasingDisabled || !allOptionsSelected}
           />
         )}
@@ -201,8 +216,15 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
           <AddToQuoteButton
             productId={productId}
             variantId={cartVariantId}
-            disabled={(useGroupedMode && !allOptionsSelected) || !kitReady}
+            // A required extras group greys this button too (it folds into `allOptionsSelected`),
+            // and the group carries its own "Choose one" so the reason is on screen.
+            disabled={(useGroupedMode && !allOptionsSelected) || !kitReady || addonGroupsUnanswered.length > 0}
             kitChoices={isBundle ? toKitChoices(kitSelection) : null}
+            // Card 0CDcCYmO. The extras panel sits above BOTH buttons: pressing this one keeps
+            // the configuration, so the rep prices what the customer was actually looking at.
+            // Posted only where the panel was OFFERED — an empty object is a deliberate
+            // clear-down, `undefined` leaves the line's configuration alone.
+            addons={addonGroupsOffered ? selectedAddons : undefined}
             label={isBundle ? "Add to Quote — request pricing" : undefined}
           />
         )}
