@@ -24,6 +24,7 @@ import {
   activeBrandFreeShippingSpecials,
   brandIdsForProducts,
 } from "@/lib/checkout/free-shipping-brands";
+import { orderSummaryImagesForProducts } from "@/lib/checkout/order-summary-images";
 import { matchBrandSpecial } from "@/lib/checkout/free-shipping-brands-policy";
 import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-policy";
 import { resolvePaymentAvailability } from "@/lib/checkout/payment-availability";
@@ -62,11 +63,11 @@ export default async function CheckoutPage() {
   // LQM9FQYe): stop the shopper with the sign-in step instead of the form. The
   // cart is untouched, so signing in from here drops them straight back onto a
   // priced basket. placeOrder enforces the SAME rule server-side — this is only
-  // what we show. Chefs Depot leaves the setting off and keeps guest checkout.
+  // what we show.
   if (checkoutNeedsSignIn(requireAccount, !!session)) {
     return (
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="page-title mb-8">Checkout</h1>
+        <h1 className="text-3xl font-bold text-zinc-900 mb-8">Checkout</h1>
         <CheckoutSignInGate />
       </div>
     );
@@ -397,6 +398,23 @@ export default async function CheckoutPage() {
     }
   }
 
+  // The picture on every Order Summary line (card qjV98YEK). ONE batched read, and a
+  // never-throw one: a photograph is the most disposable thing on this page, so a lookup
+  // failure leaves the summary reading exactly as it did before rather than costing the
+  // shopper their checkout. Same primary-image precedence as the listing tile the shopper
+  // clicked, so the two screens show the same photograph of the same product.
+  const summaryImages = await orderSummaryImagesForProducts(
+    (cart.items as Array<{ product_id: number }>).map((i) => i.product_id)
+  );
+  // Typed off CheckoutForm's own prop rather than a hand-copied shape, so a line field
+  // added there cannot be silently dropped on the way through here.
+  const summaryItems = (
+    cart.items as Parameters<typeof CheckoutForm>[0]["items"] & Array<{ product_id?: number }>
+  ).map((i) => ({
+    ...i,
+    image_url: summaryImages.get(Number(i.product_id)) ?? null,
+  }));
+
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
       <StartedCheckoutTracker
@@ -404,12 +422,12 @@ export default async function CheckoutPage() {
         itemNames={(cart.items as Array<Record<string, unknown>>).map((i) => String(i.product_name ?? i.name ?? ""))}
         items={cart.items as Array<Record<string, unknown>>}
       />
-      <h1 className="page-title mb-8">Checkout</h1>
+      <h1 className="text-3xl font-bold text-zinc-900 mb-8">Checkout</h1>
 
       {isMember && memberSavings > 0 && (
-        <div className="mb-6 flex items-center gap-2 bg-brand-tint border border-brand-light/40 rounded-lg px-4 py-3">
-          <Crown className="h-4 w-4 text-brand shrink-0" />
-          <span className="text-sm text-brand-deep">
+        <div className="mb-6 flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+          <Crown className="h-4 w-4 text-green-600 shrink-0" />
+          <span className="text-sm text-green-800">
             You&apos;re saving ${memberSavings.toFixed(2)} with your membership on this order
           </span>
         </div>
@@ -422,14 +440,14 @@ export default async function CheckoutPage() {
           it carried is kept, moved onto the BASKET, so an empty cart still gets
           no pitch. */}
       {showMemberBanner && subtotal > 0 && (
-        <div className="mb-6 flex items-center justify-between bg-member-bg border border-member/40 rounded-lg px-4 py-3">
-          <div className="flex items-center gap-2 text-sm text-member-text">
-            <Crown className="h-4 w-4 text-member-text shrink-0" />
+        <div className="mb-6 flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+          <div className="flex items-center gap-2 text-sm text-amber-800">
+            <Crown className="h-4 w-4 text-amber-600 shrink-0" />
             Join the buying group and every line reprices from your next order.
           </div>
           <Link
             href="/membership"
-            className="inline-flex items-center gap-1 text-sm font-semibold text-member-text hover:text-member-text shrink-0"
+            className="inline-flex items-center gap-1 text-sm font-semibold text-amber-700 hover:text-amber-800 shrink-0"
           >
             Join now
             <ArrowRight className="h-3.5 w-3.5" />
@@ -438,7 +456,7 @@ export default async function CheckoutPage() {
       )}
 
       <CheckoutForm
-        items={cart.items}
+        items={summaryItems}
         subtotal={subtotal}
         gstAmount={gstAmount}
         isMember={isMember}
