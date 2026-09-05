@@ -75,6 +75,12 @@ const ORDER_STAGE_BY_STATUS: Record<string, OrderStage> = {
   net_terms_account: "Being prepared",
   manual_verification_required: "Being prepared",
   disputed: "Being prepared",
+  // PART of this order is being refunded (portal card 5xC6MBPu), which means the REST of it is
+  // still ours to pack — so the customer reads the ordinary working word. Deliberately not
+  // "Refunded": that is the whole-order twin `refund_in_progress` below, and telling somebody
+  // their order is refunded when most of it is still coming would be the worst kind of wrong.
+  // The refund itself reaches them through the credit memo's own email, not through this word.
+  partial_refund_in_progress: "Being prepared",
   // Finance-company statuses. The customer is told the order is being prepared;
   // WHICH financier is funding it never reaches the browser.
   silverchef: "Being prepared",
