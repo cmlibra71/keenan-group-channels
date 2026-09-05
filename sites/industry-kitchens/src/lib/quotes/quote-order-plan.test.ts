@@ -280,3 +280,61 @@ describe("planOrderFromPaidQuote — carry-over", () => {
     assert.equal(plan.order.customer_message, "Deliver Fri");
   });
 });
+
+describe("planOrderFromPaidQuote — the rep the order carries (card QRA0m4vh)", () => {
+  test("no resolved rep leaves the order's rep field null, as before this card", () => {
+    const plan = planOrderFromPaidQuote(baseQuote(), CTX);
+    assert.equal(plan.order.sales_rep_id, null);
+    assert.equal(plan.order.metafields.sales_agent, undefined);
+  });
+
+  test("the resolved rep is stamped on the order's own rep field", () => {
+    const plan = planOrderFromPaidQuote(baseQuote(), {
+      ...CTX,
+      salesRep: { id: 2215, name: "Fiona Robinson" },
+    });
+    assert.equal(plan.order.sales_rep_id, 2215);
+  });
+
+  test("the Sales Agent line is filled from the rep, so the two screens agree", () => {
+    const plan = planOrderFromPaidQuote(baseQuote(), {
+      ...CTX,
+      salesRep: { id: 7, name: "Tim Keenan" },
+    });
+    assert.equal(plan.order.sales_rep_id, 7);
+    assert.equal(plan.order.metafields.sales_agent, "Tim Keenan");
+  });
+
+  test("a sales_agent the quote already carries is never overwritten", () => {
+    const plan = planOrderFromPaidQuote(
+      baseQuote({ attributes: { sales_agent: "Albert Chang" } }),
+      {
+        ...CTX,
+        copyAttributeCodes: new Set(["sales_agent"]),
+        salesRep: { id: 1429, name: "Albert Chang" },
+      }
+    );
+    assert.equal(plan.order.metafields.sales_agent, "Albert Chang");
+    assert.equal(plan.order.sales_rep_id, 1429);
+  });
+
+  test("a rep with no resolvable name still carries the id, and invents no Sales Agent", () => {
+    const plan = planOrderFromPaidQuote(baseQuote(), {
+      ...CTX,
+      salesRep: { id: 4, name: null },
+    });
+    assert.equal(plan.order.sales_rep_id, 4);
+    assert.equal(plan.order.metafields.sales_agent, undefined);
+  });
+
+  test("the rep changes nothing about the money", () => {
+    const without = planOrderFromPaidQuote(baseQuote(), CTX);
+    const with_ = planOrderFromPaidQuote(baseQuote(), {
+      ...CTX,
+      salesRep: { id: 6, name: "Customer Service" },
+    });
+    assert.equal(with_.order.total_inc_tax, without.order.total_inc_tax);
+    assert.equal(with_.order.total_tax, without.order.total_tax);
+    assert.equal(with_.order.total_ex_tax, without.order.total_ex_tax);
+  });
+});
