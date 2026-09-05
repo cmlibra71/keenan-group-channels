@@ -29,7 +29,17 @@ const subscriptionLocks = new Set<string>();
  */
 export async function createSubscription(planId: number): Promise<{
   success: boolean;
+  /** Confirm with `stripe.confirmCardPayment` — a first payment is due now. */
   clientSecret?: string | null;
+  /**
+   * Confirm with `stripe.confirmCardSetup` — nothing is due now because the first
+   * period is FREE, and this is how the card gets filed so the membership can roll
+   * into the paid month when the free period ends (card ASTb3tCf). A free trial
+   * produces this secret and never `clientSecret`: its first invoice is $0, so Stripe
+   * raises no PaymentIntent at all. Ignore it and the card the shopper typed is thrown
+   * away and the membership lapses on its first real invoice.
+   */
+  setupClientSecret?: string | null;
   subscriptionId?: number;
   error?: string;
 }> {
@@ -99,8 +109,31 @@ export async function createSubscription(planId: number): Promise<{
             .catch(() => null)
         : null;
 
+      // A TRIALING subscription that still has an unconfirmed SetupIntent is NOT
+      // finished (card ASTb3tCf). Its free period costs nothing, so Stripe reports it
+      // `trialing` the instant it is created — before any card has been filed. Treating
+      // that as "payment already succeeded" would hand the shopper an active membership
+      // with no payment method, which Stripe then cancels the day the free months end.
+      // So: send the setup secret back and let them finish filing the card, on the same
+      // subscription, exactly as the paid path retries an unpaid first invoice.
+      if (
+        remote &&
+        remote.status === "trialing" &&
+        remote.setupClientSecret &&
+        sameStripeAccountScope(stripeScopeOf(pendingSub), planScope)
+      ) {
+        return {
+          success: true,
+          clientSecret: null,
+          setupClientSecret: remote.setupClientSecret,
+          subscriptionId: pendingSub.id as number,
+        };
+      }
+
       if (remote && (remote.status === "active" || remote.status === "trialing")) {
-        // Payment already succeeded (a missed/late webhook) — reconcile locally.
+        // Payment already succeeded — or the free period is running with a card already
+        // on file (no pending SetupIntent). Either way a missed/late webhook left the
+        // local row behind; reconcile it.
         await subscriptionService.activate(pendingSub.id as number);
         refresh(); // acting user's view refreshes; shared data cache stays intact
         return {
@@ -225,6 +258,7 @@ export async function createSubscription(planId: number): Promise<{
     return {
       success: true,
       clientSecret: stripeSub.clientSecret,
+      setupClientSecret: stripeSub.setupClientSecret,
       subscriptionId: localSub.id as number,
     };
   } catch (err) {

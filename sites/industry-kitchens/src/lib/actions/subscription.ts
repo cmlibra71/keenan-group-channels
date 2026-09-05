@@ -25,7 +25,17 @@ const subscriptionLocks = new Set<string>();
  */
 export async function createSubscription(planId: number): Promise<{
   success: boolean;
+  /** Confirm with `stripe.confirmCardPayment` — a first payment is due now. */
   clientSecret?: string | null;
+  /**
+   * Confirm with `stripe.confirmCardSetup` — nothing is due now because the first
+   * period is FREE, and this is how the card gets filed so the membership can roll
+   * into the paid month when the free period ends (card ASTb3tCf). A free trial
+   * produces this secret and never `clientSecret`: its first invoice is $0, so Stripe
+   * raises no PaymentIntent at all. Ignore it and the card the shopper typed is thrown
+   * away and the membership lapses on its first real invoice.
+   */
+  setupClientSecret?: string | null;
   subscriptionId?: number;
   error?: string;
 }> {
@@ -169,6 +179,7 @@ export async function createSubscription(planId: number): Promise<{
     return {
       success: true,
       clientSecret: stripeSub.clientSecret,
+      setupClientSecret: stripeSub.setupClientSecret,
       subscriptionId: localSub.id as number,
     };
   } catch (err) {

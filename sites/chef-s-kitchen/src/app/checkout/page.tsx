@@ -3,9 +3,14 @@ import { redirect } from "next/navigation";
 import { Crown, ArrowRight } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getMembershipNumber, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
 import { resolveFreeTrialOffer } from "@/lib/membership/free-trial";
-import { checkoutOfferCopy, JOIN_PITCH, type FreeTrialView } from "@/lib/membership/free-trial-copy";
+import {
+  checkoutOfferCopy,
+  JOIN_PITCH,
+  memberStateLine,
+  type FreeTrialView,
+} from "@/lib/membership/free-trial-copy";
 import { getContactPermissions } from "@/lib/role-permissions";
 import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import {
@@ -376,6 +381,10 @@ export default async function CheckoutPage() {
   let showMemberBanner = false;
   let isMember = false;
   let memberSavings = 0;
+  // The MEMBER's own state (card ASTb3tCf, item 4: "the checkout shows the shopper's
+  // current membership state"). Their number, so the line is about THEIR membership and
+  // not memberships in general.
+  let memberNumber: string | null = null;
   // The free months on offer, if any (card ASTb3tCf). Null keeps the banner on Tim's
   // plain join pitch, which is what every shopper saw before this rule existed.
   let joinOffer: { view: FreeTrialView; planSlug: string | null } | null = null;
@@ -386,7 +395,7 @@ export default async function CheckoutPage() {
       const activeSub = await getActiveSubscriptionForContact(session.contactId);
       isMember = !!activeSub;
     }
-    if (isMember) {
+    if (isMember && session) {
       // Member savings flow through item salePrice (cart.discountAmount stays
       // 0): the saving is full list value minus what's actually charged.
       const listValue = (cart.items as { list_price: string | null; quantity: number }[]).reduce(
@@ -394,7 +403,8 @@ export default async function CheckoutPage() {
         0
       );
       memberSavings = Math.max(0, Math.round((listValue - subtotal) * 100) / 100);
-    } else {
+      memberNumber = await getMembershipNumber(session.contactId).catch(() => null);
+    } else if (!isMember) {
       const plans = await getSubscriptionPlans();
       if (plans.length > 0) {
         showMemberBanner = true;
@@ -413,31 +423,24 @@ export default async function CheckoutPage() {
           basketIncTax,
         }).catch(() => null);
         joinOffer = offer
-          ? {
-              view: offer.view,
-              // Only hand over a plan link when the free period can actually be TAKEN.
-              // While it is earned by this basket and the order has not been placed,
-              // the button reads "Free membership — 3 months" but still points at
-              // /membership: sending them to pay first would land them on a page that
-              // correctly refuses the free months and charges from day one.
-              planSlug: offer.pending ? null : ((plans[0].slug as string | null) ?? null),
-            }
+          ? { view: offer.view, planSlug: (plans[0].slug as string | null) ?? null }
           : null;
       }
     }
   }
 
-  // What the join banner says and where its button goes. A free period sends the
-  // shopper straight at the plan (there is a decision to act on); everything else
-  // keeps the existing "read about it first" link to /membership.
+  // What the join banner says, how loudly, and where its button goes — all decided in
+  // the shared wording module, not re-derived from `view.kind` here. Three trees render
+  // this banner and "is it free" stopped being the same question as "may we promise it
+  // to THIS visitor" the moment a signed-out shopper could see it.
   const joinCopy = joinOffer
     ? checkoutOfferCopy(joinOffer.view)
-    : { headline: JOIN_PITCH, detail: null, cta: "Join members" };
+    : { headline: JOIN_PITCH, detail: null, cta: "Join members", highlight: false, linkToPlan: false };
   const joinHref =
-    joinOffer?.view.kind === "free" && joinOffer.planSlug
+    joinCopy.linkToPlan && joinOffer?.planSlug
       ? `/account/membership/subscribe/${joinOffer.planSlug}`
       : "/membership";
-  const joinIsFree = joinOffer?.view.kind === "free";
+  const joinIsFree = joinCopy.highlight;
 
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
@@ -448,11 +451,21 @@ export default async function CheckoutPage() {
       />
       <h1 className="page-title mb-8">Checkout</h1>
 
-      {isMember && memberSavings > 0 && (
+      {/* THE MEMBER'S OWN STATE (card ASTb3tCf, item 4). It used to render only when
+          the measured saving was above zero — and that saving is list value minus what
+          is charged, so a basket whose lines carry no `list_price` produced nothing and
+          a paying member read no acknowledgement of their membership at all on the one
+          screen where they are spending money. The MEASURED sentence is unchanged in
+          substance (card Nyp8bkPm keeps it, and it must never become a percentage); all
+          that changed is that a member with no measurable saving now gets a line too. */}
+      {isMember && (
         <div className="mb-6 flex items-center gap-2 bg-brand-tint border border-brand-light/40 rounded-lg px-4 py-3">
           <Crown className="h-4 w-4 text-brand shrink-0" />
           <span className="text-sm text-brand-deep">
-            You&apos;re saving ${memberSavings.toFixed(2)} with your membership on this order
+            {memberStateLine({
+              savingsLabel: memberSavings > 0 ? `$${memberSavings.toFixed(2)}` : null,
+              membershipNumber: memberNumber,
+            })}
           </span>
         </div>
       )}
@@ -470,8 +483,11 @@ export default async function CheckoutPage() {
           free months it says so, naming the date they ran, rather than letting
           them find the charge on a statement. The wording is shared with the
           subscribe page (`lib/membership/free-trial-copy.ts`) so the promise made
-          here is the promise honoured there. Nothing here reintroduces the
-          retired savings estimate. */}
+          here is the promise honoured there. That module also decides whether the
+          button may point straight at the plan: it may not while the order that earns
+          the free months has yet to be placed, and it may not for a visitor we cannot
+          identify, who has to sign in before anything can be granted to them. Nothing
+          here reintroduces the retired savings estimate. */}
       {showMemberBanner && subtotal > 0 && (
         <div
           className={`mb-6 flex flex-col gap-2 rounded-lg border px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${

@@ -65,9 +65,13 @@ function moneyLabel(amount: number): string {
  * they have already placed, so the offer shown at the checkout is the same one the
  * subscribe page honours once that basket has become an order.
  *
- * A signed-out visitor has no history to check: they are treated as eligible, which is
- * true — they simply have to sign in before anything is granted, and the action re-runs
- * this with their real identity.
+ * A signed-out visitor has no history to check, so the DECISION treats them as eligible
+ * — which is the right default, because nothing is granted until they sign in and the
+ * action re-runs this with their real identity. What they are TOLD is different: the
+ * view is marked `identified: false` and the wording drops to a description ("free if
+ * you have not had them before") rather than a promise, because a returning member who
+ * already spent their free months and is signed out would otherwise read
+ * "Free membership — 3 months" here and be charged from day one on the next screen.
  */
 export async function resolveFreeTrialOffer(opts: {
   contactId: number | null;
@@ -121,10 +125,16 @@ export async function resolveFreeTrialOffer(opts: {
   // threshold, so its absence on a threshold grant means the basket did it.
   const pending = decision.granted && decision.basis === "threshold" && !decision.qualifyingOrderId;
 
+  // Do we know WHO this is? A signed-out visitor has no history to check, so nothing
+  // said to them about their free months can be a promise about THEM — see
+  // `FreeTrialView.identified`.
+  const identified = !!opts.contactId;
+
   let view: FreeTrialView;
   if (decision.granted) {
     view = {
       kind: "free",
+      identified,
       periodLabel,
       endsLabel: formatMemberSince(freePeriodEnds(decision.days)),
       priceLabel,
@@ -133,6 +143,7 @@ export async function resolveFreeTrialOffer(opts: {
   } else if (decision.reason === "already-used") {
     view = {
       kind: "used",
+      identified,
       periodLabel: freePeriodLabel(decision.priorTrial?.days ?? trialDays) || periodLabel,
       usedOnLabel: formatMemberSince(decision.priorTrial?.granted_at ?? null),
       priceLabel,
@@ -140,12 +151,13 @@ export async function resolveFreeTrialOffer(opts: {
   } else if (decision.reason === "below-threshold" && decision.shortfallIncTax != null) {
     view = {
       kind: "earn",
+      identified,
       periodLabel,
       shortfallLabel: moneyLabel(decision.shortfallIncTax),
       thresholdLabel: moneyLabel(thresholdIncTax),
     };
   } else {
-    view = { kind: "paid" };
+    view = { kind: "paid", identified };
   }
 
   return { decision, view, grantedDays: decision.granted ? decision.days : 0, pending };
