@@ -182,6 +182,8 @@
     "lib/mega-menu.ts",
     "lib/orders/customer-order-notes.test.ts",
     "lib/orders/customer-order-notes.ts",
+    "lib/orders/invoice-document-url.test.ts",
+    "lib/orders/invoice-document-url.ts",
     "lib/orders/line-options.test.ts",
     "lib/orders/line-options.ts",
     "lib/orders/order-access.test.ts",
