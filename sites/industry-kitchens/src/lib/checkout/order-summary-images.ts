@@ -14,8 +14,20 @@
 // the Order Summary is the one the shopper already saw on the tile they clicked.
 // ============================================================================
 
-import { productImageService } from "@/lib/store";
 import { isFetchableImageUrl } from "@/lib/image-origin";
+
+/** Read the primary photograph per product id. Injected so the policy above it is testable. */
+export type PrimaryImageReader = (productIds: number[]) => Promise<Map<number, string>>;
+
+/**
+ * The real read. `@/lib/store` is pulled in LAZILY — a static import would drag the
+ * whole service barrel (and its DB connection) into anything that merely imports this
+ * module, including its own unit test.
+ */
+const readPrimaryImages: PrimaryImageReader = async (productIds) => {
+  const { productImageService } = await import("@/lib/store");
+  return productImageService.primaryImageUrlsForProducts(productIds);
+};
 
 /**
  * Drop any URL `/api/image` would refuse to fetch.
@@ -42,12 +54,14 @@ export function usableImageUrls(
  * A product with no usable picture is simply absent from the map.
  */
 export async function orderSummaryImagesForProducts(
-  productIds: number[]
+  productIds: number[],
+  read: PrimaryImageReader = readPrimaryImages,
+  fetchable: (url: string) => boolean = isFetchableImageUrl
 ): Promise<Map<number, string>> {
   const ids = [...new Set(productIds.filter((id) => Number.isInteger(id) && id > 0))];
   if (ids.length === 0) return new Map();
   try {
-    return usableImageUrls(await productImageService.primaryImageUrlsForProducts(ids));
+    return usableImageUrls(await read(ids), fetchable);
   } catch (e) {
     console.error("[checkout] order-summary image lookup failed (non-fatal):", e);
     return new Map();
