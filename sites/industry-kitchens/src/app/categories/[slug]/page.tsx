@@ -35,6 +35,10 @@ import { FilterRail, FilterChips, SortSelect } from "@/components/category/Filte
 import { RichContent } from "@/components/content/RichContent";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { CategorySeo } from "@/components/category/CategorySeo";
+import {
+  LARGE_TILE_IMAGE_SIZES,
+  LARGE_TILE_MAX_SUBCATEGORIES,
+} from "@/builder/subcategory-tile-size";
 
 // Emit category SEO (CMS category-page meta if set, else the category record).
 export async function generateMetadata({
@@ -186,6 +190,10 @@ export default async function CategoryPage({
   ]);
 
   const { products, total } = listing;
+  // Card MN702iBv: the picture carries the tile, but only where the children are
+  // a STRIP. The same cap the authored-tree pass applies, read from the same
+  // constant so the two renderers cannot drift.
+  const largeTiles = subcategories.length <= LARGE_TILE_MAX_SUBCATEGORIES;
   // Every renderer (sealed rail, CMS blocks, authored node tree) reads these
   // facets, so applying the configuration here is what switches a facet off
   // site-wide rather than in one component.
@@ -363,7 +371,13 @@ export default async function CategoryPage({
       {subcategories.length > 0 && (
         <div className="mb-10">
           <h2 className="text-lg font-semibold text-zinc-900 mb-4">Subcategories</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+          <div
+            className={
+              largeTiles
+                ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"
+                : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3"
+            }
+          >
             {/*
               `image_url`, not `imageUrl`: the service snake-cases every key on
               the way out (see CategoryChildSlim). The row is left un-annotated
@@ -376,28 +390,67 @@ export default async function CategoryPage({
               a 403 draws the browser's broken-image glyph, which is the tile
               Steve was explicitly promised we would not ship (gRLRF8yu).
             */}
+            {/*
+              Card MN702iBv (Steve, 2026-08-24, "IK - Increase size of images"):
+              the picture, not the white space, carries the tile — a full-width
+              square above the name rather than a 48px thumbnail beside it.
+              `object-contain`, not `cover`: these are cut-out product photos, and
+              at this size cropping would slice the top off a tall cabinet.
+
+              THESE CLASS NAMES ARE ALSO DATA. The live Industry Kitchens
+              category page renders from the authored Site Builder tree, and
+              `builder/subcategory-tile-size.ts` writes exactly these classes onto
+              it at render time. A class only exists if the deployed stylesheet
+              carries it, and this file is what makes Tailwind generate them —
+              change one and change both.
+            */}
+            {/*
+              THE CAP. Steve's screenshot is a six-tile strip and that is the
+              shape the big tile is for. Industry Kitchens also has 13 categories
+              whose children are a DIRECTORY — `/categories/brands` has 395 — and
+              there the big tile grows the page from 19,908px to 35,815px and
+              buries the listing three screens down. Over the cap the tile stays
+              exactly as it was. Both class sets are written out in full because
+              a class only exists if Tailwind has seen the literal string.
+            */}
             {subcategories.map((sub) => (
               <Link
                 key={sub.id}
                 href={`/categories/${sub.slug}`}
-                className="group flex items-center gap-3 rounded-lg border border-zinc-200 p-3 hover:border-zinc-400 hover:shadow-sm transition-all"
+                className={
+                  largeTiles
+                    ? "group flex flex-col overflow-hidden rounded-lg border border-zinc-200 hover:border-zinc-400 hover:shadow-sm transition-all"
+                    : "group flex items-center gap-3 rounded-lg border border-zinc-200 p-3 hover:border-zinc-400 hover:shadow-sm transition-all"
+                }
               >
                 {sub.image_url && isAllowedImageUrl(sub.image_url) ? (
-                  <div className="relative h-12 w-12 flex-shrink-0">
+                  <div className={largeTiles ? "relative aspect-square w-full bg-white" : "relative h-12 w-12 flex-shrink-0"}>
                     <Image
                       src={sub.image_url}
                       alt={sub.name}
                       fill
-                      sizes="48px"
-                      className="rounded object-cover"
+                      sizes={largeTiles ? LARGE_TILE_IMAGE_SIZES : "48px"}
+                      className={largeTiles ? "object-contain p-3" : "rounded object-cover"}
                     />
                   </div>
                 ) : (
-                  <div className="h-12 w-12 rounded bg-zinc-100 flex items-center justify-center flex-shrink-0">
-                    <Package className="h-5 w-5 text-zinc-300" />
+                  <div
+                    className={
+                      largeTiles
+                        ? "flex aspect-square w-full items-center justify-center bg-zinc-100"
+                        : "h-12 w-12 rounded bg-zinc-100 flex items-center justify-center flex-shrink-0"
+                    }
+                  >
+                    <Package className={largeTiles ? "h-8 w-8 text-zinc-300" : "h-5 w-5 text-zinc-300"} />
                   </div>
                 )}
-                <span className="text-sm font-medium text-zinc-700 group-hover:text-zinc-900 line-clamp-2">
+                <span
+                  className={
+                    largeTiles
+                      ? "border-t border-zinc-200 px-3 py-2.5 text-center text-sm font-medium text-zinc-700 group-hover:text-zinc-900 line-clamp-2"
+                      : "text-sm font-medium text-zinc-700 group-hover:text-zinc-900 line-clamp-2"
+                  }
+                >
                   {sub.name}
                 </span>
               </Link>

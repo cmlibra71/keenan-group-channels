@@ -63,6 +63,8 @@
     "builder/silverchef-node.ts",
     "builder/strip-stock-nodes.test.ts",
     "builder/strip-stock-nodes.ts",
+    "builder/subcategory-tile-size.test.ts",
+    "builder/subcategory-tile-size.ts",
     "builder/upsell-node.test.ts",
     "builder/upsell-node.ts",
     "builder/use-form-handlers.ts",

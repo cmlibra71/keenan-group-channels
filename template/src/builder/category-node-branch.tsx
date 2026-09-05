@@ -30,6 +30,10 @@ import {
   findBannerBackdropNodes,
 } from "@/builder/category-banner-backdrop";
 import {
+  enlargeSubcategoryTiles,
+  findSmallSubcategoryThumbs,
+} from "@/builder/subcategory-tile-size";
+import {
   BuilderCategoryPage,
   type CategoryGridProduct,
 } from "@/builder/BuilderCategoryPage";
@@ -153,7 +157,18 @@ export async function renderCategoryNodeBranch({
   // shared module changes exactly one storefront. See
   // `builder/category-banner-backdrop.ts`.
   const stripped = stripCategoryBannerBackdrop(storedTree);
-  const nodeTree = stripped.tree;
+
+  // Card MN702iBv (Steve, 2026-08-24): "IK - Increase size of images". The
+  // subcategory tile was a 48px thumbnail beside a wide white card; it is now a
+  // full-width picture with the name under it. Same render-time, nothing-stored
+  // pass as the strip above, and gated on the CHANNEL rather than on the data —
+  // Chefs Depot keeps the tile it has. See `builder/subcategory-tile-size.ts`.
+  // `subcategoryCount` is the cap: above it the children are a directory, not a
+  // strip, and the big tile buries the listing (`/categories/brands` has 395).
+  const enlarged = enlargeSubcategoryTiles(stripped.tree, CHANNEL_ID, {
+    subcategoryCount: subcategories?.length,
+  });
+  const nodeTree = enlarged.tree;
 
   // The post-condition, and it is not belt-and-braces. The strip matches on node
   // id and on label; an author who rebuilds the backdrop under a fresh name
@@ -170,6 +185,24 @@ export async function renderCategoryNodeBranch({
       `[TnQJpunl] category banner backdrop survived the strip: ${survivingBackdrop.join(", ")}` +
         ` (removed by id/label: ${stripped.removed.join(", ") || "none"}).` +
         " Add its label to BANNER_BACKDROP_LABELS in builder/category-banner-backdrop.ts."
+    );
+  }
+
+  // The same kind of post-condition for the tiles, and for the same reason: the
+  // pass matches on the labels the published tree carries, and an author who
+  // rebuilds the strip under other names would leave the small thumbnail on the
+  // page with nothing anywhere saying the fix had stopped working. This asks the
+  // acceptance question structurally instead — is any subcategory thumbnail
+  // still pinned to a 48px box?
+  // Only where the pass was MEANT to run. Chefs Depot is excluded on purpose and
+  // so is a directory-sized strip, and a warning on either is noise about a tile
+  // nobody asked to change — logged on every category render, forever.
+  const smallThumbs = enlarged.applied ? findSmallSubcategoryThumbs(nodeTree) : [];
+  if (smallThumbs.length > 0) {
+    console.warn(
+      `[MN702iBv] subcategory tile still renders a 48px thumbnail: ${smallThumbs.join(", ")}` +
+        ` (restyled by label: ${enlarged.rewritten.join(", ") || "none"}).` +
+        " Check the labels in LARGE_TILE_CLASSES in builder/subcategory-tile-size.ts."
     );
   }
 
