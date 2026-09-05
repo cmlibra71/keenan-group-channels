@@ -150,16 +150,20 @@ export function facetOptions(
   selected: string[] = [],
   limit = 15
 ): { value: string; label: string; count: number }[] {
-  const kept = Object.entries(dist ?? {})
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, limit);
+  // A Map, not the raw object: a name in `selected` comes from the query string,
+  // and `dist["__proto__"]` on a plain object reads Object.prototype rather than
+  // missing, so the row would carry an object (or a function) as its count and
+  // React refuses to render one — `/search?brand=Waldorf,__proto__` would hand a
+  // shopper the site error page instead of results.
+  const counts = new Map<string, number>(Object.entries(dist ?? {}));
+  const kept = [...counts.entries()].sort(([, a], [, b]) => b - a).slice(0, limit);
   const names = new Set(kept.map(([name]) => name));
   for (const name of selected) {
     if (names.has(name)) continue;
     names.add(name);
     // Its real count when the distribution holds one (the group is counted with
     // its own filter removed, so it usually does), otherwise zero.
-    kept.push([name, dist?.[name] ?? 0]);
+    kept.push([name, counts.get(name) ?? 0]);
   }
   return kept.map(([name, count]) => ({ value: encodeURIComponent(name), label: name, count }));
 }

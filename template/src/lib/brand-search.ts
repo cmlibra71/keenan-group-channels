@@ -26,15 +26,3 @@
 export function brandFacetValue(brandName: string): string {
   return encodeURIComponent(brandName);
 }
-
-/**
- * `/search` for one query, narrowed to one brand — the address the brand-page
- * search box submits to. The form itself submits a plain GET so it works with
- * no JavaScript; this is the same address in one string, for links.
- */
-export function brandSearchHref(brandName: string, query: string): string {
-  const params = new URLSearchParams();
-  params.set("q", query);
-  params.set("brand", brandFacetValue(brandName));
-  return `/search?${params.toString()}`;
-}

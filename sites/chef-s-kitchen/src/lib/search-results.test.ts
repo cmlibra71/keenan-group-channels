@@ -160,6 +160,32 @@ test("a ticked value the distribution does not hold at all still gets a row", ()
   assert.deepEqual(opts.at(-1), { value: "Chef%20Inox", label: "Chef Inox", count: 0 });
 });
 
+test("a ticked value that is a PROTOTYPE key counts as absent, not as Object.prototype", () => {
+  // Reachable by anyone, no sign-in: /search?brand=Waldorf,__proto__.
+  // sanitizeFacetValues keeps the name, Waldorf still matches so the results
+  // branch renders, and the ticked row is kept by the rule above — so a count
+  // looked up on the raw distribution OBJECT would come back as
+  // Object.prototype (or a function, for "toString"), and React throws
+  // "Objects are not valid as a React child" when FacetCheckbox prints it. The
+  // shopper would get the site error page instead of results.
+  for (const key of ["__proto__", "constructor", "toString", "valueOf", "hasOwnProperty"]) {
+    const opts = facetOptions({ Waldorf: 12, UNOX: 341 }, [key], 15);
+    const row = opts[opts.length - 1];
+    assert.equal(row.label, key, key);
+    assert.equal(typeof row.count, "number", key);
+    assert.equal(row.count, 0, key);
+  }
+  // And a real value alongside one is unaffected.
+  const mixed = facetOptions({ Waldorf: 12 }, ["Waldorf", "__proto__"], 15);
+  assert.deepEqual(
+    mixed.map((o) => [o.label, o.count]),
+    [
+      ["Waldorf", 12],
+      ["__proto__", 0],
+    ]
+  );
+});
+
 test("a ticked value already on the list is not duplicated", () => {
   const opts = facetOptions({ UNOX: 341, Rational: 166 }, ["UNOX"], 15);
   assert.equal(opts.length, 2);

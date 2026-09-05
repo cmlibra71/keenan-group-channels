@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { brandFacetValue, brandSearchHref } from "./brand-search.ts";
+import { brandFacetValue } from "./brand-search.ts";
 import { sanitizeFacetValues } from "./search-results.ts";
 
 // The one thing that can silently break: the brand a shopper searched from is
@@ -28,17 +28,8 @@ test("a brand name survives the round trip /search puts it through", () => {
   }
 });
 
-test("brandSearchHref carries the query and the same brand value", () => {
-  for (const name of BRAND_NAMES) {
-    const href = brandSearchHref(name, "combi oven");
-    const params = new URLSearchParams(href.slice(href.indexOf("?") + 1));
-    assert.equal(params.get("q"), "combi oven", name);
-    assert.deepEqual(sanitizeFacetValues(params.get("brand")), [name], name);
-  }
-});
-
 test("the facet value is what the rail would have written for the same brand", () => {
-  // FacetRail's option value (search/page.tsx `toOptions`) is
+  // The rail option value (`facetOptions`, lib/search-results.ts) is
   // encodeURIComponent(name); a mismatch means the results page filters on the
   // brand but cannot draw it as ticked, so the shopper cannot untick it.
   for (const name of BRAND_NAMES) {
