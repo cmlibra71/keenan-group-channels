@@ -6,6 +6,8 @@ import { setSession, endShopperSession } from "@/lib/auth";
 import { safeNextPath } from "@/lib/account-redirect";
 import { verifyPassword, validatePasswordStrength } from "@/lib/password";
 import { createAccountlessContact, EmailTakenError, type LoginCandidate } from "@/lib/contact-auth";
+import { claimGuestCheckoutContact } from "@/lib/checkout/guest-contact";
+import { hashPasswordForStorage } from "@keenan/services";
 // THE shared rate-limit rulebook (lib/security/rate-limit-core.ts): per-IP and
 // per-account budgets, one audit line when a bucket trips. The form login and
 // the account-panel login share ONE keyspace, so an attacker cannot dodge the
@@ -98,6 +100,26 @@ export async function register(
   // same thing whether the address belongs to a B2B contact or an accountless
   // shopper, so nothing new is revealed.
   if (!(await contactService.isEmailAvailableForChannel(email, CHANNEL_ID))) {
+    // ONE address is not taken, though it looks it: the record a guest checkout
+    // left behind (card LiuLvc5b). It holds no password and grants no sign-in, so
+    // refusing here would strand the shopper — the refusal sends them to a sign-in
+    // that cannot succeed. Claiming turns their own record into their account, and
+    // is refused for everything else (a B2B contact, a Google-proven row, a row
+    // that already has a password), which all still get the neutral copy below.
+    const claimed = await claimGuestCheckoutContact({
+      email,
+      passwordHash: await hashPasswordForStorage(password),
+      firstName,
+      lastName,
+      // Same unverified marker the fresh registration writes — a claim proves no
+      // more about inbox ownership than a registration does.
+      metafields: { self_registered: true, email_verified: false },
+    });
+    if (claimed) {
+      await setSession(claimed.id, claimed.email);
+      await repriceCartForSession(); // same reason as a fresh registration
+      redirect(safeNextPath(formData.get("next")) ?? "/account");
+    }
     return {
       error: "We couldn't complete your registration. If you already have an account, please sign in.",
       emailTaken: true,
