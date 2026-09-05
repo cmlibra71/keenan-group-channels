@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { invoiceDocumentUrl, offersInvoiceDocument } from "./invoice-document-url";
+import { invoiceDocumentUrl, offersInvoiceDocument } from "./invoice-document-url.ts";
 
 const UUID = "3f8b1c2e-0000-4aaa-8bbb-1234567890ab";
 const CHEFS_DEPOT = { url: "https://chefsdepot.com.au", publicSubdomain: "quotes" };

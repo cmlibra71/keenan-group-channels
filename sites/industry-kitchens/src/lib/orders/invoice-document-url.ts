@@ -1,5 +1,5 @@
 import { publicQuoteUrl } from "@keenan/services";
-import { isUnpayableOrderStatus } from "@/lib/orders/pay-balance";
+import { isUnpayableOrderStatus } from "./pay-balance";
 
 /**
  * Where THIS customer's tax invoice PDF lives, and whether we may offer it at all (card EizZjaY3).
