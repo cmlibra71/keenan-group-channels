@@ -420,27 +420,33 @@ export default async function OrderDetailPage({
           {customerOrderStage(order.status)}
         </span>
       </div>
-      <p className="text-sm text-text-muted mb-4">
-        {placed ? `Placed ${placed}` : ""}
-        {order.customer_po ? `${placed ? " · " : ""}Your reference: ${order.customer_po}` : ""}
-      </p>
-
-      {/* The customer's own copy of the tax invoice (card EizZjaY3). The document existed and was
-          reachable only if somebody emailed it; this is the download Steve asked for. It carries
-          the words "Tax Invoice", which is what the ATO requires of it. */}
-      {invoiceHref && (
-        <p className="mb-8">
-          <a
-            href={invoiceHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-text-primary hover:bg-surface-secondary"
-          >
-            <Download className="h-4 w-4" />
-            Download {documentName} (PDF)
-          </a>
+      {/* The eyebrow and the invoice download share ONE container, and the container carries the
+          space below the pair. The gap BETWEEN them comes from `space-y-4`, which collapses to
+          nothing when the download is withheld — so an order with no offered document keeps
+          exactly the spacing every order had before this card (EizZjaY3). */}
+      <div className="mb-8 space-y-4">
+        <p className="text-sm text-text-muted">
+          {placed ? `Placed ${placed}` : ""}
+          {order.customer_po ? `${placed ? " · " : ""}Your reference: ${order.customer_po}` : ""}
         </p>
-      )}
+
+        {/* The customer's own copy of the tax invoice (card EizZjaY3). The document existed and was
+            reachable only if somebody emailed it; this is the download Steve asked for. It carries
+            the words "Tax Invoice", which is what the ATO requires of it. */}
+        {invoiceHref && (
+          <p>
+            <a
+              href={invoiceHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-text-primary hover:bg-surface-secondary"
+            >
+              <Download className="h-4 w-4" />
+              Download {documentName} (PDF)
+            </a>
+          </p>
+        )}
+      </div>
 
       {/* ── Updates staff published to this customer ─────────────────────────
           The other end of the portal Order History panel's "Visible on Store Frontend" tick
