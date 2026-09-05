@@ -15,11 +15,13 @@
 
 import { getCommerceClient } from "@keenan/services";
 import type { StockFacts } from "@keenan/services/backorder";
+import type { PackFacts } from "@keenan/services/pack";
 
-export type ProductBackorderFacts = StockFacts & {
-  /** Per-product control: this product may not be added to the cart at all. */
-  restrictAddToCart: boolean;
-};
+export type ProductBackorderFacts = StockFacts &
+  PackFacts & {
+    /** Per-product control: this product may not be added to the cart at all. */
+    restrictAddToCart: boolean;
+  };
 
 /**
  * Stock and buying facts for a set of products, batched. A product missing from the
@@ -41,9 +43,13 @@ export async function backorderFactsForProducts(
         inventory_level: number | null;
         backorder_policy: string | null;
         restrict_add_to_cart: boolean | null;
+        sell_pack_size: number | null;
+        sell_pack_unit: string | null;
+        min_purchase_quantity: number | null;
       }[]
     >`
-      SELECT id, inventory_tracking, inventory_level, backorder_policy, restrict_add_to_cart
+      SELECT id, inventory_tracking, inventory_level, backorder_policy, restrict_add_to_cart,
+             sell_pack_size, sell_pack_unit, min_purchase_quantity
         FROM products
        WHERE id = ANY(${ids})`;
     for (const row of rows) {
@@ -52,6 +58,13 @@ export async function backorderFactsForProducts(
         inventoryLevel: row.inventory_level == null ? null : Number(row.inventory_level),
         backorderPolicy: row.backorder_policy,
         restrictAddToCart: row.restrict_add_to_cart === true,
+        // The SELLING UNIT rides the same batched read (cards O108e4jH / zeMPVcA3): the cart has
+        // to snap a quantity to whole packs and say what a pack holds, and both callers of this
+        // lookup already have the product in hand. `@keenan/services/pack` resolves the three.
+        sellPackSize: row.sell_pack_size == null ? null : Number(row.sell_pack_size),
+        sellPackUnit: row.sell_pack_unit,
+        minPurchaseQuantity:
+          row.min_purchase_quantity == null ? null : Number(row.min_purchase_quantity),
       });
     }
   } catch (e) {

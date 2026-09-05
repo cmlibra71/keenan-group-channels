@@ -11,8 +11,14 @@
 // construction, one place to regression-test the checkout-adjacent logic.
 // ============================================================================
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { canPurchaseQuantity } from "@keenan/services/backorder";
+import {
+  packNote as packNoteFor,
+  resolvePackSize,
+  resolvePackUnit,
+  snapToPack,
+} from "@keenan/services/pack";
 import type { ProductImage } from "./ProductImageGallery";
 import type { FacadeVideo } from "@keenan/services/product-page";
 
@@ -76,6 +82,12 @@ export interface PurchaseProduct {
   restrictAddToQuote?: boolean | null;
   restrictAddToCart?: boolean | null;
   hidePrice?: boolean | null;
+  /**
+   * The SELLING UNIT (cards O108e4jH / zeMPVcA3), already resolved by `@keenan/services/pack`.
+   * Optional so a caller that predates it keeps compiling and keeps today's behaviour.
+   */
+  packSize?: number | null;
+  packUnit?: string | null;
   availability: string | null;
   descriptionShort: string | null;
   images: ProductImage[];
@@ -123,6 +135,13 @@ export interface ProductPurchaseState {
   restrictAddToQuote: boolean;
   restrictAddToCart: boolean;
   hidePrice: boolean;
+  /** Pieces in one selling pack; 1 when the product is sold individually. The quantity above is
+   *  always in PIECES, which is what the money in this data is priced in. */
+  packSize: number;
+  /** What one pack is called: Carton, Box, Pack… */
+  packUnit: string;
+  /** "Carton contains 12 Pcs", Zoey's own sentence. NULL when sold individually. */
+  packNote: string | null;
   purchasingDisabled: boolean;
   allOptionsSelected: boolean;
   cartVariantId: number | null;
@@ -162,7 +181,16 @@ export function ProductPurchaseProvider({
   children: React.ReactNode;
 }) {
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
-  const [quantity, setQuantity] = useState(1);
+  // A product sold by the carton opens at ONE WHOLE PACK and every quantity it holds is a whole
+  // number of packs, the way Zoey's own quantity box behaves (cards O108e4jH / zeMPVcA3).
+  // packSize is 1 on everything else, so this is the 1 this box has always started at.
+  const packSize = resolvePackSize({ sellPackSize: product.packSize ?? null });
+  const packUnit = resolvePackUnit({ sellPackUnit: product.packUnit ?? null });
+  const [quantity, setQuantityRaw] = useState(packSize);
+  const setQuantity = useCallback(
+    (n: number) => setQuantityRaw(snapToPack(n, packSize)),
+    [packSize]
+  );
   const [selectedOptions, setSelectedOptions] = useState<Record<number, number>>({});
 
   const { variants, options, optionValues, variantOptionMappings } = product;
@@ -303,6 +331,9 @@ export function ProductPurchaseProvider({
     selectOption,
     quantity,
     setQuantity,
+    packSize,
+    packUnit,
+    packNote: packNoteFor({ sellPackSize: packSize, sellPackUnit: packUnit }),
     useGroupedMode,
     matchedVariant,
     disabledValuesPerOption,

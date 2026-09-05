@@ -7,6 +7,7 @@ import { WarrantyDirectory } from "@/components/product/WarrantyDirectory";
 import { GstToggle } from "@/components/layout/GstToggle";
 import { SilverChefPanel } from "@/components/product/SilverChefPanel";
 import { ProductImageNotice } from "@/components/product/ProductImageNotice";
+import { ProductPackNote } from "@/components/product/ProductPackNote";
 import { usableBrandLogo } from "@/lib/brand-logo-url";
 import { CdMemberPricingPanel } from "@/components/product/CdMemberPricingPanel";
 import type { CdMembershipData } from "@/lib/pricing/cd-member-pricing";
@@ -100,5 +101,9 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     "product-image-notice": () => (
       <ProductImageNotice show={product.imageIsIllustrative === true} />
     ),
+    // "Carton contains 12 Pcs" (cards O108e4jH / zeMPVcA3). Sealed rather than exploded: it
+    // multiplies the price the shopper is being shown by the pack size, which is live purchase
+    // state a stored tree cannot carry, and it renders NULL on every product sold individually.
+    "product-pack-note": () => <ProductPackNote />,
   };
 }

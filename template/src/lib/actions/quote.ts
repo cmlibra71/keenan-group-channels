@@ -11,6 +11,7 @@ import {
 import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
 import { getSession } from "@/lib/auth";
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
+import { resolvePackSize, snapToPack } from "@keenan/services/pack";
 import {
   describeKitChoices,
   describeKitContents,
@@ -93,6 +94,9 @@ export async function addToQuote(
     sale_price: string | null;
     metafields?: unknown;
     restrict_add_to_quote?: boolean | null;
+    sell_pack_size?: number | null;
+    sell_pack_unit?: string | null;
+    min_purchase_quantity?: number | null;
   } | null;
   if (!product) return { error: "Product not found" };
 
@@ -173,6 +177,16 @@ export async function addToQuote(
     }
   }
 
+  // A product sold by the carton is quoted by the carton (cards O108e4jH / zeMPVcA3), the same
+  // rule the cart applies — a quote the customer built must not ask for two pieces of something
+  // that only ships in twelves. `resolvePackSize` returns 1 for everything else, so an ordinary
+  // product still goes on one at a time.
+  const packSize = resolvePackSize({
+    sellPackSize: product.sell_pack_size ?? null,
+    sellPackUnit: product.sell_pack_unit ?? null,
+    minPurchaseQuantity: product.min_purchase_quantity ?? null,
+  });
+
   const existing = await quoteItemService.findByProductVariant(quote.id, productId, variantId) as {
     id: number;
     quantity: number;
@@ -185,14 +199,16 @@ export async function addToQuote(
     // quantity onto a different build). Everything else keeps counting up as before.
     const reconfigured = kit?.kind === "bundle" && lineNotes !== existing.customer_notes;
     await quoteItemService.updateForParent(quote.id, existing.id, {
-      quantity: reconfigured ? existing.quantity : existing.quantity + 1,
+      quantity: reconfigured
+        ? existing.quantity
+        : snapToPack(existing.quantity + packSize, packSize),
       ...(lineAttributes ? { attributes: lineAttributes, customerNotes: lineNotes } : {}),
     });
   } else {
     await quoteItemService.createForParent(quote.id, {
       productId,
       variantId: variantId || null,
-      quantity: 1,
+      quantity: packSize,
       listPrice,
       salePrice,
       // WHO PUT THIS PRICE HERE: the customer did, off the catalogue, through
@@ -222,7 +238,33 @@ export async function updateQuoteItem(itemId: number, quantity: number) {
     if (quantity <= 0) {
       await quoteItemService.deleteForParent(quote.id, itemId);
     } else {
-      await quoteItemService.updateForParent(quote.id, itemId, { quantity });
+      // Whole packs here too. Best-effort: a lookup that fails leaves the typed quantity alone
+      // rather than blocking the change — a quote is a request, and the rep sees the line.
+      let nextQuantity = quantity;
+      try {
+        const full = await quoteService.getWithItems(quote.id);
+        const line = (full?.items ?? []).find(
+          (i: Record<string, unknown>) => Number(i.id) === itemId
+        ) as { product_id?: number | null } | undefined;
+        if (line?.product_id) {
+          const product = (await productService.getById(line.product_id)) as {
+            sell_pack_size?: number | null;
+            sell_pack_unit?: string | null;
+            min_purchase_quantity?: number | null;
+          } | null;
+          nextQuantity = snapToPack(
+            quantity,
+            resolvePackSize({
+              sellPackSize: product?.sell_pack_size ?? null,
+              sellPackUnit: product?.sell_pack_unit ?? null,
+              minPurchaseQuantity: product?.min_purchase_quantity ?? null,
+            })
+          );
+        }
+      } catch (e) {
+        console.error("[updateQuoteItem] pack lookup skipped (non-fatal):", e);
+      }
+      await quoteItemService.updateForParent(quote.id, itemId, { quantity: nextQuantity });
     }
 
     return { success: true, quoteCount: await countQuoteItems(quote.id) };

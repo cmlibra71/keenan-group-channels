@@ -8,8 +8,9 @@ import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR }
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { getCartUuid, setCartUuid } from "@/lib/cart";
 import { brandIdsForProducts } from "@/lib/checkout/free-shipping-brands";
-import { backorderFactsForProducts, backorderFactsForProduct } from "@/lib/cart/backorder-facts";
+import { backorderFactsForProducts, backorderFactsForProduct, type ProductBackorderFacts } from "@/lib/cart/backorder-facts";
 import { availableUnits, canPurchaseQuantity, resolveBackorderPolicy } from "@keenan/services/backorder";
+import { resolvePackSize, resolvePackUnit, snapToPack } from "@keenan/services/pack";
 import { getSession } from "@/lib/auth";
 import { pickBestBulkUnit, layerCartPrice } from "@/lib/pricing/cart-pricing";
 
@@ -149,8 +150,12 @@ async function resolveItemPricing(
 const CART_RESTRICTED_ERROR = "This product isn't available to order online — please add it to a quote.";
 const CART_QUANTITY_ERROR = "This product is not available in the requested quantity.";
 
-async function refuseCartQuantity(productId: number, quantity: number): Promise<string | null> {
-  const facts = await backorderFactsForProduct(productId);
+async function refuseCartQuantity(
+  productId: number,
+  quantity: number,
+  known?: ProductBackorderFacts | null
+): Promise<string | null> {
+  const facts = known !== undefined ? known : await backorderFactsForProduct(productId);
   if (!facts) return null; // unknown product: leave it to the pricing lookup below to fail properly
   if (facts.restrictAddToCart) return CART_RESTRICTED_ERROR;
   if (!canPurchaseQuantity(facts, quantity)) return CART_QUANTITY_ERROR;
@@ -170,9 +175,17 @@ export async function addToCart(productId: number, variantId?: number | null, qu
     quantity: number;
   } | null;
 
-  const finalQty = existing ? existing.quantity + Math.max(1, quantity) : Math.max(1, quantity);
+  const wantedQty = existing ? existing.quantity + Math.max(1, quantity) : Math.max(1, quantity);
 
-  const refusal = await refuseCartQuantity(productId, finalQty);
+  const facts = await backorderFactsForProduct(productId);
+  // A product sold by the carton is bought by the carton, wherever the add came from (cards
+  // O108e4jH / zeMPVcA3). The product page already steps in whole packs; this covers the listing
+  // tile, a stale form and a direct call — snapping UP, so a shopper is never handed less than
+  // they asked for. On everything else `snapToPack` returns the quantity untouched.
+  const packSize = resolvePackSize(facts);
+  const finalQty = snapToPack(wantedQty, packSize);
+
+  const refusal = await refuseCartQuantity(productId, finalQty, facts);
   if (refusal) return { error: refusal };
 
   // Price for the FINAL quantity (so crossing a bulk tier re-prices the whole line).
@@ -235,11 +248,17 @@ export async function updateCartItem(itemId: number, quantity: number) {
       return { success: true, cartCount: await countCartItems(cart.id) };
     }
 
+    // Whole packs here too (cards O108e4jH / zeMPVcA3). A quantity of zero or less has already
+    // removed the line above, so a pack product can still be emptied out of the cart; anything
+    // that survives to here is rounded up to a whole pack.
+    const packFacts = await backorderFactsForProduct(item.product_id);
+    const nextQuantity = snapToPack(quantity, resolvePackSize(packFacts));
+
     // Same refusal as the add, so a "+" cannot walk past a limit the add refused (card 7vu2iEEZ).
     // Only an INCREASE is judged: a line already in the basket when staff changed the setting must
     // still be reducible and removable, or the shopper is stuck with a cart they cannot empty.
-    if (quantity > item.quantity) {
-      const refusal = await refuseCartQuantity(item.product_id, quantity);
+    if (nextQuantity > item.quantity) {
+      const refusal = await refuseCartQuantity(item.product_id, nextQuantity, packFacts);
       if (refusal) return { error: refusal };
     }
 
@@ -247,7 +266,7 @@ export async function updateCartItem(itemId: number, quantity: number) {
     // change — fall back to updating just the quantity, matching addToCart.
     let pricing: { listPrice: string; salePrice: string | null } | null = null;
     try {
-      pricing = await resolveItemPricing(item.product_id, item.variant_id, quantity);
+      pricing = await resolveItemPricing(item.product_id, item.variant_id, nextQuantity);
     } catch {
       pricing = null;
     }
@@ -256,8 +275,8 @@ export async function updateCartItem(itemId: number, quantity: number) {
       cart.id,
       itemId,
       pricing
-        ? { quantity, listPrice: pricing.listPrice, salePrice: pricing.salePrice }
-        : { quantity }
+        ? { quantity: nextQuantity, listPrice: pricing.listPrice, salePrice: pricing.salePrice }
+        : { quantity: nextQuantity }
     );
 
     return { success: true, cartCount: await countCartItems(cart.id) };
@@ -370,6 +389,10 @@ const readCart = cache(async () => {
         brand_id: brands.get(i.product_id) ?? null,
         available_units: facts ? availableUnits(facts) : null,
         backorder_policy: facts ? resolveBackorderPolicy(facts.backorderPolicy) : null,
+        // The SELLING UNIT, resolved once here (cards O108e4jH / zeMPVcA3), so the row can step
+        // by a whole pack and say what a pack holds without a second lookup or a second opinion.
+        pack_size: resolvePackSize(facts),
+        pack_unit: resolvePackUnit(facts),
       };
     }),
   };

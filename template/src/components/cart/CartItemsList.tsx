@@ -6,6 +6,12 @@ import { updateCartItem, removeCartItem } from "@/lib/actions/cart";
 import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { backorderMessage } from "@keenan/services/backorder";
+import {
+  packNote as packNoteFor,
+  packPrice,
+  resolvePackSize,
+  resolvePackUnit,
+} from "@keenan/services/pack";
 import { Price } from "@/components/ui/Price";
 import { ga4AddToCart, ga4RemoveFromCart, type Ga4Item } from "@/components/analytics/ga4";
 
@@ -34,6 +40,13 @@ export type CartItemRow = {
   available_units?: number | null;
   /** deny | allow_silent | allow_notify — only allow_notify says anything to the shopper. */
   backorder_policy?: string | null;
+  /**
+   * The SELLING UNIT, resolved server-side in `readCart` (cards O108e4jH / zeMPVcA3). A product
+   * sold by the carton steps a whole carton at a time here and says what a carton holds — the
+   * quantity in this row is always PIECES, which is what the money is priced in.
+   */
+  pack_size?: number | null;
+  pack_unit?: string | null;
 };
 
 export function CartItemsList({
@@ -100,6 +113,14 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
   // Never let a failed action escape the transition — an unhandled rejection here
   // escalates to the error boundary and blanks the whole site. On any failure,
   // refresh to re-sync the cart from the server instead.
+  // 1 on everything that is not sold by the carton, so this row behaves exactly as it always has.
+  const packSize = resolvePackSize({ sellPackSize: item.pack_size ?? null });
+  const packNote = packNoteFor({
+    sellPackSize: item.pack_size ?? null,
+    sellPackUnit: item.pack_unit ?? null,
+  });
+  const packUnit = resolvePackUnit({ sellPackUnit: item.pack_unit ?? null });
+
   function handleQuantity(newQty: number) {
     startTransition(async () => {
       setDisplayQty(Math.max(0, newQty));
@@ -157,6 +178,13 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
           SKU: {item.variant_sku || item.product_sku || "N/A"}
         </p>
         <p className="text-sm text-zinc-600 mt-1"><Price amount={unitPrice} /> each</p>
+        {packNote && (
+          <p className="text-xs text-zinc-600 mt-0.5">
+            {packNote} {"\u00b7 "}
+            <Price amount={packPrice(unitPrice, packSize)} />
+            {` per ${packUnit.toLowerCase()}`}
+          </p>
+        )}
         {backorderNote && (
           <p className="mt-2 rounded border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs text-sky-800">
             {backorderNote}
@@ -167,7 +195,7 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
       {/* Quantity controls */}
       <div className="flex items-center gap-2">
         <button
-          onClick={() => handleQuantity(item.quantity - 1)}
+          onClick={() => handleQuantity(item.quantity - packSize)}
           disabled={isPending}
           className="h-8 w-8 flex items-center justify-center rounded border border-zinc-300 text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
         >
@@ -175,7 +203,7 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
         </button>
         <span className="w-8 text-center text-sm font-medium">{displayQty}</span>
         <button
-          onClick={() => handleQuantity(item.quantity + 1)}
+          onClick={() => handleQuantity(item.quantity + packSize)}
           disabled={isPending}
           className="h-8 w-8 flex items-center justify-center rounded border border-zinc-300 text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
         >
