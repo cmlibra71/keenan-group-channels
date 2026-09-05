@@ -208,6 +208,10 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
           options: product.options ?? [],
           optionValues: product.optionValues ?? [],
           variantOptionMappings: product.variantOptionMappings ?? [],
+          // Belt AND braces on a money surface: the shared strip already empties this on
+          // Chef's Depot (`getProductBySlug` -> `stripSuppressedCatalogPricing` in
+          // @keenan/services, card Q9hRTbKO). Kept local as well, because a Bulk Pricing
+          // table the cart refuses to charge is the defect this page must never show.
           bulkPricing: suppressCatalogPricing ? [] : (product.bulkPricing ?? []),
         }}
         memberPrice={memberPrice}
@@ -509,6 +513,10 @@ async function ProductOverviewBlock({ props, ctx }: BlockProps) {
     options: product.options ?? [],
     optionValues: product.optionValues ?? [],
     variantOptionMappings: product.variantOptionMappings ?? [],
+    // Belt AND braces on a money surface: the shared strip already empties this on
+    // Chef's Depot (`getProductBySlug` -> `stripSuppressedCatalogPricing` in
+    // @keenan/services, card Q9hRTbKO). Kept local as well, because a Bulk Pricing
+    // table the cart refuses to charge is the defect this page must never show.
     bulkPricing: suppressCatalogPricing ? [] : (product.bulkPricing ?? []),
   };
 
