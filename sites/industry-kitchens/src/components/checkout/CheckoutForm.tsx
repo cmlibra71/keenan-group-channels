@@ -15,7 +15,25 @@ import {
   auAddressNeedsCorrection,
 } from "@/lib/checkout/au-address";
 import { CUSTOMER_REFERENCE_MAX_LENGTH } from "@/lib/checkout/customer-reference";
-import { cardConfirmParams } from "@/lib/payments/stripe-gateways";
+import { cardConfirmParams, savedCardConfirmParams } from "@/lib/payments/stripe-gateways";
+// The client-safe SUBPATH, never the "@keenan/services" barrel: this is a
+// "use client" file, and the barrel drags the whole server-side index (sharp ->
+// child_process) into the browser bundle — the build fails outright.
+import { describeSavedCard, type SavedCard } from "@keenan/services/saved-cards";
+import {
+  NEW_CARD_CHOICE,
+  chosenSavedCard,
+  initialSavedCardChoice,
+  mayOfferSavedCards,
+  mayOfferToSaveCard,
+  SAVED_CARDS_UNAVAILABLE,
+  SAVED_CARD_NOT_USABLE,
+} from "@/lib/checkout/saved-cards";
+import {
+  cardEntryBlocksSubmit,
+  cardEntryMessage,
+  shouldConfirmStripeResult,
+} from "@/lib/checkout/card-entry";
 import { Price } from "@/components/ui/Price";
 import { backorderMessage } from "@keenan/services/backorder";
 import { gstSplit } from "@keenan/services/calc";
@@ -132,6 +150,8 @@ export function CheckoutForm({
   testMode = false,
   testModeCardUnavailable = false,
   finance = null,
+  savedCards = [],
+  savedCardsUnavailable = false,
 }: {
   items: CartItem[];
   subtotal: number;
@@ -180,6 +200,14 @@ export function CheckoutForm({
    *  cart, or null when the cart is under the $1,000 inc GST floor (card
    *  VAjaPj0t). placeOrder re-resolves it before accepting the order. */
   finance?: FinanceOffer | null;
+  /** The cards this PERSON already has on file, on this storefront's Stripe
+   *  account (card JiaDTjr1). Empty for a guest, who has no person record to hang
+   *  a card on. placeOrder re-checks any id posted back. */
+  savedCards?: SavedCard[];
+  /** Stripe could not be reached to look for them — deliberately NOT the same as
+   *  "no cards on file", which is what telling a returning customer they have
+   *  none amounts to. The card box is still shown either way. */
+  savedCardsUnavailable?: boolean;
 }) {
   const router = useRouter();
   const { open: openPanel } = useHeaderPanels();
@@ -213,6 +241,38 @@ export function CheckoutForm({
   const [stripeError, setStripeError] = useState<string | null>(null);
   const [stripeProcessing, setStripeProcessing] = useState(false);
   const [cardReady, setCardReady] = useState(false);
+  // Stripe's own verdict on whether the card box holds a complete card, read from
+  // the SAME change event that already feeds `stripeError` (card TT3DGpsE). It is
+  // what lets a submit be refused before an order is written for a card nobody
+  // typed — the card data itself never reaches our server, so this is the only
+  // place the answer exists.
+  const [cardComplete, setCardComplete] = useState(false);
+  // The same answer, readable from inside the confirm effect without becoming a
+  // dependency of it (card JiaDTjr1 x TT3DGpsE): that effect must run exactly once
+  // per placeOrder result, and adding render state to its dependency list is how a
+  // confirmation comes to fire twice.
+  const cardCompleteRef = useRef(false);
+  const markCardComplete = useCallback((complete: boolean) => {
+    cardCompleteRef.current = complete;
+    setCardComplete(complete);
+  }, []);
+  // WHICH CARD THIS SUBMIT IS POINTED AT (card JiaDTjr1): a payment-method id off
+  // the shopper's own file, or NEW_CARD_CHOICE for the card box.
+  //
+  // A card is ticked for them ONLY where the choice is unambiguous — Stripe's own
+  // default, or a single usable card (`initialSavedCardChoice`). Two cards and no
+  // default means nothing is ticked: choosing one alphabetically would move money
+  // off a card the shopper never picked. With nothing on file it is the box,
+  // exactly as today.
+  const [savedCardChoice, setSavedCardChoice] = useState<string>(
+    initialSavedCardChoice(savedCards)?.id ?? NEW_CARD_CHOICE
+  );
+  // Keep the card the shopper is about to type, for next time. Off by default:
+  // storing a card is the shopper's decision, not ours.
+  const [saveCard, setSaveCard] = useState(false);
+  // Set when a submit was refused for an incomplete card, so the plain-English
+  // sentence appears only once the shopper has actually pressed Pay.
+  const [cardRefused, setCardRefused] = useState(false);
   // One upload session per checkout: the licence/Medicare photos are uploaded
   // as they are picked and claimed by this token when the order is placed.
   // The upload route only accepts a 36-char uuid shape (`/^[0-9a-f-]{36}$/i`),
@@ -270,8 +330,13 @@ export function CheckoutForm({
             if (mounted) setCardReady(true);
           });
 
-          card.on("change", (event: { error?: { message: string } }) => {
-            if (mounted) setStripeError(event.error ? event.error.message : null);
+          card.on("change", (event: { error?: { message: string }; complete?: boolean }) => {
+            if (!mounted) return;
+            setStripeError(event.error ? event.error.message : null);
+            markCardComplete(Boolean(event.complete));
+            // Once the card is complete our refusal is no longer true. Clear it
+            // rather than leave two messages arguing about one box.
+            if (event.complete) setCardRefused(false);
           });
         }
       } catch {
@@ -286,20 +351,79 @@ export function CheckoutForm({
       cardElementRef.current?.destroy();
       cardElementRef.current = null;
       setCardReady(false);
+      // Nothing about the card survives a switch to another payment method: a
+      // message left behind would be a second, contradicting error on screen.
+      markCardComplete(false);
+      setCardRefused(false);
+      setStripeError(null);
     };
-  }, [selectedPaymentMethod, stripePublishableKey]);
+  }, [selectedPaymentMethod, stripePublishableKey, markCardComplete]);
 
-  // Handle Stripe payment response from server action
+  // Handle Stripe payment response from server action.
+  //
+  // ONE confirmation per placeOrder result (card TT3DGpsE). `stripeProcessing` used
+  // to be both the guard AND a dependency: a rejected confirmation set it back to
+  // false, which re-fired this effect on an unchanged result, which confirmed
+  // again, which failed again — the endless flicker between the card box and the
+  // order step. It is a guard, not an input, so it is out of the dependency list
+  // and the ref below is what actually stops a second run.
+  //
+  // The key is the RESULT, not the client secret, and that is deliberate: a retry
+  // after a decline reuses this cart's open awaiting_payment order and
+  // createStripePaymentIntent is idempotent on (orderId, amount), so the SAME
+  // secret comes back. Keying on the secret would refuse the retry and leave that
+  // shopper unable to pay at all. Each press of Pay yields a fresh result object.
+  const confirmedResultRef = useRef<object | null>(null);
+  // The saved card this submit was pointed at, captured in onSubmit — see there.
+  const submittedSavedCardRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!state?.stripe || stripeProcessing) return;
+    const stripeState = state?.stripe;
+    if (!stripeState) return;
+    if (!shouldConfirmStripeResult(confirmedResultRef.current, stripeState)) return;
+    confirmedResultRef.current = stripeState;
 
-    const { clientSecret, orderNumber, billingDetails } = state.stripe;
+    const { clientSecret, orderNumber, billingDetails } = stripeState;
+
+    // WHAT THE SERVER ACCEPTED, not what the form believed (card JiaDTjr1).
+    // `placeOrder` re-reads every posted card id off this person's own file and
+    // says here which one — if any — the intent was actually created against. The
+    // two disagree whenever that re-read declines the card (removed or expired
+    // since the page rendered, Stripe unreachable, no customer resolvable), and
+    // confirming a customer-attached payment method against an intent carrying no
+    // customer is a Stripe error the shopper cannot act on, behind a card box that
+    // is still hidden. So the server's verdict decides, and the ref survives only
+    // as the record of what this submit ASKED for — reading the radio's render
+    // state in here would put it in the dependency list and re-fire the
+    // confirmation the TT3DGpsE guard runs exactly once.
+    const acceptedSavedCardId = stripeState.savedCardId ?? null;
+    const declinedSavedCard = !!submittedSavedCardRef.current && !acceptedSavedCardId;
+    if (declinedSavedCard) {
+      // Put the card box back in front of them: `usingSavedCard` is what hides it,
+      // and it is derived from this radio. A fallback, never a refusal.
+      setSavedCardChoice(NEW_CARD_CHOICE);
+      submittedSavedCardRef.current = null;
+    }
 
     async function confirmPayment() {
-      if (!stripeRef.current || !cardElementRef.current) return;
+      // A saved card needs no card ELEMENT — it is the payment method itself
+      // (card JiaDTjr1). Demanding the element here would leave a shopper paying
+      // with a card on file stuck on a spinning button with no explanation.
+      if (!stripeRef.current) return;
+      if (!acceptedSavedCardId && !cardElementRef.current) return;
+
+      // The saved card was declined and there is nothing typed to fall back ON.
+      // Say so plainly and stop: confirming an empty element would answer with
+      // Stripe's "your card number is incomplete", which tells the shopper
+      // nothing about the card they actually chose. The order stays open and the
+      // next press of Pay reuses it (see the comment on `confirmedResultRef`).
+      if (declinedSavedCard && !cardCompleteRef.current) {
+        setStripeError(SAVED_CARD_NOT_USABLE);
+        return;
+      }
 
       setStripeProcessing(true);
       setStripeError(null);
+      setCardRefused(false);
 
       try {
         // The card the shopper just typed is confirmed WITH who they are — name,
@@ -308,9 +432,15 @@ export function CheckoutForm({
         // derived from the order that was just written, so what Stripe is told
         // and what the order says are one derivation. This is not a receipt
         // trigger: Stripe still sends the shopper nothing (EInDib45).
+        // A card on file carries its OWN billing details, recorded when it was
+        // first typed, and Stripe refuses to overwrite them at confirm time — so
+        // the saved-card path sends the payment method and nothing else, while a
+        // freshly typed card still travels with who is paying (card b88eIfaS).
         const { error: stripeErr } = await stripeRef.current.confirmCardPayment(
           clientSecret,
-          cardConfirmParams(cardElementRef.current, billingDetails)
+          acceptedSavedCardId
+            ? savedCardConfirmParams(acceptedSavedCardId)
+            : cardConfirmParams(cardElementRef.current, billingDetails)
         );
 
         if (stripeErr) {
@@ -331,7 +461,7 @@ export function CheckoutForm({
     }
 
     confirmPayment();
-  }, [state?.stripe, stripeProcessing, router]);
+  }, [state?.stripe, router]);
 
   // Refs for address autocomplete
   const address1Ref = useRef<HTMLInputElement>(null);
@@ -602,10 +732,77 @@ export function CheckoutForm({
   const summaryTotal =
     (pricesIncludeTax ? subtotal : subtotal + gstAmount) + shippingSplit.incTax;
 
+  // Refuse a card submit before the order is written, and say exactly ONE thing
+  // about it (card TT3DGpsE). Both decisions are pure and unit-pinned in
+  // `lib/checkout/card-entry.ts`.
+  // A returning customer's own card (card JiaDTjr1). All three decisions are pure
+  // and unit-pinned in `lib/checkout/saved-cards.ts`, and `placeOrder` reaches the
+  // same verdict about the id this form posts — show equals accept.
+  // Both offers carry the SAME two no-payment exclusions the submit guard below
+  // does — a held specialised delivery and a $0 cart take no payment method at
+  // all (card NmAfwrdE, sf-checkout register), so there is nothing to pay with a
+  // card on file and nothing for a save tick to keep.
+  const offerSavedCards = mayOfferSavedCards({
+    signedIn: isSignedIn,
+    paymentMethod: selectedPaymentMethod,
+    cardPaymentAvailable: Boolean(stripePublishableKey),
+    heldForSpecialised,
+    payableTotalIncTax: summaryTotal,
+  });
+  const activeSavedCard = offerSavedCards ? chosenSavedCard(savedCards, savedCardChoice) : null;
+  const usingSavedCard = !!activeSavedCard;
+  const offerSaveCard =
+    Boolean(stripePublishableKey) &&
+    mayOfferToSaveCard({
+      signedIn: isSignedIn,
+      paymentMethod: selectedPaymentMethod,
+      usingSavedCard,
+      heldForSpecialised,
+      payableTotalIncTax: summaryTotal,
+    });
+
+  const cardSubmitBlocked = cardEntryBlocksSubmit({
+    paymentMethod: selectedPaymentMethod,
+    cardFormMounted: Boolean(stripePublishableKey),
+    heldForSpecialised,
+    // A card already on file has no box to fill in, so there is nothing that can
+    // be incomplete — and refusing that submit would be a dead end on the one
+    // path where the shopper has done nothing wrong.
+    usingSavedCard,
+    // The SAME inc-GST figure the Total row above shows, and the same basis as
+    // `placeOrder`'s `nothingToPay`: a $0 cart takes no payment method at all,
+    // so it must never be asked for a card (card NmAfwrdE).
+    payableTotalIncTax: summaryTotal,
+    cardComplete,
+  });
+  const cardError = cardEntryMessage(stripeError, cardRefused);
+  // A refused submit calls preventDefault(), so `state` is never refreshed: a
+  // stale error from an EARLIER failed placeOrder would otherwise sit above Pay
+  // Now while the reason the shopper is actually stuck sits only under the card
+  // box. When the card is what stopped this press, the card message wins here.
+  const summaryError = cardRefused ? cardError || state?.error : state?.error || cardError;
+
   return (
     <form
       action={formAction}
-      onSubmit={() => {
+      onSubmit={(event) => {
+        // A blank or half-typed card is refused HERE, before placeOrder writes an
+        // order that could never be paid (card TT3DGpsE). Card data lives inside
+        // Stripe's element and never reaches our server, so completeness is only
+        // knowable in the browser: this ADDS a page guard and moves no existing
+        // server-side refusal into the client.
+        if (cardSubmitBlocked) {
+          event.preventDefault();
+          setCardRefused(true);
+          return;
+        }
+        // WHICH CARD THIS PRESS IS FOR, frozen at submit time (card JiaDTjr1).
+        // The confirm effect below runs after the server action returns and must
+        // confirm the card the shopper actually submitted, not whatever the radio
+        // says by then — and reading a piece of render state inside that effect
+        // would put it in the dependency list, re-firing a confirmation the
+        // TT3DGpsE guard exists to run exactly once.
+        submittedSavedCardRef.current = activeSavedCard?.id ?? null;
         fireShippingInfo(shippingCost);
         firePaymentInfo(selectedPaymentMethod);
       }}
@@ -1132,16 +1329,107 @@ export function CheckoutForm({
                     {/* Stripe card element */}
                     {method.id === "stripe" && selectedPaymentMethod === "stripe" && stripePublishableKey && (
                       <div className="mt-2 ml-6 p-4 bg-zinc-50 border border-zinc-200 rounded-lg">
-                        <label className="block text-sm font-medium text-zinc-700 mb-2">
-                          Card details
-                        </label>
-                        <div
-                          ref={cardContainerRef}
-                          className="border border-zinc-300 rounded-lg px-4 py-3 bg-white focus-within:ring-2 focus-within:ring-zinc-900 focus-within:border-zinc-900 transition-shadow"
-                        />
-                        {stripeError && (
-                          <p className="text-sm text-red-600 mt-2">{stripeError}</p>
+                        {/* THE CARDS THIS PERSON ALREADY HAS ON FILE (card JiaDTjr1).
+                            Offered only to a signed-in shopper: a card belongs to a
+                            person, and a guest has no person record to hang one on. */}
+                        {offerSavedCards && savedCards.length > 0 && (
+                          <div className="mb-4 space-y-2">
+                            <span className="block text-sm font-medium text-zinc-700">
+                              Pay with
+                            </span>
+                            {savedCards.map((saved) => (
+                              <label
+                                key={saved.id}
+                                className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-sm ${
+                                  saved.expired
+                                    ? "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-400"
+                                    : "cursor-pointer border-zinc-300 bg-white hover:border-zinc-400"
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name="savedCardChoice"
+                                  value={saved.id}
+                                  checked={savedCardChoice === saved.id}
+                                  onChange={() => setSavedCardChoice(saved.id)}
+                                  /* An expired card is shown, so the shopper can see
+                                     WHY it is not an option, and can never be chosen —
+                                     the server refuses it too. */
+                                  disabled={saved.expired}
+                                  className="h-4 w-4"
+                                />
+                                <span>
+                                  {describeSavedCard(saved)}
+                                  {saved.expired && (
+                                    <span className="ml-2 text-xs uppercase tracking-wide">Expired</span>
+                                  )}
+                                </span>
+                              </label>
+                            ))}
+                            <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm hover:border-zinc-400">
+                              <input
+                                type="radio"
+                                name="savedCardChoice"
+                                value={NEW_CARD_CHOICE}
+                                checked={savedCardChoice === NEW_CARD_CHOICE}
+                                onChange={() => setSavedCardChoice(NEW_CARD_CHOICE)}
+                                className="h-4 w-4"
+                              />
+                              <span>Use a different card</span>
+                            </label>
+                          </div>
                         )}
+
+                        {/* Stripe answered nothing at all. Deliberately NOT the words
+                            "you have no saved cards": telling a returning customer that,
+                            when they have three, is this card's original complaint. */}
+                        {offerSavedCards && savedCardsUnavailable && (
+                          <p className="mb-4 text-sm text-zinc-500">{SAVED_CARDS_UNAVAILABLE}</p>
+                        )}
+
+                        {/* The card box stays MOUNTED behind a saved card rather than
+                            unmounted: Stripe's element is destroyed on unmount, and
+                            tearing it down and rebuilding it every time the radio moves
+                            loses whatever the shopper had already typed. */}
+                        <div className={usingSavedCard ? "hidden" : undefined}>
+                          <label className="block text-sm font-medium text-zinc-700 mb-2">
+                            Card details
+                          </label>
+                          <div
+                            ref={cardContainerRef}
+                            className="border border-zinc-300 rounded-lg px-4 py-3 bg-white focus-within:ring-2 focus-within:ring-zinc-900 focus-within:border-zinc-900 transition-shadow"
+                          />
+                          {cardError && (
+                            <p className="text-sm text-red-600 mt-2">{cardError}</p>
+                          )}
+                        </div>
+
+                        {/* Keep it for next time. Off by default — storing a card is
+                            the shopper's decision, not ours — and never offered to a
+                            guest, who has nobody to save it against. */}
+                        {offerSaveCard && (
+                          <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
+                            <input
+                              type="checkbox"
+                              name="saveCard"
+                              checked={saveCard}
+                              onChange={(e) => setSaveCard(e.target.checked)}
+                              className="h-4 w-4 rounded border-zinc-300"
+                            />
+                            Save this card for next time
+                          </label>
+                        )}
+
+                        {/* What the SERVER is told. The radios above are ordinary form
+                            controls, but they only exist while the card method is open,
+                            so this hidden field is what guarantees the action always
+                            receives the shopper's actual choice — and it carries the id
+                            only when a real, unexpired card of theirs is selected. */}
+                        <input
+                          type="hidden"
+                          name="savedCardId"
+                          value={activeSavedCard?.id ?? ""}
+                        />
                       </div>
                     )}
                   </div>
@@ -1248,9 +1536,9 @@ export function CheckoutForm({
               </div>
             </div>
 
-            {(state?.error || stripeError) && (
+            {summaryError && (
               <div className="mt-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg">
-                {state?.error || stripeError}
+                {summaryError}
               </div>
             )}
 

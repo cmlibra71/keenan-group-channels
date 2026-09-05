@@ -14,6 +14,10 @@ import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { withSilverChefNode } from "@/builder/silverchef-node";
 import { withImageNoticeNode } from "@/builder/product-image-notice";
+import { withUpsellBlock } from "@/builder/upsell-node";
+import { attachBrandLogos } from "@/lib/brand-logo-fallback";
+import { withCdMemberPricingNode } from "@/builder/cd-member-pricing-node";
+import { buildCdMembershipData, resolveCdLadderLevelId } from "@/lib/pricing/cd-member-pricing.server";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 
 // ============================================================================
@@ -86,6 +90,17 @@ export async function renderProductNodeBranch({
   // this because its flag has been on since the template shipped.
   if (!forceNodes && !draft && !(await getFeatureFlag("node_product_template_enabled"))) return null;
 
+  // The buying-group rung, resolved ONCE and handed to BOTH the pricing call
+  // below and the membership panel further down. The engine prices what the buy
+  // box charges from it; the panel labels that figure with it. Split them and a
+  // Level 4 member is charged at Level 1 with "Level 4" printed beside it.
+  const ladderLevelId =
+    member.ladderLevelId ??
+    (await resolveCdLadderLevelId({
+      isMember: member.isMember,
+      accountId: member.accountId,
+    }).catch(() => null));
+
   const payload = await getProductPageData(slug, {
     memberContext: {
       customerGroupId: member.customerGroupId,
@@ -93,7 +108,7 @@ export async function renderProductNodeBranch({
       loggedIn: member.loggedIn,
       planPrice: member.planPrice,
       teaserCustomerGroupId: member.teaserCustomerGroupId,
-      ladderLevelId: member.ladderLevelId ?? null,
+      ladderLevelId,
     },
     // Per-account contract prices override every layer; the payload's product +
     // related cards and its variant pricing are all resolved with the account
@@ -102,6 +117,25 @@ export async function renderProductNodeBranch({
     draft,
   }).catch(() => null);
   if (!payload) return null;
+
+  // Card tSrCcnvx (Tim, 2026-08-19): the related-products rail places the same
+  // `product-card` master a category grid does, so its rows need the same
+  // brand-logo fallback field. Those rows are composed inside
+  // `getProductPageData`, not by the route, so they are enriched here.
+  //
+  // COPIED, never mutated: `getProductPageData` is cache-wrapped, and writing
+  // into the object it returns would write into the shared cached value.
+  const relatedRows = payload.related?.products as unknown as { id: number }[] | undefined;
+  const pagePayload: typeof payload =
+    Array.isArray(relatedRows) && relatedRows.length > 0
+      ? {
+          ...payload,
+          related: {
+            ...payload.related,
+            products: (await attachBrandLogos(relatedRows)) as unknown as typeof payload.related.products,
+          },
+        }
+      : payload;
 
   // The AUTHORED tree wins: the product template doc (builder_kind='nodes' —
   // published version live, draft in preview). Seed only as fallback.
@@ -133,7 +167,47 @@ export async function renderProductNodeBranch({
   // than being written into the stored trees so there is nothing to undo on a rollback and a site
   // that re-authors its buy row keeps the behaviour. It wraps the PLACED nodes as well as the
   // stored ones, so a buy control introduced by a future placed node is guarded too.
-  const nodeTree = guardBuyControls(withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE)));
+  // The upsell rail (card fYqTM5Ot) is PLACED here for the third time on this page and for
+  // the same reason: Zoey shows upsells as their own block, the data has been sitting in
+  // `product_upsells` since the import, and nothing on either stored tree reads it. The pass
+  // clones the tree's OWN related block so the rail keeps that site's tile component — which
+  // is what keeps the listing-tile rules (no stock wording, Add to Cart intact) true of it —
+  // and renders nothing at all for a product with no upsells. It runs BEFORE guardBuyControls
+  // so the cloned tiles are guarded exactly like the ones they were cloned from.
+  //
+  // Chefs Depot's prices and the spend-more-save-more ladder (card Nyp8bkPm) are
+  // PLACED here for the same reason: the panel has to reach every product page on a site
+  // that renders from a stored tree. It goes after the SilverChef panel, so the money
+  // block reads price, weekly rent, then ladder. The leaf renders NULL on a channel that
+  // sells no membership (Industry Kitchens: no `subscription_plans` row) and on a product
+  // whose price is hidden; with no ladder switched on, or on a SKU with no IK trade row,
+  // it renders the join pitch WITHOUT prices, because retiring the savings percentage
+  // took the stored teaser box off the Chefs Depot page and this is the only membership
+  // call to action left on it.
+  const nodeTree = guardBuyControls(
+    withCdMemberPricingNode(
+      withUpsellBlock(withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE)))
+    )
+  );
+
+  // The panel's data, resolved ONCE per request. A sealed native cannot read the
+  // database, so the prices and this shopper's ladder position ride the route's own
+  // `nativeData` bag, exactly as the kit contents do. Null on a channel that sells no
+  // membership; the PITCH-ONLY payload (join funnel, no prices) on a channel that does
+  // but has no ladder switched on, which is every channel until one is.
+  const cdMembership = await buildCdMembershipData({
+    isMember: member.isMember,
+    loggedIn: member.loggedIn,
+    accountId: member.accountId,
+    planPrice: member.planPrice,
+    ladderLevelId,
+    // No RRP is passed: the panel reads the page's OWN headline base amount for
+    // the active variant off the purchase provider, so a product-level price can
+    // never sit beside per-variant ladder figures (card Nyp8bkPm, review fix).
+    product: {
+      variants: payload.product.variants ?? [],
+    },
+  }).catch(() => null);
 
   const namedStyles = await getNamedStyles().catch(() => ({}));
   const components = guardBuyControlsInComponents(
@@ -161,7 +235,7 @@ export async function renderProductNodeBranch({
   let callResults: Record<string, unknown> = {};
   if (Object.keys(jsFunctions).length > 0) {
     await loadJsSandbox(jsFunctions).catch(() => null);
-    callResults = await computeCallResults(nodeTree.root, jsFunctions, payload as object).catch(
+    callResults = await computeCallResults(nodeTree.root, jsFunctions, pagePayload as object).catch(
       () => ({})
     );
   }
@@ -178,12 +252,12 @@ export async function renderProductNodeBranch({
       <ViewedProductTracker product={viewedProduct} />
       <BuilderProductPage
         tree={nodeTree}
-        payload={payload}
+        payload={pagePayload}
         namedStyles={namedStyles}
         components={components}
         jsFunctions={jsFunctions}
         callResults={callResults}
-        nativeData={nativeData}
+        nativeData={{ ...(nativeData ?? {}), cdMembership }}
       />
     </div>
   );

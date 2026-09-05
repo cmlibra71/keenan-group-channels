@@ -81,7 +81,6 @@ export default async function CartPage() {
             ? {
                 planPrice,
                 billingInterval,
-                savingsPercentage: checkoutSettings.memberSavingsPercentage,
               }
             : null
         }

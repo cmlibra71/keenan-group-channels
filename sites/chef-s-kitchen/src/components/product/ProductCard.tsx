@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useState } from "react";
 import { Package } from "lucide-react";
 import { PriceBlock } from "@/components/ui/PriceBlock";
 import { AddToCartButton } from "./AddToCartButton";
 import { AddToQuoteButton } from "./AddToQuoteButton";
 import { ga4SelectItem } from "@/components/analytics/ga4";
+import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
 
 /**
  * Design-system product card: white 1:1 image stage, corner badges (max two),
  * brand mark top-right, category eyebrow → 2-line clamped name → mono SKU →
- * shared PriceBlock → dual Add to Cart / Add to Quote. Hover lifts the card
+ * shared PriceBlock → "Buy more & save" tag → dual Add to Cart / Add to Quote. Hover lifts the card
  * with a green edge. Unpriced (POA) items show no price and a single
  * Add to Quote button.
  */
@@ -24,6 +26,21 @@ export interface ProductCardProps {
   salePrice?: string | null;
   imageUrl?: string | null;
   brandName?: string | null;
+  /**
+   * Card tSrCcnvx: the tile falls back to the BRAND's logo when the product has
+   * no photo, or when the photo's file turns out to be missing. Null (no brand,
+   * or a brand with no usable logo) keeps the grey box with the package icon
+   * that shipped before. Attached UPSTREAM by `attachBrandLogos` /
+   * `getBrandLogos` — this file is presentation only.
+   */
+  brandLogoUrl?: string | null;
+  /**
+   * ALT text for that logo — the brand's NAME, matching what the authored
+   * `product-card` master binds, so the same fallback never reads two different
+   * ways on two screens. Kept separate from `brandName`, which draws the tile's
+   * own brand chip.
+   */
+  brandLogoAlt?: string | null;
   /** Category eyebrow (usually the page's category name). */
   eyebrow?: string | null;
   memberPrice?: number | null;
@@ -54,6 +71,8 @@ export function ProductCard({
   salePrice,
   imageUrl,
   brandName,
+  brandLogoUrl,
+  brandLogoAlt,
   eyebrow,
   memberPrice,
   accountPricing,
@@ -66,6 +85,15 @@ export function ProductCard({
   listName,
   listIndex,
 }: ProductCardProps) {
+  // A dead image file is invisible to the server — the row exists and the URL is
+  // well formed — so the browser is the only place it can be caught. An errored
+  // photo drops to the same fallback an imageless product gets; a logo that is
+  // itself missing drops to the grey box rather than a broken-image glyph.
+  const [photoBroken, setPhotoBroken] = useState(false);
+  const [logoBroken, setLogoBroken] = useState(false);
+  const photoUrl = imageUrl && !photoBroken ? imageUrl : null;
+  const logoUrl = brandLogoUrl && !logoBroken ? brandLogoUrl : null;
+
   const rrp = parseFloat(price);
   const sale = salePrice ? parseFloat(salePrice) : null;
   const hasPrice = Number.isFinite(rrp) && rrp > 0;
@@ -108,13 +136,27 @@ export function ProductCard({
     <div className="group relative flex flex-col overflow-hidden rounded-card border border-border bg-white shadow-sm transition-all duration-200 hover:-translate-y-[3px] hover:border-brand-light hover:shadow-hover">
       {/* Image stage — uniform white 1:1 */}
       <Link href={`/products/${slug}`} className="relative block aspect-square bg-white" onClick={handleSelect}>
-        {imageUrl ? (
+        {photoUrl ? (
           <Image
-            src={imageUrl}
+            src={photoUrl}
             alt={name}
+            onError={() => setPhotoBroken(true)}
             fill
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
             className="object-contain p-3 transition-transform duration-500 ease-out group-hover:scale-[1.04]"
+          />
+        ) : logoUrl ? (
+          /* Card tSrCcnvx: the brand's logo stands in for the missing photo.
+             Contained with more padding than a photo gets — brand logos are
+             normalised to 600x300, so a 2:1 image in a square stage needs room
+             to stay readable — and never `object-cover`, which would crop it. */
+          <Image
+            src={logoUrl}
+            alt={brandLogoAlt || brandName || name}
+            onError={() => setLogoBroken(true)}
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            className="object-contain p-6"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-steel-300">
@@ -162,6 +204,30 @@ export function ProductCard({
             />
           )}
         </div>
+
+        {/* "Buy more & save" tag — card FNYihLHk. Steve's mock puts it under the brand, name
+            and price, so it sits here rather than in the image's corner-badge stack (which is
+            capped at two and already carries Save% / Clearance).
+
+            On EVERY tile, priced or not, because the card is "add tag to all products" — a
+            quote-only line still buys better in quantity. It is a plain <span>: the tile is
+            already wrapped in links to this product, and a nested anchor is invalid markup.
+
+            It states no threshold and no percentage on purpose. The spend-more-save-more model
+            behind the promise belongs to cards Nyp8bkPm / gk23c1VK, which are still settling;
+            a figure invented here would be a money claim on a customer-facing screen.
+
+            This card draws the tile on the home rails, /products, /clearance, /search and the
+            brand pages. Every AUTHORED page — category, brand, the product page's "You may also
+            like" rail, /pages/[slug] — repeats the stored `product-card` master instead, which
+            `builder/promo-tag-node.ts` reaches at render time off this same wording, applied once
+            in `@/lib/store` so no branch can load the master without it. One constant, so no two
+            of our own screens can say different things about the same product. */}
+        {PROMO_TAG_LABEL && (
+          <p className="mt-3">
+            <span className="badge-promo">{PROMO_TAG_LABEL}</span>
+          </p>
+        )}
 
         {/* CTAs */}
         <div className="mt-3 flex flex-col gap-2">

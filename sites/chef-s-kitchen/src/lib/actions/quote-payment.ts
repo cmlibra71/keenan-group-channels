@@ -47,6 +47,8 @@ import {
   type ResolvedDeposit,
 } from "@/lib/quotes/quote-deposit";
 import { resolveQuotePayState, PLUS_FREIGHT_NOTICE } from "@/lib/quotes/quote-payable";
+import { resolveStripeGateway } from "@/lib/payments/gateway";
+import { canTakeCardPayment } from "@/lib/payments/stripe-gateways";
 import {
   planOrderFromPaidQuote,
   type PlannedShipTo,
@@ -162,11 +164,23 @@ export async function payQuote(
   // resolvers placeOrder uses — what we show is what we accept. Staff-only
   // methods are subtracted here as well as on the page, so the customer can
   // neither see one nor post one back at this quote.
-  const [checkoutSettings, accountOptions, netTerms] = await Promise.all([
+  const [checkoutSettings, accountOptions, netTerms, stripeResolution] = await Promise.all([
     getCheckoutSettings(),
     resolveAccountOptions(session),
     resolveNetTermsEntitlement(session),
+    resolveStripeGateway(),
   ]);
+  // NO USABLE STRIPE CREDENTIALS, NO CARD PAYMENT — the authorisation half of the
+  // rule the page renders (card OHDx84DK). ONE predicate with the page,
+  // `canTakeCardPayment`, so the two halves cannot drift into show ≠ accept.
+  //
+  // It is resolved HERE, above the lists and a long way above the order write,
+  // for the reason `placeOrder` has the same guard above ITS write: this action
+  // creates the ORDER ROW FIRST and raises the PaymentIntent afterwards, so a
+  // posted `stripe` we cannot charge used to leave a numbered, unpaid order behind
+  // and hand the customer an error at the very end. Refusing before the write is
+  // the difference between "pick another method" and an order they never asked for.
+  const cardUnavailable = !canTakeCardPayment(stripeResolution.gateway);
   // Customer surface: the channel's customer-facing list (enabled minus channel
   // staff-only, services `customerFacingPaymentMethods`), narrowed by the
   // account's allow-list — read exactly as the page reads it, so what we show is
@@ -177,9 +191,15 @@ export async function payQuote(
   // form behind a $1,000 floor, none of which this screen implements. Enabling
   // them for the storefront checkout must not turn a quote into an unpaid order
   // through a bare button here.
-  const nonFinanceCustomerMethods = checkoutSettings.customerPaymentMethods.filter(
-    (m) => !isFinancePaymentMethod(m.id)
-  );
+  //
+  // The unchargeable card comes off this list too, not only off `methods`: it is
+  // the `channelPaymentMethodCount` handed to `resolveQuotePayState` below, and
+  // counting a method we will refuse makes the gate report the quote payable and
+  // blames the shopper's ACCOUNT for our own configuration (cards N8kE8arY,
+  // NmAfwrdE). Both counts, one list, one pass — the same shape the checkout uses.
+  const nonFinanceCustomerMethods = checkoutSettings.customerPaymentMethods
+    .filter((m) => !isFinancePaymentMethod(m.id))
+    .filter((m) => !cardUnavailable || m.id !== "stripe");
   const methods = filterPaymentMethodsForAccount(
     nonFinanceCustomerMethods,
     accountOptions?.allowedPaymentMethods ?? null,
@@ -231,7 +251,18 @@ export async function payQuote(
           : "This quote can no longer be paid online. Please contact us.",
     };
   }
-  if (!methods.some((m) => m.id === paymentMethod)) {
+  // The card guard, stated explicitly and BEFORE the order row is written. The list
+  // filter above already removes `stripe` from `methods`, so the next check would
+  // catch it — this one is here so the refusal cannot be lost to a reordering of
+  // the lists, and so the source guard can see it (card OHDx84DK).
+  //
+  // The wording is this surface's OWN refusal, not the checkout's
+  // `unavailablePaymentMethodError()`: that sentence ends "…choose one of the
+  // payment methods shown at checkout", and a customer paying a quote is not at a
+  // checkout and has no way to reach one. One screen must not describe the same
+  // refusal two ways, so both the card and every other unavailable method here
+  // return the line this screen already used.
+  if ((cardUnavailable && paymentMethod === "stripe") || !methods.some((m) => m.id === paymentMethod)) {
     return { error: "That payment method isn't available on this quote." };
   }
 
@@ -437,7 +468,18 @@ export async function payQuote(
       };
     } catch (err) {
       // The order exists and is awaiting payment; the customer can retry.
-      return { error: err instanceof Error ? err.message : "Failed to start the card payment." };
+      //
+      // The message is OURS, never Stripe's or the gateway resolver's (card
+      // OHDx84DK): returning `err.message` verbatim put an internal
+      // configuration sentence naming Settings > Payments in front of a
+      // customer. Nothing thrown at intent-CREATION time is shopper-actionable
+      // — a decline happens later, in the browser — so the internal text is
+      // logged for staff and the shopper is told what they can do.
+      console.error("[payQuote] could not create the PaymentIntent:", err);
+      return {
+        error:
+          "We couldn't start the card payment. Please try again, or choose another payment method.",
+      };
     }
   }
 

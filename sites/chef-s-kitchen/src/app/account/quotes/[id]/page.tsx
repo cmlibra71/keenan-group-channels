@@ -53,6 +53,7 @@ import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-p
 import { isFinancePaymentMethod } from "@/lib/checkout/finance";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
+import { canTakeCardPayment } from "@/lib/payments/stripe-gateways";
 
 /** Nothing on offer: what a colleague viewing someone else's quote gets. */
 const NO_CUSTOMER_REQUESTS: CustomerRequestState = {
@@ -255,14 +256,36 @@ export default async function QuoteDetailPage({
   //
   // This is a customer surface like the checkout, so a method the ACCOUNT marks
   // staff-only must not appear here either (third argument below).
-  const [checkoutSettings, accountOptions, netTerms] = await Promise.all([
+  const [checkoutSettings, accountOptions, netTerms, stripeResolution] = await Promise.all([
     getCheckoutSettings(),
     resolveAccountOptions(session),
     resolveNetTermsEntitlement(session),
+    resolveStripeGateway(),
   ]);
-  const nonFinanceCustomerMethods = checkoutSettings.customerPaymentMethods.filter(
-    (m) => !isFinancePaymentMethod(m.id)
-  );
+  const { gateway: stripeGateway } = stripeResolution;
+  // NO USABLE STRIPE CREDENTIALS, NO CARD OPTION — the same rule, the same
+  // predicate and the same reason as the checkout (card OHDx84DK,
+  // `sf-checkout` "No publishable key, no card option").
+  //
+  // It has to be resolved HERE, above the method list, because the card must
+  // come off BOTH lists in the same pass: `payMethods`, which is what the panel
+  // RENDERS, and `nonFinanceCustomerMethods`, which is the
+  // `channelPaymentMethodCount` fed to `resolveQuotePayState` below. Dropping it
+  // from only one of them is the dead-control-with-no-hint pattern the
+  // payment-methods rule exists to prevent — a storefront whose only customer
+  // method is the card would read "available", draw a live Card radio with no
+  // field under it, and leave Pay enabled (7vu2iEEZ, VAjaPj0t).
+  //
+  // Two ways to reach it, and the second is this card's own cutover slip: a
+  // storefront with its OWN Stripe entries but no enabled LIVE one (live keys
+  // pasted with Settings → Payments' "Test mode" box still ticked), where
+  // `selectChannelGateway` correctly refuses to borrow the other storefront's
+  // account; or half a credential set, where Elements would mount on a
+  // publishable key whose secret key `payQuote` does not hold.
+  const cardUnavailable = !canTakeCardPayment(stripeGateway);
+  const nonFinanceCustomerMethods = checkoutSettings.customerPaymentMethods
+    .filter((m) => !isFinancePaymentMethod(m.id))
+    .filter((m) => !cardUnavailable || m.id !== "stripe");
   const payMethods: PayMethod[] = filterPaymentMethodsForAccount(
     nonFinanceCustomerMethods,
     accountOptions?.allowedPaymentMethods ?? null,
@@ -327,7 +350,6 @@ export default async function QuoteDetailPage({
     channelPaymentMethodCount: nonFinanceCustomerMethods.length,
     hasDeliveryAddress: quoteHasShipTo || addressOptions.length > 0,
   });
-  const { gateway: stripeGateway } = await resolveStripeGateway();
   // Card DIj4B7Gr: who is looking after this quote, which of the three "ask us
   // something" controls it offers, and the message thread both sides read.
   // Resolved server-side by the SAME rules the emailed /q/<uuid> link uses.
@@ -646,7 +668,9 @@ export default async function QuoteDetailPage({
               : null
           }
           methods={payMethods}
-          stripePublishableKey={stripeGateway?.credentials?.publishable_key}
+          stripePublishableKey={
+            cardUnavailable ? undefined : stripeGateway?.credentials?.publishable_key
+          }
           addressSummary={addressSummary}
           addressOptions={addressOptions}
           freightPending={freightPending}

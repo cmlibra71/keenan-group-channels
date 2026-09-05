@@ -16,8 +16,13 @@ import {
   type ContactAddressData,
 } from "@/lib/contact-addresses";
 import { defaultsForNewAddress } from "@/lib/checkout/save-address";
-import { getStripeProvider } from "@/lib/stripe";
+import { stripeProviderForScope, stripeScopeOf } from "@/lib/stripe";
 import { getContactPermissions } from "@/lib/role-permissions";
+import {
+  mayManageAddressBook,
+  addressAuthorityMessage,
+  type AddressBookAction,
+} from "@/lib/account/address-authority";
 import { normaliseAuState, isValidAuPostcode } from "@/lib/checkout/au-address";
 import { getCommerceClient } from "@keenan/services";
 import {
@@ -36,27 +41,28 @@ import { sendAddedPeopleEmail } from "@/lib/account/people-email";
 type Result = { success: boolean; error?: string };
 
 /**
- * B2B account-role gate for the account address book (Zoey's
- * add/edit/remove_bill_to_address). Accountless (B2C) contacts bypass; the
- * resolver fails open on DB error. Returns an error Result when denied, else null.
- * docs/crm-parity/10-role-enforcement.md
+ * B2B account-role gate for the account address book. Accountless (B2C) contacts
+ * bypass; the resolver fails open on DB error. Returns an error Result when
+ * denied, else null. docs/crm-parity/10-role-enforcement.md
  *
- * NOTE: Zoey offers these three codes only to MAIN CONTACT roles. `account_roles`
- * has no `scope` column yet, so we enforce the code alone — requiring
- * `is_main_contact` as well would lock existing members out of their own address
- * book on day one. Add `&& perms.isMainContact` once `scope` lands.
+ * Each action takes Zoey's BILL-TO code and the ship-to code together, because one
+ * book serves both purposes here — see `lib/account/address-authority.ts` for why,
+ * and card H5JdsMrC for the instruction ("Customers other than the manager shall
+ * not be authorised to change delivery addresses"). Those codes are MAIN-CONTACT
+ * -ONLY, so the resolver settles them on the role's scope and the membership's
+ * main-contact flag rather than on the permissive absent-code default.
+ *
+ * Refused HERE, in the action — the page hides the controls as well, but a stale
+ * form or a hand-posted call must not be able to walk past the rule.
  */
 async function denyAddressAction(
   contactId: number,
-  code: "add_bill_to_address" | "edit_bill_to_address" | "remove_bill_to_address",
-  verb: string
+  action: AddressBookAction,
+  verb: "adding" | "editing" | "removing"
 ): Promise<Result | null> {
   const perms = await getContactPermissions(contactId);
-  if (perms.isB2B && !perms.can(code)) {
-    return {
-      success: false,
-      error: `Your role on this account doesn't allow ${verb} addresses. Ask your account administrator.`,
-    };
+  if (!mayManageAddressBook(perms, action)) {
+    return { success: false, error: addressAuthorityMessage(verb) };
   }
   return null;
 }
@@ -173,7 +179,12 @@ export async function updateCustomerProfile(input: {
       const subs = await subscriptionService.listForContact(session.contactId, CHANNEL_ID);
       const sub = subs.find((s) => s.status === "active" || s.status === "pending");
       if (sub?.stripe_customer_id) {
-        const stripe = await getStripeProvider();
+        // The Stripe customer lives in the account the SUBSCRIPTION was created
+        // in, which for anyone who joined before this storefront had its own
+        // Stripe account is the shared one (card OHDx84DK). Asking the new
+        // account about them returns "No such customer" and the profile save
+        // would log a failure on every edit.
+        const stripe = await stripeProviderForScope(stripeScopeOf(sub));
         await stripe.updateCustomer(sub.stripe_customer_id as string, {
           name: `${firstName} ${lastName}`.trim(),
           phone: phone || undefined,
@@ -196,7 +207,7 @@ export async function createCustomerAddress(input: AddressInput): Promise<Result
   if (!session) return { success: false, error: "Not authenticated" };
   const invalid = invalidAuAddress(input);
   if (invalid) return invalid;
-  const denied = await denyAddressAction(session.contactId, "add_bill_to_address", "adding");
+  const denied = await denyAddressAction(session.contactId, "add", "adding");
   if (denied) return denied;
   try {
     const data = toAddressData(input);
@@ -226,7 +237,7 @@ export async function updateCustomerAddress(id: number, input: AddressInput): Pr
   if (!session) return { success: false, error: "Not authenticated" };
   const invalid = invalidAuAddress(input);
   if (invalid) return invalid;
-  const denied = await denyAddressAction(session.contactId, "edit_bill_to_address", "editing");
+  const denied = await denyAddressAction(session.contactId, "edit", "editing");
   if (denied) return denied;
   try {
     // contact-scoped — the WHERE contact_id guard rejects another contact's address
@@ -241,7 +252,7 @@ export async function updateCustomerAddress(id: number, input: AddressInput): Pr
 export async function deleteCustomerAddress(id: number): Promise<Result> {
   const session = await getSession();
   if (!session) return { success: false, error: "Not authenticated" };
-  const denied = await denyAddressAction(session.contactId, "remove_bill_to_address", "removing");
+  const denied = await denyAddressAction(session.contactId, "remove", "removing");
   if (denied) return denied;
   try {
     await deleteAddressForContact(session.contactId, id);
@@ -258,7 +269,7 @@ export async function setDefaultAddress(
 ): Promise<Result> {
   const session = await getSession();
   if (!session) return { success: false, error: "Not authenticated" };
-  const denied = await denyAddressAction(session.contactId, "edit_bill_to_address", "editing");
+  const denied = await denyAddressAction(session.contactId, "edit", "editing");
   if (denied) return denied;
   try {
     // Clears the flag on the contact's other addresses, then sets this one.

@@ -8,6 +8,7 @@ import { sanitizeHtml } from "@/lib/sanitize-html";
 import { composeContentPagePayload } from "@keenan/services/builder";
 import { RichContent } from "@/components/content/RichContent";
 import { chooseContentPageTree } from "@/lib/content-page-tree";
+import { financeApplyFunderForSlug, withFinanceApplyLogo } from "@/lib/finance/finance-apply-logo";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BuilderContentPage } from "@/builder/BuilderContentPage";
 import { cmsFunctionService } from "@keenan/services/services";
@@ -81,6 +82,16 @@ export default async function ContentPage({
       } | null;
       tree = (layout?.node_tree as NodeTree | null) ?? null;
     }
+
+    // ═══ The financier's own logo on its own application page (card
+    // XlDVUsuC). `/silverchef/apply` and `/skope-funding/apply` resolve here
+    // once their CMS page is published — which all four live pages are — so
+    // the masthead is placed at render time rather than written into a stored
+    // tree staff own. The funder comes from the SLUG, so a page can never wear
+    // the other financier's mark, and an author who places the logo themselves
+    // keeps their placement (see the module). ═══
+    const applyFunder = financeApplyFunderForSlug(slug);
+    if (tree && applyFunder) tree = withFinanceApplyLogo(tree, applyFunder);
 
     // ═══ Site Builder node-tree path — renders through the shared BuilderTree
     // with the portal-compiled builder CSS for authored classes. The payload is

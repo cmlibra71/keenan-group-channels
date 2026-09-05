@@ -46,6 +46,64 @@ export const ALLOWED_IMAGE_ORIGINS: AllowedImageOrigin[] = [
 ];
 
 /**
+ * The site's own public origin, from `SITE_URL` (set per site by the deploy, and in
+ * docker-compose for local work). SERVER ONLY — `SITE_URL` is not a `NEXT_PUBLIC_` var, so it
+ * is undefined in the browser. That is deliberate: `isAllowedImageUrl` below is imported by
+ * client components (`CategoryTiles`, `brand-logo-url`) and must answer the same on both sides
+ * of hydration, so the own-origin rule lives in its own predicate that only `/api/image` uses.
+ */
+function ownSiteOrigin(): string | null {
+  const raw = process.env.SITE_URL?.trim();
+  if (!raw) return null;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A file this site itself serves — the one address the allow-list above could never cover,
+ * because it is not a bucket.
+ *
+ * Card HPgTV0Ck: Steve put `https://chefsdepot.com.au/silverchef-logo.png` on a CMS page. The
+ * file is real (it is `public/silverchef-logo.png`, 200 direct) but `/api/image` answered 403,
+ * so the authored image drew nothing. Anything under `public/` is on our own origin, already
+ * public to anyone, and reachable by us — there is no SSRF question to answer about it.
+ *
+ * Two limits keep it that narrow:
+ *  - the origin must match `SITE_URL` EXACTLY (scheme, host and port), so it is our own site
+ *    and not a lookalike, and an unset `SITE_URL` allows nothing;
+ *  - `/api/**` is refused, because `/api/image` fetching `/api/image` is an unbounded
+ *    self-recursion and a cost-amplification lever, which is the whole reason this route
+ *    snaps width and quality to a fixed set.
+ * `www.` is NOT covered: a storefront serves one canonical origin and that is the one to author.
+ */
+export function isOwnSiteImageUrl(url: string): boolean {
+  const own = ownSiteOrigin();
+  if (!own) return false;
+  try {
+    const parsed = new URL(url);
+    if (parsed.origin !== own) return false;
+    // `URL` has already normalised `..`, `.` and percent-encoded separators out of `pathname`.
+    if (parsed.pathname === "/api" || parsed.pathname.startsWith("/api/")) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * What `/api/image` is permitted to go and fetch: an allowlisted BUCKET, or a file this site
+ * serves itself. Kept apart from `isAllowedImageUrl` on purpose — that one is the "is this
+ * picture usable?" test the category tiles and the brand-logo fallback run in the BROWSER, and
+ * it must stay a pure function of the URL. (Cards LrRNJiEY, gRLRF8yu, 0CDcCYmO, HPgTV0Ck.)
+ */
+export function isFetchableImageUrl(url: string): boolean {
+  return isAllowedImageUrl(url) || isOwnSiteImageUrl(url);
+}
+
+/**
  * True only for https URLs served from an allowlisted bucket hostname — and, where that entry
  * carries a `pathPrefix`, only under that prefix.
  */

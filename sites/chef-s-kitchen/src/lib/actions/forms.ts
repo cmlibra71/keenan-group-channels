@@ -161,8 +161,12 @@ async function deliverNotifications(ctx: {
   // ── Staff notification ──
   try {
     const to = await resolveFormNotificationRecipients(
-      { id: form.id as number, default_recipient_emails: form.default_recipient_emails },
-      CHANNEL_ID
+      // `key` routes the finance application through its own rep-else-cs@
+      // fallback ladder; `accountId` (auto-linked from the submitter email)
+      // is who decides which rep is told.
+      { id: form.id as number, key: form.key, default_recipient_emails: form.default_recipient_emails },
+      CHANNEL_ID,
+      { accountId: (submission.account_id as number | null) ?? null }
     );
     if (!to.length) {
       await cmsFormSubmissionService.recordNotifyResult(submissionId, { status: "skipped" });

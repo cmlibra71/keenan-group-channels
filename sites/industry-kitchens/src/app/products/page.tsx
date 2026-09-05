@@ -1,23 +1,11 @@
-import { getProducts, getFeatureFlag, getMegaMenu, productService, CHANNEL_ID, type MegaMenuNode } from "@/lib/store";
+import { getProducts, getFeatureFlag, getMegaMenu, getMegaMenuNav, getMegaMenuHidden, productService, CHANNEL_ID, type MegaMenuNode } from "@/lib/store";
+import { flattenTree } from "@/lib/mega-menu";
+import { ikNavItems } from "@/lib/ik-nav";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { getCatalogScope } from "@/lib/catalog-scope";
 import { CategoryTiles, type CategoryTile } from "@/components/category/CategoryTiles";
 import Link from "next/link";
-
-/**
- * Industry Kitchens is deliberately NOT on the shared, self-populating
- * department bar — Steve, 2026-08-10 (card 9wau4Tx9): "Leave Industry Kitchens
- * for now, we will address that in another card." IK's `MegaMenu.tsx` still
- * renders `departments.slice(0, 7)`: no off switch, no More overflow, and no
- * `resolveNavItems`. This strip therefore takes the SAME seven so the two rows
- * on this screen cannot disagree — the IK tree (Zoey's "Main Catalog", 257)
- * carries 14 rootless rows including "Root Category" and "Brands", which the
- * bar has never shown and which are not department wording anyone chose.
- * When IK moves to the shared bar, delete this and resolve through
- * `resolveNavItems` exactly as `template/` and Chefs Depot do.
- */
-const IK_NAV_DEPARTMENT_COUNT = 7;
 
 function getPageNumbers(current: number, total: number): (number | "...")[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
@@ -79,17 +67,38 @@ export default async function ProductsPage({
             onSale: fetchOptions.onSale,
           });
 
-  const [{ products, total }, memberPricingEnabled, megaMenu] = await Promise.all([
-    productsPromise,
-    getFeatureFlag("member_pricing_enabled"),
-    getMegaMenu().catch(() => ({ departments: [] as MegaMenuNode[] })),
-  ]);
+  const [{ products, total }, memberPricingEnabled, megaMenu, megaNav, hiddenDepartments] =
+    await Promise.all([
+      productsPromise,
+      getFeatureFlag("member_pricing_enabled"),
+      getMegaMenu().catch(() => ({ departments: [] as MegaMenuNode[] })),
+      getMegaMenuNav().catch(() => []),
+      getMegaMenuHidden().catch(() => []),
+    ]);
   const totalPages = Math.ceil(total / 24);
 
-  // The same seven the bar above shows — see IK_NAV_DEPARTMENT_COUNT.
-  const barDepartments: CategoryTile[] = megaMenu.departments
-    .slice(0, IK_NAV_DEPARTMENT_COUNT)
-    .map((d) => ({ id: d.id, name: d.name, slug: d.slug, image_url: d.image_url }));
+  // The strip IS the department bar's own list. Industry Kitchens now composes
+  // its bar through the same shared, unit-tested `resolveNavItems` with the same
+  // two inputs — the Navigation editor's items (order + extras) and the
+  // per-department off switch `mega_menu_hidden_categories` — so the two rows on
+  // this screen cannot disagree about what the departments are or what they are
+  // called. A department switched off the MENU is off here too; it keeps its
+  // page and stays reachable from /categories, the homepage blocks and search.
+  // (Card mOTgYEvX, replacing the IK_NAV_DEPARTMENT_COUNT = 7 constant LrRNJiEY
+  // left here while the IK bar was parked.)
+  const byId = flattenTree(megaMenu.departments);
+  const barDepartments: CategoryTile[] = ikNavItems({
+    departments: megaMenu.departments,
+    items: megaNav,
+    hiddenCategoryIds: hiddenDepartments,
+  }).flatMap((item) => {
+    if (item.type !== "category" || item.categoryId == null) return [];
+    const node = byId.get(item.categoryId);
+    if (!node) return [];
+    // The same wording the bar prints: Industry Kitchens shows the editor's own
+    // label in both places (it does not shorten the way Chefs Depot does).
+    return [{ id: node.id, name: item.label || node.name, slug: node.slug, image_url: node.image_url }];
+  });
 
   // Departments are a way IN to the tree, so a department the viewer may not
   // open must not be offered: `assertCategoryVisible` 404s a category outside a

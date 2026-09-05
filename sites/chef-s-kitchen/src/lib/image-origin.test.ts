@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isAllowedImageUrl } from "./image-origin.ts";
+import { isAllowedImageUrl, isFetchableImageUrl, isOwnSiteImageUrl } from "./image-origin.ts";
 
 const ZOEY_OK =
   "https://zcom-media.s3.amazonaws.com/sites/a0i0L00000VH4TSQA1/media/catalog/product";
@@ -101,4 +101,68 @@ test("a category tile image in our own bucket is still usable", () => {
 test("garbage is refused rather than thrown", () => {
   assert.equal(isAllowedImageUrl("not a url"), false);
   assert.equal(isAllowedImageUrl(""), false);
+});
+
+// ---------------------------------------------------------------------------
+// Card HPgTV0Ck — a file the SITE ITSELF serves is fetchable by /api/image.
+// `isAllowedImageUrl` is unchanged by this: it is the "is this picture usable?"
+// test the category tiles and the brand-logo fallback run in the BROWSER, where
+// SITE_URL does not exist, so it has to stay a pure function of the URL.
+// ---------------------------------------------------------------------------
+
+function withSiteUrl(value: string | undefined, fn: () => void) {
+  const before = process.env.SITE_URL;
+  if (value === undefined) delete process.env.SITE_URL;
+  else process.env.SITE_URL = value;
+  try {
+    fn();
+  } finally {
+    if (before === undefined) delete process.env.SITE_URL;
+    else process.env.SITE_URL = before;
+  }
+}
+
+test("a file on the site's own origin is fetchable, but is not on the bucket allow-list", () => {
+  withSiteUrl("https://chefsdepot.com.au", () => {
+    // Steve's SilverChef logo: public/silverchef-logo.png, authored by absolute address.
+    assert.equal(isOwnSiteImageUrl("https://chefsdepot.com.au/silverchef-logo.png"), true);
+    assert.equal(isFetchableImageUrl("https://chefsdepot.com.au/silverchef-logo.png"), true);
+    // The browser-side "usable" predicate is deliberately untouched.
+    assert.equal(isAllowedImageUrl("https://chefsdepot.com.au/silverchef-logo.png"), false);
+  });
+});
+
+test("the site's own origin must match exactly — no other host, scheme or subdomain", () => {
+  withSiteUrl("https://chefsdepot.com.au", () => {
+    assert.equal(isFetchableImageUrl("https://www.chefsdepot.com.au/silverchef-logo.png"), false);
+    assert.equal(isFetchableImageUrl("http://chefsdepot.com.au/silverchef-logo.png"), false);
+    assert.equal(isFetchableImageUrl("https://chefsdepot.com.au.evil.com/x.png"), false);
+    assert.equal(isFetchableImageUrl("https://industrykitchens.com.au/x.png"), false);
+    assert.equal(isFetchableImageUrl("https://evil.com/x.png"), false);
+  });
+});
+
+test("the optimizer will not fetch its own routes — no self-recursion", () => {
+  withSiteUrl("https://chefsdepot.com.au", () => {
+    assert.equal(
+      isFetchableImageUrl("https://chefsdepot.com.au/api/image?url=https%3A%2F%2Fchefsdepot.com.au%2Fa.png&w=1600&q=80"),
+      false
+    );
+    assert.equal(isFetchableImageUrl("https://chefsdepot.com.au/api/hero-atlas"), false);
+    assert.equal(isFetchableImageUrl("https://chefsdepot.com.au/api"), false);
+    // …and a path that merely BEGINS with the letters is still a real file.
+    assert.equal(isFetchableImageUrl("https://chefsdepot.com.au/apibanner.png"), true);
+  });
+});
+
+test("with no SITE_URL set, the own-origin rule allows nothing", () => {
+  withSiteUrl(undefined, () => {
+    assert.equal(isOwnSiteImageUrl("https://chefsdepot.com.au/silverchef-logo.png"), false);
+    assert.equal(isFetchableImageUrl("https://chefsdepot.com.au/silverchef-logo.png"), false);
+    // The buckets still are.
+    assert.equal(
+      isFetchableImageUrl("https://keenan-group-images.s3.ap-southeast-2.amazonaws.com/x.webp"),
+      true
+    );
+  });
 });

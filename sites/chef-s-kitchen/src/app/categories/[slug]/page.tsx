@@ -2,7 +2,6 @@ import { notFound, redirect } from "next/navigation";
 import { draftMode, headers } from "next/headers";
 import type { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
 import { ChevronRight } from "lucide-react";
 import {
   getCategoryBySlug,
@@ -26,7 +25,11 @@ import {
   parseAttributeSelections,
 } from "@keenan/services/services";
 import { parsePriceBands, parseRangeParam } from "@/lib/category-attributes";
-import { renderCategoryNodeBranch, type CategoryListingPricing } from "@/builder/category-node-branch";
+import {
+  renderCategoryNodeBranch,
+  categoryTreePlacesSeoCopy,
+  type CategoryListingPricing,
+} from "@/builder/category-node-branch";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
 import { RichContent } from "@/components/content/RichContent";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
@@ -204,7 +207,18 @@ export default async function CategoryPage({
   // category page is set — so the page renders exactly as before.
   const { isEnabled } = await draftMode();
   const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
-  const cmsCat = await getCmsCategoryPage(category.id, draft).catch(() => null);
+  // Both of these are per-request cached loads that only need `draft`, so they go
+  // together rather than one after the other — "as long as it's fast to open".
+  const [cmsCat, seoCopyPlacedInTree] = await Promise.all([
+    getCmsCategoryPage(category.id, draft).catch(() => null),
+    // Does the authored Category Page Template PLACE this storefront's own
+    // approved wording itself (card nYxPgpvK)? The payload carries it as
+    // `category.seo_intro_html`, so a page can put it in the header or anywhere
+    // else; printing the same paragraphs again at the foot would duplicate body
+    // copy across every category page, which is the cannibalisation this content
+    // exists to avoid. The QUESTIONS are not placeable and stay where they are.
+    categoryTreePlacesSeoCopy(draft),
+  ]);
   const region = (r: string): RenderedBlock[] =>
     ((cmsCat?.blocks as unknown as RenderedBlock[]) ?? []).filter((b) => b.region === r);
   const aboveBlocks = region("above_listing");
@@ -220,7 +234,7 @@ export default async function CategoryPage({
   };
   const categorySeo = (
     <CategorySeo
-      introHtml={seo.channel_seo_intro_html}
+      introHtml={seoCopyPlacedInTree ? undefined : seo.channel_seo_intro_html}
       faq={seo.channel_seo_faq}
       faqJsonLd={seo.channel_seo_faq_jsonld}
       categoryName={category.name}
@@ -329,20 +343,20 @@ export default async function CategoryPage({
 
   return (
     <div>
-      {/* ═══ Branded banner ═══ */}
+      {/* ═══ Branded banner — brand green only, deliberately NO backdrop image ═══
+          Card TnQJpunl (Steve, 2026-08-26): "We don't need the category feature
+          image to also be stretched and made the background image behind the
+          site header. Please just the main green site colour, no image." The
+          stretched `category.image_url` at opacity-30 and its `brand-deep`
+          gradient scrim used to sit here. Do not reinstate them.
+
+          `category.image_url` itself is untouched and still draws the
+          subcategory / department TILES and the `/categories` index; only the
+          banner backdrop is gone. The live Chefs Depot category page renders
+          from its Site Builder node tree, not from here, so the removal that
+          actually reaches a shopper is `builder/category-banner-backdrop.ts` —
+          this route is the legacy fallback and has to agree with it. ═══ */}
       <section className="relative overflow-hidden bg-gradient-to-br from-brand-mid to-brand-deep">
-        {category.image_url && (
-          <>
-            <Image
-              src={category.image_url}
-              alt=""
-              fill
-              sizes="100vw"
-              className="object-cover opacity-30"
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-brand-deep/80 to-brand-deep/40" />
-          </>
-        )}
         <div className="container-page relative py-10 lg:py-12">
           {/* Breadcrumb */}
           <nav className="mb-3 flex flex-wrap items-center gap-1.5 text-[13px] text-white/70">

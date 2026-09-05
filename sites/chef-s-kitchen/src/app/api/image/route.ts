@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getCacheKey } from "@keenan/services/utils";
-import { isAllowedImageUrl } from "@/lib/image-origin";
+import { isFetchableImageUrl } from "@/lib/image-origin";
 import { normaliseWidth, normaliseQuality } from "@/lib/image-params";
 
 const S3_BUCKET = process.env.IMAGE_CACHE_S3_BUCKET || "keenan-group-images";
@@ -22,8 +22,9 @@ export async function GET(request: NextRequest) {
   }
 
   // SSRF guard: only fetch https images from an allowlisted bucket — our own two wholesale, plus
-  // Zoey's shared media bucket UNDER our own site's product-media prefix only (see image-origin.ts).
-  if (!isAllowedImageUrl(url)) {
+  // Zoey's shared media bucket UNDER our own site's product-media prefix only — or a file THIS
+  // site serves itself, `/api/**` excepted (see image-origin.ts).
+  if (!isFetchableImageUrl(url)) {
     return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
   }
 
