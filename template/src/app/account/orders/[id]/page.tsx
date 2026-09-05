@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronLeft, Package } from "lucide-react";
+import { ChevronLeft, Download, Package } from "lucide-react";
 import { ApiError, loadOrderContactForOrder } from "@keenan/services";
 import { getSession } from "@/lib/auth";
 import { signInRedirect } from "@/lib/account-redirect";
@@ -12,6 +12,7 @@ import {
   getLinkableProductPaths,
   getCheckoutSettings,
   getAccountNetTermsDays,
+  getSiteConfig,
   CHANNEL_ID,
 } from "@/lib/store";
 import { canCustomerViewOrder } from "@/lib/orders/order-visibility";
@@ -28,6 +29,7 @@ import {
   isNetTermsMethod,
 } from "@/lib/orders/order-presentation";
 import { orderDocumentName } from "@/lib/orders/order-document-name";
+import { invoiceDocumentUrl, offersInvoiceDocument } from "@/lib/orders/invoice-document-url";
 import { customerOrderStage } from "@/lib/orders/order-status-label";
 import { readCustomerOrderNotes } from "@/lib/orders/customer-order-notes";
 import { EYEBROW_CLASS, PAGE_TITLE_CLASS, PANEL_TITLE_CLASS } from "@/lib/orders/order-page-styles";
@@ -127,6 +129,12 @@ interface OrderDetail {
    */
   external_source: string | null;
   order_number: string | null;
+  /**
+   * `orders.uuid` — RENDERED, as the credential on the link to this order's own tax invoice
+   * (card EizZjaY3). It is the unguessable key the portal serves that document on, the way
+   * `/q/<uuid>` keys a quote; the enumerable order number could never be one.
+   */
+  uuid: string | null;
   status: string | null;
   payment_status: string | null;
   payment_method: string | null;
@@ -252,6 +260,7 @@ export default async function OrderDetailPage({
     shipmentPage,
     accountNetTermsDays,
     orderContact,
+    siteConfig,
   ] = await Promise.all([
       productImageService.getThumbnailsForProducts(productIds) as Promise<
         { product_id: number; url_thumbnail: string | null; url_standard: string | null }[]
@@ -281,6 +290,10 @@ export default async function OrderDetailPage({
       // this page's data (card BIig1Zo1). Best effort: a contact panel must not be
       // able to 500 an order.
       loadOrderContactForOrder(orderId).catch(() => null),
+      // This storefront's own site row, for the tax-invoice host below (card EizZjaY3). Cached
+      // for an hour and shared with the rest of the storefront, so it costs nothing here. A
+      // failure means no site row, which the URL builder answers with its own fallback.
+      getSiteConfig().catch(() => ({ site: null })),
     ]);
 
   // May this person settle the balance by card, and with what control? THE one
@@ -320,6 +333,26 @@ export default async function OrderDetailPage({
     }).paid,
     paymentStatus: order.payment_status,
   });
+  // The document itself, one click away (card EizZjaY3). Rendered by the portal from this order's
+  // rows as they stand right now, so it is the same piece of paper the invoice email attaches —
+  // the same "Pro-Forma Tax Invoice" / "Paid Tax Invoice Receipt" naming the eyebrow above prints,
+  // and the same balance owing the Payment section states.
+  //
+  // `offersInvoiceDocument` holds BOTH refusals, tested, in one place: no live lines (the first
+  // thing the document build refuses on — `items` here is the identical set, `order_items` with
+  // `cancelled_at IS NULL` — and a Download that answers 404 is worse than none), and a cancelled,
+  // declined, refunded or closed order, which is NEVER asked to pay (card D045H6Zh, the same
+  // `isUnpayableOrderStatus` the Payment section below suppresses its whole panel on). The
+  // document's closing line is "Payment is due by <date>" over an Amount-due band; on this screen
+  // that would be a payment demand we have already decided not to make.
+  //
+  // Served on THIS storefront's own quotes host, never the parent group's (card 87IkgD2H).
+  const invoiceHref = offersInvoiceDocument({
+    status: order.status,
+    hasLiveLines: items.length > 0,
+  })
+    ? invoiceDocumentUrl(order.uuid, siteConfig.site)
+    : null;
 
   const totalInc = money(order.total_inc_tax);
   const gst = money(order.total_tax);
@@ -387,10 +420,33 @@ export default async function OrderDetailPage({
           {customerOrderStage(order.status)}
         </span>
       </div>
-      <p className="text-sm text-text-muted mb-8">
-        {placed ? `Placed ${placed}` : ""}
-        {order.customer_po ? `${placed ? " · " : ""}Your reference: ${order.customer_po}` : ""}
-      </p>
+      {/* The eyebrow and the invoice download share ONE container, and the container carries the
+          space below the pair. The gap BETWEEN them comes from `space-y-4`, which collapses to
+          nothing when the download is withheld — so an order with no offered document keeps
+          exactly the spacing every order had before this card (EizZjaY3). */}
+      <div className="mb-8 space-y-4">
+        <p className="text-sm text-text-muted">
+          {placed ? `Placed ${placed}` : ""}
+          {order.customer_po ? `${placed ? " · " : ""}Your reference: ${order.customer_po}` : ""}
+        </p>
+
+        {/* The customer's own copy of the tax invoice (card EizZjaY3). The document existed and was
+            reachable only if somebody emailed it; this is the download Steve asked for. It carries
+            the words "Tax Invoice", which is what the ATO requires of it. */}
+        {invoiceHref && (
+          <p>
+            <a
+              href={invoiceHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-text-primary hover:bg-surface-secondary"
+            >
+              <Download className="h-4 w-4" />
+              Download {documentName} (PDF)
+            </a>
+          </p>
+        )}
+      </div>
 
       {/* ── Updates staff published to this customer ─────────────────────────
           The other end of the portal Order History panel's "Visible on Store Frontend" tick
