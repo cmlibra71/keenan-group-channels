@@ -138,3 +138,46 @@ test("the same bundle build twice counts up", () => {
   });
   assert.equal(out.incrementsQuantity, true);
 });
+
+// ── LEGACY LINES (written before `storefront_note` existed) HEAL, THEY DO NOT FREEZE ───
+
+test("a legacy storefront-built line with no marker still counts up on a repeat press", () => {
+  // Every configured line already sitting in a quote was written before this card, so it
+  // carries no `attributes.storefront_note`. Read naively its own comment looks like a rep's,
+  // and the press did nothing at all — on main it counted up.
+  const out = at({
+    hadAddons: true,
+    resolvedAddonCount: 1,
+    lineNotes: "Slicers: Slicer 4mm",
+    existingNote: "Slicers: Slicer 4mm",
+    ownedNote: null,
+  });
+  assert.equal(out.incrementsQuantity, true);
+  assert.equal(out.writesNote, true); // and the marker is stamped, so it is healed for good
+  assert.equal(out.clearsAddons, false);
+});
+
+test("a legacy bundle line with no marker counts up on the same build", () => {
+  const out = at({
+    isBundleBuild: true,
+    lineNotes: "Bay 1: Door",
+    existingNote: "Bay 1: Door",
+    ownedNote: null,
+  });
+  assert.equal(out.incrementsQuantity, true);
+  assert.equal(out.writesNote, true);
+});
+
+test("healing never adopts a comment that differs from the one this add would leave", () => {
+  // A rep's words on an unmarked line are still a rep's words: nothing is overwritten, and
+  // a genuine re-configuration still refuses to stack.
+  const out = at({
+    hadAddons: true,
+    resolvedAddonCount: 2,
+    lineNotes: "Slicers: Slicer 6mm",
+    existingNote: "Ring Kate re gas connection before quoting",
+    ownedNote: null,
+  });
+  assert.equal(out.writesNote, false);
+  assert.equal(out.incrementsQuantity, false);
+});

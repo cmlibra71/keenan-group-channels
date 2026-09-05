@@ -316,7 +316,12 @@ export async function addToCart(
       quantity: finalQty,
       listPrice: pricing.listPrice,
       salePrice: pricing.salePrice,
-      modifierSelections: resolvedAddons,
+      // Same guard as `updateCartItem` and the reprice: a line that never carried extras is left
+      // alone, because `modifier_selections` also holds the variant-modifier OBJECT the REST API
+      // writes and this card does not own it. Stamping `[]` here on a plain re-add would erase it.
+      ...(readStoredAddons(existing.modifier_selections).length > 0 || resolvedAddons.length > 0
+        ? { modifierSelections: resolvedAddons }
+        : {}),
     });
   } else {
     await cartItemService.createForParent(cart.id, {

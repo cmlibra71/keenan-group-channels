@@ -72,13 +72,24 @@ export function decideQuoteLineWrite(input: QuoteLineWriteInput): QuoteLineWrite
   const clearsAddons = addonsPosted && hadAddons && resolvedAddonCount === 0;
   const isConfigured = isBundleBuild || resolvedAddonCount > 0 || clearsAddons;
 
-  const noteIsOurs = existingNote === null || existingNote === "" || existingNote === ownedNote;
+  // LEGACY LINES HEAL RATHER THAN FREEZE. `attributes.storefront_note` has never been written
+  // before this card, so every storefront-built line already sitting in a quote carries no
+  // marker at all. Without this, `ownedNote` is null on a line the storefront itself wrote, the
+  // comment reads as a rep's, and a second press of Add to Quote on the same configuration
+  // neither counts the quantity up (which is what main did) nor writes anything — a dead button.
+  // A comment IDENTICAL to the one this add would leave can only have come from the storefront,
+  // so treat it as ours; `writesNote` then stamps the marker and the line is healed for good.
+  const effectiveOwnedNote =
+    ownedNote ?? (lineNotes !== null && existingNote === lineNotes ? existingNote : null);
+
+  const noteIsOurs =
+    existingNote === null || existingNote === "" || existingNote === effectiveOwnedNote;
   const writesNote = isConfigured && noteIsOurs;
 
   return {
     // Comparing against the note we OWN, not against whatever is on the line: a rep's
     // typed comment would otherwise read as "this line changed" on every press.
-    incrementsQuantity: !(isConfigured && lineNotes !== ownedNote),
+    incrementsQuantity: !(isConfigured && lineNotes !== effectiveOwnedNote),
     clearsAddons,
     writesNote,
   };
