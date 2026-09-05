@@ -11,6 +11,7 @@ import { renderBrandNodeBranch } from "@/builder/brand-node-branch";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BrandIntro } from "@/components/brand/BrandIntro";
+import { BrandSearch } from "@/components/brand/BrandSearch";
 import { BrandProductLines } from "@/components/brand/BrandProductLines";
 import { BrandIndustryUses } from "@/components/brand/BrandIndustryUses";
 import { BrandFaq } from "@/components/brand/BrandFaq";
@@ -154,6 +155,11 @@ export default async function BrandPage({
           scraped from the old Industry Kitchens site, kept as the fallback so the 19 pages
           carrying it read exactly as they do today until wording is published for them. */}
       <BrandIntro html={brand.channel_intro_html || meta.intro_html} />
+
+      {/* Search within this brand — a plain form onto the site search, narrowed
+          to this brand (card 1RLP5nSJ). Only offered where there is something to
+          search: a brand with no products would return nothing whatever is typed. */}
+      {total > 0 && <BrandSearch brandName={brand.name as string} />}
 
       {/* Brand product lines (e.g. Rational iCombi Pro / Classic / Vario) */}
       <BrandProductLines heading="Product Lines" lines={meta.product_lines} />
