@@ -105,9 +105,10 @@ export const {
   getMemberPriceMap,
   getMemberSavingsPctMap,
   applyAccountPricesToProducts,
-  // The Chefs Depot buying-group ladder (cards gk23c1VK / Nyp8bkPm). All four are
+  // The Chefs Depot buying-group ladder (cards gk23c1VK / Nyp8bkPm). These are
   // no-ops on a channel with no ladder in `channel_settings`, which is every
   // channel until one is written.
+  applyAdvertisedLadderPrices,
   getMemberLadderLevelId,
   getLadderConfig,
   getLadderVariantPrices,

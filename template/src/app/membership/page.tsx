@@ -134,7 +134,7 @@ export default async function MembershipLandingPage() {
           <BenefitCard
             icon="pricing"
             title="Members-Only Pricing"
-            description="Save 10-25% off retail on all kitchen equipment. The more you buy, the more you save."
+            description="Members buy at a different price tier, applied automatically from their first order."
           />
           {freeShippingEnabled && (
             <BenefitCard

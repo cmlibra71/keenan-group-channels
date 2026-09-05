@@ -6,7 +6,7 @@ import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogS
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { hasTestCheckoutSession } from "@/lib/checkout/test-session";
-import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveOrderBusinessName, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, siteAccessProfileService, loadOrderContactForOrder, ensureContactStripeCustomerForGateway, listSavedCardsForContact, type EmailLineItem } from "@keenan/services";
+import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveOrderBusinessName, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, snapshotOrderLadderPricing, siteAccessProfileService, loadOrderContactForOrder, ensureContactStripeCustomerForGateway, listSavedCardsForContact, type EmailLineItem } from "@keenan/services";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, type BelowCostLine } from "@/lib/checkout/order-draft";
 import { backorderFactsForProducts } from "@/lib/cart/backorder-facts";
 import { canPurchaseQuantity } from "@keenan/services/backorder";
@@ -995,6 +995,13 @@ export async function placeOrder(
     }
     return { error: err instanceof Error ? err.message : "We couldn't complete your order. Please try again." };
   }
+
+  // The buying-group M/W/R snapshot on the order's lines (card gk23c1VK). The
+  // order is the document the customer is charged on, so it carries the record of
+  // how each line was priced — a cart line is not a document and never writes one.
+  // No-op on a channel with no ladder switched on, idempotent per line, and never
+  // fatal: the money has already been taken.
+  await snapshotOrderLadderPricing(order.id).catch(() => ({ written: 0 }));
 
   // File the finance application and tell the rep (card VAjaPj0t). The order is
   // already placed and unpaid; this never throws, and a failure is stamped on
