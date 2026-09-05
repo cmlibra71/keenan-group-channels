@@ -129,6 +129,46 @@ export function isCappedByLimit(total: number): boolean {
 }
 
 /**
+ * The rail's option list for one facet: the busiest `limit` values, PLUS any
+ * value the shopper has already TICKED that fell off that list.
+ *
+ * The addition is not tidiness. `/search` draws its Brand and Category groups
+ * from Meilisearch's facet distribution, counted with that group's own filter
+ * removed, and shows the busiest fifteen — so a narrow selection (a brand page's
+ * search box hands one straight in, and so does a hand-typed URL) is very often
+ * NOT among them. Without its own row the ticked value cannot be unticked on the
+ * rail, and `FacetChips.labelFor` has no label to print for it either, so the
+ * chip falls back to the raw parameter and a customer reads "Chef%20Inox ×".
+ * Same contract the category rail already has: a ticked value keeps its row.
+ * (1RLP5nSJ, bound by C8G4f4U8/NfYe3P3G.)
+ *
+ * `selected` is the DECODED names (what `sanitizeFacetValues` returns); the
+ * option value is re-encoded, which is the form the rail and the URL use.
+ */
+export function facetOptions(
+  dist: Record<string, number> | undefined,
+  selected: string[] = [],
+  limit = 15
+): { value: string; label: string; count: number }[] {
+  // A Map, not the raw object: a name in `selected` comes from the query string,
+  // and `dist["__proto__"]` on a plain object reads Object.prototype rather than
+  // missing, so the row would carry an object (or a function) as its count and
+  // React refuses to render one — `/search?brand=Waldorf,__proto__` would hand a
+  // shopper the site error page instead of results.
+  const counts = new Map<string, number>(Object.entries(dist ?? {}));
+  const kept = [...counts.entries()].sort(([, a], [, b]) => b - a).slice(0, limit);
+  const names = new Set(kept.map(([name]) => name));
+  for (const name of selected) {
+    if (names.has(name)) continue;
+    names.add(name);
+    // Its real count when the distribution holds one (the group is counted with
+    // its own filter removed, so it usually does), otherwise zero.
+    kept.push([name, counts.get(name) ?? 0]);
+  }
+  return kept.map(([name, count]) => ({ value: encodeURIComponent(name), label: name, count }));
+}
+
+/**
  * The Meilisearch filter clauses for the selected facets. Values are quoted with
  * `meiliStr`, never concatenated raw.
  */
