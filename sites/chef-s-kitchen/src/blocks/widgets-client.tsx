@@ -21,6 +21,7 @@ import { OptionSelector } from "@/components/product/OptionSelector";
 import { Price } from "@/components/ui/Price";
 import { PriceBlock } from "@/components/ui/PriceBlock";
 import { useProductPurchaseOptional } from "@/components/product/ProductPurchaseProvider";
+import { packPrice } from "@keenan/services/pack";
 
 export type WidgetComponent = FC<{ attrs: Record<string, unknown>; ctx?: RenderContext }>;
 
@@ -48,6 +49,28 @@ export const ProductGalleryWidget: WidgetComponent = () => {
     />
   );
 };
+
+/**
+ * What one purchase actually hands the customer, when the product is sold by the carton (cards
+ * O108e4jH / zeMPVcA3). Zoey's IK page states both halves — "Carton contains 12 Pcs" beside the
+ * quantity, and twelve pieces priced into the subtotal — so this says both rather than leaving a
+ * shopper to multiply a per-piece price by a number that is not on the screen.
+ *
+ * `unitPrice` is the price the panel above it is ALREADY showing, so the two can never disagree.
+ */
+function PackLine({ unitPrice }: { unitPrice: number }) {
+  const purchase = useProductPurchaseOptional();
+  if (!purchase) return null;
+  const { packSize, packNote } = purchase;
+  if (packSize <= 1 || !packNote || unitPrice <= 0) return null;
+  return (
+    <p className="mt-2 text-[13px] text-text-secondary">
+      <span className="font-semibold text-text-primary">{packNote}</span>
+      {" \u00b7 "}
+      <Price amount={packPrice(unitPrice, packSize)} gst /> per {purchase.packUnit.toLowerCase()}
+    </p>
+  );
+}
 
 export const PriceWidget: WidgetComponent = ({ attrs }) => {
   const purchase = useProductPurchaseOptional();
@@ -84,15 +107,24 @@ export const PriceWidget: WidgetComponent = ({ attrs }) => {
           </p>
         </div>
       ) : (
-        <PriceBlock
-          rrp={displaySalePrice ?? displayPrice}
-          memberPrice={activeMemberPrice}
-          isMember={isMember}
-          planPrice={membershipTeaser?.fromPrice}
-          memberSavingsPct={memberSavingsPct}
-          accountPricing={accountPricing}
-          size="pdp"
-        />
+        <>
+          <PriceBlock
+            rrp={displaySalePrice ?? displayPrice}
+            memberPrice={activeMemberPrice}
+            isMember={isMember}
+            planPrice={membershipTeaser?.fromPrice}
+            memberSavingsPct={memberSavingsPct}
+            accountPricing={accountPricing}
+            size="pdp"
+          />
+          <PackLine
+            unitPrice={
+              activeMemberPrice != null && activeMemberPrice < (displaySalePrice ?? displayPrice)
+                ? activeMemberPrice
+                : (displaySalePrice ?? displayPrice)
+            }
+          />
+        </>
       )}
     </div>
   );
@@ -167,22 +199,25 @@ export const OptionSelectorWidget: WidgetComponent = () => {
 export const QuantityWidget: WidgetComponent = () => {
   const purchase = useProductPurchaseOptional();
   if (!purchase) return null;
-  const { displayPrice, quantity, setQuantity } = purchase;
+  const { displayPrice, quantity, setQuantity, packSize } = purchase;
   if (displayPrice <= 0) return null;
+  // A product sold by the carton steps a whole carton at a time and never drops below one, the
+  // way Zoey's own quantity box does (cards O108e4jH / zeMPVcA3). packSize is 1 on everything
+  // else, so this is the same one-at-a-time control it has always been.
   return (
     <div className="flex items-center rounded-btn border border-border-strong bg-white">
       <button
         type="button"
-        onClick={() => setQuantity(Math.max(1, quantity - 1))}
+        onClick={() => setQuantity(Math.max(packSize, quantity - packSize))}
         aria-label="Decrease quantity"
         className="px-3 py-3 text-text-secondary transition-colors hover:text-text-primary"
       >
         <Minus className="h-3.5 w-3.5" />
       </button>
-      <span className="w-8 text-center text-sm font-semibold">{quantity}</span>
+      <span className="min-w-8 px-1 text-center text-sm font-semibold">{quantity}</span>
       <button
         type="button"
-        onClick={() => setQuantity(quantity + 1)}
+        onClick={() => setQuantity(quantity + packSize)}
         aria-label="Increase quantity"
         className="px-3 py-3 text-text-secondary transition-colors hover:text-text-primary"
       >
@@ -283,6 +318,7 @@ export const MobileBuyBarWidget: WidgetComponent = () => {
     activeMemberPrice: memberPrice,
     isMember,
     quantity,
+    packNote,
     cartVariantId,
     purchaseBlockedByStock,
     restrictAddToCart,
@@ -311,6 +347,10 @@ export const MobileBuyBarWidget: WidgetComponent = () => {
             ? (isMember ? "member" : "your price")
             : "ex GST"}
         </span>
+        {/* Sold by the carton: the bar's button adds a whole one, so the bar says so (O108e4jH). */}
+        {packNote && (
+          <p className="truncate text-[10px] font-semibold text-text-secondary">{packNote}</p>
+        )}
       </div>
       <AddToCartButton
         productId={product.id}

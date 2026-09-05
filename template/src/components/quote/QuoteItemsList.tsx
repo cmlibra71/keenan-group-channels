@@ -6,6 +6,7 @@ import { updateQuoteItem, removeQuoteItem } from "@/lib/actions/quote";
 import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { Price } from "@/components/ui/Price";
+import { packNote as packNoteFor, resolvePackSize } from "@keenan/services/pack";
 
 // QuoteService returns snake_case rows (transformRow convention).
 export type QuoteItemRow = {
@@ -23,6 +24,15 @@ export type QuoteItemRow = {
   product_sku: string | null;
   variant_sku: string | null;
   variant_option_name: string | null;
+  /**
+   * The SELLING UNIT of this line's product (cards O108e4jH / zeMPVcA3), selected onto every line
+   * by `QuoteService.getWithItems`. The server rounds a typed quantity UP to whole packs, so this
+   * screen has to SAY what a pack holds — a customer who asks for 20 and is handed 24 with nothing
+   * on screen explaining it has been given wrong customer-visible wording, which is the one thing
+   * we may not guess at. NULL on nearly every product, and then this row is exactly as it was.
+   */
+  product_sell_pack_size?: number | null;
+  product_sell_pack_unit?: string | null;
 };
 
 export function QuoteItemsList({ items, onMutate }: { items: QuoteItemRow[]; onMutate?: () => void }) {
@@ -42,6 +52,13 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
   // Instant on click; auto-reverts to the prop if the transition ends without
   // fresh items (error → refresh self-heal).
   const [displayQty, setDisplayQty] = useOptimistic(item.quantity);
+  // 1 on everything nobody has marked as sold by the carton, which is the +1 / -1 this row has
+  // always done.
+  const packSize = resolvePackSize({ sellPackSize: item.product_sell_pack_size ?? null });
+  const packNote = packNoteFor({
+    sellPackSize: item.product_sell_pack_size ?? null,
+    sellPackUnit: item.product_sell_pack_unit ?? null,
+  });
 
   const unitPrice = item.sale_price
     ? parseFloat(item.sale_price)
@@ -104,20 +121,23 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
         <p className="text-sm text-zinc-600 mt-1">{isPoa ? (
             <span className="inline-block bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded text-xs font-medium">Requires quote</span>
           ) : <><Price amount={unitPrice} /> each</>}</p>
+        {packNote && (
+          <p className="text-xs text-zinc-600 mt-0.5">{packNote}</p>
+        )}
       </div>
 
       {/* Quantity controls */}
       <div className="flex items-center gap-2">
         <button
-          onClick={() => handleQuantity(item.quantity - 1)}
+          onClick={() => handleQuantity(item.quantity - packSize)}
           disabled={isPending}
           className="h-8 w-8 flex items-center justify-center rounded border border-zinc-300 text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
         >
           <Minus className="h-3 w-3" />
         </button>
-        <span className="w-8 text-center text-sm font-medium">{displayQty}</span>
+        <span className="min-w-8 px-1 text-center text-sm font-medium">{displayQty}</span>
         <button
-          onClick={() => handleQuantity(item.quantity + 1)}
+          onClick={() => handleQuantity(item.quantity + packSize)}
           disabled={isPending}
           className="h-8 w-8 flex items-center justify-center rounded border border-zinc-300 text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
         >

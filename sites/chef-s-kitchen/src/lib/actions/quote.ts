@@ -11,6 +11,7 @@ import {
 import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
 import { getSession } from "@/lib/auth";
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
+import { resolvePackSize, snapToPack } from "@keenan/services/pack";
 import {
   describeKitChoices,
   describeKitContents,
@@ -93,6 +94,8 @@ export async function addToQuote(
     sale_price: string | null;
     metafields?: unknown;
     restrict_add_to_quote?: boolean | null;
+    sell_pack_size?: number | null;
+    sell_pack_unit?: string | null;
   } | null;
   if (!product) return { error: "Product not found" };
 
@@ -173,6 +176,15 @@ export async function addToQuote(
     }
   }
 
+  // A product sold by the carton is quoted by the carton (cards O108e4jH / zeMPVcA3), the same
+  // rule the cart applies — a quote the customer built must not ask for two pieces of something
+  // that only ships in twelves. `resolvePackSize` returns 1 for everything else, so an ordinary
+  // product still goes on one at a time.
+  const packSize = resolvePackSize({
+    sellPackSize: product.sell_pack_size ?? null,
+    sellPackUnit: product.sell_pack_unit ?? null,
+  });
+
   const existing = await quoteItemService.findByProductVariant(quote.id, productId, variantId) as {
     id: number;
     quantity: number;
@@ -185,14 +197,16 @@ export async function addToQuote(
     // quantity onto a different build). Everything else keeps counting up as before.
     const reconfigured = kit?.kind === "bundle" && lineNotes !== existing.customer_notes;
     await quoteItemService.updateForParent(quote.id, existing.id, {
-      quantity: reconfigured ? existing.quantity : existing.quantity + 1,
+      quantity: reconfigured
+        ? existing.quantity
+        : snapToPack(existing.quantity + packSize, packSize),
       ...(lineAttributes ? { attributes: lineAttributes, customerNotes: lineNotes } : {}),
     });
   } else {
     await quoteItemService.createForParent(quote.id, {
       productId,
       variantId: variantId || null,
-      quantity: 1,
+      quantity: packSize,
       listPrice,
       salePrice,
       // WHO PUT THIS PRICE HERE: the customer did, off the catalogue, through
@@ -219,13 +233,44 @@ export async function updateQuoteItem(itemId: number, quantity: number) {
     const quote = (await quoteService.getByUuid(uuid)) as QuoteRow | null;
     if (!quote) return { error: "Quote not found" };
 
+    // ONE `getWithItems` for the whole action. It is by far the heaviest read here and this is a
+    // customer-facing screen, so the pack size and the badge count both come off this single
+    // snapshot: a keystroke costs one read, not the two it cost when the pack lookup and
+    // `countQuoteItems` each fetched the quote. The lines already carry the pack columns, so no
+    // product round trip is added either.
+    const full = (await quoteService.getWithItems(quote.id)) as {
+      items?: Record<string, unknown>[];
+    } | null;
+    const items = full?.items ?? [];
+    const line = items.find((i) => Number(i.id) === itemId) as
+      | {
+          quantity?: number | null;
+          product_sell_pack_size?: number | null;
+          product_sell_pack_unit?: string | null;
+        }
+      | undefined;
+    const previousQuantity = Number(line?.quantity ?? 0);
+
+    let nextQuantity = 0;
     if (quantity <= 0) {
       await quoteItemService.deleteForParent(quote.id, itemId);
     } else {
-      await quoteItemService.updateForParent(quote.id, itemId, { quantity });
+      // Whole packs here too — the size is read off the line in hand, never fetched again.
+      nextQuantity = snapToPack(
+        quantity,
+        resolvePackSize({
+          sellPackSize: line?.product_sell_pack_size ?? null,
+          sellPackUnit: line?.product_sell_pack_unit ?? null,
+        })
+      );
+      await quoteItemService.updateForParent(quote.id, itemId, { quantity: nextQuantity });
     }
 
-    return { success: true, quoteCount: await countQuoteItems(quote.id) };
+    // The badge is the snapshot's total adjusted by the one line this call moved, so it reflects
+    // the write we just made without re-reading the quote to find out.
+    const quoteCount =
+      items.reduce((sum, i) => sum + Number(i.quantity ?? 0), 0) - previousQuantity + nextQuantity;
+    return { success: true, quoteCount };
   } catch (e) {
     console.error("[updateQuoteItem] failed (non-fatal):", e);
     return { error: "Could not update quote" };
