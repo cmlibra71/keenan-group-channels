@@ -73,7 +73,17 @@ export default async function ProductPage({
     slug: string;
   }[];
 
-  // Fetch member pricing if feature is enabled
+  // Fetch member pricing if feature is enabled.
+  //
+  // NO BUYING-GROUP RUNG IS THREADED HERE, and that is not an omission (card
+  // gk23c1VK). The ladder reaches a product page through `renderProductNodeBranch`,
+  // which this template page does not render at all — it is the pre-node page,
+  // and both live sites diverged from it before this card existed. Their
+  // non-node halves call `getEffectivePrice` with exactly these five arguments
+  // too. A site seeded from this template that later wires up the node branch
+  // still gets the right rung: the engine resolves it itself
+  // (`member.ladderLevelId ?? resolveCdLadderLevelId(...)` in
+  // `src/builder/product-node-branch.tsx`) when the caller passes none.
   let memberPrice: number | null = null;
   let isMember = false;
   let membershipTeaser: { fromPrice: string | null } | null = null;
