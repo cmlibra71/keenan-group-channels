@@ -10,6 +10,8 @@ import {
 } from "@/lib/store";
 import { wantsStripeTestMode, STRIPE_SCOPE_GLOBAL } from "@keenan/services";
 import { stripeProviderForScope, stripeScopeOf } from "@/lib/stripe";
+import { resolveFreeTrialOffer } from "@/lib/membership/free-trial";
+import { freeTrialStamp } from "@keenan/services/membership-trial";
 
 // Per-customer in-flight guard (per container): the active/pending check and the
 // Stripe+local create aren't atomic, so two concurrent submits (double-click / retry)
@@ -105,12 +107,30 @@ export async function createSubscription(planId: number): Promise<{
       return { success: false, error: "Plan is not properly configured" };
     }
 
+
+    // THE FREE MONTHS, SPENT HERE AND NOWHERE ELSE (card ASTb3tCf).
+    //
+    // Tim: "3 months free - Users can only use this feature once. Otherwise they will
+    // perpetually use the free feature, then cancel and resign." So the plan's
+    // `trial_period_days` is no longer handed to Stripe unconditionally: it is granted
+    // only where this PERSON has never had it, and — where the storefront sets a
+    // free-membership order threshold — only where they have placed an order that earns
+    // it. Decided server-side, from the database, at the moment the subscription is
+    // created, so a stale checkout page cannot buy a second free period; and stamped
+    // onto the subscription, because that stamp is the only memory the rule has.
+    const freeTrial = await resolveFreeTrialOffer({
+      contactId: session.contactId,
+      trialDays: (plan.trial_period_days as number) || 0,
+      planPrice: plan.price as string,
+    });
+    const trialStamp = freeTrialStamp(freeTrial.decision);
+
     // Create Stripe subscription
     const stripeSub = await stripeProvider.createSubscription(
       stripeCustomerId,
       stripePriceId,
       {
-        trialPeriodDays: (plan.trial_period_days as number) || 0,
+        trialPeriodDays: freeTrial.grantedDays,
         metadata: {
           channel_id: String(CHANNEL_ID),
           customer_id: String(session.contactId),
@@ -135,6 +155,11 @@ export async function createSubscription(planId: number): Promise<{
       // this storefront moves onto its own Stripe account.
       metafields: {
         stripe_account_scope: planScope ?? STRIPE_SCOPE_GLOBAL,
+        // The free months this subscription was given, if any (card ASTb3tCf). This
+        // stamp IS the once-per-person memory: eligibility asks it, never "have you
+        // ever subscribed", so an abandoned sign-up burns nobody's free period and a
+        // member who paid from day one keeps theirs.
+        ...(trialStamp ? { free_trial: trialStamp } : {}),
         ...((await wantsStripeTestMode(CHANNEL_ID)) ? { test_mode: true } : {}),
       },
     });

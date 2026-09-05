@@ -45,6 +45,10 @@ import {
   shippingRateCardService,
   blogService,
   loadAccountStatement,
+  // The free months on a membership, once per person, ever (card ASTb3tCf).
+  readPriorFreeTrial,
+  readQualifyingOrder,
+  membershipNumber,
 } from "@keenan/services";
 import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
@@ -244,6 +248,33 @@ export const getAccountStatement = (
  * because staff answer "when did I join" from the same date the customer reads.
  * Null when nothing is held; the caller then shows no date rather than a wrong one.
  */
+/**
+ * This person's membership NUMBER on this site (card ASTb3tCf, "Membership number on
+ * the account").
+ *
+ * Derived from the EARLIEST subscription — the same row `getMemberSince` reads — so the
+ * number and the join date can never describe different memberships, and a member who
+ * re-subscribed keeps the number they have always had. Null when they hold none.
+ */
+export const getMembershipNumber = async (contactId: number): Promise<string | null> => {
+  try {
+    const rows = (await subscriptionService.listForContact(contactId, CHANNEL_ID)) as Array<{
+      id: number;
+      created_at: string | null;
+    }>;
+    let earliest: { id: number; created_at: string } | null = null;
+    for (const row of rows) {
+      if (!row.created_at) continue;
+      if (!earliest || new Date(row.created_at) < new Date(earliest.created_at)) {
+        earliest = { id: Number(row.id), created_at: row.created_at };
+      }
+    }
+    return membershipNumber(earliest?.id ?? null);
+  } catch {
+    return null;
+  }
+};
+
 export const getMemberSince = async (contactId: number): Promise<string | null> => {
   try {
     const rows = (await subscriptionService.listForContact(contactId, CHANNEL_ID)) as Array<{
@@ -884,5 +915,11 @@ export {
   getEffectivePrices,
   shippingRateCalculator,
   shippingRateCardService,
+  // The free-membership rule's two database questions (card ASTb3tCf): has this
+  // person already had their free months, and have they placed an order big enough
+  // to earn them. Both contact-keyed; the channel is passed by the caller.
+  readPriorFreeTrial,
+  readQualifyingOrder,
+  membershipNumber,
   CHANNEL_ID,
 };
