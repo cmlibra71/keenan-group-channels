@@ -11,6 +11,7 @@ import { renderBrandNodeBranch, type BrandListingPricing } from "@/builder/brand
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BrandHero, BrandProducts, DEFAULT_BRAND_BLOCKS } from "@/blocks/brand-page-blocks";
 import { BrandIntro } from "@/components/brand/BrandIntro";
+import { BrandSearch } from "@/components/brand/BrandSearch";
 import { TemplateRenderer } from "@/blocks/TemplateRenderer";
 import { effectiveSubBlocks } from "@/blocks/BlockRenderer";
 import { BLOCK_REGISTRY } from "@keenan/services";
@@ -116,6 +117,17 @@ export default async function BrandPage({
   // brand template keeps it with the heading; with no hero block it leads the page.
   const heroIndex = blocks.findIndex((b) => b.block_type === "brand_hero");
   const intro = <BrandIntro html={brand.channel_intro_html} />;
+  // Search within this brand — a plain form onto the site search, narrowed to
+  // this brand (card 1RLP5nSJ). It rides with the intro so a reordered brand
+  // template keeps both with the heading, and it is only offered where there is
+  // something to search: a brand with no products returns nothing whatever is
+  // typed.
+  const heroExtras = (
+    <>
+      {intro}
+      {total > 0 && <BrandSearch brandName={brand.name as string} />}
+    </>
+  );
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
@@ -126,14 +138,14 @@ export default async function BrandPage({
         <span className="text-ink-700">{brand.name as string}</span>
       </nav>
 
-      {heroIndex < 0 && intro}
+      {heroIndex < 0 && heroExtras}
 
       {blocks.map((b, i) => {
         const withIntro = (node: React.ReactNode) =>
           i === heroIndex ? (
             <Fragment key={i}>
               {node}
-              {intro}
+              {heroExtras}
             </Fragment>
           ) : (
             node

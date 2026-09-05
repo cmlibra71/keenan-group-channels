@@ -16,6 +16,7 @@ import {
   andFilters,
   bandExpr,
   clampPage,
+  facetOptions,
   type SearchFeedParams,
 } from "@/lib/search-results";
 import {
@@ -42,7 +43,8 @@ const GRID_CLASS = "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6";
 async function fetchFacetGroups(query: string, params: SearchFeedParams): Promise<FacetGroupDef[]> {
   try {
     const { searchProducts } = await import("@keenan/services/search");
-    const { brandClause, categoryClause, priceClause } = resolveFeedFilters(params);
+    const { brandClause, categoryClause, priceClause, brandValues, categoryValues } =
+      resolveFeedFilters(params);
 
     const [brandRes, catRes, ...priceCounts] = await Promise.all([
       searchProducts(CHANNEL_ID, query, {
@@ -63,16 +65,14 @@ async function fetchFacetGroups(query: string, params: SearchFeedParams): Promis
       ),
     ]);
 
-    const toOptions = (dist?: Record<string, number>) =>
-      Object.entries(dist ?? {})
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 15)
-        .map(([name, count]) => ({ value: encodeURIComponent(name), label: name, count }));
-
+    // The busiest fifteen, plus anything already TICKED that fell off that list
+    // — a brand handed in from a brand page's search box, or a hand-typed URL,
+    // is very often not among the fifteen, and a ticked value with no row can
+    // neither be unticked nor named by its chip. (1RLP5nSJ.)
     const groups: FacetGroupDef[] = [];
-    const catOpts = toOptions(catRes.facetDistribution?.categoryNames);
+    const catOpts = facetOptions(catRes.facetDistribution?.categoryNames, categoryValues);
     if (catOpts.length) groups.push({ param: "category", title: "Category", options: catOpts });
-    const brandOpts = toOptions(brandRes.facetDistribution?.brandName);
+    const brandOpts = facetOptions(brandRes.facetDistribution?.brandName, brandValues);
     if (brandOpts.length) groups.push({ param: "brand", title: "Brand", options: brandOpts });
     const priceOpts = PRICE_KEYS.map((k, i) => ({
       value: k,
