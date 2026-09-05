@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { invoiceDocumentUrl, offersInvoiceDocument } from "./invoice-document-url.ts";
+import {
+  invoiceDocumentUrl,
+  invoicePrintUrl,
+  offersInvoiceDocument,
+} from "./invoice-document-url.ts";
 
 const UUID = "3f8b1c2e-0000-4aaa-8bbb-1234567890ab";
 const CHEFS_DEPOT = { url: "https://chefsdepot.com.au", publicSubdomain: "quotes" };
@@ -79,4 +83,25 @@ test("a live order in any ordinary state still gets its invoice", () => {
   for (const status of ["pending", "processing", "complete", "shipped", null, undefined]) {
     assert.equal(offersInvoiceDocument({ status, hasLiveLines: true }), true, String(status));
   }
+});
+
+test("the PRINT link is the same document on the same host, with the print flag", () => {
+  assert.equal(
+    invoicePrintUrl(UUID, CHEFS_DEPOT),
+    `https://quotes.chefsdepot.com.au/invoice/document?o=${UUID}&print=1`
+  );
+  assert.equal(
+    invoicePrintUrl(UUID, INDUSTRY_KITCHENS),
+    `https://quotes.industrialkitchens.com.au/invoice/document?o=${UUID}&print=1`
+  );
+});
+
+test("no uuid means no print link either — a Print button that 404s is worse than none", () => {
+  assert.equal(invoicePrintUrl(null, CHEFS_DEPOT), null);
+  assert.equal(invoicePrintUrl("  ", CHEFS_DEPOT), null);
+});
+
+test("Print and Download can never point at different documents", () => {
+  const download = invoiceDocumentUrl(UUID, CHEFS_DEPOT)!;
+  assert.equal(invoicePrintUrl(UUID, CHEFS_DEPOT), `${download}&print=1`);
 });

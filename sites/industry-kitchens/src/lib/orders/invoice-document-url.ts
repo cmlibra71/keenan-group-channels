@@ -38,6 +38,12 @@ import { isUnpayableOrderStatus } from "./pay-balance";
  * fallback is a real page rather than a dead one.
  *
  * Pure: an order with no uuid gets NO link rather than a link to a 404.
+ *
+ * `invoicePrintUrl` is the SAME address with `&print=1`, which the portal answers with a one-page
+ * frame around this very document and the browser's print dialog over it (card uoSUWW3R). Steve
+ * asked on the 26 August call to be able to print an invoice without downloading the PDF and
+ * reopening it; printing THE document rather than a storefront-rendered copy of it is what keeps
+ * the paper a customer holds identical to the paper we email, whichever way they got it.
  */
 function originOf(url: string): string | null {
   try {
@@ -64,6 +70,21 @@ export function invoiceDocumentUrl(
     (onOwnHost ? originOf(onOwnHost) : null) ??
     (process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/+$/, "");
   return `${base}/invoice/document?o=${encodeURIComponent(uuid)}`;
+}
+
+/**
+ * Where the customer PRINTS that same document (card uoSUWW3R).
+ *
+ * Deliberately derived from `invoiceDocumentUrl` rather than rebuilt: the host rule (this
+ * storefront's own quotes host, never the parent group's — 87IkgD2H) and the no-uuid-no-link rule
+ * are decided once, so a Print button can never point somewhere a Download button would not.
+ */
+export function invoicePrintUrl(
+  orderUuid: string | null | undefined,
+  site: { url?: string | null; publicSubdomain?: string | null } | null | undefined
+): string | null {
+  const url = invoiceDocumentUrl(orderUuid, site);
+  return url ? `${url}&print=1` : null;
 }
 
 /**

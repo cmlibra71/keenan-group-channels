@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronLeft, Download, Package } from "lucide-react";
+import { ChevronLeft, Download, Package, Printer } from "lucide-react";
 import { ApiError, loadOrderContactForOrder } from "@keenan/services";
 import { getSession } from "@/lib/auth";
 import { signInRedirect } from "@/lib/account-redirect";
@@ -29,7 +29,11 @@ import {
   isNetTermsMethod,
 } from "@/lib/orders/order-presentation";
 import { orderDocumentName } from "@/lib/orders/order-document-name";
-import { invoiceDocumentUrl, offersInvoiceDocument } from "@/lib/orders/invoice-document-url";
+import {
+  invoiceDocumentUrl,
+  invoicePrintUrl,
+  offersInvoiceDocument,
+} from "@/lib/orders/invoice-document-url";
 import { customerOrderStage } from "@/lib/orders/order-status-label";
 import { readCustomerOrderNotes } from "@/lib/orders/customer-order-notes";
 import { EYEBROW_CLASS, PAGE_TITLE_CLASS, PANEL_TITLE_CLASS } from "@/lib/orders/order-page-styles";
@@ -347,12 +351,15 @@ export default async function OrderDetailPage({
   // that would be a payment demand we have already decided not to make.
   //
   // Served on THIS storefront's own quotes host, never the parent group's (card 87IkgD2H).
-  const invoiceHref = offersInvoiceDocument({
+  const offersInvoice = offersInvoiceDocument({
     status: order.status,
     hasLiveLines: items.length > 0,
-  })
-    ? invoiceDocumentUrl(order.uuid, siteConfig.site)
-    : null;
+  });
+  const invoiceHref = offersInvoice ? invoiceDocumentUrl(order.uuid, siteConfig.site) : null;
+  // Print is the SAME document with the print dialog over it (card uoSUWW3R). One gate decides
+  // both: a Print button beside a withheld Download would offer the very document the rule above
+  // has just refused, and the portal route re-derives that refusal anyway, so it would 404.
+  const invoicePrintHref = offersInvoice ? invoicePrintUrl(order.uuid, siteConfig.site) : null;
 
   const totalInc = money(order.total_inc_tax);
   const gst = money(order.total_tax);
@@ -432,9 +439,16 @@ export default async function OrderDetailPage({
 
         {/* The customer's own copy of the tax invoice (card EizZjaY3). The document existed and was
             reachable only if somebody emailed it; this is the download Steve asked for. It carries
-            the words "Tax Invoice", which is what the ATO requires of it. */}
+            the words "Tax Invoice", which is what the ATO requires of it.
+
+            PRINT sits beside it (card uoSUWW3R, Steve on the 26 August call: printing meant
+            downloading the PDF and reopening it). It opens the SAME document with the browser's
+            print dialog over it — not a storefront-rendered copy, which would be a second
+            rendering of an invoice to keep in step with the one we email. The button says only
+            "Print": the document is named once, by the Download beside it and by the eyebrow
+            above, so one document is never called two things. */}
         {invoiceHref && (
-          <p>
+          <div className="flex flex-wrap items-center gap-3">
             <a
               href={invoiceHref}
               target="_blank"
@@ -444,7 +458,18 @@ export default async function OrderDetailPage({
               <Download className="h-4 w-4" />
               Download {documentName} (PDF)
             </a>
-          </p>
+            {invoicePrintHref && (
+              <a
+                href={invoicePrintHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-text-primary hover:bg-surface-secondary"
+              >
+                <Printer className="h-4 w-4" />
+                Print
+              </a>
+            )}
+          </div>
         )}
       </div>
 
