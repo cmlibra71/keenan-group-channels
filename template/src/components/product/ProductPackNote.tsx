@@ -45,12 +45,20 @@ export function ProductPackNote() {
   // one on the panel, else the sale price, else the list price.
   const shown = displaySalePrice ?? displayPrice;
   const unit = activeMemberPrice != null && activeMemberPrice < shown ? activeMemberPrice : shown;
-  if (!(unit > 0)) return null;
+  // NO PRICE ON SCREEN (card 7vu2iEEZ hides it per product, and the purchase scope masks it to 0):
+  // the SENTENCE still has to be here. The quantity box on a pack product opens at a carton and
+  // steps by a carton, and this line is the only thing that explains why — dropping it leaves an
+  // affordance with no wording, which is the exact collision the behaviour register exists to
+  // catch. What is dropped is the carton PRICE, which is the part that would leak the figure.
   return (
     <p className="mt-3 text-sm text-zinc-700">
       <span className="font-semibold text-zinc-900">{packNote}</span>
-      {" · "}
-      <Price amount={packPrice(unit, packSize)} gst /> per {packUnit.toLowerCase()}
+      {unit > 0 && (
+        <>
+          {" · "}
+          <Price amount={packPrice(unit, packSize)} gst /> per {packUnit.toLowerCase()}
+        </>
+      )}
     </p>
   );
 }

@@ -96,7 +96,6 @@ export async function addToQuote(
     restrict_add_to_quote?: boolean | null;
     sell_pack_size?: number | null;
     sell_pack_unit?: string | null;
-    min_purchase_quantity?: number | null;
   } | null;
   if (!product) return { error: "Product not found" };
 
@@ -184,7 +183,6 @@ export async function addToQuote(
   const packSize = resolvePackSize({
     sellPackSize: product.sell_pack_size ?? null,
     sellPackUnit: product.sell_pack_unit ?? null,
-    minPurchaseQuantity: product.min_purchase_quantity ?? null,
   });
 
   const existing = await quoteItemService.findByProductVariant(quote.id, productId, variantId) as {
@@ -238,29 +236,23 @@ export async function updateQuoteItem(itemId: number, quantity: number) {
     if (quantity <= 0) {
       await quoteItemService.deleteForParent(quote.id, itemId);
     } else {
-      // Whole packs here too. Best-effort: a lookup that fails leaves the typed quantity alone
-      // rather than blocking the change — a quote is a request, and the rep sees the line.
+      // Whole packs here too. `getWithItems` is the read this page already goes through and it
+      // ALREADY selects the pack columns onto every line, so the size is taken from the line in
+      // hand rather than fetched again — this is a customer-facing screen and a second product
+      // round trip per keystroke is not free. Best-effort: a lookup that fails leaves the typed
+      // quantity alone rather than blocking the change; a quote is a request, and the rep sees it.
       let nextQuantity = quantity;
+      let packSize = 1;
       try {
         const full = await quoteService.getWithItems(quote.id);
         const line = (full?.items ?? []).find(
           (i: Record<string, unknown>) => Number(i.id) === itemId
-        ) as { product_id?: number | null } | undefined;
-        if (line?.product_id) {
-          const product = (await productService.getById(line.product_id)) as {
-            sell_pack_size?: number | null;
-            sell_pack_unit?: string | null;
-            min_purchase_quantity?: number | null;
-          } | null;
-          nextQuantity = snapToPack(
-            quantity,
-            resolvePackSize({
-              sellPackSize: product?.sell_pack_size ?? null,
-              sellPackUnit: product?.sell_pack_unit ?? null,
-              minPurchaseQuantity: product?.min_purchase_quantity ?? null,
-            })
-          );
-        }
+        ) as { product_sell_pack_size?: number | null; product_sell_pack_unit?: string | null } | undefined;
+        packSize = resolvePackSize({
+          sellPackSize: line?.product_sell_pack_size ?? null,
+          sellPackUnit: line?.product_sell_pack_unit ?? null,
+        });
+        nextQuantity = snapToPack(quantity, packSize);
       } catch (e) {
         console.error("[updateQuoteItem] pack lookup skipped (non-fatal):", e);
       }

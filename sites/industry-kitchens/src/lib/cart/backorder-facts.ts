@@ -45,11 +45,10 @@ export async function backorderFactsForProducts(
         restrict_add_to_cart: boolean | null;
         sell_pack_size: number | null;
         sell_pack_unit: string | null;
-        min_purchase_quantity: number | null;
       }[]
     >`
       SELECT id, inventory_tracking, inventory_level, backorder_policy, restrict_add_to_cart,
-             sell_pack_size, sell_pack_unit, min_purchase_quantity
+             sell_pack_size, sell_pack_unit
         FROM products
        WHERE id = ANY(${ids})`;
     for (const row of rows) {
@@ -60,11 +59,11 @@ export async function backorderFactsForProducts(
         restrictAddToCart: row.restrict_add_to_cart === true,
         // The SELLING UNIT rides the same batched read (cards O108e4jH / zeMPVcA3): the cart has
         // to snap a quantity to whole packs and say what a pack holds, and both callers of this
-        // lookup already have the product in hand. `@keenan/services/pack` resolves the three.
+        // lookup already have the product in hand. `products.min_purchase_quantity` is NOT read —
+        // it carries Zoey's number, which is a carton on some products and a minimum on others,
+        // and we cannot tell which (see `@keenan/services/pack`).
         sellPackSize: row.sell_pack_size == null ? null : Number(row.sell_pack_size),
         sellPackUnit: row.sell_pack_unit,
-        minPurchaseQuantity:
-          row.min_purchase_quantity == null ? null : Number(row.min_purchase_quantity),
       });
     }
   } catch (e) {
