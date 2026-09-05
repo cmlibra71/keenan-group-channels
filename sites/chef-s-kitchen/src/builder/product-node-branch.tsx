@@ -14,6 +14,7 @@ import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { withSilverChefNode } from "@/builder/silverchef-node";
 import { withImageNoticeNode } from "@/builder/product-image-notice";
+import { withResidentialNoticeNode } from "@/builder/product-residential-notice";
 import { withUpsellBlock } from "@/builder/upsell-node";
 import { attachBrandLogos } from "@/lib/brand-logo-fallback";
 import { withCdMemberPricingNode } from "@/builder/cd-member-pricing-node";
@@ -186,7 +187,11 @@ export async function renderProductNodeBranch({
   // call to action left on it.
   const nodeTree = guardBuyControls(
     withCdMemberPricingNode(
-      withUpsellBlock(withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE)))
+      withUpsellBlock(
+        withResidentialNoticeNode(
+          withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE))
+        )
+      )
     )
   );
 

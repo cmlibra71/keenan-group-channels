@@ -8,6 +8,7 @@ import { getContactPermissions } from "@/lib/role-permissions";
 import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import {
   summariseLinesFreight,
+  listResidentialRestrictedProductNames,
   listSavedCardsForContact,
   RENDER_PATH_TIMEOUT_MS,
   type SavedCard,
@@ -363,6 +364,14 @@ export default async function CheckoutPage() {
     .then((f) => f.bulky.map((p) => p.name))
     .catch(() => [] as string[]);
 
+  // Commercial-only items in this cart (card HMtUxvwZ). Non-empty ⇒ CheckoutForm shows the
+  // commercial-appliance note once, in the card's own words. It refuses nothing, so unlike
+  // the bulky read above it has no counterpart in placeOrder; a failed lookup simply means
+  // no note, never a blocked checkout.
+  const commercialProductNames = await listResidentialRestrictedProductNames(
+    (cart.items as Array<{ product_id: number }>).map((i) => Number(i.product_id))
+  ).catch(() => [] as string[]);
+
   // Check if shipping rate calculation is available
   let shippingEnabled = false;
   try {
@@ -457,6 +466,7 @@ export default async function CheckoutPage() {
         brandSpecial={brandSpecial}
         shippingEnabled={shippingEnabled}
         bulkyProductNames={bulkyProductNames}
+        commercialProductNames={commercialProductNames}
         stripePublishableKey={stripePublishableKey}
         savedCards={savedCards}
         savedCardsUnavailable={savedCardsUnavailable}
