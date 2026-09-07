@@ -34,6 +34,8 @@ import {
   cardEntryMessage,
   shouldConfirmStripeResult,
 } from "@/lib/checkout/card-entry";
+import Image from "next/image";
+import { Package } from "lucide-react";
 import { Price } from "@/components/ui/Price";
 import { backorderMessage } from "@keenan/services/backorder";
 import { gstSplit } from "@keenan/services/calc";
@@ -89,6 +91,12 @@ type CartItem = {
   /** Back-order facts carried by readCart (card 7vu2iEEZ). See CartItemsList for why. */
   available_units?: number | null;
   backorder_policy?: string | null;
+  /**
+   * The product's primary photograph, resolved on the server and already checked
+   * against what `/api/image` may fetch (card qjV98YEK). `null` = no usable picture,
+   * which draws the placeholder rather than a broken box.
+   */
+  image_url?: string | null;
 };
 
 type Country = {
@@ -1471,17 +1479,44 @@ export function CheckoutForm({
                 );
                 return (
                   <div key={i} className="py-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-steel-500">
-                        {item.product_name} &times; {item.quantity}
-                      </span>
-                      <Price amount={price * item.quantity} className="font-medium" />
+                    <div className="flex gap-3">
+                      {/* The product photograph (card qjV98YEK). Decorative: the product
+                          name sits right beside it, so an alt text would only make a
+                          screen reader read the same line twice. A product with no usable
+                          picture keeps the line's shape with the same placeholder the
+                          listing tiles use. */}
+                      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded border border-steel-200 bg-white">
+                        {item.image_url ? (
+                          <Image
+                            src={item.image_url}
+                            alt=""
+                            fill
+                            sizes="48px"
+                            /* Contained, never cropped: these are catalogue photographs on
+                               white, and `object-cover` on a 48px square cuts the ends off a
+                               bench or a rangehood. */
+                            className="object-contain p-1"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-steel-300">
+                            <Package className="h-5 w-5" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex justify-between gap-2">
+                          <span className="text-steel-500">
+                            {item.product_name} &times; {item.quantity}
+                          </span>
+                          <Price amount={price * item.quantity} className="font-medium" />
+                        </div>
+                        {backorderNote && (
+                          <p className="mt-1.5 rounded border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs text-sky-800">
+                            {backorderNote}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    {backorderNote && (
-                      <p className="mt-1.5 rounded border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs text-sky-800">
-                        {backorderNote}
-                      </p>
-                    )}
                   </div>
                 );
               })}

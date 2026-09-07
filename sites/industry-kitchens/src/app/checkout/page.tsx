@@ -24,6 +24,7 @@ import {
   activeBrandFreeShippingSpecials,
   brandIdsForProducts,
 } from "@/lib/checkout/free-shipping-brands";
+import { orderSummaryImagesForProducts } from "@/lib/checkout/order-summary-images";
 import { matchBrandSpecial } from "@/lib/checkout/free-shipping-brands-policy";
 import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-policy";
 import { resolvePaymentAvailability } from "@/lib/checkout/payment-availability";
@@ -397,6 +398,23 @@ export default async function CheckoutPage() {
     }
   }
 
+  // The picture on every Order Summary line (card qjV98YEK). ONE batched read, and a
+  // never-throw one: a photograph is the most disposable thing on this page, so a lookup
+  // failure leaves the summary reading exactly as it did before rather than costing the
+  // shopper their checkout. Same primary-image precedence as the listing tile the shopper
+  // clicked, so the two screens show the same photograph of the same product.
+  const summaryImages = await orderSummaryImagesForProducts(
+    (cart.items as Array<{ product_id: number }>).map((i) => i.product_id)
+  );
+  // Typed off CheckoutForm's own prop rather than a hand-copied shape, so a line field
+  // added there cannot be silently dropped on the way through here.
+  const summaryItems = (
+    cart.items as Parameters<typeof CheckoutForm>[0]["items"] & Array<{ product_id?: number }>
+  ).map((i) => ({
+    ...i,
+    image_url: summaryImages.get(Number(i.product_id)) ?? null,
+  }));
+
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
       <StartedCheckoutTracker
@@ -438,7 +456,7 @@ export default async function CheckoutPage() {
       )}
 
       <CheckoutForm
-        items={cart.items}
+        items={summaryItems}
         subtotal={subtotal}
         gstAmount={gstAmount}
         isMember={isMember}

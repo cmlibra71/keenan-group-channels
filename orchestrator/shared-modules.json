@@ -139,6 +139,8 @@
     "lib/checkout/net-terms.ts",
     "lib/checkout/order-draft.test.ts",
     "lib/checkout/order-draft.ts",
+    "lib/checkout/order-summary-images.test.ts",
+    "lib/checkout/order-summary-images.ts",
     "lib/checkout/payment-availability.test.ts",
     "lib/checkout/payment-availability.ts",
     "lib/checkout/save-address.test.ts",
