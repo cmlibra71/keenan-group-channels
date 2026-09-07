@@ -170,3 +170,17 @@ test("casing and stray whitespace on a known status do not defeat the mapping", 
   assert.equal(customerOrderStage("  Shipped  "), "On its way");
   assert.equal(customerOrderStage("COMPLETE"), "Complete");
 });
+
+test("a SilverChef or Skope Funding order reads as an ordinary net-terms order", () => {
+  // Card MHHjnZ0c: a finance purchase takes the net-terms path, so it now carries
+  // `net_terms_account` rather than `pending_payment`. Two things must hold for the
+  // shopper: the stage is one of the eight plain words, and no finance company is
+  // named — not by the status they landed on, and not by the hand-set Zoey statuses
+  // an operator can still choose.
+  assert.equal(customerOrderStage("net_terms_account"), "Being prepared");
+  for (const status of ["net_terms_account", "silverchef", "skope_funding", "food_by_us"]) {
+    const stage = customerOrderStage(status);
+    assert.ok((ORDER_STAGES as readonly string[]).includes(stage), `${status} escaped the closed set`);
+    assert.equal(/silver|skope|scope|finance|food by us/i.test(stage), false, status);
+  }
+});
