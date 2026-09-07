@@ -4,6 +4,7 @@ import { Package } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { signInRedirect } from "@/lib/account-redirect";
 import { customerOrderStage } from "@/lib/orders/order-status-label";
+import { orderStatusChipClass } from "@/lib/orders/order-presentation";
 import { orderService, CHANNEL_ID, getGuestOrdersForEmail } from "@/lib/store";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import { Price } from "@/components/ui/Price";
@@ -172,13 +173,11 @@ export default async function OrdersPage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                    order.status === "completed"
-                      ? "text-accent bg-accent-subtle"
-                      : order.status === "shipped"
-                        ? "bg-accent-subtle text-accent-dark"
-                        : "bg-surface-secondary text-text-secondary"
-                  }`}>
+                  {/* Same word AND the same colour as the pill one click later:
+                      both come from lib/orders/order-presentation, keyed on the
+                      customer STAGE rather than on two raw status spellings
+                      (card a1lgdzW7). This chip keeps the list's compact size. */}
+                  <span className={orderStatusChipClass(order.status)}>
                     {customerOrderStage(order.status)}
                   </span>
                   <Price amount={order.total_inc_tax} className="font-semibold text-text-primary" />

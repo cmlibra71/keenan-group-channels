@@ -9,6 +9,7 @@ import {
   sendQuoteStaffNotificationEmail,
 } from "@keenan/services";
 import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
+import { readAcquisitionUtm } from "@/lib/acquisition";
 import { getSession } from "@/lib/auth";
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
 import {
@@ -61,6 +62,12 @@ async function getOrCreateQuote() {
 
   const quote = await quoteService.create({
     channelId: CHANNEL_ID,
+    // The CUSTOMER raised this quote, on the web (card T7Wclho8) — so it says so at
+    // birth rather than waiting for a rep to classify it, and it carries the campaign
+    // this shopper first arrived on where they arrived on one. This is the arrival the
+    // paid-search analysis of 26 August could not see.
+    acquisitionSource: "web_form",
+    acquisitionUtm: await readAcquisitionUtm(),
     ...((await wantsStripeTestMode(CHANNEL_ID)) ? { attributes: { test_mode: true } } : {}),
   }) as QuoteRow;
 
@@ -760,7 +767,13 @@ export async function duplicateQuote(quoteId: number) {
     return { error: "You've duplicated several quotes just now. Please wait a minute before duplicating again." };
   }
   const q = (await quoteService.getWithItems(quoteId)) as
-    | (QuoteRow & { status?: string | null; email?: string | null; items?: Array<Record<string, unknown>> })
+    | (QuoteRow & {
+        status?: string | null;
+        email?: string | null;
+        acquisition_source?: string | null;
+        acquisition_utm?: Record<string, string> | null;
+        items?: Array<Record<string, unknown>>;
+      })
     | null;
   if (!q || q.contact_id !== session.contactId || q.channel_id !== CHANNEL_ID) return { error: "Quote not found." };
   // A staff-only Draft is neither the customer's to SEE nor to COPY. The portal's
@@ -774,6 +787,13 @@ export async function duplicateQuote(quoteId: number) {
     channelId: CHANNEL_ID,
     contactId: session.contactId,
     email: q.email ?? session.email,
+    // The copy INHERITS how the customer arrived, campaign and all (card T7Wclho8):
+    // duplicating a quote is not a new arrival, and re-stamping it as a fresh web-form
+    // visit with no campaign would quietly strip the attribution off the original sale.
+    // A quote raised before this was recorded has nothing to inherit and stays blank —
+    // it is not back-filled with a guess.
+    acquisitionSource: q.acquisition_source ?? null,
+    acquisitionUtm: q.acquisition_utm ?? null,
   })) as QuoteRow;
   for (const it of q.items ?? []) {
     try {
