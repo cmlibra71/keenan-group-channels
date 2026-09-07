@@ -69,7 +69,6 @@
     "builder/use-form-handlers.ts",
     "components/account/InvoiceArchivePanel.tsx",
     "components/account/OrderMoney.tsx",
-    "components/brand/BrandCategories.tsx",
     "components/layout/ScrollReset.tsx",
     "components/search/use-search-suggestions.ts",
     "components/ui/Price.tsx",

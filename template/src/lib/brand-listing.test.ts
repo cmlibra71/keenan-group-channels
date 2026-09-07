@@ -10,6 +10,9 @@ import {
   parseBrandPage,
   parseBrandSort,
   parseIds,
+  railCategoryOptions,
+  MAX_CATEGORY_IDS,
+  RAIL_CATEGORY_LIMIT,
   type BrandListingFacets,
 } from "./brand-listing";
 import { DEFAULT_STOREFRONT_FILTERS, type StorefrontFilter } from "./storefront-filters";
@@ -160,4 +163,56 @@ test("category ids are integers or they are not ids", () => {
   assert.deepEqual(parseIds("11,12"), [11, 12]);
   assert.deepEqual(parseIds("11,abc,,13"), [11, 13]);
   assert.deepEqual(parseIds(undefined), []);
+});
+
+const manyCategories = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({
+    id: 100 + i,
+    name: `Category ${i}`,
+    slug: `category-${i}`,
+    count: n - i,
+  }));
+
+test("the rail shows the biggest few categories, not every one the brand reaches", () => {
+  const options = railCategoryOptions(manyCategories(41));
+  assert.equal(options.length, RAIL_CATEGORY_LIMIT);
+  // Listing order is preserved (count desc), so the rail does not reshuffle.
+  assert.equal(options[0].value, "100");
+  assert.equal(options[RAIL_CATEGORY_LIMIT - 1].value, String(100 + RAIL_CATEGORY_LIMIT - 1));
+});
+
+test("a ticked category is kept on the rail even when it falls outside the top few", () => {
+  const options = railCategoryOptions(manyCategories(41), [140]);
+  assert.equal(options.length, RAIL_CATEGORY_LIMIT + 1);
+  assert.ok(options.some((o) => o.value === "140"));
+  // ...and it keeps its listing position rather than jumping to the top.
+  assert.equal(options[options.length - 1].value, "140");
+});
+
+test("a short category list is untrimmed, and every row keeps its count", () => {
+  const options = railCategoryOptions(facets().categories);
+  assert.deepEqual(
+    options.map((o) => [o.value, o.label, o.count]),
+    [
+      ["11", "Combi Ovens", 12],
+      ["12", "Ovens", 4],
+    ]
+  );
+});
+
+test("brandFacetGroups trims the Category group and keeps what is ticked", () => {
+  const big = { ...facets(), categories: manyCategories(41) };
+  const plain = brandFacetGroups(big, DEFAULT_STOREFRONT_FILTERS);
+  assert.equal(plain[0].param, CATEGORY_PARAM);
+  assert.equal(plain[0].options.length, RAIL_CATEGORY_LIMIT);
+
+  const ticked = brandFacetGroups(big, DEFAULT_STOREFRONT_FILTERS, [140]);
+  assert.equal(ticked[0].options.length, RAIL_CATEGORY_LIMIT + 1);
+  assert.ok(ticked[0].options.some((o) => o.value === "140"));
+});
+
+test("a hand-typed ?cat= cannot become an unbounded bind list", () => {
+  const huge = Array.from({ length: MAX_CATEGORY_IDS + 500 }, (_, i) => i + 1).join(",");
+  assert.equal(parseIds(huge).length, MAX_CATEGORY_IDS);
+  assert.equal(parseIds(huge)[0], 1);
 });

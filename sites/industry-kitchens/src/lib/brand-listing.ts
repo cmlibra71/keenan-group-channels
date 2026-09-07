@@ -18,7 +18,10 @@
  *    Products > Filtering): a facet a storefront switched off must not come back
  *    on a different screen, and a switched-off facet has to stop FILTERING as
  *    well as displaying (NfYe3P3G). The HEADING is always "Category" — the brand
- *    page has no sub-categories to name.
+ *    page has no sub-categories to name. The listing returns EVERY category the
+ *    brand reaches; the rail trims to the biggest few (Steve: "we don't want
+ *    long lists") and the tile strip above it carries the rest, so nothing the
+ *    brand sits on is unreachable from the brand's own page.
  */
 // Relative, not `@/…`: this module is unit-tested under `node --test`, which
 // does not read the tsconfig path alias.
@@ -29,6 +32,16 @@ import { normalizeStorefrontFilters, type StorefrontFilter } from "./storefront-
 /** Same page size and same hard cap as the category page. */
 export const PER_PAGE = 24;
 export const MAX_PAGES = 8;
+
+/** How many categories the RAIL offers. The listing hands over every category
+ *  the brand reaches (Vogue sits on 41 Chefs Depot shelves), but Steve's
+ *  standing instruction on this rail is "we don't want long lists"
+ *  (2026-08-05, card C8G4f4U8), so the rail shows the biggest few and the TILE
+ *  strip above it carries the rest behind its own "Show all" disclosure — no
+ *  category is unreachable from the brand's own page either way. A category the
+ *  shopper has already TICKED is always kept, wherever it sits in the order, or
+ *  it could not be unticked. */
+export const RAIL_CATEGORY_LIMIT = 12;
 
 /** The category facet's URL param. Namespaced away from the category page's
  *  `sub` so a link copied between the two screens cannot half-apply. */
@@ -60,13 +73,20 @@ const PRICE_LABELS: Record<string, string> = {
   gt3000: "$3,000+",
 };
 
+/** How many ids a single `?cat=` will ever be believed for. No brand reaches
+ *  anywhere near this many categories, so it costs a real shopper nothing; it
+ *  exists so a hand-typed `?cat=1,2,3,…` cannot turn one URL into an `ARRAY[]`
+ *  of tens of thousands of bind parameters. */
+export const MAX_CATEGORY_IDS = 200;
+
 /** Comma-joined ids, as every facet param on these screens is written. */
 export function parseIds(v?: string): number[] {
   return (
     v
       ?.split(",")
       .map((x) => parseInt(x, 10))
-      .filter((n) => Number.isInteger(n)) ?? []
+      .filter((n) => Number.isInteger(n))
+      .slice(0, MAX_CATEGORY_IDS) ?? []
   );
 }
 
@@ -116,13 +136,31 @@ function attributeGroups(facets: BrandListingFacets): FacetGroupDef[] {
 }
 
 /**
+ * The Category rows the RAIL shows: the biggest `RAIL_CATEGORY_LIMIT`, in the
+ * order the listing returned them (count desc, then name), plus every category
+ * the shopper has already ticked — a ticked row that fell off the end would be
+ * a filter with no way to remove it. Ticked rows keep their position in the
+ * listing order, so the list does not reshuffle as boxes are ticked.
+ */
+export function railCategoryOptions(
+  categories: BrandListingFacets["categories"],
+  selectedCategoryIds: number[] = [],
+  limit = RAIL_CATEGORY_LIMIT
+): FacetOption[] {
+  const selected = new Set(selectedCategoryIds);
+  const kept = categories.filter((c, i) => i < limit || selected.has(c.id));
+  return kept.map((c) => ({ value: String(c.id), label: c.name, count: c.count }));
+}
+
+/**
  * The brand rail's groups, in this channel's configured order: Category (the
  * `sub` entry), Price, then whichever product-detail sections the brand's
  * products earned. Brand is skipped — the page is one brand.
  */
 export function brandFacetGroups(
   facets: BrandListingFacets,
-  filters?: StorefrontFilter[]
+  filters?: StorefrontFilter[],
+  selectedCategoryIds: number[] = []
 ): FacetGroupDef[] {
   const config = normalizeStorefrontFilters(filters);
   const groups: FacetGroupDef[] = [];
@@ -132,11 +170,7 @@ export function brandFacetGroups(
     if (filter.id === "brand") continue;
 
     if (filter.id === "sub") {
-      const options: FacetOption[] = facets.categories.map((c) => ({
-        value: String(c.id),
-        label: c.name,
-        count: c.count,
-      }));
+      const options = railCategoryOptions(facets.categories, selectedCategoryIds);
       if (options.length === 0) continue;
       groups.push({
         param: CATEGORY_PARAM,

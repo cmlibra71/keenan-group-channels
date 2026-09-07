@@ -123,47 +123,62 @@ export default async function BrandPage({
   const priceBands = parsePriceBands(rawPrice) as ("lt1000" | "1000to3000" | "gt3000")[];
   const priceRange = priceBands.length === 0 ? parseRangeParam(rawPrice) : undefined;
   const attributeSelections = parseAttributeSelections(sp as Record<string, string | undefined>);
+  const selectedCategoryIds = categoryEnabled ? parseIds(sp[CATEGORY_PARAM]) : [];
 
-  const [listing, memberPricingEnabled] = await Promise.all([
+  // "Nothing here" and "nothing MATCHES" are different sentences: a brand with
+  // no products at all is a fact about the catalogue, an empty filtered listing
+  // is something the shopper can undo, and telling them the brand is empty when
+  // it is not reads as a broken page. Decided BEFORE the reads because the hero's
+  // unfiltered count is one of them.
+  const filtered =
+    selectedCategoryIds.length > 0 ||
+    (priceEnabled && Boolean(rawPrice)) ||
+    Object.keys(attributeSelections).length > 0;
+
+  const [listing, memberPricingEnabled, unfiltered] = await Promise.all([
     getBrandListing(brand.id, {
       // Cumulative for Load more: each press re-asks for the SAME listing with a
       // bigger limit, and `total` + `facets` stay anchored to page 1 inside
       // getBrandListing so the toolbar's numbers do not move as the shopper pages.
       page: 1,
       limit: PER_PAGE * page,
-      categoryIds: categoryEnabled ? parseIds(sp[CATEGORY_PARAM]) : [],
+      categoryIds: selectedCategoryIds,
       priceBands,
       priceRange,
       attributes: attributeSelections,
       sort,
     }),
     getFeatureFlag("member_pricing_enabled"),
+    // The HERO states how many products the BRAND has; the toolbar states how
+    // many match. They are the same number until something is ticked, and after
+    // that they must not be: "Vogue — 0 products" beside a price filter reads as
+    // "we do not stock Vogue", which is false. Only a filtered request pays for
+    // the extra read, it is the same cache entry that shopper's own unfiltered
+    // first load already populated, and it rides ALONGSIDE the listing rather
+    // than after it — an extra serial round trip on the page Tim calls slow is
+    // exactly the thing we are told not to add.
+    filtered ? getBrandListing(brand.id, {}) : Promise.resolve(null),
   ]);
 
   const { products, total } = listing;
   const facets = listing.facets as unknown as BrandListingFacets;
-  const groups = brandFacetGroups(facets, storefrontFilters);
+  const groups = brandFacetGroups(facets, storefrontFilters, selectedCategoryIds);
+  // Where a tile GOES depends on the rail configuration: with the Category
+  // facet on it narrows this brand page, with it switched off it goes to the
+  // category's own page rather than being a control that does nothing.
+  const categoryTiles = facets.categories.map((category) => ({
+    ...category,
+    href: categoryEnabled
+      ? `/brands/${slug}?${CATEGORY_PARAM}=${category.id}`
+      : `/categories/${category.slug}`,
+  }));
   const shown = products.length;
   const hasMore = shown < total && page < MAX_PAGES;
-  // "Nothing here" and "nothing MATCHES" are different sentences: a brand with
-  // no products at all is a fact about the catalogue, an empty filtered listing
-  // is something the shopper can undo, and telling them the brand is empty when
-  // it is not reads as a broken page.
-  const filtered =
-    (categoryEnabled && parseIds(sp[CATEGORY_PARAM]).length > 0) ||
-    (priceEnabled && Boolean(rawPrice)) ||
-    Object.keys(attributeSelections).length > 0;
 
   const meta = ((brand.metafields as BrandMetafields | null) ?? {}) as BrandMetafields;
   const pageTitle = (brand.page_title as string | null) || (brand.name as string);
 
-  // The HERO states how many products the brand has; the TOOLBAR states how many
-  // match. They are the same number until something is ticked, and after that
-  // they must not be: "Vogue — 0 products" beside a price filter reads as "we do
-  // not stock Vogue", which is false. Only a filtered request pays for the extra
-  // read, and it is the same cache entry that shopper's own unfiltered first load
-  // already populated.
-  const brandTotal = filtered ? (await getBrandListing(brand.id, {})).total : total;
+  const brandTotal = unfiltered ? unfiltered.total : total;
 
   const nextPageHref = brandNextPageHref({
     slug,
@@ -230,14 +245,7 @@ export default async function BrandPage({
           Category facet is on; with it switched off the tile goes to the
           category's own page rather than being a control that does nothing. */}
       <div className="mt-12">
-        <BrandCategories
-          categories={facets.categories}
-          hrefFor={(category) =>
-            categoryEnabled
-              ? `/brands/${slug}?${CATEGORY_PARAM}=${category.id}`
-              : `/categories/${category.slug}`
-          }
-        />
+        <BrandCategories categories={categoryTiles} />
       </div>
 
       {/* ═══ Rail + grid ═══ */}
