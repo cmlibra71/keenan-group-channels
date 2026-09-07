@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { acquisitionBagFromCookie, acquisitionBagFromRequest } from "./acquisition";
+import { acquisitionBagFromCookie, acquisitionBagFromRequest } from "./acquisition-campaign";
 
 test("a visit with no campaign is not worth remembering", () => {
   assert.equal(

@@ -4,16 +4,19 @@ import {
   ACQUISITION_COOKIE,
   ACQUISITION_MAX_AGE,
   acquisitionBagFromRequest,
-} from "@/lib/acquisition";
+  // IMPORT DISCIPLINE: the PURE module only (no `next/headers`, no @keenan/services,
+  // no @/lib/store) — see the note at the top of `lib/guard/index.ts`. The server-side
+  // reader lives in `@/lib/acquisition` and must never be imported here.
+} from "@/lib/acquisition-campaign";
 
 /**
  * Runs for EVERY storefront route (see matcher), and dispatches:
  *
  *   1. the abuse guard — rate limiting and temporary bans for scraping;
- *   2. the first-touch campaign cookie, for quote attribution;
- *   3. /json/*   — the JSON draft-preview surface;
- *   4. /render/* — the chrome-free CMS render surface;
- *   5. everything else falls straight through untouched.
+ *   2. /json/*   — the JSON draft-preview surface;
+ *   3. /render/* — the chrome-free CMS render surface;
+ *   4. everything else falls through, picking up the first-touch campaign cookie
+ *      on the way if this visit carries one.
  *
  * HISTORY: this file used to be scoped to /render/* and /json/* only, and
  * applied the CMS-render headers unconditionally to whatever the matcher
@@ -33,19 +36,7 @@ export default function proxy(req: NextRequest) {
   const blocked = guardRequest(req);
   if (blocked) return blocked;
 
-  // ── 2. First-touch campaign cookie (card T7Wclho8) ─────────────────────────
-  // A shopper who arrives on an ad and raises a quote later must be credited to that
-  // ad, so the campaign is remembered on the FIRST page carrying utm_* parameters and
-  // never overwritten while it lasts. Costs one `has()` on every other request, which
-  // is why the utm_* test comes first and nothing is parsed without one.
-  //
-  // Deliberately NOT a redirect or a rewrite: this only ATTACHES a cookie to the
-  // response the request was already getting, so no page behaves differently and a
-  // failure here cannot cost anybody a page.
-  const campaign = attachCampaignCookie(req);
-  if (campaign) return campaign;
-
-  // ── 3. /json/* — the parallel JSON preview surface ─────────────────────────
+  // ── 2. /json/* — the parallel JSON preview surface ─────────────────────────
   // Renders the DRAFT node-tree version of any page beside its live HTML
   // counterpart (e.g. /json/categories/x mirrors /categories/x), so the JSON
   // build can be reviewed side-by-side WITHOUT publishing or flipping the
@@ -62,7 +53,7 @@ export default function proxy(req: NextRequest) {
     return jsonRes;
   }
 
-  // ── 4. /render/* — the chrome-free CMS render surface ──────────────────────
+  // ── 3. /render/* — the chrome-free CMS render surface ──────────────────────
   // Tags the request so the root layout skips Header/Footer/analytics (bare
   // shell), locks framing to the portal (the pages are embedded in the portal's
   // page-builder / component-library iframes), and keeps it out of search
@@ -83,8 +74,19 @@ export default function proxy(req: NextRequest) {
     return res;
   }
 
-  // ── 5. Ordinary storefront traffic — untouched ─────────────────────────────
-  return NextResponse.next();
+  // ── 4. Ordinary storefront traffic ─────────────────────────────────────────
+  // Untouched, except that a visitor arriving on a campaign link picks up the
+  // first-touch cookie here (card T7Wclho8), so the quote they raise later can say
+  // which campaign produced it.
+  //
+  // LAST on purpose. It used to run at position 2 and returned its own
+  // `NextResponse.next()`, which meant any /json/* or /render/* address carrying a
+  // utm_* parameter skipped the rewrite, the `x-kg-json` / `x-cms-render` headers, the
+  // frame-ancestors CSP lock to the portal and the noindex — the CMS preview surfaces
+  // silently losing every one of their protections to a stray query parameter. Down
+  // here those branches have already returned, so the comment "only the pages that fall
+  // through can reach this" is true of the code rather than of the intention.
+  return attachCampaignCookie(req) ?? NextResponse.next();
 }
 
 /**
@@ -93,8 +95,9 @@ export default function proxy(req: NextRequest) {
  * request from a visitor who already carries the cookie (first touch wins).
  *
  * Returns a plain `NextResponse.next()` with the cookie attached, so the page renders
- * exactly as it would have. Only the pages that would fall through to case 5 can reach
- * this — a campaign link into /json or /render is not a shopper's arrival.
+ * exactly as it would have. It is called from the LAST branch only, so /json and
+ * /render keep their own responses intact — a campaign link into a CMS preview is not
+ * a shopper's arrival, and stealing its response cost it the headers that lock it down.
  */
 function attachCampaignCookie(req: NextRequest): NextResponse | null {
   if (req.cookies.has(ACQUISITION_COOKIE)) return null;
