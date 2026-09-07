@@ -197,6 +197,14 @@ export default async function BrandPage({
     (priceEnabled && Boolean(rawPrice)) ||
     Object.keys(attributeSelections).length > 0;
 
+  // The HERO states how many products the brand has; the TOOLBAR states how many
+  // match. They are the same number until something is ticked, and after that
+  // they must not be: "Vogue — 0 products" beside a price filter reads as "we do
+  // not stock Vogue", which is false. Only a filtered request pays for the extra
+  // read, and it is the same cache entry that shopper's own unfiltered first load
+  // already populated.
+  const brandTotal = filtered ? (await getBrandListing(brand.id, {})).total : total;
+
   const nextPageHref = brandNextPageHref({
     slug,
     searchParams: sp,
@@ -242,7 +250,7 @@ export default async function BrandPage({
             </p>
           )}
           <p className="mt-3 text-sm text-zinc-500">
-            {total} {total === 1 ? "product" : "products"}
+            {brandTotal} {brandTotal === 1 ? "product" : "products"}
           </p>
         </div>
       </div>
@@ -255,8 +263,11 @@ export default async function BrandPage({
 
       {/* Search within this brand — a plain form onto the site search, narrowed
           to this brand (card 1RLP5nSJ). Only offered where there is something to
-          search: a brand with no products would return nothing whatever is typed. */}
-      {total > 0 && <BrandSearch brandName={brand.name as string} />}
+          search: a brand with no products would return nothing whatever is typed.
+          Gated on the BRAND's total, not the filtered one: the search box is the
+          shopper's way out of an empty result, so it must not be the thing that
+          disappears with the results. */}
+      {brandTotal > 0 && <BrandSearch brandName={brand.name as string} />}
 
       {/* Brand product lines (e.g. Rational iCombi Pro / Classic / Vario) */}
       <BrandProductLines heading="Product Lines" lines={meta.product_lines} />

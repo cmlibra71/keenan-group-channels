@@ -197,6 +197,14 @@ export default async function BrandPage({
     (priceEnabled && Boolean(rawPrice)) ||
     Object.keys(attributeSelections).length > 0;
 
+  // The HERO states how many products the brand has; the TOOLBAR states how many
+  // match. They are the same number until something is ticked, and after that
+  // they must not be: "Vogue — 0 products" beside a price filter reads as "we do
+  // not stock Vogue", which is false. Only a filtered request pays for the extra
+  // read, and it is the same cache entry that shopper's own unfiltered first load
+  // already populated.
+  const brandTotal = filtered ? (await getBrandListing(brand.id, {})).total : total;
+
   const nextPageHref = brandNextPageHref({
     slug,
     searchParams: sp,
@@ -227,11 +235,13 @@ export default async function BrandPage({
   // this brand (card 1RLP5nSJ). It rides with the intro so a reordered brand
   // template keeps both with the heading, and it is only offered where there is
   // something to search: a brand with no products returns nothing whatever is
-  // typed.
+  // typed. It is gated on the BRAND's total, not the filtered one: the search box
+  // is the shopper's way out of an empty result, so it must not be the thing that
+  // disappears with the results.
   const heroExtras = (
     <>
       {intro}
-      {total > 0 && <BrandSearch brandName={brand.name as string} />}
+      {brandTotal > 0 && <BrandSearch brandName={brand.name as string} />}
     </>
   );
 
@@ -322,10 +332,10 @@ export default async function BrandPage({
               process.env.CMS_V2_FORCE === "1");
           if (v2) {
             return withIntro(
-              <BrandHeroV2 key={i} props={b.props ?? {}} brand={brand} total={total} draft={draft} />
+              <BrandHeroV2 key={i} props={b.props ?? {}} brand={brand} total={brandTotal} draft={draft} />
             );
           }
-          return withIntro(<BrandHero key={i} brand={brand} total={total} />);
+          return withIntro(<BrandHero key={i} brand={brand} total={brandTotal} />);
         }
         if (b.block_type === "brand_products") {
           const v2 =
