@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { Package, FileText, MapPin, LogOut, Crown, Trophy, Gift, ArrowRight, Calendar, Ticket, KeyRound, Wallet } from "lucide-react";
-import { getSession } from "@/lib/auth";
+import { getSession, readRememberedEmail } from "@/lib/auth";
 import { formatMemberSince } from "@/lib/member-date";
 import { contactService, getFeatureFlag, getActiveSubscriptionForContact,
   getMemberSince, getUpcomingDraws, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { safeNextPath, signInPrompt } from "@/lib/account-redirect";
 import { normaliseEmail, looksLikeEmail } from "@/lib/checkout/account-prompt";
+import { chooseSignInEmail } from "@/lib/known-device";
 import { logout } from "@/lib/actions/auth";
 import { AccountShell } from "@/components/account/AccountShell";
 import { readStatementAccess } from "@/lib/account/statement-visibility";
@@ -31,12 +32,19 @@ export default async function AccountPage({
     // Carried by the register form's "Sign in" offer when the address already has
     // an account — echoed back only if it still looks like one.
     const typedEmail = normaliseEmail(params.email);
-    const prefillEmail = looksLikeEmail(typedEmail) ? typedEmail : null;
+    // Card upTMAqRc — a returning customer on a computer they have used before
+    // starts with their address already in the field, so they type only their
+    // password. A typed address (the register form's "sign in instead" hand-off)
+    // still wins over the remembered one.
+    const { email: prefillEmail, fromDevice } = chooseSignInEmail({
+      typed: looksLikeEmail(typedEmail) ? typedEmail : null,
+      remembered: await readRememberedEmail(),
+    });
     return (
       <AccountShell>
         <h1 className="text-3xl font-bold text-zinc-900 mb-8">My Account</h1>
         {next && <p className="text-zinc-600 mb-4">{signInPrompt(next)}</p>}
-        <LoginForm next={next} defaultEmail={prefillEmail} />
+        <LoginForm next={next} defaultEmail={prefillEmail} rememberedDevice={fromDevice} />
       </AccountShell>
     );
   }

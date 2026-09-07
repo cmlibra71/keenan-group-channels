@@ -179,6 +179,8 @@
     "lib/image-origin.ts",
     "lib/image-params.test.ts",
     "lib/image-params.ts",
+    "lib/known-device.test.ts",
+    "lib/known-device.ts",
     "lib/mega-menu.test.ts",
     "lib/mega-menu.ts",
     "lib/orders/customer-order-notes.test.ts",
