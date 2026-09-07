@@ -94,6 +94,7 @@ export const {
   getCategoryById,
   getBrandsForChannel,
   getBrandBySlug,
+  getBrandListing,
   getProductReviews,
   getProductAttachments,
   getProductVideos,
