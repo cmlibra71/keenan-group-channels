@@ -117,6 +117,49 @@ function defaultNavItems(departments: MegaMenuNodeLike[]): MegaNavItem[] {
   ];
 }
 
+/** The department slug a `/categories/<slug>` address names, else null. */
+function departmentSlug(url: string | undefined): string | null {
+  if (!url) return null;
+  const match = /^\/categories\/([^/?#]+)\/?$/.exec(url.trim());
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]).toLowerCase();
+  } catch {
+    return match[1].toLowerCase();
+  }
+}
+
+/**
+ * A saved menu item that is a plain LINK to `/categories/<slug>` IS that
+ * department, so read it as one.
+ *
+ * Industry Kitchens' saved header came from the old flat `header_nav` list, so
+ * every item is `type: "link"` with a hardcoded `/categories/...` address (card
+ * mOTgYEvX). Taken literally those items are not departments, which meant the
+ * bar added each department a SECOND time automatically, printed the same
+ * wording twice, gave the link no drop-down, and — worse — let a department the
+ * portal had switched OFF stay on the bar through its link. Matching on the
+ * slug fixes all four at once and needs no data migration: the item keeps the
+ * editor's own label and position, and simply becomes the department it always
+ * pointed at.
+ *
+ * Only an exact `/categories/<slug>` match is adopted. `/clearance`, `/brands`
+ * and `/pages/...` stay the plain links they are, on both storefronts.
+ */
+export function adoptDepartmentLinks(
+  items: MegaNavItem[],
+  departments: MegaMenuNodeLike[]
+): MegaNavItem[] {
+  const bySlug = new Map(departments.map((d) => [d.slug.toLowerCase(), d]));
+  return items.map((item) => {
+    if (item.type !== "link") return item;
+    const slug = departmentSlug(item.url);
+    const dept = slug ? bySlug.get(slug) : undefined;
+    if (!dept) return item;
+    return { ...item, type: "category" as const, categoryId: dept.id, url: undefined };
+  });
+}
+
 /**
  * Compose what the bar renders: the editor's items in the editor's order, minus
  * any department switched off, plus every department the editor does not
@@ -136,13 +179,25 @@ export function resolveNavItems({
   const hidden = new Set(hiddenCategoryIds ?? []);
   const visible = departments.filter((d) => !hidden.has(d.id));
 
-  const configured = (items ?? []).filter(
+  const configured = adoptDepartmentLinks(items ?? [], departments).filter(
     (i) => !(i.type === "category" && i.categoryId != null && hidden.has(i.categoryId))
   );
   if (configured.length === 0) return defaultNavItems(visible);
 
   const named = new Set<number>();
-  for (const i of configured) if (i.type === "category" && i.categoryId != null) named.add(i.categoryId);
+  for (const i of configured) {
+    if (i.type === "category" && i.categoryId != null) named.add(i.categoryId);
+  }
+  // A department is kept off the bar by exactly ONE thing: its off switch. It is
+  // tempting to also drop a department whose NAME already appears on the bar —
+  // the Industry Kitchens tree keeps "Brands" and "Clearance Sale" categories
+  // next to the editor's own /brands and /clearance links, so both words print
+  // twice. That was tried and reverted (card mOTgYEvX): it made the portal lie.
+  // The Mega menu tab lists every department with a switch and counts how many
+  // are "in the menu", so a department the code suppresses behind the editor's
+  // back is a switch that does nothing and a count that is wrong — which is the
+  // very complaint this card was raised about. Duplicate wording is a visible
+  // choice a person can fix with the switch; an inert switch is not.
   const missing: MegaNavItem[] = visible
     .filter((d) => !named.has(d.id))
     .map((d) => ({ type: "category" as const, label: d.name, categoryId: d.id, auto: true }));

@@ -4,10 +4,13 @@ import { Package } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { signInRedirect } from "@/lib/account-redirect";
 import { customerOrderStage } from "@/lib/orders/order-status-label";
+import { orderStatusChipClass } from "@/lib/orders/order-presentation";
 import { orderService, CHANNEL_ID, getGuestOrdersForEmail } from "@/lib/store";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import { Price } from "@/components/ui/Price";
 import { AccountShell } from "@/components/account/AccountShell";
+import { InvoiceArchivePanel } from "@/components/account/InvoiceArchivePanel";
+import { loadArchiveOrders } from "@/lib/orders/invoice-archive-data";
 
 // orderService returns snake_case keys (transformRow).
 interface OrderRecord {
@@ -103,12 +106,25 @@ export default async function OrdersPage() {
   }
 
   // Fetch orders with items included; fall back to the list row if getById is null.
-  const ordersWithItems = await Promise.all(
-    customerOrders.map(async (order) => {
-      const result = (await orderService.getById(order.id, ["items"])) as unknown as OrderRecord | null;
-      return result ?? order;
-    })
-  );
+  //
+  // Alongside it, the orders this customer may be handed a TAX INVOICE for (card WlTnY4cd). It is
+  // its own projected read rather than a reuse of the rows above: the panel's decision needs
+  // `orders.uuid` and whether each order still has live lines, and the standing rule on a
+  // customer-facing surface is to project those in SQL rather than widen this page's row shape and
+  // narrow it again in the render (BIig1Zo1). It also applies the same account-role and
+  // guest-inbox scoping this list does, so the count in the panel and the archive the download
+  // produces are decided by one rule.
+  const [ordersWithItems, archiveOrders] = await Promise.all([
+    Promise.all(
+      customerOrders.map(async (order) => {
+        const result = (await orderService.getById(order.id, ["items"])) as unknown as OrderRecord | null;
+        return result ?? order;
+      })
+    ),
+    // Best effort: a customer must never lose their order history because the invoice panel could
+    // not be built.
+    loadArchiveOrders(session).catch(() => []),
+  ]);
 
   return (
     <div className="mx-auto max-w-3xl px-6 lg:px-8 section-padding">
@@ -126,6 +142,12 @@ export default async function OrdersPage() {
           Back to Account
         </Link>
       </div>
+
+      {/* Every tax invoice this customer holds, as one download (card WlTnY4cd). Absent when there
+          is none to offer. It sits ABOVE the list rather than inside the order cards: each card is
+          a single <a> wrapping its whole contents (D045H6Zh) and cannot hold a nested link — the
+          per-order download lives on the order's own page, where the document is also named. */}
+      <InvoiceArchivePanel orders={archiveOrders} />
 
       <div className="space-y-4">
         {ordersWithItems.map((order) => {
@@ -151,13 +173,11 @@ export default async function OrdersPage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                    order.status === "completed"
-                      ? "text-accent bg-accent-subtle"
-                      : order.status === "shipped"
-                        ? "bg-accent-subtle text-accent-dark"
-                        : "bg-surface-secondary text-text-secondary"
-                  }`}>
+                  {/* Same word AND the same colour as the pill one click later:
+                      both come from lib/orders/order-presentation, keyed on the
+                      customer STAGE rather than on two raw status spellings
+                      (card a1lgdzW7). This chip keeps the list's compact size. */}
+                  <span className={orderStatusChipClass(order.status)}>
                     {customerOrderStage(order.status)}
                   </span>
                   <Price amount={order.total_inc_tax} className="font-semibold text-text-primary" />
