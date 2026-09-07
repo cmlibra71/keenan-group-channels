@@ -87,6 +87,8 @@
     "lib/account/statement-access.test.ts",
     "lib/account/statement-access.ts",
     "lib/account/statement-visibility.ts",
+    "lib/acquisition.test.ts",
+    "lib/acquisition.ts",
     "lib/actions/account-panel.ts",
     "lib/actions/account-security.ts",
     "lib/actions/auth.ts",
