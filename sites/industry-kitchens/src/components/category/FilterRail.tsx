@@ -55,6 +55,20 @@ export interface CategoryFacets {
   filters?: StorefrontFilter[];
 }
 
+/**
+ * A facet value is a percent-encoded NAME (the rail writes
+ * `encodeURIComponent(name)`), so anything printed from a raw value has to be
+ * decoded first. A bare `%` in a name would make `decodeURIComponent` throw,
+ * which is why this cannot be the one-liner. (1RLP5nSJ.)
+ */
+const decodeFacetValue = (value: string): string => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+
 const PRICE_LABELS: Record<string, string> = {
   lt1000: "Under $1,000",
   "1000to3000": "$1,000–$3,000",
@@ -528,8 +542,13 @@ export function FacetChips({ groups }: { groups: FacetGroupDef[] }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
+  // Last resort when no option carries this value: the value itself is a
+  // percent-encoded NAME, so decode it rather than printing "Chef%20Inox ×" at
+  // a customer. Facet builders are expected to keep a ticked value's row (see
+  // `facetOptions`), so this should not fire — belt to that braces. (1RLP5nSJ.)
   const labelFor = (param: string, value: string) =>
-    groups.find((g) => g.param === param)?.options.find((o) => o.value === value)?.label ?? value;
+    groups.find((g) => g.param === param)?.options.find((o) => o.value === value)?.label ??
+    decodeFacetValue(value);
 
   const chips: { param: string; value: string; label: string }[] = [];
   for (const g of groups) {

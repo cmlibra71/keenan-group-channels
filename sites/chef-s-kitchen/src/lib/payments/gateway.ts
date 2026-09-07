@@ -28,6 +28,8 @@ import {
   wantsStripeTestMode,
   readChannelGatewayLists,
   enabledGatewaysOfProvider,
+  resolveScopedChannelStripeGateway,
+  type ScopedStripeGateway,
 } from "@keenan/services";
 import { type StripeGatewayEntry } from "@/lib/payments/stripe-gateways";
 import { hasTestCheckoutSession } from "@/lib/checkout/test-session";
@@ -79,4 +81,46 @@ export async function resolveStripeGateway(): Promise<ResolvedStripeGateway> {
   } catch {
     return { gateway: null, wantTestMode: testSession || envWantsTestMode, testSession };
   }
+}
+
+/**
+ * The same resolution, but saying WHICH Stripe account the answer came out of
+ * (card JiaDTjr1, on card OHDx84DK's scope stamp).
+ *
+ * A PaymentIntent needs no stamp — an order is charged once and carries its
+ * channel — but a Stripe CUSTOMER is long-lived, exists inside one account only,
+ * and is invisible from every other. So the customer this storefront saves a card
+ * against has to be minted and read under the SAME account the intent will be
+ * created on, and "the same account" is the entry that was actually chosen, never
+ * a second resolution a moment later.
+ *
+ * `resolveScopedChannelStripeGateway` decides the stamp by IDENTITY of the chosen
+ * entry: in test mode a configured channel can legitimately be handed the GLOBAL
+ * test entry, and calling that `channel:2` would lose every customer minted under
+ * it.
+ *
+ * AND IT ASKS THE SAME QUESTION THE INTENT ASKS. An ephemeral test checkout
+ * session is STRICT on both sides: `PaymentService.getDefaultGateway` demands a
+ * real test entry (`selectTestGatewayStrict`) and refuses rather than fall back,
+ * so this must too. Without `strictTestMode` the two disagree — on a channel with
+ * no test entry anywhere, `selectChannelGateway`'s test arm falls through to a
+ * LIVE entry, so the Stripe CUSTOMER would be minted on the live account and,
+ * because that entry is not `testMode`, PERSISTED onto the real contact, while
+ * the intent that was meant to use it throws. The customer and the key come out
+ * of one rule or not at all.
+ *
+ * Returns null when nothing usable is configured — the caller then simply does
+ * not offer, or save, a card, exactly as it behaves today.
+ */
+export async function resolveScopedStripeGateway(): Promise<ScopedStripeGateway | null> {
+  const testSession = await hasTestCheckoutSession();
+  const envWantsTestMode = await wantsStripeTestMode(CHANNEL_ID);
+  return resolveScopedChannelStripeGateway({
+    channelId: CHANNEL_ID,
+    wantTestMode: testSession || envWantsTestMode,
+    // Only the ephemeral SESSION is strict. The environment default (test keys on
+    // a dev build) keeps `selectChannelGateway`'s dev convenience, which is
+    // exactly what `getDefaultGateway` does when `forceTestMode` is undefined.
+    ...(testSession ? { strictTestMode: true } : {}),
+  }).catch(() => null);
 }

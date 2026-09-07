@@ -6,7 +6,7 @@ import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogS
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { hasTestCheckoutSession } from "@/lib/checkout/test-session";
-import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveOrderBusinessName, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, siteAccessProfileService, loadOrderContactForOrder, type EmailLineItem } from "@keenan/services";
+import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveOrderBusinessName, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, siteAccessProfileService, loadOrderContactForOrder, ensureContactStripeCustomerForGateway, listSavedCardsForContact, type EmailLineItem } from "@keenan/services";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, type BelowCostLine } from "@/lib/checkout/order-draft";
 import { backorderFactsForProducts } from "@/lib/cart/backorder-facts";
 import { canPurchaseQuantity } from "@keenan/services/backorder";
@@ -27,11 +27,13 @@ import {
 import { matchBrandSpecial } from "@/lib/checkout/free-shipping-brands-policy";
 import { normaliseAuState, isValidAuPostcode } from "@/lib/checkout/au-address";
 import { normaliseCustomerReference } from "@/lib/checkout/customer-reference";
+import { createGuestContactForCheckout } from "@/lib/checkout/guest-contact";
 import { setLastOrder } from "@/lib/checkout/last-order";
 import { canViewOrderConfirmation } from "@/lib/checkout/confirmation-access";
 import { siteBaseUrl } from "@/lib/seo";
 import { canTakeCardPayment, type ConfirmBillingDetails } from "@/lib/payments/stripe-gateways";
-import { resolveStripeGateway } from "@/lib/payments/gateway";
+import { resolveStripeGateway, resolveScopedStripeGateway } from "@/lib/payments/gateway";
+import { chosenSavedCard } from "@/lib/checkout/saved-cards";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 import {
   ACCOUNT_REQUIRED_SETTING,
@@ -106,6 +108,21 @@ type PlaceOrderResult = {
      * card EInDib45 exists to keep true.
      */
     billingDetails?: ConfirmBillingDetails | null;
+    /**
+     * THE SERVER'S VERDICT ON THE POSTED CARD (card JiaDTjr1): the payment-method
+     * id this intent was actually created against, or null when none was — either
+     * because none was posted, or because the one that was is not this person's,
+     * has expired, or could not be re-read.
+     *
+     * It is returned because the BROWSER confirms the payment, and it must confirm
+     * with what the server accepted, not with what the form believed at submit
+     * time. Those two disagree whenever the re-read declines the card, and
+     * confirming a customer-attached payment method against an intent that carries
+     * no customer is a Stripe error in front of a shopper whose order is already
+     * written. Nulling it here is what puts the card box back in front of them —
+     * a fallback, never a refusal.
+     */
+    savedCardId?: string | null;
   };
 };
 
@@ -201,6 +218,11 @@ export async function placeOrder(
   // never a reason to refuse an order — and normalised (one line, capped at the
   // varchar(100) column) so a pasted value can never make the insert fail.
   const customerReference = normaliseCustomerReference(formData.get("customerReference"));
+  // A card the shopper already has on file, and whether to keep the one they are
+  // about to type (card JiaDTjr1). Both are CLAIMS at this point; neither is
+  // acted on until the id has been checked against this person's own cards below.
+  const postedSavedCardId = (formData.get("savedCardId") as string)?.trim() || "";
+  const wantsCardSaved = formData.get("saveCard") === "on";
 
   if (!email || !firstName || !lastName || !address1 || !city || !postalCode) {
     return { error: "Please fill in all required fields." };
@@ -741,6 +763,52 @@ export async function placeOrder(
   const testCheckoutSession = await hasTestCheckoutSession();
   const isTestMode = testCheckoutSession || (await wantsStripeTestMode(CHANNEL_ID));
 
+  // ── THE PERSON'S OWN CARD (card JiaDTjr1) ─────────────────────────────────
+  //
+  // The AUTHORIZATION half of the picker the checkout page drew. Everything the
+  // browser posted about a card is a claim: the id is re-read off THIS person's
+  // own file, on THIS storefront's Stripe account, and anything else — somebody
+  // else's card id, a card that has since expired, a card posted by a guest — is
+  // simply not used. It falls back to the card box rather than refusing the
+  // order, because there is a working way to pay either way and a dead end is
+  // the worse failure (`chosenSavedCard`, unit-pinned).
+  //
+  // A saved card is a way of paying by CARD, never a way past the method gate: it
+  // is resolved only for `stripe`, and only after the channel list, the account
+  // allow-list and the account staff-only list have already accepted that method
+  // above (NmAfwrdE, N8kE8arY).
+  //
+  // The Stripe CUSTOMER is resolved on the gateway this checkout already chose,
+  // so the customer id and the key can never come from two different accounts
+  // (OHDx84DK) — one is `resource_missing`, not a fallback.
+  let stripeCustomerId: string | null = null;
+  let savedCardId: string | null = null;
+  if (effectivePaymentMethod === "stripe" && session?.contactId) {
+    const wantsCard = !!postedSavedCardId || wantsCardSaved;
+    if (wantsCard) {
+      const scoped = await resolveScopedStripeGateway().catch(() => null);
+      if (scoped) {
+        const ensured = await ensureContactStripeCustomerForGateway(scoped, session.contactId, {
+          name: [firstName, lastName].filter(Boolean).join(" "),
+          email,
+        }).catch(() => null);
+        stripeCustomerId = ensured?.customerId ?? null;
+      }
+    }
+    if (stripeCustomerId && postedSavedCardId) {
+      const onFile = await listSavedCardsForContact({
+        channelId: CHANNEL_ID,
+        contactId: session.contactId,
+        ...(testCheckoutSession ? { testMode: true } : {}),
+      }).catch(() => null);
+      savedCardId = chosenSavedCard(onFile?.cards ?? [], postedSavedCardId)?.id ?? null;
+    }
+  }
+  // Keep the card only where there is a person to keep it against, and only when
+  // a NEW card is being typed — re-saving one already on file is a no-op that
+  // would nonetheless ask Stripe to re-consent.
+  const saveThisCard = !!stripeCustomerId && wantsCardSaved && !savedCardId;
+
   // Stamp test-mode marker + (for net-terms orders) the actual term length used,
   // so the confirmation page / invoice email show the customer's real terms.
   const orderMetafields: Record<string, unknown> = {};
@@ -842,11 +910,21 @@ export async function placeOrder(
           // Per-call only; nothing persisted. Refused rather than charged live if
           // no test gateway is configured.
           test_mode: testCheckoutSession,
+          // The person, and optionally the card of theirs this is pointed at
+          // (card JiaDTjr1). All three are inert without a customer, and the
+          // card choice is part of the idempotency key — so a shopper who
+          // pressed Pay on a saved card and then switched to "use a different
+          // card" for the same amount is not handed the first intent back.
+          ...(stripeCustomerId ? { customer_id: stripeCustomerId } : {}),
+          ...(savedCardId ? { payment_method_id: savedCardId } : {}),
+          ...(saveThisCard ? { save_card: true } : {}),
         });
         // Breadcrumb BEFORE handing off to the card form — see the fresh-order
         // branch below for why it can't wait for confirmStripePayment.
         await setLastOrder(existing.order_number, "stripe");
-        return { stripe: { clientSecret, orderNumber: existing.order_number, billingDetails } };
+        return {
+          stripe: { clientSecret, orderNumber: existing.order_number, billingDetails, savedCardId },
+        };
       }
     } catch (e) {
       console.error("[placeOrder] idempotency reuse check failed (non-fatal):", e);
@@ -890,7 +968,10 @@ export async function placeOrder(
         }
       : {}),
     ...(Object.keys(orderMetafields).length ? { metafields: orderMetafields } : {}),
-  }) as { id: number; order_number: string };
+    // `contact_id` is read back because OrderService.create may have stamped it itself: a guest
+    // whose address already belongs to an accountless contact on this storefront is linked at
+    // create time (card lpMsJZMM), and the guest-record step below must not run for them.
+  }) as { id: number; order_number: string; contact_id?: number | null };
 
   // Create order items (line items precomputed by buildLineItems above)
   try {
@@ -917,6 +998,41 @@ export async function placeOrder(
       }
     }
     return { error: err instanceof Error ? err.message : "We couldn't complete your order. Please try again." };
+  }
+
+  // ── Every completed checkout attaches a customer record (card LiuLvc5b) ─────────────────────
+  // A signed-in shopper already has one, and a guest whose billing address is already known on
+  // this site had one stamped on the order by `OrderService.create` (card lpMsJZMM). What was
+  // still missing is the FIRST-time guest: the sale existed but the person did not, so staff
+  // could not open the buyer from the order and the CRM never learned they exist. So we create
+  // the contact — the same row a registration on that address would create — and stamp it.
+  //
+  // It runs HERE, after the order and its line items are persisted and past the compensating
+  // delete above, because no record may be created by a save that failed (Product Brief). It runs
+  // before the Stripe early-return so a card order is linked too: the order row exists at this
+  // point whatever the payment method, and the webhook only ever owns the payment status.
+  //
+  // The channel's account setting is not consulted. `require_account_to_checkout` decides whether
+  // a shopper must SIGN IN, and this is a record, not a login — so a channel that lets guests
+  // through still ends up with a customer for every order.
+  //
+  // Nothing here may cost the customer their order: the helper swallows its own failures and the
+  // stamp is wrapped, exactly like the shipping-address and address-book writes above.
+  const alreadyLinked = session?.contactId ?? (order as { contact_id?: number | null }).contact_id ?? null;
+  if (!alreadyLinked) {
+    try {
+      const guestContactId = await createGuestContactForCheckout({
+        email,
+        firstName,
+        lastName,
+        phone,
+      });
+      if (guestContactId) {
+        await orderService.update(order.id, { contactId: guestContactId });
+      }
+    } catch (e) {
+      console.error("[placeOrder] guest customer record not attached (non-fatal):", e);
+    }
   }
 
   // File the finance application and tell the rep (card VAjaPj0t). The order is
@@ -1143,6 +1259,11 @@ export async function placeOrder(
         // Per-call only; nothing persisted. Refused rather than charged live if
         // no test gateway is configured.
         test_mode: testCheckoutSession,
+        // The person, and optionally the card of theirs this is pointed at, or
+        // the instruction to keep the card they are about to type (JiaDTjr1).
+        ...(stripeCustomerId ? { customer_id: stripeCustomerId } : {}),
+        ...(savedCardId ? { payment_method_id: savedCardId } : {}),
+        ...(saveThisCard ? { save_card: true } : {}),
       });
 
       // IMPORTANT: do NOT clear the cart here. Returning from a server action
@@ -1160,7 +1281,7 @@ export async function placeOrder(
       // that ordering irrelevant. Harmless if the shopper abandons the card form
       // — the cart is still full, so the guard never fires.
       await setLastOrder(order.order_number, "stripe");
-      return { stripe: { clientSecret, orderNumber: order.order_number, billingDetails } };
+      return { stripe: { clientSecret, orderNumber: order.order_number, billingDetails, savedCardId } };
     } catch (err) {
       // WHAT THE SHOPPER READS IS OURS, NOT STRIPE'S (card OHDx84DK).
       //

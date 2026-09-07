@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { guardRequest } from "@/lib/guard";
+import {
+  ACQUISITION_COOKIE,
+  ACQUISITION_MAX_AGE,
+  acquisitionBagFromRequest,
+  // IMPORT DISCIPLINE: the PURE module only (no `next/headers`, no @keenan/services,
+  // no @/lib/store) — see the note at the top of `lib/guard/index.ts`. The server-side
+  // reader lives in `@/lib/acquisition` and must never be imported here.
+} from "@/lib/acquisition-campaign";
 
 /**
  * Runs for EVERY storefront route (see matcher), and dispatches:
@@ -7,7 +15,8 @@ import { guardRequest } from "@/lib/guard";
  *   1. the abuse guard — rate limiting and temporary bans for scraping;
  *   2. /json/*   — the JSON draft-preview surface;
  *   3. /render/* — the chrome-free CMS render surface;
- *   4. everything else falls straight through untouched.
+ *   4. everything else falls through, picking up the first-touch campaign cookie
+ *      on the way if this visit carries one.
  *
  * HISTORY: this file used to be scoped to /render/* and /json/* only, and
  * applied the CMS-render headers unconditionally to whatever the matcher
@@ -65,8 +74,44 @@ export default function proxy(req: NextRequest) {
     return res;
   }
 
-  // ── 4. Ordinary storefront traffic — untouched ─────────────────────────────
-  return NextResponse.next();
+  // ── 4. Ordinary storefront traffic ─────────────────────────────────────────
+  // Untouched, except that a visitor arriving on a campaign link picks up the
+  // first-touch cookie here (card T7Wclho8), so the quote they raise later can say
+  // which campaign produced it.
+  //
+  // LAST on purpose. It used to run at position 2 and returned its own
+  // `NextResponse.next()`, which meant any /json/* or /render/* address carrying a
+  // utm_* parameter skipped the rewrite, the `x-kg-json` / `x-cms-render` headers, the
+  // frame-ancestors CSP lock to the portal and the noindex — the CMS preview surfaces
+  // silently losing every one of their protections to a stray query parameter. Down
+  // here those branches have already returned, so the comment "only the pages that fall
+  // through can reach this" is true of the code rather than of the intention.
+  return attachCampaignCookie(req) ?? NextResponse.next();
+}
+
+/**
+ * The response carrying this visitor's first-touch campaign, or null when there is
+ * nothing to record — which is every request that has no utm_* parameter, and every
+ * request from a visitor who already carries the cookie (first touch wins).
+ *
+ * Returns a plain `NextResponse.next()` with the cookie attached, so the page renders
+ * exactly as it would have. It is called from the LAST branch only, so /json and
+ * /render keep their own responses intact — a campaign link into a CMS preview is not
+ * a shopper's arrival, and stealing its response cost it the headers that lock it down.
+ */
+function attachCampaignCookie(req: NextRequest): NextResponse | null {
+  if (req.cookies.has(ACQUISITION_COOKIE)) return null;
+  const bag = acquisitionBagFromRequest(req.nextUrl, req.headers.get("referer"));
+  if (!bag) return null;
+  const res = NextResponse.next();
+  res.cookies.set(ACQUISITION_COOKIE, encodeURIComponent(JSON.stringify(bag)), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: ACQUISITION_MAX_AGE,
+  });
+  return res;
 }
 
 export const config = {

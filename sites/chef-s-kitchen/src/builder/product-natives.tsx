@@ -25,11 +25,20 @@ import type { ProductKit } from "@/lib/product-kit";
 import { GstToggle } from "@/components/layout/GstToggle";
 import { SilverChefPanel } from "@/components/product/SilverChefPanel";
 import { ProductImageNotice } from "@/components/product/ProductImageNotice";
+import { MODULAR_NOTICE_TEXT, slugIsModularSystems } from "@/builder/modular-notice";
 import { CdMemberPricingPanel } from "@/components/product/CdMemberPricingPanel";
 import type { CdMembershipData } from "@/lib/pricing/cd-member-pricing";
+import { usableBrandLogo } from "@/lib/brand-logo-url";
 
 export function productNatives({ payload, variantImageUrl, data }: ProductNativesArgs): NativeComponents {
   const product = (payload.product ?? {}) as Record<string, unknown>;
+  // Card tSrCcnvx: a missing or broken photo falls back to the brand's logo.
+  // `payload.brand` is the same slice the brand-logo link above the title
+  // already binds (`enrichProductPayload`), so no extra read is needed and the
+  // two can never disagree about which logo this product's brand has.
+  const brand = (payload.brand ?? null) as { imageUrl?: string | null; name?: string | null } | null;
+  const brandLogoUrl = usableBrandLogo(brand?.imageUrl);
+
   return {
     // The gallery keeps its real zoom/pan/thumbnail behaviour.
     "product-gallery": () => (
@@ -38,6 +47,8 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
         productName={String(product.name ?? "")}
         variantImageUrl={variantImageUrl}
         videos={(product.videos ?? []) as never}
+        brandLogoUrl={brandLogoUrl}
+        brandName={brand?.name ?? null}
       />
     ),
     // Storewide ex/inc-GST switch, now that it has left the masthead. Sealed
@@ -81,6 +92,19 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     ),
     "product-image-notice": () => (
       <ProductImageNotice show={product.imageIsIllustrative === true} />
+    ),
+    // The Modular Systems banner (card qGfWAzQx, Steve — CE-40). The SAME sealed
+    // panel as the notice above, because it is the same message: one look, one
+    // colour, red panel with white writing. What differs is the rule — the slug
+    // instead of the per-product tick — and the wording Steve supplied on the
+    // card. Suppressed when the tick has already put the panel on this page, so
+    // a product can never carry the banner twice.
+    "product-modular-notice": () => (
+      <ProductImageNotice
+        show={product.imageIsIllustrative !== true && slugIsModularSystems(product.slug)}
+        text={MODULAR_NOTICE_TEXT}
+        className="my-4 w-full"
+      />
     ),
   };
 }
