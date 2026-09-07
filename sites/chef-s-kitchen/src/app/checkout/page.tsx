@@ -405,11 +405,6 @@ export default async function CheckoutPage() {
         itemNames={(cart.items as Array<Record<string, unknown>>).map((i) => String(i.product_name ?? i.name ?? ""))}
         items={cart.items as Array<Record<string, unknown>>}
       />
-      {/* The abandon-intent questionnaire (card loDyEE3S, Tim: "as per Myer").
-          Mounted only here, and only past the empty-cart redirect above, so it
-          can never appear on the confirmation page or on an empty basket. It is
-          a prompt, never a gate — see the component. */}
-      <CheckoutExitSurvey />
       <h1 className="page-title mb-8">Checkout</h1>
 
       {isMember && memberSavings > 0 && (
@@ -470,6 +465,14 @@ export default async function CheckoutPage() {
         testModeCardUnavailable={cardUnavailableInTestSession}
         finance={financeMethodsEnabled ? financeOffer : null}
       />
+      {/* The abandon-intent questionnaire (card loDyEE3S, Tim: "as per Myer").
+          Mounted only here, and only past the empty-cart redirect above, so it
+          can never appear on the confirmation page or on an empty basket. It is
+          a prompt, never a gate — see the component. LAST on the page on
+          purpose: while it is open it reserves flow height below the checkout,
+          so the Order Summary that ends this page can always be scrolled clear
+          of the card. */}
+      <CheckoutExitSurvey />
     </div>
   );
 }

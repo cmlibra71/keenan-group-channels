@@ -11,7 +11,14 @@
 // validates against, so the pop-up cannot offer an answer the server refuses.
 //
 // IT IS A PROMPT, NEVER A GATE, and everything below is arranged around that:
-//   * NO backdrop. The checkout stays fully usable behind it.
+//   * NO backdrop, and the card is kept OFF the controls that matter. On a
+//     laptop it sits bottom-LEFT, over the form column, never over the
+//     right-hand Order Summary that carries the Total and Place Order. On a
+//     phone the checkout is one column and that summary is the LAST thing on
+//     the page, so while the pop-up is open the page is grown by exactly the
+//     card's height — the Total, the button and its hint can always be
+//     scrolled clear of it. A pop-up sitting on the one control the shopper
+//     needs is a gate in everything but name (sf-checkout, "Do not break").
 //   * Nothing listens to `beforeunload`, cancels a click or delays a
 //     navigation. Leaving is exactly as fast with the pop-up open as without.
 //   * The X closes it, Escape closes it, and answering closes it. Whatever is
@@ -36,6 +43,7 @@ import {
 import { submitCheckoutSurvey } from "@/lib/actions/checkout-survey";
 import {
   EMPTY_SURVEY_DRAFT,
+  EXIT_SURVEY_FRAME_GUTTER_PX,
   EXIT_SURVEY_OTHER_MAX_LENGTH,
   EXIT_SURVEY_SESSION_KEY,
   isExitIntent,
@@ -50,10 +58,13 @@ export function CheckoutExitSurvey() {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<Step>("reason");
   const [draft, setDraft] = useState<SurveyDraft>(EMPTY_SURVEY_DRAFT);
+  /** Flow height added below the checkout so the card covers nothing for good. */
+  const [reserve, setReserve] = useState(0);
 
   // Refs, not state: the listeners below read these on every event and must
   // never re-subscribe (a re-subscribe mid-gesture drops the gesture).
   const draftRef = useRef(draft);
+  const cardRef = useRef<HTMLDivElement | null>(null);
   const armed = useRef(false);
   const submitted = useRef(false);
   const filed = useRef(false);
@@ -62,9 +73,12 @@ export function CheckoutExitSurvey() {
    *  pop-up is never allowed to wait on the network. */
   const file = useCallback(() => {
     if (filed.current) return;
-    filed.current = true;
     const d = draftRef.current;
+    // Latch AFTER the empty check, not before: filing is also attempted when
+    // the page goes away with nothing answered yet, and latching there would
+    // silently throw away the answer that came afterwards.
     if (!d.reason && !d.likelihood) return;
+    filed.current = true;
     void submitCheckoutSurvey(d).catch(() => undefined);
   }, []);
 
@@ -115,6 +129,12 @@ export function CheckoutExitSurvey() {
     const onVisibility = () => {
       if (document.visibilityState === "hidden") {
         hiddenAt = Date.now();
+        // They are on their way out with an answer already picked. File it now
+        // — this is the ONLY moment we get from a shopper who closes the tab,
+        // presses Back or follows a link, which is exactly the population this
+        // survey is aimed at. Fire and forget, and NOT `beforeunload`, so it
+        // still delays nothing.
+        file();
         return;
       }
       if (hiddenAt && returnedFromLeaving(Date.now() - hiddenAt)) show();
@@ -127,6 +147,16 @@ export function CheckoutExitSurvey() {
     const onSubmit = () => {
       submitted.current = true;
       armed.current = false;
+      // Stamped here as well as when the pop-up is shown: a card taking the
+      // REDIRECT form of 3-D Secure leaves the site and comes back to
+      // /checkout as a fresh page load, where `submitted` starts false again.
+      // Without the stamp the survey would re-arm on somebody who has just
+      // paid, which is the one thing it must never do.
+      try {
+        window.sessionStorage.setItem(EXIT_SURVEY_SESSION_KEY, "1");
+      } catch {
+        /* see above */
+      }
     };
 
     document.addEventListener("mouseout", onMouseOut);
@@ -138,6 +168,26 @@ export function CheckoutExitSurvey() {
       document.removeEventListener("submit", onSubmit, true);
     };
   }, []);
+
+  // The page grows by exactly the card's height while the pop-up is open, so
+  // nothing at the BOTTOM of the checkout can be left unreachable underneath
+  // it. On a phone that bottom is the Order Summary, the Total, Place Order and
+  // the hint that says why it is disabled — the one thing the sf-checkout
+  // register says must never be taken away from a shopper.
+  useEffect(() => {
+    if (!open) {
+      setReserve(0);
+      return;
+    }
+    const el = cardRef.current;
+    if (!el) return;
+    const measure = () => setReserve(el.offsetHeight + EXIT_SURVEY_FRAME_GUTTER_PX);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [open, step]);
 
   useEffect(() => {
     if (!open) return;
@@ -161,121 +211,132 @@ export function CheckoutExitSurvey() {
   };
 
   return (
-    // No backdrop, and `pointer-events-none` on the frame so the checkout
-    // behind it stays clickable everywhere the card itself is not.
-    <div
-      // z-[120] clears the sticky site header (z-[100]) and its mega menu
-      // (z-[110]) — under either of them the question and the close button hide
-      // behind the header on a laptop screen — but stays UNDER the mobile
-      // navigation drawer (z-[200]), which is a screen the shopper opened on
-      // purpose and must not be covered.
-      className="pointer-events-none fixed inset-0 z-[120] flex items-end justify-center p-3 sm:items-end sm:justify-end sm:p-6"
-      aria-live="polite"
-    >
+    <>
+      {/* Grows the page by the card's height so the checkout's own bottom —
+          Order Summary, Total, Place Order, its hint — always scrolls clear. */}
+      <div aria-hidden style={{ height: reserve }} />
+      {/* No backdrop, and `pointer-events-none` on the frame so the checkout
+          behind it stays clickable everywhere the card itself is not. */}
       <div
-        role="dialog"
-        aria-modal="false"
-        aria-label="Checkout survey"
-        // A column with ONE scrolling part: the question and the Next button
-        // stay in view however long the option list is, so the pop-up can never
-        // present a list with no visible way out of it.
-        className="pointer-events-auto flex max-h-[75vh] w-full flex-col rounded-2xl bg-white p-5 shadow-2xl ring-1 ring-black/10 sm:w-[380px]"
+        // z-[120] clears the sticky site header (z-[100]) and its mega menu
+        // (z-[110]) — under either of them the question and the close button hide
+        // behind the header on a laptop screen — but stays UNDER the mobile
+        // navigation drawer (z-[200]), which is a screen the shopper opened on
+        // purpose and must not be covered.
+        // Bottom-LEFT from `sm` up, never bottom-right: the Order Summary is the
+        // right-hand column on this checkout, and it carries the Total, the
+        // Place Order / Pay Now button and the sentence explaining why the button
+        // is disabled. Covering those would break a rule card 7vu2iEEZ put on
+        // this surface, and would make a prompt behave like a gate.
+        className="pointer-events-none fixed inset-0 z-[120] flex items-end justify-center p-3 sm:justify-start sm:p-6"
+        aria-live="polite"
       >
-        <div className="flex shrink-0 justify-end">
-          <button
-            type="button"
-            onClick={dismiss}
-            aria-label="Close survey"
-            className="-mr-1 -mt-1 rounded-full p-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {step === "thanks" ? (
-          <div className="shrink-0 pb-1 pt-2">
-            <p className="text-center text-base font-semibold text-zinc-900">
-              {CHECKOUT_SURVEY_THANKS}
-            </p>
+        <div
+          ref={cardRef}
+          role="dialog"
+          aria-modal="false"
+          aria-label="Checkout survey"
+          // A column with ONE scrolling part: the question and the Next button
+          // stay in view however long the option list is, so the pop-up can never
+          // present a list with no visible way out of it.
+          className="pointer-events-auto flex max-h-[60vh] w-full flex-col rounded-2xl bg-white p-5 shadow-2xl ring-1 ring-black/10 sm:max-h-[75vh] sm:w-[380px]"
+        >
+          <div className="flex shrink-0 justify-end">
             <button
               type="button"
-              onClick={() => setOpen(false)}
-              className="btn-primary mt-5 w-full"
+              onClick={dismiss}
+              aria-label="Close survey"
+              className="-mr-1 -mt-1 rounded-full p-1 text-steel-500 hover:bg-steel-100 hover:text-ink-900"
             >
-              Close
+              <X className="h-5 w-5" />
             </button>
           </div>
-        ) : step === "reason" ? (
-          <>
-            <p className="shrink-0 pr-2 text-base text-zinc-900">
-              {CHECKOUT_SURVEY_REASON_QUESTION}
-            </p>
-            <div className="mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto">
-              {CHECKOUT_SURVEY_REASONS.map((reason) => (
-                <label
-                  key={reason}
-                  className={`flex cursor-pointer items-start gap-3 rounded-full border px-4 py-3 text-sm transition-colors ${
-                    draft.reason === reason
-                      ? "border-zinc-900 bg-zinc-50 text-zinc-900"
-                      : "border-zinc-300 text-zinc-700 hover:border-zinc-400"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="checkout_survey_reason"
-                    value={reason}
-                    checked={draft.reason === reason}
-                    onChange={() => setDraft((d) => ({ ...d, reason }))}
-                    className="mt-0.5 h-4 w-4 shrink-0 accent-zinc-900"
-                  />
-                  <span>{reason}</span>
-                </label>
-              ))}
+
+          {step === "thanks" ? (
+            <div className="shrink-0 pb-1 pt-2">
+              <p className="text-center text-base font-semibold text-ink-900">
+                {CHECKOUT_SURVEY_THANKS}
+              </p>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="btn-primary mt-5 w-full"
+              >
+                Close
+              </button>
             </div>
-            {draft.reason === CHECKOUT_SURVEY_REASON_OTHER && (
-              <textarea
-                value={draft.other}
-                onChange={(e) => setDraft((d) => ({ ...d, other: e.target.value }))}
-                maxLength={EXIT_SURVEY_OTHER_MAX_LENGTH}
-                rows={3}
-                aria-label="Tell us more"
-                placeholder="Tell us more (optional)"
-                className="mt-3 w-full shrink-0 rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-zinc-900 focus:outline-none"
-              />
-            )}
-            <NextButton disabled={nextDisabled} onClick={onNext} />
-          </>
-        ) : (
-          <>
-            <p className="shrink-0 pr-2 text-base text-zinc-900">
-              {CHECKOUT_SURVEY_LIKELIHOOD_QUESTION}
-            </p>
-            <div className="mt-4 flex shrink-0 justify-between gap-1">
-              {CHECKOUT_SURVEY_LIKELIHOOD_SCALE.map((point) => (
-                <button
-                  key={point}
-                  type="button"
-                  aria-pressed={draft.likelihood === point}
-                  onClick={() => setDraft((d) => ({ ...d, likelihood: point }))}
-                  className={`h-10 w-10 rounded-lg border text-sm font-medium transition-colors ${
-                    draft.likelihood === point
-                      ? "border-zinc-900 bg-zinc-900 text-white"
-                      : "border-transparent text-zinc-700 hover:border-zinc-300"
-                  }`}
-                >
-                  {point}
-                </button>
-              ))}
-            </div>
-            <div className="mt-2 flex justify-between text-xs text-zinc-500">
-              <span>{CHECKOUT_SURVEY_LIKELIHOOD_LOW}</span>
-              <span>{CHECKOUT_SURVEY_LIKELIHOOD_HIGH}</span>
-            </div>
-            <NextButton disabled={nextDisabled} onClick={onNext} />
-          </>
-        )}
-      </div>
-    </div>
+          ) : step === "reason" ? (
+            <>
+              <p className="shrink-0 pr-2 text-base text-ink-900">
+                {CHECKOUT_SURVEY_REASON_QUESTION}
+              </p>
+              <div className="mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto">
+                {CHECKOUT_SURVEY_REASONS.map((reason) => (
+                  <label
+                    key={reason}
+                    className={`flex cursor-pointer items-start gap-3 rounded-full border px-4 py-3 text-sm transition-colors ${
+                      draft.reason === reason
+                        ? "border-ink-900 bg-steel-50 text-ink-900"
+                        : "border-steel-300 text-steel-700 hover:border-steel-400"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="checkout_survey_reason"
+                      value={reason}
+                      checked={draft.reason === reason}
+                      onChange={() => setDraft((d) => ({ ...d, reason }))}
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-ink-900"
+                    />
+                    <span>{reason}</span>
+                  </label>
+                ))}
+              </div>
+              {draft.reason === CHECKOUT_SURVEY_REASON_OTHER && (
+                <textarea
+                  value={draft.other}
+                  onChange={(e) => setDraft((d) => ({ ...d, other: e.target.value }))}
+                  maxLength={EXIT_SURVEY_OTHER_MAX_LENGTH}
+                  rows={3}
+                  aria-label="Tell us more"
+                  placeholder="Tell us more (optional)"
+                  className="mt-3 w-full shrink-0 rounded-lg border border-steel-300 px-3 py-2 text-sm text-ink-900 focus:border-ink-900 focus:outline-none"
+                />
+              )}
+              <NextButton disabled={nextDisabled} onClick={onNext} />
+            </>
+          ) : (
+            <>
+              <p className="shrink-0 pr-2 text-base text-ink-900">
+                {CHECKOUT_SURVEY_LIKELIHOOD_QUESTION}
+              </p>
+              <div className="mt-4 flex shrink-0 justify-between gap-1">
+                {CHECKOUT_SURVEY_LIKELIHOOD_SCALE.map((point) => (
+                  <button
+                    key={point}
+                    type="button"
+                    aria-pressed={draft.likelihood === point}
+                    onClick={() => setDraft((d) => ({ ...d, likelihood: point }))}
+                    className={`h-10 w-10 rounded-lg border text-sm font-medium transition-colors ${
+                      draft.likelihood === point
+                        ? "border-ink-900 bg-ink-900 text-white"
+                        : "border-transparent text-steel-700 hover:border-steel-300"
+                    }`}
+                  >
+                    {point}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2 flex justify-between text-xs text-steel-500">
+                <span>{CHECKOUT_SURVEY_LIKELIHOOD_LOW}</span>
+                <span>{CHECKOUT_SURVEY_LIKELIHOOD_HIGH}</span>
+              </div>
+              <NextButton disabled={nextDisabled} onClick={onNext} />
+            </>
+          )}
+        </div>
+        </div>
+    </>
   );
 }
 

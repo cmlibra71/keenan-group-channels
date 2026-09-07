@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   hasSurveyAnswer,
   isExitIntent,
@@ -95,4 +96,58 @@ test("the email rides along but is never an answer on its own", () => {
   const emailOnly = surveyAnswers({ reason: "", other: "", likelihood: "" }, "chef@example.com");
   assert.equal(emailOnly[CHECKOUT_SURVEY_EMAIL_FIELD], "chef@example.com");
   assert.equal(hasSurveyAnswer(emailOnly), false);
+});
+
+// ── Where the card is allowed to sit ────────────────────────────────────────
+//
+// A source guard, in the spirit of `finance-offer-parity.test.ts`: the defect
+// lives in a className, so no test of the pure functions above can see it.
+//
+// The Order Summary is the RIGHT-hand column of this checkout and it carries
+// the Total, the Place Order / Pay Now button and the sentence saying why that
+// button is disabled. The sf-checkout register's "Do not break" list (card
+// 7vu2iEEZ) says that hint is the only thing telling a shopper why they cannot
+// submit — so a pop-up that lands on it, with `pointer-events-auto`, is a gate
+// wearing a prompt's clothes. It used to.
+
+const component = readFileSync(
+  new URL("../../components/checkout/CheckoutExitSurvey.tsx", import.meta.url),
+  "utf8"
+);
+
+const frameClass =
+  component.match(/className="(pointer-events-none fixed inset-0[^"]*)"/)?.[1] ?? "";
+
+test("the pop-up frame keeps the card away from the Order Summary column", () => {
+  assert.ok(frameClass, "could not find the pop-up frame's className");
+  assert.ok(
+    frameClass.includes("sm:justify-start"),
+    "the card must sit bottom-LEFT from sm up — the Order Summary is the right-hand column"
+  );
+  assert.ok(
+    !/justify-end/.test(frameClass),
+    "justify-end puts the card over the Total, Place Order and its disabled hint"
+  );
+  assert.ok(
+    frameClass.includes("pointer-events-none"),
+    "the frame must not swallow clicks meant for the checkout behind it"
+  );
+});
+
+test("the page reserves room below the checkout while the pop-up is open", () => {
+  // On a phone the checkout is one column and the Order Summary is the LAST
+  // thing on the page, so a bottom-anchored card would cover it with nothing
+  // left to scroll. The spacer is what makes "the checkout stays usable behind
+  // it" true rather than aspirational.
+  assert.match(component, /aria-hidden style=\{\{ height: reserve \}\}/);
+  assert.match(component, /setReserve\(el\.offsetHeight \+ EXIT_SURVEY_FRAME_GUTTER_PX\)/);
+});
+
+test("nothing in the pop-up ever delays a navigation", () => {
+  // The rule that outranks every other rule on this component. Matched against
+  // the CODE, so the two comments that name `beforeunload` to say we do not use
+  // it are not mistaken for a use of it.
+  const code = component.replace(/\/\/[^\n]*/g, "");
+  assert.ok(!/beforeunload/.test(code), "beforeunload would turn the prompt into a gate");
+  assert.ok(!/preventDefault/.test(code), "nothing here may cancel a click or a key");
 });

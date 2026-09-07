@@ -29,6 +29,15 @@ export const EXIT_SURVEY_SESSION_KEY = "kg:checkout-survey:done";
 export const EXIT_SURVEY_OTHER_MAX_LENGTH = 500;
 
 /**
+ * The gap between the pop-up card and the edge of the window (`sm:p-6`).
+ *
+ * It is added to the card's own height when the page reserves room below the
+ * checkout, so the last thing on the page clears the card rather than stopping
+ * flush against it.
+ */
+export const EXIT_SURVEY_FRAME_GUTTER_PX = 24;
+
+/**
  * True when the pointer left through the TOP edge of the window — the browser's
  * only honest "they are reaching for the address bar, the back button or the
  * tab strip" signal.
