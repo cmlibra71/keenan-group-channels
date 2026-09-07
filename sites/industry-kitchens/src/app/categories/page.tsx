@@ -37,7 +37,10 @@ export default async function CategoriesPage() {
               href={`/categories/${category.slug || category.id}`}
               className="group block rounded-lg border border-zinc-200 overflow-hidden hover:border-zinc-400 hover:shadow-sm transition-all"
             >
-              <div className="relative aspect-[4/3] bg-zinc-100 overflow-hidden">
+              {/* 3:1 is the category BANNER ratio (card RyMa2mkX): artwork with its heading baked
+                  in fits whole instead of being sliced. object-cover is kept knowing the cost: until
+                  the artwork is banners, a square photo shows as a horizontal slice. */}
+              <div className="relative aspect-[3/1] bg-zinc-100 overflow-hidden">
                 {category.image_url ? (
                   <Image
                     src={category.image_url}
