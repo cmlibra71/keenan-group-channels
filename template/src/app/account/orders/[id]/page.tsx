@@ -429,8 +429,8 @@ export default async function OrderDetailPage({
             drift apart, and the WORD is still customerOrderStage() — the closed
             eight-stage set. Nothing about this change lets a raw status, an
             internal word or a finance company's name onto the page. */}
-        <span className={orderStatusPillClass(order.status)}>
-          {customerOrderStage(order.status)}
+        <span className={orderStatusPillClass(order.status, order.payment_method)}>
+          {customerOrderStage(order.status, order.payment_method)}
         </span>
       </div>
       {/* The eyebrow and the invoice download share ONE container, and the container carries the

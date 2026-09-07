@@ -17,6 +17,10 @@ interface OrderRecord {
   id: number;
   order_number: string;
   status: string;
+  // Read only so the stage helpers can tell a finance order from a net-terms one:
+  // both carry `net_terms_account`, and only the finance pair reads "Placed"
+  // (card MHHjnZ0c). Never rendered.
+  payment_method?: string | null;
   total_inc_tax: string;
   created_at: Date | null;
   // `cancelled_at` is set when a staff order amendment moved this line onto a replacement
@@ -177,8 +181,8 @@ export default async function OrdersPage() {
                       both come from lib/orders/order-presentation, keyed on the
                       customer STAGE rather than on two raw status spellings
                       (card a1lgdzW7). This chip keeps the list's compact size. */}
-                  <span className={orderStatusChipClass(order.status)}>
-                    {customerOrderStage(order.status)}
+                  <span className={orderStatusChipClass(order.status, order.payment_method)}>
+                    {customerOrderStage(order.status, order.payment_method)}
                   </span>
                   <Price amount={order.total_inc_tax} className="font-semibold text-text-primary" />
                 </div>

@@ -308,9 +308,18 @@ export const ORDER_STAGE_COLOUR_CLASS: Record<OrderStage, string> = {
   Refunded: "bg-purple-800 text-white",
 };
 
-/** Just the colour, for a caller supplying its own geometry. */
-export function orderStageColourClass(status: string | null | undefined): string {
-  return ORDER_STAGE_COLOUR_CLASS[customerOrderStage(status)];
+/**
+ * Just the colour, for a caller supplying its own geometry.
+ *
+ * `paymentMethod` is passed straight through to `customerOrderStage` so the colour
+ * can never disagree with the word — a finance order reads "Placed" and therefore
+ * wears the Placed slate, not the being-prepared green (card MHHjnZ0c).
+ */
+export function orderStageColourClass(
+  status: string | null | undefined,
+  paymentMethod?: string | null
+): string {
+  return ORDER_STAGE_COLOUR_CLASS[customerOrderStage(status, paymentMethod)];
 }
 
 /**
@@ -319,8 +328,11 @@ export function orderStageColourClass(status: string | null | undefined): string
  * Larger type, more padding and a solid colour, because this is the one thing on
  * the page a customer opens the page to read.
  */
-export function orderStatusPillClass(status: string | null | undefined): string {
-  return `inline-flex items-center rounded-full px-4 py-2 text-sm sm:text-base font-semibold leading-none shadow-sm ${orderStageColourClass(status)}`;
+export function orderStatusPillClass(
+  status: string | null | undefined,
+  paymentMethod?: string | null
+): string {
+  return `inline-flex items-center rounded-full px-4 py-2 text-sm sm:text-base font-semibold leading-none shadow-sm ${orderStageColourClass(status, paymentMethod)}`;
 }
 
 /**
@@ -329,8 +341,11 @@ export function orderStatusPillClass(status: string | null | undefined): string 
  * Same colour as the pill one click later — that pairing is the point — but the
  * list's own size, because a list of twenty orders is not twenty headlines.
  */
-export function orderStatusChipClass(status: string | null | undefined): string {
-  return `inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold leading-none ${orderStageColourClass(status)}`;
+export function orderStatusChipClass(
+  status: string | null | undefined,
+  paymentMethod?: string | null
+): string {
+  return `inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold leading-none ${orderStageColourClass(status, paymentMethod)}`;
 }
 
 // ── The money the customer reads, GST-INCLUSIVE ──────────────────────────────

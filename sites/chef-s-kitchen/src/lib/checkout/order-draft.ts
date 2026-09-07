@@ -32,14 +32,17 @@ export type PaymentStatus = "pending" | "awaiting_payment" | "pending_payment" |
  * card VAjaPj0t, 2026-08-11). That is a statement about the MONEY and it has not
  * changed.
  *
- * What the ORDER STATUS does with it has. A finance order is now treated exactly
- * like a net-terms order — prepared straight away, collected later from the
- * finance company (Tim, 26 Aug: "Silver Chef is the same as processing on net
- * terms, as is Scope Finance"; card MHHjnZ0c) — so `initialOrderStatus` reads the
- * order's payment METHOD as well as this status and gives it Zoey's
- * `net_terms_account` rather than "Pending Payment". Do not encode that here:
- * this function answers "has the money arrived", and for a finance order the
- * honest answer is still no.
+ * What the ORDER STATUS does with it has. Staff now handle a finance order exactly
+ * like a net-terms order — prepared straight away, collected later from the finance
+ * company (Tim, 26 Aug: "Silver Chef is the same as processing on net terms, as is
+ * Scope Finance"; card MHHjnZ0c) — so `initialOrderStatus` reads the order's payment
+ * METHOD as well as this status and gives it Zoey's `net_terms_account` rather than
+ * "Pending Payment". Do not encode that here: this function answers "has the money
+ * arrived", and for a finance order the honest answer is still no.
+ *
+ * That move is INTERNAL. The shopper's own order pages still read "Placed" for a
+ * finance order, because nobody has paid, approved or started it — see the finance
+ * override in `lib/orders/order-status-label.ts`.
  *
  * The ids are spelled out rather than imported so this module stays pure
  * arithmetic with no service-layer dependency; @keenan/services
