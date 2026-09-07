@@ -5,9 +5,16 @@ import { draftMode, headers } from "next/headers";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { getBrandBySlug, getProducts, getFeatureFlag, getCmsPage } from "@/lib/store";
+import {
+  getBrandBySlug,
+  getBrandListing,
+  getProducts,
+  getStorefrontFilters,
+  getFeatureFlag,
+  getCmsPage,
+} from "@/lib/store";
 import { getListingMemberPrices } from "@/lib/member";
-import { renderBrandNodeBranch } from "@/builder/brand-node-branch";
+import { brandNodePathApplies, renderBrandNodeBranch } from "@/builder/brand-node-branch";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BrandIntro } from "@/components/brand/BrandIntro";
@@ -15,6 +22,25 @@ import { BrandSearch } from "@/components/brand/BrandSearch";
 import { BrandProductLines } from "@/components/brand/BrandProductLines";
 import { BrandIndustryUses } from "@/components/brand/BrandIndustryUses";
 import { BrandFaq } from "@/components/brand/BrandFaq";
+import { BrandCategories } from "@/components/brand/BrandCategories";
+import { FacetRail, FacetChips, SortSelect } from "@/components/category/FilterRail";
+import { enabledFilterIds } from "@/lib/storefront-filters";
+import { parsePriceBands, parseRangeParam } from "@/lib/category-attributes";
+import { parseAttributeSelections } from "@keenan/services/services";
+import {
+  CATEGORY_PARAM,
+  MAX_PAGES,
+  PER_PAGE,
+  attributeParamsOf,
+  brandClearParams,
+  brandFacetGroups,
+  brandNextPageHref,
+  parseBrandPage,
+  parseBrandSort,
+  parseIds,
+  type BrandListingFacets,
+  type BrandSearchParams,
+} from "@/lib/brand-listing";
 
 type BrandMetafields = {
   intro_html?: string;
@@ -53,12 +79,25 @@ export async function generateMetadata({
   };
 }
 
+/**
+ * The brand page lists the brand's CATEGORIES and its PRODUCTS, with the same
+ * filters, sort and "Load more" the category page has (card xOBnQarT). Every
+ * control is the category page's own component — `FacetRail`, `FacetChips`,
+ * `SortSelect`, `ProductGrid` — driven by `lib/brand-listing.ts`; there is
+ * deliberately no second listing implementation.
+ *
+ * When this site's AUTHORED brand tree renders the page instead, the listing
+ * furniture is not on screen to drive, so the route loads what that tree has
+ * always been given and hands it straight over — see `brandNodePathApplies`.
+ */
 export default async function BrandPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<BrandSearchParams>;
 }) {
-  const { slug } = await params;
+  const [{ slug }, sp] = await Promise.all([params, searchParams]);
   // getBrandBySlug → getBySlug runs transformRow, so the row is snake_case at runtime
   // (image_url). Type it so the loose Record<string,unknown> doesn't surface as `unknown`.
   const brand = (await getBrandBySlug(slug)) as
@@ -81,11 +120,6 @@ export default async function BrandPage({
     notFound();
   }
 
-  const [{ products, total }, memberPricingEnabled] = await Promise.all([
-    getProducts({ brandId: brand.id as number, limit: 48 }),
-    getFeatureFlag("member_pricing_enabled"),
-  ]);
-
   const meta = ((brand.metafields as BrandMetafields | null) ?? {}) as BrandMetafields;
   const pageTitle = (brand.page_title as string | null) || (brand.name as string);
 
@@ -96,18 +130,81 @@ export default async function BrandPage({
   const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
   const brandCms = await getCmsPage("__brand__", draft).catch(() => null);
 
-  // Site Builder node path — additive. Returns null (and we fall through to the
-  // blocks below) until a brand tree is authored and the flag is on.
-  const nodeRendered = await renderBrandNodeBranch({
-    brandCms,
-    brand: brand as unknown as Record<string, unknown>,
-    products,
-    total,
-    pricing: { memberPriceMap: await getListingMemberPrices(products) },
-    memberPricingEnabled,
-    draft,
+  // ═══ Site Builder node path ═══ The authored tree binds a plain product list
+  // and carries no filter rail, so it keeps the load it has always had: asking
+  // for the faceted listing here would hand a designed page 24 rows where it
+  // shows 48, with nothing on screen to page or filter them.
+  if (await brandNodePathApplies({ brandCms, draft })) {
+    const [{ products: nodeProducts, total: nodeTotal }, nodeMemberPricing] = await Promise.all([
+      getProducts({ brandId: brand.id as number, limit: 48 }),
+      getFeatureFlag("member_pricing_enabled"),
+    ]);
+    const nodeRendered = await renderBrandNodeBranch({
+      brandCms,
+      brand: brand as unknown as Record<string, unknown>,
+      products: nodeProducts,
+      total: nodeTotal,
+      pricing: { memberPriceMap: await getListingMemberPrices(nodeProducts) },
+      memberPricingEnabled: nodeMemberPricing,
+      draft,
+    });
+    if (nodeRendered) return nodeRendered;
+  }
+
+  const page = parseBrandPage(sp.page);
+  const sort = parseBrandSort(sp.sort);
+
+  // This storefront's rail configuration (portal: Products > Filtering). A
+  // switched-off facet must stop FILTERING, not merely displaying, so its URL
+  // selections are dropped before they reach the query (NfYe3P3G). Brand is
+  // skipped outright: the page IS the brand.
+  const storefrontFilters = await getStorefrontFilters();
+  const filtersOn = enabledFilterIds(storefrontFilters);
+  const categoryEnabled = filtersOn.has("sub");
+  const priceEnabled = filtersOn.has("price");
+
+  const rawPrice = priceEnabled ? sp.price : undefined;
+  const priceBands = parsePriceBands(rawPrice) as ("lt1000" | "1000to3000" | "gt3000")[];
+  const priceRange = priceBands.length === 0 ? parseRangeParam(rawPrice) : undefined;
+  const attributeSelections = parseAttributeSelections(sp as Record<string, string | undefined>);
+
+  const [listing, memberPricingEnabled] = await Promise.all([
+    getBrandListing(brand.id, {
+      // Cumulative for Load more: each press re-asks for the SAME listing with a
+      // bigger limit, and `total` + `facets` stay anchored to page 1 inside
+      // getBrandListing so the toolbar's numbers do not move as the shopper pages.
+      page: 1,
+      limit: PER_PAGE * page,
+      categoryIds: categoryEnabled ? parseIds(sp[CATEGORY_PARAM]) : [],
+      priceBands,
+      priceRange,
+      attributes: attributeSelections,
+      sort,
+    }),
+    getFeatureFlag("member_pricing_enabled"),
+  ]);
+
+  const { products, total } = listing;
+  const facets = listing.facets as unknown as BrandListingFacets;
+  const groups = brandFacetGroups(facets, storefrontFilters);
+  const shown = products.length;
+  const hasMore = shown < total && page < MAX_PAGES;
+  // "Nothing here" and "nothing MATCHES" are different sentences: a brand with
+  // no products at all is a fact about the catalogue, an empty filtered listing
+  // is something the shopper can undo.
+  const filtered =
+    (categoryEnabled && parseIds(sp[CATEGORY_PARAM]).length > 0) ||
+    (priceEnabled && Boolean(rawPrice)) ||
+    Object.keys(attributeSelections).length > 0;
+
+  const nextPageHref = brandNextPageHref({
+    slug,
+    searchParams: sp,
+    page,
+    categoryEnabled,
+    priceEnabled,
+    attributeParams: attributeParamsOf(facets),
   });
-  if (nodeRendered) return nodeRendered;
 
   const brandRegion = (r: string): RenderedBlock[] =>
     ((brandCms?.blocks as unknown as RenderedBlock[]) ?? []).filter((b) => b.region === r);
@@ -164,15 +261,66 @@ export default async function BrandPage({
       {/* Brand product lines (e.g. Rational iCombi Pro / Classic / Vario) */}
       <BrandProductLines heading="Product Lines" lines={meta.product_lines} />
 
-      {/* Products */}
-      {products.length > 0 ? (
-        <div className="mt-12">
-          <h2 className="text-lg font-semibold text-zinc-900 mb-4">Products</h2>
-          <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(products)} listId={`brand_${brand.slug ?? brand.id}`} listName={String(brand.name ?? "")} />
+      {/* ═══ The brand's categories ═══ A tile narrows this page while the
+          Category facet is on; with it switched off the tile goes to the
+          category's own page rather than being a control that does nothing. */}
+      <div className="mt-12">
+        <BrandCategories
+          categories={facets.categories}
+          hrefFor={(category) =>
+            categoryEnabled
+              ? `/brands/${slug}?${CATEGORY_PARAM}=${category.id}`
+              : `/categories/${category.slug}`
+          }
+        />
+      </div>
+
+      {/* ═══ Rail + grid ═══ */}
+      <div className="flex gap-6">
+        <FacetRail groups={groups} clearParams={brandClearParams(facets, storefrontFilters)} />
+
+        <div className="min-w-0 flex-1">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-[13px] text-zinc-600">
+                Showing <b className="text-zinc-900">1–{shown}</b> of{" "}
+                <b className="text-zinc-900">{total}</b>
+              </p>
+              <FacetChips groups={groups} />
+            </div>
+            <SortSelect />
+          </div>
+
+          {products.length > 0 ? (
+            <ProductGrid
+              products={products}
+              memberPricingAvailable={memberPricingEnabled}
+              memberPriceMap={await getListingMemberPrices(products)}
+              listId={`brand_${brand.slug ?? brand.id}`}
+              listName={String(brand.name ?? "")}
+            />
+          ) : (
+            <p className="text-zinc-500 text-center py-12">
+              {filtered
+                ? "No products match these filters."
+                : "No products from this brand yet."}
+            </p>
+          )}
+
+          {/* Load more */}
+          {hasMore && (
+            <div className="mt-10 text-center">
+              <Link
+                href={nextPageHref}
+                scroll={false}
+                className="inline-flex items-center rounded-md border border-zinc-300 bg-white px-5 py-2.5 text-sm font-semibold text-zinc-700 transition-colors hover:border-zinc-400 hover:bg-zinc-50"
+              >
+                Load more ({total - shown} remaining)
+              </Link>
+            </div>
+          )}
         </div>
-      ) : (
-        <p className="text-zinc-500 text-center py-12">No products from this brand yet.</p>
-      )}
+      </div>
 
       {/* Industry-use tiles (e.g. Cafés / Restaurants / Hotels) */}
       <BrandIndustryUses heading="Top Use Cases" items={meta.industry_uses} />
