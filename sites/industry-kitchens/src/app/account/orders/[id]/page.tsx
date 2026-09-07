@@ -19,7 +19,7 @@ import { canCustomerViewOrder } from "@/lib/orders/order-visibility";
 import { payBalanceForOrder } from "@/lib/orders/pay-balance-site";
 import { isUnpayableOrderStatus } from "@/lib/orders/pay-balance";
 import {
-  orderStatusChipClass,
+  orderStatusPillClass,
   orderLineBasis,
   orderTaxFactor,
   orderTotalRows,
@@ -420,10 +420,16 @@ export default async function OrderDetailPage({
         <h1 className={PAGE_TITLE_CLASS}>Order {orderNumber}</h1>
         {/* The status the customer just read on Order History — same word, same
             colour. Both surfaces render customerOrderStage(), never the raw
-            `orders.status` column. */}
-        <span
-          className={`text-xs font-medium px-2 py-1 rounded-full ${orderStatusChipClass(order.status)}`}
-        >
+            `orders.status` column.
+
+            Here it is the LARGE pill: solid colour, white text, headline size
+            (card a1lgdzW7, Tim — "it needs to pop more … larger … a colour. All
+            of the above"). The geometry and the colour both come from
+            orderStatusPillClass so that the list's chip and this pill cannot
+            drift apart, and the WORD is still customerOrderStage() — the closed
+            eight-stage set. Nothing about this change lets a raw status, an
+            internal word or a finance company's name onto the page. */}
+        <span className={orderStatusPillClass(order.status)}>
           {customerOrderStage(order.status)}
         </span>
       </div>

@@ -18,6 +18,8 @@
 //      client component (an RSC prop ships in the flight payload even unrendered).
 // ============================================================================
 
+import { customerOrderStage, type OrderStage } from "./order-status-label";
+
 /** The shape of a configured channel payment method (subset of PaymentMethodConfig). */
 export interface PaymentMethodLike {
   id: string;
@@ -257,23 +259,78 @@ export function paymentStatusLabel(status: string | null | undefined): string {
 }
 
 /**
- * Colours for the order-status chip.
+ * Colours for the order-status pill, one per customer STAGE.
  *
- * Deliberately the SAME expression the Order History list uses inline, so the
- * status a customer sees on the list and the status they see one click later are
- * the same word in the same colour.
+ * Tim, on the 7-Aug call, twice: the status "needs to pop more. It can be
+ * dynamic. It can be larger. It can have a colour. All of the above." Chris asked
+ * specifically for the being-prepared pill to be green (card a1lgdzW7). So the
+ * pill is a SOLID colour with white text rather than the pale tint it used to be,
+ * and the colour says what the word says.
  *
- * The WORDING of that chip is not decided here — it comes from
- * `customerOrderStage()` in ./order-status-label.ts, which both the list and the
- * detail page call. That pairing is the whole point: the raw `orders.status`
- * column is a staff column carrying finance-company names and internal shorthand,
- * so neither surface may ever render it, and neither may render a different word
- * from the other. Change the wording there and both surfaces change together.
+ * Three things about this map are deliberate:
+ *
+ *   1. It is keyed on the customer STAGE, not on `orders.status`. The stage set
+ *      is closed (eight words, ./order-status-label.ts) and its fallback is
+ *      total, so no Zoey or portal status — present or future — can arrive here
+ *      without a colour, and no colour can be attached to a word a customer never
+ *      reads. The old version keyed on two raw statuses (`completed`, `shipped`)
+ *      and therefore left `complete`, the spelling every Zoey-imported order
+ *      actually carries, on the grey default.
+ *   2. The WORDING is still not decided here. Both the list and the detail page
+ *      render `customerOrderStage()`; this module only says what colour that word
+ *      wears, and both surfaces read it from here so they cannot disagree.
+ *   3. The values are fixed palette colours, not the per-site design tokens. A
+ *      status colour is a semantic (green = under way, red = stopped), it has to
+ *      mean the same thing on Chefs Depot and Industry Kitchens, and the tokens
+ *      are per-site and live-overridable from the portal Design editor — a pill
+ *      painted in `accent` is teal on CD and amber on IK, and amber cannot carry
+ *      white text at AA. Every colour below clears WCAG AA against white text
+ *      (measured: 5.05:1 at worst, amber-700), on both storefronts, which are
+ *      light-only.
+ */
+export const ORDER_STAGE_COLOUR_CLASS: Record<OrderStage, string> = {
+  // Received, nothing has started — and this is also what an UNPAID order reads.
+  Placed: "bg-slate-600 text-white",
+  // Green, by name, on Chris's ask.
+  "Being prepared": "bg-emerald-700 text-white",
+  // Both shipping stages share one colour on purpose: they are the same event at
+  // different completeness, and the words already say which. A second blue that
+  // nobody can name is noise, not information.
+  "On its way": "bg-sky-700 text-white",
+  "Partly on its way": "bg-sky-700 text-white",
+  // Finished: a deeper green than in-progress, so the two greens read as a
+  // progression rather than as the same state twice.
+  Complete: "bg-emerald-900 text-white",
+  "On hold": "bg-amber-700 text-white",
+  Cancelled: "bg-rose-700 text-white",
+  // Money returned is not the same event as an order being stopped, so it does
+  // not wear the cancelled colour.
+  Refunded: "bg-purple-800 text-white",
+};
+
+/** Just the colour, for a caller supplying its own geometry. */
+export function orderStageColourClass(status: string | null | undefined): string {
+  return ORDER_STAGE_COLOUR_CLASS[customerOrderStage(status)];
+}
+
+/**
+ * The BIG pill at the top of the order page (card a1lgdzW7).
+ *
+ * Larger type, more padding and a solid colour, because this is the one thing on
+ * the page a customer opens the page to read.
+ */
+export function orderStatusPillClass(status: string | null | undefined): string {
+  return `inline-flex items-center rounded-full px-4 py-2 text-sm sm:text-base font-semibold leading-none shadow-sm ${orderStageColourClass(status)}`;
+}
+
+/**
+ * The compact chip on the Order History list.
+ *
+ * Same colour as the pill one click later — that pairing is the point — but the
+ * list's own size, because a list of twenty orders is not twenty headlines.
  */
 export function orderStatusChipClass(status: string | null | undefined): string {
-  if (status === "completed") return "text-accent bg-accent-subtle";
-  if (status === "shipped") return "bg-accent-subtle text-accent-dark";
-  return "bg-surface-secondary text-text-secondary";
+  return `inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold leading-none ${orderStageColourClass(status)}`;
 }
 
 // ── The money the customer reads, GST-INCLUSIVE ──────────────────────────────
