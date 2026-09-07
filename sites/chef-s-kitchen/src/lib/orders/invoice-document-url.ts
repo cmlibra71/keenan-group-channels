@@ -53,23 +53,38 @@ function originOf(url: string): string | null {
   }
 }
 
+/**
+ * THE origin every portal-rendered order document is fetched from for this storefront — the host
+ * rule above, isolated so it is derived exactly once in this module.
+ *
+ * `publicQuoteUrl` needs a uuid to build a link, and the origin does not depend on which one, so a
+ * placeholder is passed and only the origin kept. Exported because the ARCHIVE endpoint
+ * (`invoice-archive.ts`, card WlTnY4cd) needs the same origin: two derivations of "which portal
+ * host does this storefront talk to" is exactly the drift `invoicePrintUrl` was written to avoid.
+ */
+export function invoicePortalOrigin(
+  site: { url?: string | null; publicSubdomain?: string | null } | null | undefined
+): string {
+  // The quote link's host, reused rather than re-derived: one apex/subdomain rule for every
+  // customer-facing portal address this storefront hands out.
+  const onOwnHost = publicQuoteUrl({
+    siteUrl: site?.url,
+    publicSubdomain: site?.publicSubdomain,
+    uuid: "00000000-0000-0000-0000-000000000000",
+  });
+  return (
+    (onOwnHost ? originOf(onOwnHost) : null) ??
+    (process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/+$/, "")
+  );
+}
+
 export function invoiceDocumentUrl(
   orderUuid: string | null | undefined,
   site: { url?: string | null; publicSubdomain?: string | null } | null | undefined
 ): string | null {
   const uuid = typeof orderUuid === "string" ? orderUuid.trim() : "";
   if (!uuid) return null;
-  // The quote link's host, reused rather than re-derived: one apex/subdomain rule for every
-  // customer-facing portal address this storefront hands out.
-  const onOwnHost = publicQuoteUrl({
-    siteUrl: site?.url,
-    publicSubdomain: site?.publicSubdomain,
-    uuid,
-  });
-  const base =
-    (onOwnHost ? originOf(onOwnHost) : null) ??
-    (process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/+$/, "");
-  return `${base}/invoice/document?o=${encodeURIComponent(uuid)}`;
+  return `${invoicePortalOrigin(site)}/invoice/document?o=${encodeURIComponent(uuid)}`;
 }
 
 /**
