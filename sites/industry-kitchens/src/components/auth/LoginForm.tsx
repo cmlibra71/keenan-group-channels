@@ -1,9 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState, useTransition } from "react";
 import Link from "next/link";
 import { User } from "lucide-react";
-import { login } from "@/lib/actions/auth";
+import { login, forgetThisDevice } from "@/lib/actions/auth";
 
 // `next` is the page the customer was trying to reach when the account guard
 // bounced them here (an emailed order link, typically). It rides the form so the
@@ -12,18 +12,40 @@ import { login } from "@/lib/actions/auth";
 export function LoginForm({
   next,
   defaultEmail,
+  rememberedDevice = false,
 }: {
   next?: string | null;
   /** Carried from the register form when that address already has an account. */
   defaultEmail?: string | null;
+  /**
+   * True when `defaultEmail` came from the known-device cookie rather than from
+   * something the customer just typed (card upTMAqRc) — it is what turns the
+   * greeting and the "Not you?" escape hatch on.
+   */
+  rememberedDevice?: boolean;
 }) {
   const [state, formAction, isPending] = useActionState(login, null);
+  // The remembered address is a starting point, not a lock: it stays an ordinary
+  // editable field, and "Not you?" empties it and forgets the browser.
+  const [email, setEmail] = useState(defaultEmail ?? "");
+  const [knownDevice, setKnownDevice] = useState(rememberedDevice);
+  const [, startForgetting] = useTransition();
+
+  function forgetDevice() {
+    setKnownDevice(false);
+    setEmail("");
+    startForgetting(async () => {
+      await forgetThisDevice();
+    });
+  }
 
   return (
     <div className="border border-zinc-200 rounded-lg p-8">
       <div className="text-center mb-6">
         <User className="h-12 w-12 text-zinc-300 mx-auto" />
-        <p className="mt-2 text-zinc-500">Sign in to your account</p>
+        <p className="mt-2 text-zinc-500">
+          {knownDevice ? "Welcome back. Enter your password to sign in." : "Sign in to your account"}
+        </p>
       </div>
 
       {state?.error && (
@@ -44,10 +66,22 @@ export function LoginForm({
             name="email"
             autoComplete="username"
             required
-            defaultValue={defaultEmail ?? undefined}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
             placeholder="your@email.com"
           />
+          {knownDevice && (
+            <p className="mt-1">
+              <button
+                type="button"
+                onClick={forgetDevice}
+                className="text-sm text-zinc-500 hover:text-zinc-900 hover:underline"
+              >
+                Not you? Use a different email
+              </button>
+            </p>
+          )}
         </div>
         <div>
           <label htmlFor="password" className="block text-sm font-medium text-zinc-700">
@@ -59,6 +93,7 @@ export function LoginForm({
             name="password"
             autoComplete="current-password"
             required
+            autoFocus={knownDevice}
             className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
           />
           <p className="mt-1 text-right">

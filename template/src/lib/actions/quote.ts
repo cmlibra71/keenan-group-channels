@@ -9,6 +9,7 @@ import {
   sendQuoteStaffNotificationEmail,
 } from "@keenan/services";
 import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
+import { readAcquisitionUtm } from "@/lib/acquisition";
 import { getSession } from "@/lib/auth";
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
 import {
@@ -68,6 +69,12 @@ async function getOrCreateQuote() {
 
   const quote = await quoteService.create({
     channelId: CHANNEL_ID,
+    // The CUSTOMER raised this quote, on the web (card T7Wclho8) — so it says so at
+    // birth rather than waiting for a rep to classify it, and it carries the campaign
+    // this shopper first arrived on where they arrived on one. This is the arrival the
+    // paid-search analysis of 26 August could not see.
+    acquisitionSource: "web_form",
+    acquisitionUtm: await readAcquisitionUtm(),
     ...((await wantsStripeTestMode(CHANNEL_ID)) ? { attributes: { test_mode: true } } : {}),
   }) as QuoteRow;
 
@@ -481,20 +488,32 @@ export async function submitQuote(form: QuoteRequestForm) {
 
   // Attach customer identity, the name, their comment and the delivery address. The
   // quote stays in `quote_pending` (Zoey lifecycle): the sales team reviews it in the
-  // portal and sends pricing back via markSent → quote_available. The submitted_at
-  // attribute distinguishes a customer-submitted request from an in-progress draft
-  // (both share the quote_pending status) and is what LOCKS the request — the panel
-  // starts a fresh quote afterwards, so there is nothing left to edit (Steve: address
-  // changes after submission are by phone or email).
-  const existingAttributes = (quote.attributes ?? {}) as Record<string, unknown>;
+  // portal and sends pricing back via markSent → quote_available.
   await quoteService.update(quote.id, {
     contactId: session.contactId,
     email: session.email,
     quoteName: form.quoteName.trim(),
     customerNotes: form.comments.trim() || null,
     shippingAddress,
-    attributes: { ...existingAttributes, submitted_at: new Date().toISOString() },
   });
+
+  // THE SUBMISSION ITSELF, and it is one shared service entry point with the
+  // portal's public /request-quote form (card ZlrhH4qQ) — the same discipline
+  // `markChangeRequested` and `markCancelled` already carry, so no surface can
+  // send its own copy of the alert or skip it.
+  //
+  // It stamps `attributes.submitted_at`, which distinguishes a customer-submitted
+  // request from an in-progress draft (both share the quote_pending status), LOCKS
+  // the request — the panel starts a fresh quote afterwards, so there is nothing
+  // left to edit (Steve: address changes after submission are by phone or email) —
+  // and is what floats the request to the top of the staff quotes list.
+  //
+  // And it EMAILS THE SALES DESK. Every other thing a customer can do to a quote
+  // already tells somebody; the one event that starts the conversation told nobody,
+  // so requests sat until the weekly awaiting-pricing chase noticed them, and some
+  // expired first. Written AFTER the update above so the email carries the name and
+  // the comment the customer just typed.
+  await quoteService.markRequestSubmitted(quote.id);
 
   // File a newly typed address for next time. Wrapped whole: a request that reached
   // the sales team must never fail because the address book could not be updated.
@@ -552,8 +571,9 @@ export async function getQuotesForCustomer() {
   // A SUBMITTED request is kept even though it is still `quote_pending`: the customer
   // has just named it, been told "You can track your quotes in My Account" and handed
   // a "View My Quotes" button (card 9tbz3sBF), so the quote they named has to be in
-  // the list. `attributes.submitted_at` is what `submitQuote` stamps and is the only
-  // thing separating a sent request from the basket-shaped draft the panel is holding.
+  // the list. `attributes.submitted_at` is stamped by the service `markRequestSubmitted`
+  // that `submitQuote` calls (card ZlrhH4qQ), and is the only thing separating a sent
+  // request from the basket-shaped draft the panel is holding.
   // Same rule as the /account/quotes page — the two must not disagree.
   const contactQuotes = withoutStaffOnlyDrafts(
     (
@@ -845,7 +865,13 @@ export async function duplicateQuote(quoteId: number) {
     return { error: "You've duplicated several quotes just now. Please wait a minute before duplicating again." };
   }
   const q = (await quoteService.getWithItems(quoteId)) as
-    | (QuoteRow & { status?: string | null; email?: string | null; items?: Array<Record<string, unknown>> })
+    | (QuoteRow & {
+        status?: string | null;
+        email?: string | null;
+        acquisition_source?: string | null;
+        acquisition_utm?: Record<string, string> | null;
+        items?: Array<Record<string, unknown>>;
+      })
     | null;
   if (!q || q.contact_id !== session.contactId || q.channel_id !== CHANNEL_ID) return { error: "Quote not found." };
   // A staff-only Draft is neither the customer's to SEE nor to COPY. The portal's
@@ -859,6 +885,13 @@ export async function duplicateQuote(quoteId: number) {
     channelId: CHANNEL_ID,
     contactId: session.contactId,
     email: q.email ?? session.email,
+    // The copy INHERITS how the customer arrived, campaign and all (card T7Wclho8):
+    // duplicating a quote is not a new arrival, and re-stamping it as a fresh web-form
+    // visit with no campaign would quietly strip the attribution off the original sale.
+    // A quote raised before this was recorded has nothing to inherit and stays blank —
+    // it is not back-filled with a guess.
+    acquisitionSource: q.acquisition_source ?? null,
+    acquisitionUtm: q.acquisition_utm ?? null,
   })) as QuoteRow;
   for (const it of q.items ?? []) {
     try {

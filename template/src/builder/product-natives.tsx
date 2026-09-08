@@ -27,6 +27,7 @@ import { SilverChefPanel } from "@/components/product/SilverChefPanel";
 import { ProductImageNotice } from "@/components/product/ProductImageNotice";
 import { ProductInstructionsPanel } from "@/components/product/ProductInstructionsPanel";
 import { useProductPurchase } from "@keenan/services/product-page";
+import { MODULAR_NOTICE_TEXT, slugIsModularSystems } from "@/builder/modular-notice";
 import { CdMemberPricingPanel } from "@/components/product/CdMemberPricingPanel";
 import type { CdMembershipData } from "@/lib/pricing/cd-member-pricing";
 
@@ -85,6 +86,19 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     ),
     "product-image-notice": () => (
       <ProductImageNotice show={product.imageIsIllustrative === true} />
+    ),
+    // The Modular Systems banner (card qGfWAzQx, Steve — CE-40). The SAME sealed
+    // panel as the notice above, because it is the same message: one look, one
+    // colour, red panel with white writing. What differs is the rule — the slug
+    // instead of the per-product tick — and the wording Steve supplied on the
+    // card. Suppressed when the tick has already put the panel on this page, so
+    // a product can never carry the banner twice.
+    "product-modular-notice": () => (
+      <ProductImageNotice
+        show={product.imageIsIllustrative !== true && slugIsModularSystems(product.slug)}
+        text={MODULAR_NOTICE_TEXT}
+        className="my-4 w-full"
+      />
     ),
   };
 }
