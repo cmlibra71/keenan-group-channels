@@ -11,10 +11,23 @@ test("keeps the structural tags the Zoey pages are written in", () => {
   const html =
     `<header><h1>Warranty</h1></header>` +
     `<section class="panel-blue"><h2>How to claim</h2><p>Steps</p></section>` +
-    `<main><article><aside>Note</aside></article></main>` +
+    `<main><p>Body</p></main>` +
     `<nav><a href="/pages/warranty">Back</a></nav>` +
     `<footer>Footer</footer>`;
   assert.equal(sanitizeHtml(html), html);
+});
+
+test("the allow-list is not widened past what we actually render", () => {
+  // Measured 2026-09-08 across both Zoey pages, the Industry Kitchens terms body
+  // and every production product description: zero uses of any of these, so they
+  // stay out. The tag is unwrapped, never the text inside it. [card vMQUPzG6]
+  for (const tag of ["article", "aside", "samp", "var", "abbr", "cite", "time", "address"]) {
+    const out = sanitizeHtml(`<${tag}>keep me</${tag}>`);
+    assert.equal(out.includes(`<${tag}`), false, `${tag} should not survive`);
+    assert.ok(out.includes("keep me"), `${tag} should not eat its own text`);
+  }
+  // `kbd` IS on the list — the manufacturer directory's keyboard hints.
+  assert.equal(sanitizeHtml("<kbd>&larr;</kbd>"), "<kbd>←</kbd>");
 });
 
 test("keeps the native accordion, open panels included", () => {

@@ -15,16 +15,31 @@ export function sanitizeHtml(html: string): string {
       "p", "br", "hr", "div", "span",
       "b", "i", "em", "strong", "u", "s", "strike", "small", "sub", "sup", "mark", "font",
       "a", "ul", "ol", "li", "dl", "dt", "dd",
-      "blockquote", "pre", "code", "kbd", "samp", "var", "abbr", "cite", "q", "time", "address",
+      // `kbd` is here on evidence: the manufacturer directory uses two of them
+      // for its keyboard hints. The rest of the text-level HTML5 set (samp, var,
+      // abbr, cite, q, time, address) is deliberately NOT, measured 2026-09-08
+      // over both Zoey pages, the Industry Kitchens terms body and every
+      // production product description: zero occurrences of any of them. This
+      // list is a security guard, so it is widened on measurement, not on
+      // symmetry. [card vMQUPzG6]
+      "blockquote", "pre", "code", "kbd",
       "h1", "h2", "h3", "h4", "h5", "h6",
       "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption", "colgroup", "col",
       "img", "figure", "figcaption",
       // The structure the Zoey-era information pages are written in. Without these
-      // the warranty page's <header> and its five <section>s collapse into one run
+      // the warranty page's <header> and its eight <section>s collapse into one run
       // of prose and every style rule written against them stops matching, which
       // is most of what "the portal does not support these pages" looked like.
-      // [card vMQUPzG6]
-      "section", "article", "header", "footer", "aside", "nav", "main",
+      // Each one is here because something on THIS render path uses it, counted
+      // 2026-09-08: section 8 + header 1 on the warranty page, nav 1 on the
+      // manufacturer directory, footer 1 in the Industry Kitchens terms body (which
+      // reaches this function today, as a `page.body_html` binding), main in 32
+      // production product descriptions scraped with a `<main
+      // data-currency-iso-code>` wrapper. `article` and `aside` complete the
+      // sectioning set and are deliberately LEFT OUT — nothing we render uses
+      // either, and this list is the guard that stops authored HTML reaching a
+      // customer. [card vMQUPzG6]
+      "section", "header", "footer", "nav", "main",
       // The accordion. <details>/<summary> is the one interactive control that
       // needs no script, which is why the Zoey FAQ is built out of it and why it
       // survives when the page's own JavaScript cannot.
