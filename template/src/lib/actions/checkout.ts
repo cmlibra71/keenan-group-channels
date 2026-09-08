@@ -532,6 +532,11 @@ export async function placeOrder(
       const shippingResult = await calculateShipping(postalCode, subtotalExTax, {
         weightKg: cartFreight?.weight_kg ?? null,
         itemCount: cartFreight?.item_count ?? null,
+        // The BULKY ARM (card NuBmIxuL). Only a CURBSIDE bulky order reaches here — a
+        // specialised one is held above at $0 for a human quote — and a bulky item still needs
+        // a tail lift to reach the kerb, so the zone's bulky surcharge applies. Same read the
+        // checkout page priced its summary from, so show equals charge.
+        hasBulkyItems: bulkyProducts.length > 0,
         // A weight-rated zone must not price a cart where some lines have no catalogue
         // weight — the weighed lines alone would land it in a cheap tier.
         weightIncomplete: cartFreight ? cartFreight.has_unweighed_lines : true,
