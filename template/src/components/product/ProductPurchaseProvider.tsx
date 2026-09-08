@@ -182,7 +182,12 @@ export function ProductPurchaseProvider({
 }) {
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
   // A product sold by the carton opens at ONE WHOLE PACK and every quantity it holds is a whole
-  // number of packs, the way Zoey's own quantity box behaves (cards O108e4jH / zeMPVcA3).
+  // number of packs (cards O108e4jH / zeMPVcA3).
+  //
+  // DELIBERATELY NOT Zoey's affordance, and this comment used to claim it was. Zoey's box counts
+  // CARTONS — "Qty: 1 / Carton contains 12 Pcs", and it multiplies. Ours counts PIECES, so the same
+  // product opens at 12. Same money, same delivery, different affordance; recorded on
+  // `sf-product-page` › "Deliberately different from Zoey" in the behaviour register.
   // packSize is 1 on everything else, so this is the 1 this box has always started at.
   const packSize = resolvePackSize({ sellPackSize: product.packSize ?? null });
   const packUnit = resolvePackUnit({ sellPackUnit: product.packUnit ?? null });

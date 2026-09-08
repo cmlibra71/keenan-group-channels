@@ -55,6 +55,8 @@
     "builder/product-image-notice.test.ts",
     "builder/product-image-notice.ts",
     "builder/product-node-branch.tsx",
+    "builder/product-pack-note.test.ts",
+    "builder/product-pack-note.ts",
     "builder/promo-tag-node.test.ts",
     "builder/promo-tag-node.ts",
     "builder/seeds/product.ts",

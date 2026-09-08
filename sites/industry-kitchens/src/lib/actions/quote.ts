@@ -256,7 +256,16 @@ export async function updateQuoteItem(itemId: number, quantity: number) {
           product_sell_pack_unit?: string | null;
         }
       | undefined;
-    const previousQuantity = Number(line?.quantity ?? 0);
+    // The snapshot's own total is exactly what `countQuoteItems` would report — it is the same
+    // read — so the badge is authoritative even when we return without writing.
+    const snapshotCount = items.reduce((sum, i) => sum + Number(i.quantity ?? 0), 0);
+    // The posted item is not on this quote (deleted in another tab, or a stale form from a
+    // different quote). The write below would no-op against the parent scope, and adjusting the
+    // badge by a `previousQuantity` of 0 would INFLATE it by the whole new quantity. Report the
+    // count we actually hold and change nothing.
+    if (!line) return { success: true, quoteCount: snapshotCount };
+
+    const previousQuantity = Number(line.quantity ?? 0);
 
     let nextQuantity = 0;
     if (quantity <= 0) {
@@ -275,8 +284,7 @@ export async function updateQuoteItem(itemId: number, quantity: number) {
 
     // The badge is the snapshot's total adjusted by the one line this call moved, so it reflects
     // the write we just made without re-reading the quote to find out.
-    const quoteCount =
-      items.reduce((sum, i) => sum + Number(i.quantity ?? 0), 0) - previousQuantity + nextQuantity;
+    const quoteCount = snapshotCount - previousQuantity + nextQuantity;
     return { success: true, quoteCount };
   } catch (e) {
     console.error("[updateQuoteItem] failed (non-fatal):", e);
