@@ -403,20 +403,32 @@ export async function submitQuote(form: QuoteRequestForm) {
 
   // Attach customer identity, the name, their comment and the delivery address. The
   // quote stays in `quote_pending` (Zoey lifecycle): the sales team reviews it in the
-  // portal and sends pricing back via markSent → quote_available. The submitted_at
-  // attribute distinguishes a customer-submitted request from an in-progress draft
-  // (both share the quote_pending status) and is what LOCKS the request — the panel
-  // starts a fresh quote afterwards, so there is nothing left to edit (Steve: address
-  // changes after submission are by phone or email).
-  const existingAttributes = (quote.attributes ?? {}) as Record<string, unknown>;
+  // portal and sends pricing back via markSent → quote_available.
   await quoteService.update(quote.id, {
     contactId: session.contactId,
     email: session.email,
     quoteName: form.quoteName.trim(),
     customerNotes: form.comments.trim() || null,
     shippingAddress,
-    attributes: { ...existingAttributes, submitted_at: new Date().toISOString() },
   });
+
+  // THE SUBMISSION ITSELF, and it is one shared service entry point with the
+  // portal's public /request-quote form (card ZlrhH4qQ) — the same discipline
+  // `markChangeRequested` and `markCancelled` already carry, so no surface can
+  // send its own copy of the alert or skip it.
+  //
+  // It stamps `attributes.submitted_at`, which distinguishes a customer-submitted
+  // request from an in-progress draft (both share the quote_pending status), LOCKS
+  // the request — the panel starts a fresh quote afterwards, so there is nothing
+  // left to edit (Steve: address changes after submission are by phone or email) —
+  // and is what floats the request to the top of the staff quotes list.
+  //
+  // And it EMAILS THE SALES DESK. Every other thing a customer can do to a quote
+  // already tells somebody; the one event that starts the conversation told nobody,
+  // so requests sat until the weekly awaiting-pricing chase noticed them, and some
+  // expired first. Written AFTER the update above so the email carries the name and
+  // the comment the customer just typed.
+  await quoteService.markRequestSubmitted(quote.id);
 
   // File a newly typed address for next time. Wrapped whole: a request that reached
   // the sales team must never fail because the address book could not be updated.
@@ -474,8 +486,9 @@ export async function getQuotesForCustomer() {
   // A SUBMITTED request is kept even though it is still `quote_pending`: the customer
   // has just named it, been told "You can track your quotes in My Account" and handed
   // a "View My Quotes" button (card 9tbz3sBF), so the quote they named has to be in
-  // the list. `attributes.submitted_at` is what `submitQuote` stamps and is the only
-  // thing separating a sent request from the basket-shaped draft the panel is holding.
+  // the list. `attributes.submitted_at` is stamped by the service `markRequestSubmitted`
+  // that `submitQuote` calls (card ZlrhH4qQ), and is the only thing separating a sent
+  // request from the basket-shaped draft the panel is holding.
   // Same rule as the /account/quotes page — the two must not disagree.
   const contactQuotes = withoutStaffOnlyDrafts(
     (
