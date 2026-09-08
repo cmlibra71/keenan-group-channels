@@ -486,8 +486,9 @@ export async function getQuotesForCustomer() {
   // A SUBMITTED request is kept even though it is still `quote_pending`: the customer
   // has just named it, been told "You can track your quotes in My Account" and handed
   // a "View My Quotes" button (card 9tbz3sBF), so the quote they named has to be in
-  // the list. `attributes.submitted_at` is what `submitQuote` stamps and is the only
-  // thing separating a sent request from the basket-shaped draft the panel is holding.
+  // the list. `attributes.submitted_at` is stamped by the service `markRequestSubmitted`
+  // that `submitQuote` calls (card ZlrhH4qQ), and is the only thing separating a sent
+  // request from the basket-shaped draft the panel is holding.
   // Same rule as the /account/quotes page — the two must not disagree.
   const contactQuotes = withoutStaffOnlyDrafts(
     (
