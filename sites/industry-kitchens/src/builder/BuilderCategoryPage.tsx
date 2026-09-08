@@ -15,7 +15,7 @@ import {
 } from "./master-leaves";
 import { useGst } from "@/lib/gst";
 import { overlayLiveGst } from "./live-gst";
-import { useFormHandlers } from "./use-form-handlers";
+import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 import { categoryNatives } from "./category-natives";
 
 // ============================================================================
@@ -100,6 +100,10 @@ export function BuilderCategoryPage({
   const addToCart = useAddToCartHandler();
   const addToQuote = useAddToQuoteHandler();
   const formHandlers = useFormHandlers();
+  // A form success panel shows its form's authored confirmation message when
+  // one is set (card XBOxpQmd). Identity-returning when the page carries no
+  // form, which is almost every page.
+  const confirmed = useFormConfirmations(tree, components);
   const handlers = React.useMemo(
     () => ({
       ...formHandlers,
@@ -173,12 +177,12 @@ export function BuilderCategoryPage({
         }))}
       />
       <BuilderTree
-        tree={tree}
+        tree={confirmed.tree}
         payload={livePayload}
         namedStyles={namedStyles}
         jsFunctions={jsFunctions}
         callResults={callResults}
-        components={components}
+        components={confirmed.components}
         nativeComponents={nativeComponents}
         linkComponent={Link as unknown as React.ComponentType<Record<string, unknown>>}
         imageComponent={BuilderImage}
