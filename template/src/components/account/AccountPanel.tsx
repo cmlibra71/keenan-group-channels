@@ -5,10 +5,12 @@ import Link from "next/link";
 import { User, Package, FileText, LogOut } from "lucide-react";
 import {
   getSessionInfo,
+  getRememberedEmail,
   loginFromPanel,
   registerFromPanel,
   logoutFromPanel,
 } from "@/lib/actions/account-panel";
+import { forgetThisDevice } from "@/lib/actions/auth";
 import { GoogleSignInButton } from "@/components/account/GoogleSignInButton";
 import { usePanelContext } from "@/components/ui/PanelContext";
 
@@ -50,12 +52,16 @@ export function AccountPanel({
   // has one: they are moved to the sign-in face with that address filled in,
   // rather than being left on a refusal (cards yUNl5TPq, LQM9FQYe).
   const [takenEmail, setTakenEmail] = useState<string | null>(null);
+  // Card upTMAqRc — the address this browser last signed in with. The cookie is
+  // httpOnly, so it comes back over the same server round-trip as the session.
+  const [rememberedEmail, setRememberedEmail] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       startTransition(async () => {
-        const info = await getSessionInfo();
+        const [info, remembered] = await Promise.all([getSessionInfo(), getRememberedEmail()]);
         setSession(info);
+        setRememberedEmail(remembered);
         setView(info ? "profile" : initialView ?? "login");
         setLoaded(true);
       });
@@ -101,7 +107,11 @@ export function AccountPanel({
   if (view === "login" && !session) {
     return (
       <PanelLoginForm
-        defaultEmail={takenEmail ?? initialEmail}
+        defaultEmail={takenEmail ?? initialEmail ?? rememberedEmail ?? undefined}
+        // Only a remembered address earns the greeting and the "Not you?" escape
+        // hatch — an address the shopper just typed at checkout is already theirs.
+        rememberedDevice={!takenEmail && !initialEmail && !!rememberedEmail}
+        onForgetDevice={() => setRememberedEmail(null)}
         notice={
           takenEmail
             ? "You already have an account with this email. Sign in to continue."
@@ -129,16 +139,35 @@ export function AccountPanel({
 
 function PanelLoginForm({
   defaultEmail,
+  rememberedDevice = false,
+  onForgetDevice,
   notice,
   onSuccess,
   onSwitchToRegister,
 }: {
   defaultEmail?: string;
+  /** `defaultEmail` came from the known-device cookie, not from something typed. */
+  rememberedDevice?: boolean;
+  /** Told when the shopper presses "Not you?", so re-opening does not refill it. */
+  onForgetDevice?: () => void;
   /** Why they are looking at this face — e.g. their email already has an account. */
   notice?: string;
   onSuccess: (info: SessionInfo) => void;
   onSwitchToRegister: () => void;
 }) {
+  const [email, setEmail] = useState(defaultEmail ?? "");
+  const [knownDevice, setKnownDevice] = useState(rememberedDevice);
+  const [, startForgetting] = useTransition();
+
+  function forgetDevice() {
+    setKnownDevice(false);
+    setEmail("");
+    onForgetDevice?.();
+    startForgetting(async () => {
+      await forgetThisDevice();
+    });
+  }
+
   const [state, formAction, isPending] = useActionState(
     async (_prev: { error?: string } | null, formData: FormData) => {
       const result = await loginFromPanel(formData);
@@ -153,7 +182,9 @@ function PanelLoginForm({
     <div className="px-6 py-8">
       <div className="text-center mb-6">
         <User className="h-12 w-12 text-zinc-300 mx-auto" />
-        <p className="mt-2 text-zinc-500">Sign in to your account</p>
+        <p className="mt-2 text-zinc-500">
+          {knownDevice ? "Welcome back. Enter your password to sign in." : "Sign in to your account"}
+        </p>
       </div>
 
       {notice && (
@@ -190,10 +221,22 @@ function PanelLoginForm({
             name="email"
             autoComplete="username"
             required
-            defaultValue={defaultEmail}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
             placeholder="your@email.com"
           />
+          {knownDevice && (
+            <p className="mt-1">
+              <button
+                type="button"
+                onClick={forgetDevice}
+                className="text-sm text-zinc-500 hover:text-zinc-900 hover:underline"
+              >
+                Not you? Use a different email
+              </button>
+            </p>
+          )}
         </div>
         <div>
           <label htmlFor="panel-password" className="block text-sm font-medium text-zinc-700">
@@ -205,6 +248,7 @@ function PanelLoginForm({
             name="password"
             autoComplete="current-password"
             required
+            autoFocus={knownDevice}
             className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
           />
           <p className="mt-1 text-right">
