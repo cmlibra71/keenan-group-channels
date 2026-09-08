@@ -28,7 +28,12 @@ export async function POST(request: NextRequest) {
     // rates, card Wxjp8wpg). The measures come from the shopper's OWN cart on the server —
     // never from the request body — so a quoted price can't be talked down by a crafted post.
     let measures:
-      | { weightKg: number | null; itemCount: number | null; weightIncomplete: boolean }
+      | {
+          weightKg: number | null;
+          itemCount: number | null;
+          weightIncomplete: boolean;
+          hasBulkyItems: boolean;
+        }
       | undefined;
     try {
       const uuid = await getCartUuid();
@@ -47,6 +52,11 @@ export async function POST(request: NextRequest) {
           weightKg: summary.weight_kg,
           itemCount: summary.item_count,
           weightIncomplete: summary.has_unweighed_lines,
+          // The BULKY ARM (card NuBmIxuL): a cart holding a product ticked bulky is quoted the
+          // zone's rate PLUS that zone's bulky surcharge — the tail-lift premium the tiers do
+          // not carry. Read from the cart's own products, like every other measure here, so a
+          // crafted post cannot price a bratt pan as an ordinary parcel.
+          hasBulkyItems: summary.bulky.length > 0,
         };
       }
     } catch {

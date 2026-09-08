@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  adoptDepartmentLinks,
   flattenTree,
   itemHref,
   panelColumns,
@@ -173,4 +174,97 @@ test("extra pages tucked in a department are the panel's extras", () => {
   };
   assert.deepEqual(panelExtras(item).map((c) => c.label), ["Buying guide"]);
   assert.deepEqual(panelExtras({ type: "category", label: "x" }), []);
+});
+
+// ── A saved LINK to a department IS that department (card mOTgYEvX) ─────────
+// Industry Kitchens' saved header is ten `type: "link"` rows carrying hardcoded
+// /categories/... addresses, seeded from the old flat `header_nav` list.
+
+test("a link to /categories/<slug> resolves to that department", () => {
+  const items: MegaNavItem[] = [
+    { type: "link", label: "Cooking", url: "/categories/cooking-equipment" },
+    { type: "link", label: "Clearance Sale", url: "/clearance" },
+  ];
+  const bar = resolveNavItems({ departments, items });
+  assert.equal(bar[0].type, "category");
+  assert.equal(bar[0].categoryId, 1);
+  assert.equal(bar[0].label, "Cooking"); // the editor's own wording survives
+  assert.equal(bar[0].url, undefined);
+  // The other two departments are still added automatically, after the one the
+  // editor named; /clearance stays the plain link it is and falls to the right.
+  assert.deepEqual(
+    bar.map((i) => i.label),
+    ["Cooking", "Refrigeration & Ice", "Food Preparation", "Clearance Sale"]
+  );
+  assert.equal(bar[3].type, "link");
+  assert.deepEqual(splitNavItems(bar).right.map((i) => i.label), ["Clearance Sale"]);
+});
+
+test("a link to a department switched OFF drops off the bar", () => {
+  const items: MegaNavItem[] = [
+    { type: "link", label: "Fridges", url: "/categories/refrigeration-ice" },
+    { type: "link", label: "Cooking", url: "/categories/cooking-equipment" },
+  ];
+  const bar = resolveNavItems({ departments, items, hiddenCategoryIds: [2] });
+  assert.deepEqual(
+    bar.map((i) => i.label),
+    ["Cooking", "Food Preparation"]
+  );
+});
+
+test("a department link is not duplicated by the automatic pass", () => {
+  const items: MegaNavItem[] = [
+    { type: "link", label: "Cooking Equipment", url: "/categories/cooking-equipment/" },
+  ];
+  const bar = resolveNavItems({ departments, items });
+  assert.equal(bar.filter((i) => i.categoryId === 1).length, 1);
+});
+
+test("only an exact /categories/<slug> address is adopted", () => {
+  const items: MegaNavItem[] = [
+    { type: "link", label: "Brands", url: "/brands" },
+    { type: "link", label: "All", url: "/categories" },
+    { type: "link", label: "Deep", url: "/categories/cooking-equipment/ovens" },
+    { type: "link", label: "Unknown", url: "/categories/not-a-department" },
+    { type: "page", label: "Finance", pageSlug: "finance" },
+  ];
+  const bar = adoptDepartmentLinks(items, departments);
+  assert.deepEqual(bar.map((i) => i.type), ["link", "link", "link", "link", "page"]);
+});
+
+test("a department link keeps working through itemHref", () => {
+  const bar = resolveNavItems({
+    departments,
+    items: [{ type: "link", label: "Cooking", url: "/categories/cooking-equipment" }],
+  });
+  assert.equal(itemHref(bar[0], flattenTree(departments)), "/categories/cooking-equipment");
+});
+
+// The off switch is the ONLY thing that keeps a department off the bar. A
+// department whose NAME is already on the bar as somebody's custom link is
+// still added, because the portal's Mega menu tab lists it with a live switch
+// and counts it as in the menu — suppressing it in code would make that switch
+// inert and that count wrong (card mOTgYEvX).
+test("a department is still added when a custom link carries the same word", () => {
+  const items: MegaNavItem[] = [
+    { type: "categories", label: "All Departments" },
+    { type: "link", label: "Refrigeration & Ice", url: "/refrigeration" },
+  ];
+  const bar = resolveNavItems({ departments, items });
+  assert.deepEqual(
+    bar.map((i) => i.label),
+    [
+      "All Departments",
+      "Cooking Equipment",
+      "Refrigeration & Ice",
+      "Food Preparation",
+      "Refrigeration & Ice",
+    ]
+  );
+  // ...and switching that department off is what removes it, exactly as the
+  // portal screen promises.
+  assert.deepEqual(
+    resolveNavItems({ departments, items, hiddenCategoryIds: [2] }).map((i) => i.label),
+    ["All Departments", "Cooking Equipment", "Food Preparation", "Refrigeration & Ice"]
+  );
 });

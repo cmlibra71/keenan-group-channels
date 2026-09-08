@@ -80,8 +80,21 @@ export function cardEntryBlocksSubmit(input: {
   payableTotalIncTax: number;
   /** Stripe's own verdict, from the element's change event. */
   cardComplete: boolean;
+  /**
+   * Is this submit pointed at a card the shopper ALREADY has on file (card
+   * JiaDTjr1)? Then there is no box to complete: the intent is created against
+   * that payment method and Stripe confirms it without the element.
+   *
+   * REQUIRED, not optional, for the reason the payment-methods register gives for
+   * `staffOnly` next door: an optional flag defaults silently, and the default
+   * here — "no saved card" — is a refusal the shopper cannot clear, on the one
+   * path where they have done nothing wrong. Every call site has to decide.
+   */
+  usingSavedCard: boolean;
 }): boolean {
   if (input.heldForSpecialised) return false;
+  // A card on file needs no card box, so there is nothing to be incomplete.
+  if (input.usingSavedCard) return false;
   // Written as `!(x > 0)` on purpose: a NaN total is not something to charge for
   // either, and must never become a refusal the shopper cannot clear.
   if (!(input.payableTotalIncTax > 0)) return false;

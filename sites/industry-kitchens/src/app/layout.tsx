@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { cookies, headers } from "next/headers";
-import { getSiteConfig, getFeatureFlag, getFooterConfig, getHeaderNav, getHeaderConfig, getGa4MeasurementId } from "@/lib/store";
+import { getSiteConfig, getFeatureFlag, getFooterConfig, getHeaderConfig, getGa4MeasurementId } from "@/lib/store";
 import { getPublishedTokenVars } from "@/lib/design-tokens";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { Header } from "@/components/layout/Header";
@@ -73,7 +73,6 @@ export default async function RootLayout({
     { site, channel },
     subscriptionsEnabled,
     footerConfig,
-    headerNav,
     headerConfig,
     pricesIncludeTax,
     cookieStore,
@@ -84,7 +83,6 @@ export default async function RootLayout({
     getSiteConfig(),
     getFeatureFlag("subscriptions_enabled"),
     getFooterConfig(),
-    getHeaderNav(),
     getHeaderConfig(),
     getFeatureFlag("prices_include_tax"),
     cookies(),
@@ -109,7 +107,6 @@ export default async function RootLayout({
                 storeName={storeName}
                 logoUrl={logoUrl}
                 logoAlt={logoAlt}
-                nav={headerNav}
                 config={headerConfig}
               />
               <ScrollReset />

@@ -1,23 +1,40 @@
 import Link from "next/link";
 import { Crown, Truck, ArrowRight } from "lucide-react";
 
+// ============================================================================
+// The join pitch in the cart.
+//
+// NO ESTIMATED SAVING. This box used to print "Members save up to $X on this
+// order", where X was the cart total times a flat 15% held in
+// `channel_settings.member_savings_percentage`. That number has no basis: under
+// Tim's membership model (cards gk23c1VK / Nyp8bkPm, approved 2026-08-24) a
+// member's price is interpolated between two trade prices whose spread differs
+// SKU by SKU, so a single percentage cannot describe a basket and his pack
+// forbids publishing any figure until the spread has been measured across the
+// catalogue. His compliance note is why it is a hard rule and not a preference:
+// a published saving has to survive an Australian Consumer Law challenge on
+// substantiation. The pitch stands; the invented dollar figure does not.
+//
+// THE WORDS ARE TIM'S. His widget kit (gk23c1VK, `05-widget-kit.html`, "Cart
+// upsell") already ships the replacement, and its order-exclusive phrasing is
+// deliberate: membership reprices from the NEXT order, not this one. This box
+// was written fresh first; his version says it better and is the approved copy.
+// ============================================================================
+
 export function MembershipCartUpsell({
   cartTotal,
   planPrice,
   billingInterval,
-  savingsPercentage = 15,
   freeShippingEnabled = false,
   freeShippingThreshold = 500,
 }: {
   cartTotal: number;
   planPrice: number;
   billingInterval: string;
-  savingsPercentage?: number;
   /** Free-delivery messaging only renders on channels that actually offer it. */
   freeShippingEnabled?: boolean;
   freeShippingThreshold?: number;
 }) {
-  const estimatedSavings = Math.round(cartTotal * (savingsPercentage / 100) * 100) / 100;
   const freeDeliveryEligible = freeShippingEnabled && cartTotal >= freeShippingThreshold;
 
   return (
@@ -25,10 +42,10 @@ export function MembershipCartUpsell({
       <div className="flex items-start gap-3 mb-3">
         <Crown className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
         <div>
-          <h3 className="font-semibold text-zinc-900">Members save up to</h3>
+          <h3 className="font-semibold text-zinc-900">Buying for a commercial kitchen?</h3>
           <p className="text-sm text-zinc-600 mt-1">
-            Members save up to{" "}
-            <span className="font-bold text-amber-700">${estimatedSavings.toFixed(2)}</span> on this order.
+            Join the buying group and every line reprices from your next order &mdash; then keeps
+            stepping down as your spend builds.
           </p>
         </div>
       </div>

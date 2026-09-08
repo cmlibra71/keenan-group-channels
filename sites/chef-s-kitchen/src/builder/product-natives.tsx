@@ -25,9 +25,20 @@ import type { ProductKit } from "@/lib/product-kit";
 import { GstToggle } from "@/components/layout/GstToggle";
 import { SilverChefPanel } from "@/components/product/SilverChefPanel";
 import { ProductImageNotice } from "@/components/product/ProductImageNotice";
+import { MODULAR_NOTICE_TEXT, slugIsModularSystems } from "@/builder/modular-notice";
+import { CdMemberPricingPanel } from "@/components/product/CdMemberPricingPanel";
+import type { CdMembershipData } from "@/lib/pricing/cd-member-pricing";
+import { usableBrandLogo } from "@/lib/brand-logo-url";
 
 export function productNatives({ payload, variantImageUrl, data }: ProductNativesArgs): NativeComponents {
   const product = (payload.product ?? {}) as Record<string, unknown>;
+  // Card tSrCcnvx: a missing or broken photo falls back to the brand's logo.
+  // `payload.brand` is the same slice the brand-logo link above the title
+  // already binds (`enrichProductPayload`), so no extra read is needed and the
+  // two can never disagree about which logo this product's brand has.
+  const brand = (payload.brand ?? null) as { imageUrl?: string | null; name?: string | null } | null;
+  const brandLogoUrl = usableBrandLogo(brand?.imageUrl);
+
   return {
     // The gallery keeps its real zoom/pan/thumbnail behaviour.
     "product-gallery": () => (
@@ -36,6 +47,8 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
         productName={String(product.name ?? "")}
         variantImageUrl={variantImageUrl}
         videos={(product.videos ?? []) as never}
+        brandLogoUrl={brandLogoUrl}
+        brandName={brand?.name ?? null}
       />
     ),
     // Storewide ex/inc-GST switch, now that it has left the masthead. Sealed
@@ -67,8 +80,31 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // authored because the supplied panel colour is not a token on either site, and a
     // colour class invented in a STORED tree has no rule in the deployed stylesheet.
     // Renders null unless this product carries the tick.
+    // Chefs Depot's three prices (RRP / Mates Rates / this shopper's member price)
+    // and the spend-more-save-more ladder (card Nyp8bkPm). Sealed rather than
+    // authored because the figures follow the LIVE purchase state — which variant
+    // is selected, whether this product's price is hidden — and an authored tree
+    // cannot call a pricing engine. `data.cdMembership` is built ONCE per request
+    // by the product branch; the native never fetches. Renders null on a channel
+    // that does not run the membership model, so Industry Kitchens is untouched.
+    "cd-member-pricing": () => (
+      <CdMemberPricingPanel data={(data.cdMembership ?? null) as CdMembershipData | null} />
+    ),
     "product-image-notice": () => (
       <ProductImageNotice show={product.imageIsIllustrative === true} />
+    ),
+    // The Modular Systems banner (card qGfWAzQx, Steve — CE-40). The SAME sealed
+    // panel as the notice above, because it is the same message: one look, one
+    // colour, red panel with white writing. What differs is the rule — the slug
+    // instead of the per-product tick — and the wording Steve supplied on the
+    // card. Suppressed when the tick has already put the panel on this page, so
+    // a product can never carry the banner twice.
+    "product-modular-notice": () => (
+      <ProductImageNotice
+        show={product.imageIsIllustrative !== true && slugIsModularSystems(product.slug)}
+        text={MODULAR_NOTICE_TEXT}
+        className="my-4 w-full"
+      />
     ),
   };
 }

@@ -1,4 +1,7 @@
 import { unstable_cache } from "next/cache";
+import type { NodeTree } from "@keenan/services/builder";
+import { withPromoTagInComponents } from "@/builder/promo-tag-node";
+import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
 import { initCommerceDb, createChannelStore, getCommerceClient } from "@keenan/services";
 import {
   channelService,
@@ -87,9 +90,18 @@ export const {
   getCategoryStats,
   getCategoryBreadcrumbs,
   getProductBreadcrumbs,
+  // Names of the categories REMOVED from this storefront (channel_settings
+  // `hidden_category_ids`, card ZVbjSoKN). Every category read resolves the
+  // removal by id; the /search facet rail speaks NAMES, so it needs these.
+  getRemovedCategoryNames,
+  // The same removal as IDS (whole subtree). The Sub-category rail and `?sub=`
+  // on a category page are id-keyed, so the removal has to be resolvable in
+  // that language too — see the route's `?sub=` canonicalisation. (ZVbjSoKN.)
+  getRemovedCategoryIds,
   getCategoryById,
   getBrandsForChannel,
   getBrandBySlug,
+  getBrandListing,
   getProductReviews,
   getProductAttachments,
   getProductVideos,
@@ -99,6 +111,13 @@ export const {
   getActiveSubscription,
   getMemberPriceMap,
   applyAccountPricesToProducts,
+  // The Chefs Depot buying-group ladder (cards gk23c1VK / Nyp8bkPm). All four are
+  // no-ops on a channel with no ladder in `channel_settings`, which is every
+  // channel until one is written.
+  getMemberLadderLevelId,
+  getLadderConfig,
+  getLadderVariantPrices,
+  getMemberTrailingSpend,
   getUpcomingDraws,
   getPartnerOffers,
   getFeatureFlag,
@@ -108,13 +127,45 @@ export const {
   getCmsCategoryPage,
   getCmsTemplate,
   getNamedStyles,
-  getComponents,
-  getDraftComponents,
   getDesignTokens,
   getDraftDesignTokens,
   getCheckoutSettings,
   calculateShipping,
 } = _store;
+
+// ============================================================================
+// Component masters, with the promotional tile tag placed at read time.
+//
+// Card FNYihLHk: a storefront that names a tile tag in `lib/promo-tag.ts` gets
+// it on EVERY tile — the React `ProductCard.tsx` draws the tiles this site
+// renders in React, and every AUTHORED page (category, brand, home, product's
+// "You may also like" rail, `/pages/[slug]`) repeats the stored `product-card`
+// master instead.
+//
+// It is placed HERE, once, and not in each node branch that loads components,
+// for the reason card tSrCcnvx placed the brand-logo fallback here: a branch
+// that forgot the call would carry the tag on one of our own screens and not on
+// the next, for the same product. Nothing is written to the stored tree — see
+// `builder/promo-tag-node.ts`.
+//
+// `template/` holds null in `lib/promo-tag.ts`, so this is a no-op here and
+// returns the very same map. Typing a wording in that one file is the whole
+// opt-in for a site forked from this template.
+// ============================================================================
+
+type ComponentMap = Awaited<ReturnType<typeof _store.getComponents>>;
+
+const withPromoTag = (components: ComponentMap): ComponentMap =>
+  withPromoTagInComponents(
+    components as Record<string, NodeTree>,
+    PROMO_TAG_LABEL
+  ) as ComponentMap;
+
+export const getComponents = async (): Promise<ComponentMap> =>
+  withPromoTag(await _store.getComponents());
+
+export const getDraftComponents = async (): Promise<ComponentMap> =>
+  withPromoTag((await _store.getDraftComponents()) as ComponentMap);
 
 // ============================================================================
 // Channel settings (raw accessor)
@@ -549,11 +600,13 @@ export async function getGuestOrdersForEmail(
  * no contact whose billing email resolves to the same inbox as `normalizedEmail`.
  *
  * Deliberately shared by {@link getGuestOrdersForEmail} (the history list) and
- * {@link isGuestOrderForEmail} (the per-order access gate). Two copies of this
+ * {@link isGuestOrderForEmail} (the per-order access gate) and, since card WlTnY4cd, by
+ * `lib/orders/invoice-archive-data.ts` (which of a customer's orders go in their invoice
+ * archive) — which is why it is exported. Two copies of this
  * CASE expression would drift, and a drift here is not cosmetic: a looser copy
  * WIDENS who can read an order, a tighter one 404s an order the list is showing.
  */
-function guestOrderForEmailCondition(
+export function guestOrderForEmailCondition(
   sql: NonNullable<ReturnType<typeof getCommerceClient>>,
   normalizedEmail: string
 ) {
@@ -697,7 +750,7 @@ export async function getLineCosts(
 }
 
 /** Normalize an email for inbox-equivalent matching (mirrors the SQL above). */
-function normalizeEmailForMatch(email: string): string {
+export function normalizeEmailForMatch(email: string): string {
   const [rawLocal, rawDomain] = email.toLowerCase().trim().split("@");
   if (!rawDomain) return "";
   let local = rawLocal.split("+")[0];

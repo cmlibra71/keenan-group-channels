@@ -6,7 +6,12 @@ import { getSession } from "@/lib/auth";
 import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
 import { getContactPermissions } from "@/lib/role-permissions";
 import { mayFileAddressInBook } from "@/lib/account/address-authority";
-import { summariseLinesFreight } from "@keenan/services";
+import {
+  summariseLinesFreight,
+  listSavedCardsForContact,
+  RENDER_PATH_TIMEOUT_MS,
+  type SavedCard,
+} from "@keenan/services";
 import { gstSplit } from "@keenan/services/calc";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
 import { canTakeCardPayment } from "@/lib/payments/stripe-gateways";
@@ -275,6 +280,46 @@ export default async function CheckoutPage() {
     }
   }
 
+  // THE CARDS THIS PERSON ALREADY HAS ON FILE (card JiaDTjr1).
+  //
+  // Cards live in Stripe against the PERSON, so this is by contact and by nothing
+  // else — never by the company account (Tim demonstrated a contact with no
+  // company whose cards still appeared). Read on THIS channel's Stripe account,
+  // with THIS person's customer id for that account (card OHDx84DK): the two
+  // halves are resolved together inside `listSavedCardsForContact`, because a
+  // customer id from the other account is `resource_missing`, not a fallback.
+  //
+  // Skipped entirely unless the card method actually survived to this shopper —
+  // a storefront that cannot take a card, or an account whose allow-list removes
+  // it, must not pay for a Stripe round trip, and a card picker under a method
+  // that is not drawn would be a control with nothing behind it.
+  //
+  // `available: false` means Stripe could not be reached, NOT "no cards". The
+  // form says so and still shows the card box: this never blocks a payment.
+  //
+  // ON A SHORT LEASH, because this is the first third-party call on the checkout
+  // render path and the register's discipline for that is explicit (checkout is
+  // the critical path; "an account page must not wait on Stripe", card TdTuvgQq).
+  // `RENDER_PATH_TIMEOUT_MS` is 4s with retries OFF, so a degraded Stripe costs a
+  // signed-in card shopper their picker and nothing else — and costs a bank
+  // transfer, net terms, SilverChef or Finance shopper nothing at all, because
+  // the read is skipped entirely unless the card method survived to them.
+  let savedCards: SavedCard[] = [];
+  let savedCardsUnavailable = false;
+  if (session && offeredPaymentMethods.some((m) => m.id === "stripe")) {
+    const result = await listSavedCardsForContact({
+      channelId: CHANNEL_ID,
+      contactId: session.contactId,
+      timeoutMs: RENDER_PATH_TIMEOUT_MS,
+      // The ephemeral test checkout session has to reach the cards too, or a test
+      // shopper is offered a live account's cards that this browser's key cannot
+      // charge.
+      ...(testSession ? { testMode: true } : {}),
+    }).catch(() => null);
+    savedCards = result?.cards ?? [];
+    savedCardsUnavailable = result ? !result.available : true;
+  }
+
   // Prefill the contact panel for a signed-in shopper who has NO saved address —
   // their name and phone live on the contact record, not in the address book, so
   // without this they retype details we already hold. Best-effort: a failed
@@ -327,7 +372,6 @@ export default async function CheckoutPage() {
 
   // Check membership status for checkout banners
   let showMemberBanner = false;
-  let estimatedSavings = 0;
   let isMember = false;
   let memberSavings = 0;
 
@@ -349,7 +393,6 @@ export default async function CheckoutPage() {
       const plans = await getSubscriptionPlans();
       if (plans.length > 0) {
         showMemberBanner = true;
-        estimatedSavings = Math.round(subtotal * (checkoutSettings.memberSavingsPercentage / 100) * 100) / 100;
       }
     }
   }
@@ -372,11 +415,17 @@ export default async function CheckoutPage() {
         </div>
       )}
 
-      {showMemberBanner && estimatedSavings > 0 && (
+      {/* The join pitch, in Tim's words (card Nyp8bkPm; his widget kit's cart
+          upsell). It used to print "Members save up to $X on this order", X being
+          the basket times a flat 15% held in `member_savings_percentage` — a
+          figure with no measured basis, retired across the site. The `> 0` guard
+          it carried is kept, moved onto the BASKET, so an empty cart still gets
+          no pitch. */}
+      {showMemberBanner && subtotal > 0 && (
         <div className="mb-6 flex items-center justify-between bg-member-bg border border-member/40 rounded-lg px-4 py-3">
           <div className="flex items-center gap-2 text-sm text-member-text">
             <Crown className="h-4 w-4 text-member-text shrink-0" />
-            Members save up to ${estimatedSavings.toFixed(2)} on this order.
+            Join the buying group and every line reprices from your next order.
           </div>
           <Link
             href="/membership"
@@ -409,6 +458,8 @@ export default async function CheckoutPage() {
         shippingEnabled={shippingEnabled}
         bulkyProductNames={bulkyProductNames}
         stripePublishableKey={stripePublishableKey}
+        savedCards={savedCards}
+        savedCardsUnavailable={savedCardsUnavailable}
         testMode={testSession}
         testModeCardUnavailable={cardUnavailableInTestSession}
         finance={financeMethodsEnabled ? financeOffer : null}

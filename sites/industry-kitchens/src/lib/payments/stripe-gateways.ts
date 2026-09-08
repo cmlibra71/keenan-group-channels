@@ -84,3 +84,24 @@ export function cardConfirmParams(
   const usable = billingDetails && Object.keys(billingDetails).length > 0 ? billingDetails : null;
   return { payment_method: { card, ...(usable ? { billing_details: usable } : {}) } };
 }
+
+/**
+ * Confirm params for a card the shopper ALREADY has on file (card JiaDTjr1).
+ *
+ * The payment method id is the whole of it, and no `billing_details` go with it:
+ * a saved PaymentMethod carries its own, recorded when the card was first typed,
+ * and Stripe REFUSES to overwrite the billing details of an existing payment
+ * method at confirm time. Sending them would turn a good card into a failed
+ * payment in front of the shopper, which is worse than a Radar signal Stripe
+ * already holds on the method itself.
+ *
+ * The intent was created with the same id server-side, so this is belt and
+ * braces — but explicit is right here: `confirmCardPayment(secret)` with no
+ * params silently depends on the server having set it, and a future change to
+ * the intent would break payment with nothing in this file to explain it.
+ */
+export function savedCardConfirmParams(paymentMethodId: string): {
+  payment_method: string;
+} {
+  return { payment_method: paymentMethodId };
+}

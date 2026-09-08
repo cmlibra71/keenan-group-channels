@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Package } from "lucide-react";
 import { Price } from "@/components/ui/Price";
 import { ga4SelectItem } from "@/components/analytics/ga4";
+import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
 
 interface ProductCardProps {
   name: string;
@@ -138,6 +139,23 @@ export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName,
           <span className="mt-1 inline-block bg-green-50 text-green-700 px-2 py-0.5 rounded text-xs font-medium">
             Members save up to 25%
           </span>
+        )}
+
+        {/* The site's promotional tile tag — card FNYihLHk. Under the brand, name and price,
+            where the card's mock puts it, and not in the image's corner-badge stack.
+
+            THIS SITE RENDERS NOTHING HERE TODAY: `lib/promo-tag.ts` holds null on Industry
+            Kitchens, on purpose. "Buy more & save" is the shopper-facing face of the CHEFS DEPOT
+            buying-group ladder (cards Nyp8bkPm / gk23c1VK); Industry Kitchens has its own trade
+            wording ("Mates Rates") on a different pricing model.
+
+            The block is present so that naming a tag in that one file is the whole opt-in — the
+            same wording is placed on the authored `product-card` master by `@/lib/store`, so
+            this tile and the tile the Site Builder repeats can never say different things. */}
+        {PROMO_TAG_LABEL && (
+          <p className="mt-3">
+            <span className="badge-promo">{PROMO_TAG_LABEL}</span>
+          </p>
         )}
       </div>
     </Link>
