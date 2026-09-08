@@ -89,7 +89,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Contact not found." }, { status: 401 });
   }
 
-  await setSession(contact.id, contact.email);
+  // rememberDevice:false — this is a STAFF browser wearing a customer's session
+  // (card upTMAqRc). Leaving the customer's email remembered here would put it on
+  // the sign-in panel of whoever uses that machine next.
+  await setSession(contact.id, contact.email, { rememberDevice: false });
   // Relative Location so the browser resolves it against the storefront origin it's
   // on (not `request.url`, which behind the reverse proxy can be an internal host).
   // The Set-Cookie from setSession() is attached to this response by the framework.

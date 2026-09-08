@@ -10,6 +10,16 @@ type RowProduct = {
   price: string;
   salePrice: string | null;
   brandName?: string | null;
+  /**
+   * Card tSrCcnvx: the brand's logo, drawn instead of the grey package box when
+   * the product has no photo (or its file is broken). Attached UPSTREAM by
+   * `attachBrandLogos` in each server path that feeds this rail
+   * (`builder/home-data.ts` for the authored home, `blocks/home-blocks.tsx` for
+   * the legacy and CMS homes). Presentation only — it never reaches the database.
+   */
+  brand_logo_url?: string | null;
+  /** The brand's NAME — the fallback image's ALT text. Attached with the URL above. */
+  brand_name?: string | null;
   availability?: string | null;
   inventoryLevel?: number | null;
   inventoryTracking?: string | null;
@@ -63,6 +73,8 @@ export function ClearanceSpotlight({
                 salePrice={product.salePrice}
                 imageUrl={product.thumbnailImage?.urlThumbnail || product.thumbnailImage?.urlStandard}
                 brandName={product.brandName}
+                brandLogoUrl={product.brand_logo_url ?? null}
+                brandLogoAlt={product.brand_name ?? null}
                 memberPrice={pricing?.memberPriceMap?.[product.id] ?? null}
                 isMember={pricing?.isMember}
                 planPrice={pricing?.planPrice}
@@ -100,6 +112,8 @@ export function ClearanceRail({
             salePrice={product.salePrice}
             imageUrl={product.thumbnailImage?.urlThumbnail || product.thumbnailImage?.urlStandard}
             brandName={product.brandName}
+            brandLogoUrl={product.brand_logo_url ?? null}
+            brandLogoAlt={product.brand_name ?? null}
             memberPrice={pricing?.memberPriceMap?.[product.id] ?? null}
             isMember={pricing?.isMember}
             planPrice={pricing?.planPrice}

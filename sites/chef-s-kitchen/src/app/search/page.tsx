@@ -17,6 +17,7 @@ import {
   andFilters,
   bandExpr,
   clampPage,
+  facetOptions,
   type SearchFeedParams,
 } from "@/lib/search-results";
 import {
@@ -43,7 +44,8 @@ const GRID_CLASS = "grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-
 async function fetchFacetGroups(query: string, params: SearchFeedParams): Promise<FacetGroupDef[]> {
   try {
     const { searchProducts } = await import("@keenan/services/search");
-    const { brandClause, categoryClause, priceClause } = await resolveFeedFilters(params);
+    const { brandClause, categoryClause, priceClause, brandValues, categoryValues } =
+      await resolveFeedFilters(params);
     // Categories REMOVED from this storefront (card ZVbjSoKN). The Meilisearch
     // index is built from product_categories and cannot know about the setting,
     // so the shelf whose page now 404s would still be offered here as a filter.
@@ -68,19 +70,31 @@ async function fetchFacetGroups(query: string, params: SearchFeedParams): Promis
       ),
     ]);
 
-    // `removedNames` is applied BEFORE the sort and the top-15 slice, or a
-    // removed shelf would still eat one of the fifteen slots a real category
-    // should have had.
-    const toOptions = (dist?: Record<string, number>, removedNames: string[] = []) =>
-      dropRemovedCategoryNames(Object.entries(dist ?? {}), removedNames, ([name]) => name)
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 15)
-        .map(([name, count]) => ({ value: encodeURIComponent(name), label: name, count }));
+    // The busiest fifteen, plus anything already TICKED that fell off that list
+    // — a brand handed in from a brand page's search box, or a hand-typed URL,
+    // is very often not among the fifteen, and a ticked value with no row can
+    // neither be unticked nor named by its chip. (1RLP5nSJ.)
+    //
+    // A category REMOVED from this storefront (card ZVbjSoKN) is dropped from the
+    // distribution BEFORE that top-15 slice, or a removed shelf would still eat
+    // one of the fifteen slots a real category should have had. `categoryValues`
+    // has already lost them in `resolveFeedFilters`, so a hand-typed
+    // `?category=Chefs+Hat+Sydney` cannot come back as a ticked row either.
+    // A null-prototype object, like `facetOptions`' own Map, so a name such as
+    // `__proto__` stays a plain own property.
+    const catDist: Record<string, number> = Object.create(null);
+    for (const [name, count] of dropRemovedCategoryNames(
+      Object.entries(catRes.facetDistribution?.categoryNames ?? {}),
+      removedCategoryNames,
+      ([name]) => name
+    )) {
+      catDist[name] = count;
+    }
 
     const groups: FacetGroupDef[] = [];
-    const catOpts = toOptions(catRes.facetDistribution?.categoryNames, removedCategoryNames);
+    const catOpts = facetOptions(catDist, categoryValues);
     if (catOpts.length) groups.push({ param: "category", title: "Category", options: catOpts });
-    const brandOpts = toOptions(brandRes.facetDistribution?.brandName);
+    const brandOpts = facetOptions(brandRes.facetDistribution?.brandName, brandValues);
     if (brandOpts.length) groups.push({ param: "brand", title: "Brand", options: brandOpts });
     const priceOpts = PRICE_KEYS.map((k, i) => ({
       value: k,
