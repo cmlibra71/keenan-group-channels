@@ -2,9 +2,12 @@
 
 import { refresh } from "next/cache";
 import { contactService, CHANNEL_ID } from "@/lib/store";
-import { getSession, setSession, endShopperSession } from "@/lib/auth";
+import { getSession, setSession, endShopperSession, readRememberedEmail } from "@/lib/auth";
 import { verifyPassword } from "@/lib/password";
 import { createAccountlessContact, EmailTakenError, type LoginCandidate } from "@/lib/contact-auth";
+import { claimGuestCheckoutContact } from "@/lib/checkout/guest-contact";
+import { isUnclaimedGuestRecord } from "@/lib/checkout/guest-contact-policy";
+import { hashPasswordForStorage } from "@keenan/services";
 import { enforceLimit, noteLimitFailure } from "@/lib/security/rate-limits";
 import { normaliseEmail, looksLikeEmail } from "@/lib/checkout/account-prompt";
 import { repriceCartForSession } from "@/lib/actions/cart";
@@ -30,6 +33,23 @@ export async function getSessionInfo() {
     firstName: contact.first_name ?? "",
     lastName: contact.last_name ?? "",
   };
+}
+
+/**
+ * The address this browser last signed in with, for the drawer's sign-in face.
+ *
+ * Card upTMAqRc. The drawer is a client component and the cookie is httpOnly, so
+ * the remembered address has to come back over a server action like the session
+ * does. Answers null for a signed-in shopper — they are not looking at a sign-in
+ * form — and never throws: a missing hint must not break the drawer.
+ */
+export async function getRememberedEmail(): Promise<string | null> {
+  try {
+    if (await getSession()) return null;
+    return await readRememberedEmail();
+  } catch {
+    return null;
+  }
 }
 
 export async function loginFromPanel(formData: FormData): Promise<{
@@ -118,6 +138,31 @@ export async function registerFromPanel(formData: FormData): Promise<{
 
   // Same copy for B2B-owned and accountless-taken emails (enumeration safety).
   if (!(await contactService.isEmailAvailableForChannel(email, CHANNEL_ID))) {
+    // Except a record a guest checkout left behind, which is not an account and
+    // has no password to sign in with — the shopper claims their own row instead
+    // of being sent to a sign-in that cannot succeed. See lib/actions/auth.ts for
+    // the same branch on the register PAGE, and guest-contact.ts for what the
+    // claim refuses.
+    const claimed = await claimGuestCheckoutContact({
+      email,
+      passwordHash: await hashPasswordForStorage(password),
+      firstName,
+      lastName,
+      metafields: { self_registered: true, email_verified: false },
+    });
+    if (claimed) {
+      await setSession(claimed.id, claimed.email);
+      await repriceCartForSession(); // same reason as a fresh registration
+      refresh(); // acting user's view refreshes; shared data cache stays intact
+      return {
+        session: {
+          contactId: claimed.id,
+          email: claimed.email,
+          firstName: claimed.first_name ?? "",
+          lastName: claimed.last_name ?? "",
+        },
+      };
+    }
     return { error: "An account with this email already exists.", emailTaken: true };
   }
 
@@ -182,7 +227,15 @@ export async function emailHasAccount(email: string): Promise<boolean> {
     const limit = await enforceLimit("email_lookup", { surface: "checkout email probe" });
     if (!limit.allowed) return false;
 
-    const candidate = await contactService.findLoginCandidate(normalised, CHANNEL_ID);
+    const candidate = (await contactService.findLoginCandidate(normalised, CHANNEL_ID)) as
+      | { password_hash?: string | null; metafields?: Record<string, unknown> | null }
+      | null;
+    // A record a guest checkout left behind is NOT an account (card LiuLvc5b): it
+    // holds no password, so "you already have an account — sign in" would be both
+    // wrong and a dead end for a repeat guest. Everything else a passwordless
+    // candidate can be — a B2B contact awaiting activation, a Google-only shopper
+    // — still answers true, because Forgot password does let them in.
+    if (isUnclaimedGuestRecord(candidate)) return false;
     return !!candidate;
   } catch (e) {
     // A hint is never worth breaking checkout for.

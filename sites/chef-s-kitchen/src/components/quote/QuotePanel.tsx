@@ -9,7 +9,8 @@ import {
   getQuoteDeliveryAddresses,
   submitQuote,
 } from "@/lib/actions/quote";
-import { loginFromPanel, registerFromPanel } from "@/lib/actions/account-panel";
+import { loginFromPanel, registerFromPanel, getRememberedEmail } from "@/lib/actions/account-panel";
+import { forgetThisDevice } from "@/lib/actions/auth";
 import { GoogleSignInButton } from "@/components/account/GoogleSignInButton";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
 import { Price } from "@/components/ui/Price";
@@ -60,6 +61,9 @@ export function QuotePanel() {
   const [error, setError] = useState<string | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [authView, setAuthView] = useState<"login" | "register">("login");
+  // Card upTMAqRc — the address this browser last signed in with, so a returning
+  // customer meets a filled-in email here too and types only their password.
+  const [rememberedEmail, setRememberedEmail] = useState<string | null>(null);
   const { setQuoteCount } = useCartQuoteCounts();
   // The autocomplete attaches to the street input rather than owning it, so the
   // customer can still type an address Google has never heard of.
@@ -75,14 +79,16 @@ export function QuotePanel() {
       setNeedsLogin(false);
       setAuthView("login");
       startTransition(async () => {
-        const [data, addresses, maySave] = await Promise.all([
+        const [data, addresses, maySave, remembered] = await Promise.all([
           getQuote(),
           getQuoteDeliveryAddresses(),
           canSaveQuoteAddress(),
+          getRememberedEmail(),
         ]);
         setQuote(data);
         applyAddresses(addresses);
         setCanSaveAddress(maySave);
+        setRememberedEmail(remembered);
       });
     }
   }, [isOpen]);
@@ -242,6 +248,9 @@ export function QuotePanel() {
     }
     return (
       <QuotePanelLogin
+        defaultEmail={rememberedEmail ?? undefined}
+        rememberedDevice={!!rememberedEmail}
+        onForgetDevice={() => setRememberedEmail(null)}
         onSuccess={handleAuthSuccess}
         onSwitchToRegister={() => setAuthView("register")}
       />
@@ -497,12 +506,32 @@ export function QuotePanel() {
 }
 
 function QuotePanelLogin({
+  defaultEmail,
+  rememberedDevice = false,
+  onForgetDevice,
   onSuccess,
   onSwitchToRegister,
 }: {
+  /** The known-device address, when this browser has signed in here before. */
+  defaultEmail?: string;
+  rememberedDevice?: boolean;
+  onForgetDevice?: () => void;
   onSuccess: (info: SessionInfo) => void;
   onSwitchToRegister: () => void;
 }) {
+  const [email, setEmail] = useState(defaultEmail ?? "");
+  const [knownDevice, setKnownDevice] = useState(rememberedDevice);
+  const [, startForgetting] = useTransition();
+
+  function forgetDevice() {
+    setKnownDevice(false);
+    setEmail("");
+    onForgetDevice?.();
+    startForgetting(async () => {
+      await forgetThisDevice();
+    });
+  }
+
   const [state, formAction, isPending] = useActionState(
     async (_prev: { error?: string } | null, formData: FormData) => {
       const result = await loginFromPanel(formData);
@@ -517,7 +546,11 @@ function QuotePanelLogin({
     <div className="px-6 py-8">
       <div className="text-center mb-6">
         <User className="h-12 w-12 text-text-muted mx-auto" strokeWidth={1.5} />
-        <p className="mt-2 text-text-secondary">Sign in to submit your quote</p>
+        <p className="mt-2 text-text-secondary">
+          {knownDevice
+            ? "Welcome back. Enter your password to submit your quote."
+            : "Sign in to submit your quote"}
+        </p>
       </div>
 
       <GoogleSignInButton onSuccess={(session) => onSuccess(session)} />
@@ -548,9 +581,22 @@ function QuotePanelLogin({
             name="email"
             autoComplete="username"
             required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className="mt-1 block w-full input"
             placeholder="your@email.com"
           />
+          {knownDevice && (
+            <p className="mt-1">
+              <button
+                type="button"
+                onClick={forgetDevice}
+                className="text-sm text-text-secondary hover:text-text-primary hover:underline"
+              >
+                Not you? Use a different email
+              </button>
+            </p>
+          )}
         </div>
         <div>
           <label htmlFor="quote-login-password" className="field-label">
@@ -562,6 +608,7 @@ function QuotePanelLogin({
             name="password"
             autoComplete="current-password"
             required
+            autoFocus={knownDevice}
             className="mt-1 block w-full input"
           />
           <p className="mt-1 text-right">
