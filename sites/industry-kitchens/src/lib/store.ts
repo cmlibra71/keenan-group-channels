@@ -49,6 +49,9 @@ import {
 import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
 import { withBrandLogoFallback, targetsForChannel } from "@/builder/product-card-brand-logo";
+import { withPromoTagInComponents } from "@/builder/promo-tag-node";
+import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
+import type { NodeTree } from "@keenan/services/builder";
 import {
   STOREFRONT_FILTERS_SETTING_KEY,
   normalizeStorefrontFilters,
@@ -91,6 +94,7 @@ export const {
   getCategoryById,
   getBrandsForChannel,
   getBrandBySlug,
+  getBrandListing,
   getProductReviews,
   getProductAttachments,
   getProductVideos,
@@ -132,26 +136,41 @@ export const {
 // (`node_category_template_enabled` is on for channel 1), so the rule has to
 // reach the master too.
 //
-// It is placed HERE, once, rather than in each of the four node branches that
-// load components (category, brand, home, product), because a branch that
-// forgot the call would serve grey boxes on one screen and logos on the next.
-// Nothing is written to the stored tree — see `product-card-brand-logo.ts`.
+// It is placed HERE, once, rather than in each of the node branches that load
+// components (category, brand, home, product, `/pages/[slug]`), because a branch
+// that forgot the call would serve grey boxes on one screen and logos on the
+// next. Nothing is written to the stored tree — see
+// `product-card-brand-logo.ts`.
 //
 // WHICH masters are rewritten is this CHANNEL's business, so the target list is
 // resolved here and passed in: the transform itself is shared code and never
 // reads the ambient channel. A channel that has not opted in gets an empty list
 // and the call is a pass-through by reference.
+//
+// The promotional tile tag (card FNYihLHk) rides the same read for the same
+// reason. It is INERT on this site: `lib/promo-tag.ts` holds null here, so
+// `withPromoTagInComponents` returns the map untouched. That is the channel
+// gate — "Buy more & save" is a Chefs Depot promise, and Industry Kitchens has
+// its own trade wording. It is composed in anyway so that the day this site does
+// name a tag, the tag is on every authored surface rather than on whichever
+// branch someone remembered.
 // ============================================================================
 
 type ComponentMap = Awaited<ReturnType<typeof _store.getComponents>>;
 
 const BRAND_LOGO_TARGETS = targetsForChannel(CHANNEL_ID);
 
+const withMasterTransforms = (components: ComponentMap): ComponentMap =>
+  withPromoTagInComponents(
+    withBrandLogoFallback(components, BRAND_LOGO_TARGETS) as Record<string, NodeTree>,
+    PROMO_TAG_LABEL
+  ) as ComponentMap;
+
 export const getComponents = async (): Promise<ComponentMap> =>
-  withBrandLogoFallback(await _store.getComponents(), BRAND_LOGO_TARGETS);
+  withMasterTransforms(await _store.getComponents());
 
 export const getDraftComponents = async (): Promise<ComponentMap> =>
-  withBrandLogoFallback((await _store.getDraftComponents()) as ComponentMap, BRAND_LOGO_TARGETS);
+  withMasterTransforms((await _store.getDraftComponents()) as ComponentMap);
 
 // ============================================================================
 // Channel settings (raw accessor)
@@ -663,11 +682,13 @@ export async function getGuestOrdersForEmail(
  * no contact whose billing email resolves to the same inbox as `normalizedEmail`.
  *
  * Deliberately shared by {@link getGuestOrdersForEmail} (the history list) and
- * {@link isGuestOrderForEmail} (the per-order access gate). Two copies of this
+ * {@link isGuestOrderForEmail} (the per-order access gate) and, since card WlTnY4cd, by
+ * `lib/orders/invoice-archive-data.ts` (which of a customer's orders go in their invoice
+ * archive) — which is why it is exported. Two copies of this
  * CASE expression would drift, and a drift here is not cosmetic: a looser copy
  * WIDENS who can read an order, a tighter one 404s an order the list is showing.
  */
-function guestOrderForEmailCondition(
+export function guestOrderForEmailCondition(
   sql: NonNullable<ReturnType<typeof getCommerceClient>>,
   normalizedEmail: string
 ) {
@@ -810,7 +831,7 @@ export async function getLineCosts(
 }
 
 /** Normalize an email for inbox-equivalent matching (mirrors the SQL above). */
-function normalizeEmailForMatch(email: string): string {
+export function normalizeEmailForMatch(email: string): string {
   const [rawLocal, rawDomain] = email.toLowerCase().trim().split("@");
   if (!rawDomain) return "";
   let local = rawLocal.split("+")[0];

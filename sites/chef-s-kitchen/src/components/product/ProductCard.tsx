@@ -8,11 +8,12 @@ import { PriceBlock } from "@/components/ui/PriceBlock";
 import { AddToCartButton } from "./AddToCartButton";
 import { AddToQuoteButton } from "./AddToQuoteButton";
 import { ga4SelectItem } from "@/components/analytics/ga4";
+import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
 
 /**
  * Design-system product card: white 1:1 image stage, corner badges (max two),
  * brand mark top-right, category eyebrow → 2-line clamped name → mono SKU →
- * shared PriceBlock → dual Add to Cart / Add to Quote. Hover lifts the card
+ * shared PriceBlock → "Buy more & save" tag → dual Add to Cart / Add to Quote. Hover lifts the card
  * with a green edge. Unpriced (POA) items show no price and a single
  * Add to Quote button.
  */
@@ -203,6 +204,30 @@ export function ProductCard({
             />
           )}
         </div>
+
+        {/* "Buy more & save" tag — card FNYihLHk. Steve's mock puts it under the brand, name
+            and price, so it sits here rather than in the image's corner-badge stack (which is
+            capped at two and already carries Save% / Clearance).
+
+            On EVERY tile, priced or not, because the card is "add tag to all products" — a
+            quote-only line still buys better in quantity. It is a plain <span>: the tile is
+            already wrapped in links to this product, and a nested anchor is invalid markup.
+
+            It states no threshold and no percentage on purpose. The spend-more-save-more model
+            behind the promise belongs to cards Nyp8bkPm / gk23c1VK, which are still settling;
+            a figure invented here would be a money claim on a customer-facing screen.
+
+            This card draws the tile on the home rails, /products, /clearance, /search and the
+            brand pages. Every AUTHORED page — category, brand, the product page's "You may also
+            like" rail, /pages/[slug] — repeats the stored `product-card` master instead, which
+            `builder/promo-tag-node.ts` reaches at render time off this same wording, applied once
+            in `@/lib/store` so no branch can load the master without it. One constant, so no two
+            of our own screens can say different things about the same product. */}
+        {PROMO_TAG_LABEL && (
+          <p className="mt-3">
+            <span className="badge-promo">{PROMO_TAG_LABEL}</span>
+          </p>
+        )}
 
         {/* CTAs */}
         <div className="mt-3 flex flex-col gap-2">

@@ -27,6 +27,7 @@ import {
 import { matchBrandSpecial } from "@/lib/checkout/free-shipping-brands-policy";
 import { normaliseAuState, isValidAuPostcode } from "@/lib/checkout/au-address";
 import { normaliseCustomerReference } from "@/lib/checkout/customer-reference";
+import { createGuestContactForCheckout } from "@/lib/checkout/guest-contact";
 import { setLastOrder } from "@/lib/checkout/last-order";
 import { canViewOrderConfirmation } from "@/lib/checkout/confirmation-access";
 import { siteBaseUrl } from "@/lib/seo";
@@ -967,7 +968,10 @@ export async function placeOrder(
         }
       : {}),
     ...(Object.keys(orderMetafields).length ? { metafields: orderMetafields } : {}),
-  }) as { id: number; order_number: string };
+    // `contact_id` is read back because OrderService.create may have stamped it itself: a guest
+    // whose address already belongs to an accountless contact on this storefront is linked at
+    // create time (card lpMsJZMM), and the guest-record step below must not run for them.
+  }) as { id: number; order_number: string; contact_id?: number | null };
 
   // Create order items (line items precomputed by buildLineItems above)
   try {
@@ -994,6 +998,41 @@ export async function placeOrder(
       }
     }
     return { error: err instanceof Error ? err.message : "We couldn't complete your order. Please try again." };
+  }
+
+  // ── Every completed checkout attaches a customer record (card LiuLvc5b) ─────────────────────
+  // A signed-in shopper already has one, and a guest whose billing address is already known on
+  // this site had one stamped on the order by `OrderService.create` (card lpMsJZMM). What was
+  // still missing is the FIRST-time guest: the sale existed but the person did not, so staff
+  // could not open the buyer from the order and the CRM never learned they exist. So we create
+  // the contact — the same row a registration on that address would create — and stamp it.
+  //
+  // It runs HERE, after the order and its line items are persisted and past the compensating
+  // delete above, because no record may be created by a save that failed (Product Brief). It runs
+  // before the Stripe early-return so a card order is linked too: the order row exists at this
+  // point whatever the payment method, and the webhook only ever owns the payment status.
+  //
+  // The channel's account setting is not consulted. `require_account_to_checkout` decides whether
+  // a shopper must SIGN IN, and this is a record, not a login — so a channel that lets guests
+  // through still ends up with a customer for every order.
+  //
+  // Nothing here may cost the customer their order: the helper swallows its own failures and the
+  // stamp is wrapped, exactly like the shipping-address and address-book writes above.
+  const alreadyLinked = session?.contactId ?? (order as { contact_id?: number | null }).contact_id ?? null;
+  if (!alreadyLinked) {
+    try {
+      const guestContactId = await createGuestContactForCheckout({
+        email,
+        firstName,
+        lastName,
+        phone,
+      });
+      if (guestContactId) {
+        await orderService.update(order.id, { contactId: guestContactId });
+      }
+    } catch (e) {
+      console.error("[placeOrder] guest customer record not attached (non-fatal):", e);
+    }
   }
 
   // File the finance application and tell the rep (card VAjaPj0t). The order is
