@@ -15,6 +15,7 @@ import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { withSilverChefNode } from "@/builder/silverchef-node";
 import { withImageNoticeNode } from "@/builder/product-image-notice";
 import { withResidentialNoticeNode } from "@/builder/product-residential-notice";
+import { withModularNoticeNode } from "@/builder/modular-notice";
 import { withUpsellBlock } from "@/builder/upsell-node";
 import { attachBrandLogos } from "@/lib/brand-logo-fallback";
 import { withCdMemberPricingNode } from "@/builder/cd-member-pricing-node";
@@ -185,11 +186,22 @@ export async function renderProductNodeBranch({
   // it renders the join pitch WITHOUT prices, because retiring the savings percentage
   // took the stored teaser box off the Chefs Depot page and this is the only membership
   // call to action left on it.
+  // Chefs Depot's Modular Systems banner (card qGfWAzQx) is FINISHED here rather
+  // than in the Site Builder. The banner itself is already authored into that
+  // site's published product template with the right rule and the right words,
+  // but every style on it is an `lg:` variant (so a phone gets unstyled 14px
+  // text) and its arbitrary font class compiles to a broken selector. This pass
+  // swaps that paragraph — in place, so the author's placement is kept — for the
+  // sealed panel, whose styling compiles with the build and therefore cannot
+  // render unstyled. It is a no-op on every tree that does not carry the
+  // half-finished banner, which today is every template except Chefs Depot's.
   const nodeTree = guardBuyControls(
     withCdMemberPricingNode(
       withUpsellBlock(
         withResidentialNoticeNode(
-          withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE))
+          withModularNoticeNode(
+            withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE))
+          )
         )
       )
     )

@@ -55,6 +55,20 @@ export interface CategoryFacets {
   filters?: StorefrontFilter[];
 }
 
+/**
+ * A facet value is a percent-encoded NAME (the rail writes
+ * `encodeURIComponent(name)`), so anything printed from a raw value has to be
+ * decoded first. A bare `%` in a name would make `decodeURIComponent` throw,
+ * which is why this cannot be the one-liner. (1RLP5nSJ.)
+ */
+const decodeFacetValue = (value: string): string => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+
 const PRICE_LABELS: Record<string, string> = {
   lt1000: "Under $1,000",
   "1000to3000": "$1,000–$3,000",
@@ -588,17 +602,40 @@ export function PriceSliderFacet({ facets }: { facets: CategoryFacets }) {
 }
 
 /** Generic removable teal chips for the active facet selections (toolbar row). */
-export function FacetChips({ groups }: { groups: FacetGroupDef[] }) {
+/**
+ * `selected` overrides what the URL says is filtering, per param.
+ *
+ * A chip is a claim about the grid beside it, so it has to come from the values
+ * the page ACTUALLY filtered on, not from the address bar, wherever the two can
+ * differ. They differ in one place: a `?category=` naming a category removed
+ * from this storefront (`hidden_category_ids`, card ZVbjSoKN) is dropped before
+ * the search runs, and a chip still claiming it would say "filtered by Chefs Hat
+ * Sydney" over an unfiltered result set. Omit the prop and the URL is read, which
+ * is what the category page does.
+ */
+export function FacetChips({
+  groups,
+  selected,
+}: {
+  groups: FacetGroupDef[];
+  selected?: Record<string, string[]>;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
+  // Last resort when no option carries this value: the value itself is a
+  // percent-encoded NAME, so decode it rather than printing "Chef%20Inox ×" at
+  // a customer. Facet builders are expected to keep a ticked value's row (see
+  // `facetOptions`), so this should not fire — belt to that braces. (1RLP5nSJ.)
   const labelFor = (param: string, value: string) =>
-    groups.find((g) => g.param === param)?.options.find((o) => o.value === value)?.label ?? value;
+    groups.find((g) => g.param === param)?.options.find((o) => o.value === value)?.label ??
+    decodeFacetValue(value);
 
   const chips: { param: string; value: string; label: string }[] = [];
   for (const g of groups) {
-    const raw = searchParams.get(g.param);
+    const override = selected?.[g.param];
+    const raw = override !== undefined ? override.join(",") : searchParams.get(g.param);
     if (!raw) continue;
     // A slider is ONE chip naming its window ("Width 600–900mm"), not one chip
     // per value — and removing it clears the whole window.

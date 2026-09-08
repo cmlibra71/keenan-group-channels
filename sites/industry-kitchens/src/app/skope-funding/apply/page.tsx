@@ -8,6 +8,7 @@ import {
   financeApplicationFields,
 } from "@keenan/services/finance";
 import { FinanceApplicationForm } from "@/components/finance/FinanceApplicationForm";
+import { FinanceApplyLogo } from "@/components/finance/FinanceApplyLogo";
 import { financeApplyFundingTypes } from "@/lib/finance/product-finance";
 import { ensureFinanceApplyPage, FINANCE_APPLY_SLUGS } from "@keenan/services/services";
 import { CHANNEL_ID } from "@/lib/channel";
@@ -78,6 +79,10 @@ export default async function SkopeFundingApplyPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
       <header>
+        {/* Skope Funding's own mark, from the file Steve attached to card
+            XlDVUsuC — never SilverChef's. The published CMS page gets the same
+            masthead at render time (`lib/finance/finance-apply-logo.ts`). */}
+        <FinanceApplyLogo funder="skope" />
         <p className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
           Skope Funding
         </p>
