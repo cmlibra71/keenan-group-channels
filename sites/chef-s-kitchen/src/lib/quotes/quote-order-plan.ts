@@ -144,8 +144,8 @@ export interface QuotePlanContext {
    * The rep this order carries, already resolved by `resolveQuoteOrderRep`
    * (card QRA0m4vh). Passed in rather than resolved here so this module stays
    * pure and the storefront and the portal share ONE rule: the quote's
-   * `sales_agent` pick, else its `sales_rep_id`, else the rep who looks after
-   * the customer's account, else cs@ this storefront's own domain.
+   * `sales_agent` pick, else its `sales_rep_id`, else the rep FLAGGED as the
+   * customer's account primary, else cs@ this storefront's own domain.
    *
    * Omitted ⇒ the order carries no rep, which is what every quote paid on the
    * website did before this card.

@@ -332,12 +332,18 @@ export async function payQuote(
   //
   // One shared ladder in `@keenan/services`, the same one the portal's staff
   // conversion resolves its first two steps from: the quote's `sales_agent`
-  // pick, else its own `sales_rep_id`, else the rep standing against the
-  // customer's ACCOUNT (storefront-scoped, so a Chefs Depot order never takes an
+  // pick, else its own `sales_rep_id`, else the rep FLAGGED as the customer's
+  // account primary (storefront-scoped, so a Chefs Depot order never takes an
   // Industry Kitchens rep), else the ACTIVE rep row on this storefront's own cs@
   // address. Tolerated like the attribute codes above: a failed lookup carries no
   // rep — exactly what every quote paid here did before this card — and never
   // stops a customer paying.
+  //
+  // The last arm STAMPS the desk, so an order nobody else owns arrives owned:
+  // the portal stops offering "Take it" on it and a manager must move it
+  // (card nz251xZr). Deliberate — Steve asked for the order's rep to BE
+  // cs@(domain) — and recorded under `order-detail` in the portal's
+  // `docs/behaviour/orders.md`.
   const salesRep = await loadQuoteOrderRep({
     channelId: quote.channel_id as number,
     salesRepId: (quote.sales_rep_id as number | null) ?? null,
