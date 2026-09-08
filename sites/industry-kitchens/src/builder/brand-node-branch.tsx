@@ -58,6 +58,31 @@ export interface BrandNodeBranchArgs {
 }
 
 /**
+ * Does the node path apply to this brand page — a tree authored, and the flag on
+ * (or draft)? Exported because the ROUTE has to know BEFORE it loads: the
+ * faceted brand listing (card xOBnQarT) is what the React path renders, and the
+ * authored tree binds a plain product list, so asking for one when the other is
+ * about to render would change what a designed page shows.
+ *
+ * `renderBrandNodeBranch` asks the same question through this function, so the
+ * two can never disagree. `getFeatureFlag` is cached per request, so asking
+ * twice costs one read.
+ */
+export async function brandNodePathApplies({
+  brandCms,
+  draft,
+}: {
+  brandCms: unknown;
+  draft: boolean;
+}): Promise<boolean> {
+  const nodeTree =
+    ((brandCms as { node_tree?: unknown } | null)?.node_tree as NodeTree | null) ?? null;
+  if (!nodeTree) return false;
+  if (!draft && !(await getFeatureFlag("node_brand_template_enabled"))) return false;
+  return true;
+}
+
+/**
  * Renders the brand template's node tree, or returns null if the node path
  * does not apply (no tree authored, or the flag is off outside draft).
  */
@@ -70,10 +95,8 @@ export async function renderBrandNodeBranch({
   memberPricingEnabled,
   draft,
 }: BrandNodeBranchArgs): Promise<React.ReactElement | null> {
-  const nodeTree =
-    ((brandCms as { node_tree?: unknown } | null)?.node_tree as NodeTree | null) ?? null;
-  if (!nodeTree) return null;
-  if (!draft && !(await getFeatureFlag("node_brand_template_enabled"))) return null;
+  if (!(await brandNodePathApplies({ brandCms, draft }))) return null;
+  const nodeTree = (brandCms as { node_tree?: unknown } | null)!.node_tree as NodeTree;
 
   // Card tSrCcnvx (Tim, 2026-08-19): the brand logo an authored tile falls back
   // to when a product has no photo. Additive — every other field on the row is

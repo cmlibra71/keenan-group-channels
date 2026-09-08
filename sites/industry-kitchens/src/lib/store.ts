@@ -91,9 +91,18 @@ export const {
   getCategoryStats,
   getCategoryBreadcrumbs,
   getProductBreadcrumbs,
+  // Names of the categories REMOVED from this storefront (channel_settings
+  // `hidden_category_ids`, card ZVbjSoKN). Every category read resolves the
+  // removal by id; the /search facet rail speaks NAMES, so it needs these.
+  getRemovedCategoryNames,
+  // The same removal as IDS (whole subtree). The Sub-category rail and `?sub=`
+  // on a category page are id-keyed, so the removal has to be resolvable in
+  // that language too — see the route's `?sub=` canonicalisation. (ZVbjSoKN.)
+  getRemovedCategoryIds,
   getCategoryById,
   getBrandsForChannel,
   getBrandBySlug,
+  getBrandListing,
   getProductReviews,
   getProductAttachments,
   getProductVideos,
@@ -681,11 +690,13 @@ export async function getGuestOrdersForEmail(
  * no contact whose billing email resolves to the same inbox as `normalizedEmail`.
  *
  * Deliberately shared by {@link getGuestOrdersForEmail} (the history list) and
- * {@link isGuestOrderForEmail} (the per-order access gate). Two copies of this
+ * {@link isGuestOrderForEmail} (the per-order access gate) and, since card WlTnY4cd, by
+ * `lib/orders/invoice-archive-data.ts` (which of a customer's orders go in their invoice
+ * archive) — which is why it is exported. Two copies of this
  * CASE expression would drift, and a drift here is not cosmetic: a looser copy
  * WIDENS who can read an order, a tighter one 404s an order the list is showing.
  */
-function guestOrderForEmailCondition(
+export function guestOrderForEmailCondition(
   sql: NonNullable<ReturnType<typeof getCommerceClient>>,
   normalizedEmail: string
 ) {
@@ -828,7 +839,7 @@ export async function getLineCosts(
 }
 
 /** Normalize an email for inbox-equivalent matching (mirrors the SQL above). */
-function normalizeEmailForMatch(email: string): string {
+export function normalizeEmailForMatch(email: string): string {
   const [rawLocal, rawDomain] = email.toLowerCase().trim().split("@");
   if (!rawDomain) return "";
   let local = rawLocal.split("+")[0];
