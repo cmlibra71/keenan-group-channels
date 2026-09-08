@@ -1,5 +1,11 @@
 import { unstable_cache } from "next/cache";
-import { CHANNEL_ID, getProducts, shouldSuppressCatalogSalePrice } from "@/lib/store";
+import { dropRemovedCategoryNames } from "@keenan/services";
+import {
+  CHANNEL_ID,
+  getProducts,
+  getRemovedCategoryNames,
+  shouldSuppressCatalogSalePrice,
+} from "@/lib/store";
 import {
   SORT_MAP,
   andFilters,
@@ -36,10 +42,24 @@ export type SearchChunk = {
   exhausted: boolean;
 };
 
-/** The one place the URL/action parameters become Meilisearch arguments. */
-export function resolveFeedFilters(params: SearchFeedParams) {
+/**
+ * The one place the URL/action parameters become Meilisearch arguments.
+ *
+ * Async because of ONE thing: a category REMOVED from this storefront
+ * (`hidden_category_ids`, card ZVbjSoKN) is not a browsable filter. The removal
+ * is resolved by ID everywhere else, but Meilisearch's `categoryNames` facet is
+ * keyed by NAME and the index knows nothing about the setting — so a hand-typed
+ * `?category=Chefs+Hat+Sydney` would still filter the results of a shelf whose
+ * own page 404s. Dropped here, in the one place, so the rail, the first render,
+ * the scroll loads and the active-filter chips cannot disagree.
+ */
+export async function resolveFeedFilters(params: SearchFeedParams) {
   const brandValues = sanitizeFacetValues(params.brand);
-  const categoryValues = sanitizeFacetValues(params.category);
+  const categoryValues = dropRemovedCategoryNames(
+    sanitizeFacetValues(params.category),
+    await getRemovedCategoryNames(),
+    (v) => v
+  );
   const priceKeys = sanitizePriceKeys(params.price);
   const clauses = buildFilterClauses({ brandValues, categoryValues, priceKeys });
   return {
@@ -71,7 +91,9 @@ export async function fetchSearchChunk(
 
   try {
     const { searchProducts } = await import("@keenan/services/search");
-    const { brandClause, categoryClause, priceClause, sortKey } = resolveFeedFilters(opts.params);
+    const { brandClause, categoryClause, priceClause, sortKey } = await resolveFeedFilters(
+      opts.params
+    );
 
     const result = await searchProducts(CHANNEL_ID, query, {
       limit: opts.limit,

@@ -7,6 +7,7 @@ import {
   getCategoryBySlug,
   getCategoryListing,
   getStorefrontFilters,
+  getRemovedCategoryIds,
   getCategoryBreadcrumbs,
   getFeatureFlag,
   getChannelSetting,
@@ -166,6 +167,32 @@ export default async function CategoryPage({
     next.delete("stock");
     const qs = next.toString();
     redirect(`/categories/${slug}${qs ? `?${qs}` : ""}`);
+  }
+
+  // A category REMOVED from this storefront is not a filter either (ZVbjSoKN).
+  // The Sub-category rail is id-keyed, so a removed shelf whose own page 404s
+  // would otherwise keep a working tick box on its PARENT's page: it narrows
+  // the grid, draws a chip and sits beside a tile strip that no longer lists
+  // it. The listing layer drops the option and ignores the selection, but the
+  // parameter has to leave the URL as well, or the chip prints the raw database
+  // id it can no longer name (C8G4f4U8) and the next tick writes it back.
+  // `?sub=` is canonicalised ONCE — the ids that survive are all live, so this
+  // cannot redirect to itself. Same shape as ?stock= above, and it costs one
+  // cached settings read on the channels with nothing removed.
+  if (sp.sub !== undefined) {
+    const asked = parseIds(sp.sub);
+    const removed = new Set(await getRemovedCategoryIds());
+    const kept = asked.filter((id) => !removed.has(id));
+    if (kept.length !== asked.length) {
+      const next = new URLSearchParams(
+        Object.entries(sp).filter((e): e is [string, string] => typeof e[1] === "string")
+      );
+      if (kept.length > 0) next.set("sub", kept.join(","));
+      else next.delete("sub");
+      next.delete("page");
+      const subQs = next.toString();
+      redirect(`/categories/${slug}${subQs ? `?${subQs}` : ""}`);
+    }
   }
 
   const [listing, breadcrumbs, memberPricingEnabled] = await Promise.all([
