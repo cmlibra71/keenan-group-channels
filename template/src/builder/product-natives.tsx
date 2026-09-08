@@ -87,6 +87,7 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // product carries the tick.
     "product-residential-notice": () => (
       <ProductResidentialNotice show={product.restrictResidentialPurchase === true} />
+    ),
     // The Modular Systems banner (card qGfWAzQx, Steve — CE-40). The SAME sealed
     // panel as the notice above, because it is the same message: one look, one
     // colour, red panel with white writing. What differs is the rule — the slug
