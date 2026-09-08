@@ -997,6 +997,13 @@ export function CheckoutForm({
                 </div>
                 <div className="col-span-2 relative">
                   <label className="block text-sm font-medium text-zinc-700">Address</label>
+                  {/* Card HMtUxvwZ: typing over the address by hand drops the
+                      derived delivery type. Whatever the last suggestion said no
+                      longer describes what is in the box, and posting the type of
+                      an abandoned address would print RESIDENTIAL ADDRESS about
+                      somewhere the order is not going. Google filling this box
+                      writes `.value` directly and fires no React change, so a real
+                      pick is not caught here. */}
                   <input
                     ref={address1Ref}
                     type="text"
@@ -1004,6 +1011,7 @@ export function CheckoutForm({
                     required
                     autoComplete="off"
                     defaultValue={prefill?.address1 ?? ""}
+                    onChange={() => setAddressType("")}
                     className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
                   />
                   {googlePlacesEnabled && (
@@ -1098,6 +1106,9 @@ export function CheckoutForm({
                         : e.target.value;
                       setPostalCodeValue(next);
                       handlePostcodeChange(next);
+                      // A hand-typed postcode moves the delivery off the picked
+                      // place — see the address line above (card HMtUxvwZ).
+                      setAddressType("");
                     }}
                     className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
                   />
