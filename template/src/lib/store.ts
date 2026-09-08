@@ -94,6 +94,10 @@ export const {
   // `hidden_category_ids`, card ZVbjSoKN). Every category read resolves the
   // removal by id; the /search facet rail speaks NAMES, so it needs these.
   getRemovedCategoryNames,
+  // The same removal as IDS (whole subtree). The Sub-category rail and `?sub=`
+  // on a category page are id-keyed, so the removal has to be resolvable in
+  // that language too — see the route's `?sub=` canonicalisation. (ZVbjSoKN.)
+  getRemovedCategoryIds,
   getCategoryById,
   getBrandsForChannel,
   getBrandBySlug,
