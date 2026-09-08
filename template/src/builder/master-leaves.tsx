@@ -128,12 +128,22 @@ export function enquireHandler(router: { push: (to: string) => void }) {
 }
 
 /** The `addToCart` Action the add-to-cart MASTER runs — a faithful port of
- *  AddToCartButton.tsx's handleClick: cart POST → header badge update → BOTH
- *  Klaviyo `Added to Cart` and GA4 `add_to_cart` fired unconditionally (exactly
- *  as the live button does, even on an addToCart error). addToCart returns
+ *  AddToCartButton.tsx's handleClick: cart POST → header badge update → Klaviyo
+ *  `Added to Cart` and GA4 `add_to_cart` ON SUCCESS ONLY. addToCart returns
  *  `{ error }` WITHOUT a success key on failure, which BuilderActions.run would
  *  treat as ok — so we normalise to `{ success:false, error }` so the master's
- *  onError branch (reset the pending state) fires. */
+ *  onError branch (its toast, and resetting the pending state) fires.
+ *
+ *  A REFUSED ADD IS NOT AN ADD. Both analytics calls used to fire before the
+ *  result was even inspected, so a product refused for a restricted-online
+ *  policy, a `backorder_policy = 'deny'`, or an unanswered required
+ *  customisation (cards 7vu2iEEZ, kyMjCmAw) was reported to GA4 and Klaviyo as a
+ *  completed add — inflating add_to_cart on the authored tile path and firing
+ *  cart-abandonment flows for a cart that never received the line. The React
+ *  button (`AddToCartButton.tsx`) returns early on `{ error }` for exactly this
+ *  reason and the register records it as a rule on `sf-catalog-browse`; the two
+ *  paths must agree, because the LIVE Chefs Depot category page draws the
+ *  authored master, not the React tile. */
 export function useAddToCartHandler() {
   const { setCartCount } = useCartQuoteCounts();
   const { open } = useHeaderPanels();
@@ -141,6 +151,11 @@ export function useAddToCartHandler() {
     const id = num(args.productId);
     if (id == null) return { success: false, error: "no product" };
     const res = await addToCart(id, undefined, 1);
+    // Nothing was added, so nothing is reported and no panel pops out. The
+    // master's onError follow-up carries the refusal to the shopper.
+    if (res && "error" in res && typeof res.error === "string") {
+      return { success: false, error: res.error };
+    }
     // Fresh count from the action → badge updates without a route re-render,
     // and the cart panel pops out showing what was just added — parity with
     // AddToCartButton, which does exactly this in the same success branch.
@@ -164,9 +179,7 @@ export function useAddToCartHandler() {
       price: num(args.price) ?? undefined,
       quantity: 1,
     });
-    return "error" in (res ?? {})
-      ? { success: false, error: String((res as { error: string }).error) }
-      : { success: true };
+    return { success: true };
   };
 }
 
