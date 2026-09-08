@@ -31,10 +31,30 @@ export const MEMBERSHIP_CLAIM_REWRITES: Array<{ from: string; to: string }> = [
       "Members pay wholesale, cost-plus pricing across the catalogue — typically 10–25% below retail. " +
       "Join from $14.95/month and your member price is applied automatically at cart and checkout.",
     to:
+      "Member pricing is applied to your account automatically — every line reprices the moment your " +
+      "membership is active, with no code and no minimum order. Membership starts from $14.95/month. " +
+      "The difference is set item by item, so there is no single percentage: your price is shown on " +
+      "every product page.",
+  },
+  // MIGRATION OF OUR OWN FIRST ANSWER. The 2026-08-24 pass replaced the claim
+  // above with a sentence describing the LADDER ("calculated from our current
+  // trade price list ... the same list our own team quotes from"), and that
+  // sentence is now published on the Chefs Depot homepage and in its FAQ
+  // structured data while `cd_member_ladder` is unwritten — an engine that does
+  // not run, described in the words Google indexes. It is rewritten to the
+  // ladder-free answer above. Re-running the script is what corrects the live
+  // trees; leaving this rule in place keeps the run idempotent.
+  {
+    from:
       "Member pricing is calculated from our current trade price list at the moment you see it — the same " +
       "list our own team quotes from. Membership starts from $14.95/month and your member price applies " +
       "automatically once you are signed in. The distance is set item by item, so there is no single " +
       "percentage: your price is shown on every product page.",
+    to:
+      "Member pricing is applied to your account automatically — every line reprices the moment your " +
+      "membership is active, with no code and no minimum order. Membership starts from $14.95/month. " +
+      "The difference is set item by item, so there is no single percentage: your price is shown on " +
+      "every product page.",
   },
   {
     from: "Members save 10–25% on every order.",

@@ -172,6 +172,58 @@ async function main() {
       }
     }
 
+    // The `homepage_seo` CHANNEL SETTING — heading, body and the FAQ answers the
+    // homepage renders and Google indexes as FAQ structured data. This is where
+    // "typically 10–25% below retail" survived the 2026-08-24 pass: the block
+    // falls back to code copy only when the setting is absent, and channel 2 has
+    // one, so fixing the React source changed nothing a customer could see. The
+    // setting is a plain jsonb document, not a node tree, so it is walked as
+    // strings.
+    const seoSettings = (await sql`
+      SELECT id, channel_id, setting_value
+      FROM channel_settings WHERE setting_key = 'homepage_seo' ORDER BY channel_id`) as unknown as {
+      id: number;
+      channel_id: number;
+      setting_value: unknown;
+    }[];
+
+    for (const row of seoSettings) {
+      const value = row.setting_value as
+        | { heading?: string; body?: string; faqs?: { q: string; a: string }[] }
+        | null;
+      if (!value || typeof value !== "object") continue;
+
+      const originals = [
+        value.heading ?? "",
+        value.body ?? "",
+        ...(Array.isArray(value.faqs) ? value.faqs.map((f) => f?.a ?? "") : []),
+      ];
+      const { values, rewritten } = rewriteMembershipStrings(originals);
+      const stillClaiming = values.filter((v) =>
+        MEMBERSHIP_CLAIM_MARKERS.some((m) => v.toLowerCase().includes(m.toLowerCase()))
+      );
+      if (stillClaiming.length) {
+        leftovers.push(`channel_settings ${row.id} (channel ${row.channel_id}) homepage_seo: ${stillClaiming.join(" / ")}`);
+      }
+      if (rewritten.length === 0) continue;
+      changes++;
+      console.log(
+        `  channel_settings ${row.id} (channel ${row.channel_id}) homepage_seo: rewrites ${rewritten.length} claim(s)`
+      );
+      const next = {
+        ...value,
+        heading: values[0] || undefined,
+        body: values[1] || undefined,
+        faqs: Array.isArray(value.faqs)
+          ? value.faqs.map((f, i) => ({ ...f, a: values[2 + i] }))
+          : value.faqs,
+      };
+      if (APPLY) {
+        await sql`UPDATE channel_settings SET setting_value = ${sql.json(next as never)} WHERE id = ${row.id}`;
+        console.log("    homepage_seo: UPDATED");
+      }
+    }
+
     if (leftovers.length) {
       console.error("\nCLAIMS STILL PRESENT after the pass:");
       for (const l of leftovers) console.error("  " + l);

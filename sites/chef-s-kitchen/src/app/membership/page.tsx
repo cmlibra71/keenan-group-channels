@@ -30,13 +30,30 @@ import { PartnerLogos } from "@/components/membership/PartnerLogos";
 // Consumer Law challenge on substantiation. The one percentage here is the
 // yearly fee against twelve monthly fees, which is arithmetic on our own prices.
 // (Blueprint §10 and §13.)
+//
+// AND: EVERY CLAIM ABOUT HOW THE PRICE IS BUILT IS GATED ON `ladderOn`, not
+// only the claims that name a level. The trade-price-list mechanism — "member
+// pricing comes off the same trade list our own team quotes from", "your price
+// steps down as your spend grows", "your level is recorded against every line"
+// — is the LADDER, and the ladder ships OFF (`channel_settings.cd_member_ladder`
+// is unwritten on both live channels). With it off a Chefs Depot member has no
+// level, no monthly review runs, and their price is a markup applied to our own
+// buying cost. Copy and engine turn on together, in one setting. Anything that
+// is true either way is written once, ungated.
 // ============================================================================
 
-export const metadata = {
-  title: "Chefs Depot Buying Group",
-  description:
-    "Members don't get a discount. They get a different price tier — calculated from the trade price list our own team quotes from, and applied from your first order.",
-};
+export async function generateMetadata() {
+  // The description makes a claim about HOW the price is built, so it obeys the
+  // same switch as the words on the page. A static export could not read it.
+  const ladder = await getLadderConfig().catch(() => null);
+  const ladderOn = Boolean(ladder?.enabled) && (ladder?.levels.length ?? 0) > 1;
+  return {
+    title: "Chefs Depot Buying Group",
+    description: ladderOn
+      ? "Members don't get a discount. They get a different price tier — calculated from the trade price list our own team quotes from, and applied from your first order."
+      : "Members don't get a discount. They get a different price tier — applied to your account automatically, from your first order.",
+  };
+}
 
 export default async function MembershipLandingPage() {
   const enabled = await getFeatureFlag("subscriptions_enabled");
@@ -88,7 +105,7 @@ export default async function MembershipLandingPage() {
   const firstLevel = levels[0];
   const lastLevel = levels[levels.length - 1];
 
-  const feeCard = <PlanChoice plans={planOptions} ctaLabel={ctaLabel} />;
+  const feeCard = <PlanChoice plans={planOptions} ctaLabel={ctaLabel} ladderOn={ladderOn} />;
 
   return (
     <div>
@@ -102,11 +119,9 @@ export default async function MembershipLandingPage() {
                 Members don&rsquo;t get a discount. They get a different price tier.
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-relaxed text-text-secondary">
-                Members buy as a group and see a different number on every line, calculated from the
-                same trade price list our own team quotes from.
                 {ladderOn
-                  ? " Your member price applies from your first order, and keeps stepping down as your spend builds over twelve months."
-                  : " Your member price applies from your first order, automatically, with no code to remember."}
+                  ? "Members buy as a group and see a different number on every line, calculated from the same trade price list our own team quotes from. Your member price applies from your first order, and keeps stepping down as your spend builds over twelve months."
+                  : "Members buy as a group and see a different number on every line. Your member price applies from your first order, automatically, with no code to remember."}
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <Link href={hrefFor(primary.slug)} className="btn-primary inline-flex items-center justify-center gap-2">
@@ -219,7 +234,7 @@ export default async function MembershipLandingPage() {
               <p className="mt-3 text-sm leading-relaxed text-text-secondary">
                 Suppliers bring us bulk buys, clearance and end-of-line stock, and it reaches the
                 group before it goes anywhere else. A special is priced by what we managed to secure,
-                independent of your level.
+                {ladderOn ? " independent of your level." : " independent of your member pricing."}
               </p>
               <p className="mt-3 text-xs text-text-muted">
                 You always land on the lower of the two.
@@ -293,8 +308,10 @@ export default async function MembershipLandingPage() {
               <p className="mt-4 text-sm leading-relaxed text-text-secondary">
                 Chefs Depot members buy as a single block. Every order adds to the volume we put
                 through a brand, and volume is what moves a supplier — so the harder the group buys
-                something, the better the price sitting behind it for every member. This is why the
-                movement differs by product: it follows what the group actually buys.
+                something, the better the price sitting behind it for every member.
+                {ladderOn
+                  ? " This is why the movement differs by product: it follows what the group actually buys."
+                  : " This is why the gap between our standard price and the member price differs by product: it follows what the group actually buys."}
               </p>
               <p className="mt-4 text-sm leading-relaxed text-text-secondary">
                 A single cafe ordering one under-counter fridge has no leverage with the brand behind
@@ -346,17 +363,27 @@ export default async function MembershipLandingPage() {
           {[
             {
               title: "Prices you can trace",
-              body: "Our trade prices move when our suppliers move theirs, and member pricing follows the same day — up or down. There is no separate list and no lag working against you.",
-            },
-            {
-              title: "Every price is on the record",
               body: ladderOn
-                ? "Your level and the trade prices behind it are recorded against every quote and every order line. Ask us about a price from six months ago and we can show you exactly how it was built."
-                : "The trade prices behind every quote and order line are recorded against it. Ask us about a price from six months ago and we can show you exactly how it was built.",
+                ? "Our trade prices move when our suppliers move theirs, and member pricing follows the same day — up or down. There is no separate list and no lag working against you."
+                : "Our prices move when our suppliers move theirs, and member pricing follows the same day — up or down. There is no lag working against you.",
             },
+            // "Every price is on the record" is the ladder's own audit trail
+            // (`cd_price_audit`, written only by the ladder resolver). With the
+            // ladder off nothing is recorded against a line, so the claim is not
+            // rephrased for the off state — it is not made at all.
+            ...(ladderOn
+              ? [
+                  {
+                    title: "Every price is on the record",
+                    body: "Your level and the trade prices behind it are recorded against every quote and every order line. Ask us about a price from six months ago and we can show you exactly how it was built.",
+                  },
+                ]
+              : []),
             {
-              title: "One list, openly applied",
-              body: "Member pricing comes off the same trade list our own team quotes from. There is one source of truth, and your account reads from it directly.",
+              title: ladderOn ? "One list, openly applied" : "One price, openly applied",
+              body: ladderOn
+                ? "Member pricing comes off the same trade list our own team quotes from. There is one source of truth, and your account reads from it directly."
+                : "Member pricing is applied by your account, not by a code you have to remember. The price on the product page is the price at checkout, on every line.",
             },
             {
               title: "Your rights stand either way",
@@ -389,7 +416,9 @@ export default async function MembershipLandingPage() {
               {[
                 {
                   q: "How the buying group sets the price",
-                  a: "Every price is calculated from our current trade price list at the moment you see it — the same list our own team quotes from. That list reflects what the group buys, so as combined volume on a brand or an item grows, the price behind it improves for every member. When the trade price improves, yours improves with it, the same day.",
+                  a: ladderOn
+                    ? "Every price is calculated from our current trade price list at the moment you see it — the same list our own team quotes from. That list reflects what the group buys, so as combined volume on a brand or an item grows, the price behind it improves for every member. When the trade price improves, yours improves with it, the same day."
+                    : "Member pricing is applied to your account automatically — every line reprices the moment your membership is active, with no code and no minimum order. What the group buys is what moves a supplier, so as combined volume on a brand or an item grows, the price behind it improves for every member. When our buying price improves, yours improves with it, the same day.",
                 },
                 ...(ladderOn
                   ? [
@@ -438,7 +467,7 @@ export default async function MembershipLandingPage() {
           {feeCard}
           <p className="mt-6 text-xs text-text-secondary">
             Membership is subject to the{" "}
-            <Link href="/pages/membership-terms" className="underline hover:text-text-primary">
+            <Link href="/membership/terms" className="underline hover:text-text-primary">
               membership terms and conditions
             </Link>
             .

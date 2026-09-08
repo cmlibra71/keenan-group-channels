@@ -37,10 +37,19 @@ export function PlanChoice({
   plans,
   ctaLabel,
   note,
+  ladderOn = false,
 }: {
   plans: MembershipPlanOption[];
   ctaLabel: string;
   note?: string;
+  /**
+   * Does this channel run the spend ladder? Two lines on this card describe it —
+   * the eyebrow ("Members Spend More, Save More") and the clearance line's "your
+   * level" — and neither is true with `cd_member_ladder` unwritten, which is
+   * every channel today. Same rule as the rest of `/membership`: copy and engine
+   * turn on together, in one setting.
+   */
+  ladderOn?: boolean;
 }) {
   const monthly = plans.find((p) => p.interval === "month") ?? null;
   const yearly = plans.find((p) => p.interval === "year") ?? null;
@@ -64,7 +73,9 @@ export function PlanChoice({
 
   return (
     <div className="rounded-2xl border border-border-strong bg-white p-6 text-center sm:p-8">
-      <p className="eyebrow mb-4">Members Spend More, Save More</p>
+      <p className="eyebrow mb-4">
+        {ladderOn ? "Members Spend More, Save More" : "The Chefs Depot Buying Group"}
+      </p>
 
       {monthly && yearly && (
         <div
@@ -109,8 +120,9 @@ export function PlanChoice({
         Cancel any time, no lock-in. No contract, no exit fee, no notice period.
       </p>
       <p className="mt-2 text-xs leading-relaxed text-text-secondary">
-        You always get the better price. Where a clearance or Partner Special is sharper than your
-        level, you get that instead.
+        {ladderOn
+          ? "You always get the better price. Where a clearance or Partner Special is sharper than your level, you get that instead."
+          : "You always get the better price. Where a clearance or Partner Special is sharper than your member price, you get that instead."}
       </p>
       {note && <p className="mt-2 text-xs leading-relaxed text-text-secondary">{note}</p>}
     </div>

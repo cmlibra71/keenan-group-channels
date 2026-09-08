@@ -59,7 +59,11 @@ test("the live homepage FAQ answer is rewritten, and the question is left standi
     json.includes("How does Chefs Depot membership pricing work?"),
     "removing the answer instead of rewriting it would leave a question with none"
   );
-  assert.ok(json.includes("calculated from our current trade price list"));
+  assert.ok(json.includes("applied to your account automatically"));
+  assert.ok(
+    !json.includes("trade price list"),
+    "the replacement may not describe the ladder — it ships switched off"
+  );
 });
 
 test("the post-condition catches a claim retyped into another node", () => {
@@ -212,6 +216,25 @@ test("the replacement copy claims no percentage and no ladder the engine may not
   // ladder, which ships switched off.
   for (const rule of MEMBERSHIP_CLAIM_REWRITES) {
     assert.ok(!/\d+\s*[–-]\s*\d+\s*%/.test(rule.to), `percentage range in: ${rule.to}`);
-    assert.ok(!/rolling twelve-month|steps down|spend builds/i.test(rule.to), `ladder claim in: ${rule.to}`);
+    assert.ok(
+      !/rolling twelve-month|steps down|spend builds|trade price list|your level|monthly review/i.test(rule.to),
+      `ladder claim in: ${rule.to}`
+    );
   }
+});
+
+test("our own first replacement — the trade-price-list answer — is itself migrated", () => {
+  // The 2026-08-24 pass published a ladder sentence to the live homepage and its
+  // FAQ structured data while the ladder was off. Re-running the script has to
+  // correct it, and then leave it alone.
+  const published =
+    "Member pricing is calculated from our current trade price list at the moment you see it — the same " +
+    "list our own team quotes from. Membership starts from $14.95/month and your member price applies " +
+    "automatically once you are signed in. The distance is set item by item, so there is no single " +
+    "percentage: your price is shown on every product page.";
+  const { values, rewritten } = rewriteMembershipStrings([published]);
+  assert.equal(rewritten.length, 1);
+  assert.ok(!values[0].includes("trade price list"));
+  assert.ok(values[0].includes("applied to your account automatically"));
+  assert.deepEqual(rewriteMembershipStrings(values).rewritten, [], "idempotent");
 });
