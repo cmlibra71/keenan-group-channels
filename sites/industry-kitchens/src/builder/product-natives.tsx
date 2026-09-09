@@ -8,6 +8,7 @@ import { GstToggle } from "@/components/layout/GstToggle";
 import { SilverChefPanel } from "@/components/product/SilverChefPanel";
 import { ProductImageNotice } from "@/components/product/ProductImageNotice";
 import { ProductResidentialNotice } from "@/components/product/ProductResidentialNotice";
+import { ProductPackNote } from "@/components/product/ProductPackNote";
 import { MODULAR_NOTICE_TEXT, slugIsModularSystems } from "@/builder/modular-notice";
 import { usableBrandLogo } from "@/lib/brand-logo-url";
 import { CdMemberPricingPanel } from "@/components/product/CdMemberPricingPanel";
@@ -110,6 +111,10 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     "product-residential-notice": () => (
       <ProductResidentialNotice show={product.restrictResidentialPurchase === true} />
     ),
+    // "Carton contains 12 Pcs" (cards O108e4jH / zeMPVcA3). Sealed rather than exploded: it
+    // multiplies the price the shopper is being shown by the pack size, which is live purchase
+    // state a stored tree cannot carry, and it renders NULL on every product sold individually.
+    "product-pack-note": () => <ProductPackNote />,
     // The Modular Systems banner (card qGfWAzQx, Steve — CE-40). The SAME sealed
     // panel as the notice above, because it is the same message: one look, one
     // colour, red panel with white writing. What differs is the rule — the slug

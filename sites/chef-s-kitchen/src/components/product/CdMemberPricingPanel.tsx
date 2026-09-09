@@ -127,13 +127,28 @@ function PriceRow({
  * Depot's `components/ui/PriceBlock.tsx` already carries on the surfaces IT
  * draws, so one storefront never shows two versions of his copy. He owns these
  * words — do not reword them.
+ *
+ * THE TAIL CLAUSE IS THE LADDER, SO IT WAITS FOR THE LADDER. "Lower again as
+ * their twelve-month spend grows" describes levels, thresholds and a monthly
+ * review; none of that runs on a channel with `cd_member_ladder` unwritten, and
+ * that is every channel today. The first half of Tim's sentence is true either
+ * way and is what ships until the switch is thrown — the same rule `/membership`
+ * and the member terms run on (copy and engine turn on together, in one
+ * setting). Nothing is reworded: the ladder half is either printed whole or not
+ * printed.
  */
-function JoinPitch() {
+function JoinPitch({ ladderOn }: { ladderOn: boolean }) {
   return (
     <p className="text-sm text-text-secondary">
       <strong className="text-text-primary">You&rsquo;re seeing our standard price.</strong>{" "}
-      Members buy this line lower &mdash; and almost 40,000 others &mdash; lower again as their
-      twelve-month spend grows.
+      {ladderOn ? (
+        <>
+          Members buy this line lower &mdash; and almost 40,000 others &mdash; lower again as their
+          twelve-month spend grows.
+        </>
+      ) : (
+        <>Members buy this line lower &mdash; and almost 40,000 others.</>
+      )}
     </p>
   );
 }
@@ -167,7 +182,7 @@ function MembershipPitchPanel({ data }: { data: CdMembershipBase }) {
       className="mt-4 rounded-[12px] bg-member-bg p-4"
       aria-label="Chefs Depot membership"
     >
-      <JoinPitch />
+      <JoinPitch ladderOn={false} />
       <JoinButton data={data} />
     </section>
   );
@@ -360,7 +375,7 @@ function CdLadderPanel({ data }: { data: CdMembershipLadder }) {
           </p>
         ) : (
           <div className="mt-3">
-            <JoinPitch />
+            <JoinPitch ladderOn={true} />
           </div>
         )}
 
