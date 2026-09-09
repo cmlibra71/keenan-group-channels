@@ -261,6 +261,9 @@ export const AddToCartWidget: WidgetComponent = ({ attrs }) => {
     restrictAddToCart,
     purchasingDisabled,
     allOptionsSelected,
+    selectedAddons,
+    addonGroupsOffered,
+    addonGroupsUnanswered,
   } = purchase;
   // Also covers a product staff set to Hide Price: the provider masks its amounts to zero, so it
   // takes the same quote-only path a genuinely unpriced product takes (7vu2iEEZ).
@@ -270,13 +273,36 @@ export const AddToCartWidget: WidgetComponent = ({ attrs }) => {
   // dead control (cards 7vu2iEEZ + CXnP1lrL). Add to Quote is still there.
   if (restrictAddToCart || purchaseBlockedByStock) return null;
   return (
-    <AddToCartButton
-      productId={product.id}
-      variantId={cartVariantId}
-      quantity={quantity}
-      size={attrs.size === "sm" ? "sm" : undefined}
-      disabled={purchasingDisabled || !allOptionsSelected}
-    />
+    <>
+      <AddToCartButton
+        productId={product.id}
+        variantId={cartVariantId}
+        quantity={quantity}
+        size={attrs.size === "sm" ? "sm" : undefined}
+        disabled={purchasingDisabled || !allOptionsSelected}
+        // WHAT THE SHOPPER CONFIGURED HAS TO REACH THE BUTTON (card kyMjCmAw).
+        // Without it the press lands on the server with no configuration at all and
+        // is refused with the wording written for a listing TILE — "Please open the
+        // product page and fill in Instructions" — told to the shopper standing on
+        // that very page, with no way through. `addonGroupsOffered` keeps "this
+        // renderer showed no panel" distinct from "the shopper emptied the box",
+        // which is what stops a tile clearing a configuration made elsewhere.
+        addons={addonGroupsOffered ? selectedAddons : undefined}
+      />
+      {/* THE GREYED BUTTON IS EXPLAINED, always. 7vu2iEEZ's rule on `sf-product-page`
+          is that a greyed buy button with nothing beside it is forbidden outright, and
+          CXnP1lrL removed every other string on this page that could explain one. On
+          the node renderer the panel's own "Required —" line carries that explanation
+          because the panel is PLACED at render time; on this one the panel is a widget
+          an author has to place, and the seed purchase panel does not place it (see
+          `sf-product-page`). So the reason is said HERE, where the dead control is,
+          and it names the field rather than describing a rule. */}
+      {!purchasingDisabled && addonGroupsUnanswered.length > 0 && (
+        <p className="mt-2 text-xs font-medium text-text-secondary">
+          Fill in {addonGroupsUnanswered.join(" and ")} above to add this to your cart.
+        </p>
+      )}
+    </>
   );
 };
 
@@ -290,6 +316,8 @@ export const AddToQuoteWidget: WidgetComponent = ({ attrs }) => {
     useGroupedMode,
     allOptionsSelected,
     restrictAddToQuote,
+    selectedAddons,
+    addonGroupsOffered,
   } = purchase;
   // Zoey "Restrict Add to Quote" — the button simply is not offered for this product (7vu2iEEZ).
   if (restrictAddToQuote) return null;
@@ -299,6 +327,11 @@ export const AddToQuoteWidget: WidgetComponent = ({ attrs }) => {
       variantId={cartVariantId}
       size={attrs.size === "sm" ? "sm" : undefined}
       disabled={useGroupedMode && !allOptionsSelected}
+      // See AddToCartWidget. Add to Quote deliberately stays live while a required
+      // box is empty, so THIS is the press that must carry the typed answer — and
+      // when the box really is empty, the refusal it earns is the one that names
+      // the field on this page rather than the one that sends a shopper to it.
+      addons={addonGroupsOffered ? selectedAddons : undefined}
       label={
         str(attrs.label) ||
         (displayPrice <= 0 ? "Add to Quote — request pricing" : undefined)
@@ -346,6 +379,8 @@ export const MobileBuyBarWidget: WidgetComponent = () => {
     restrictAddToCart,
     purchasingDisabled,
     allOptionsSelected,
+    selectedAddons,
+    addonGroupsOffered,
   } = purchase;
   if (displayPrice <= 0) return null;
   // The bar is a price and an Add to Cart and nothing else, so a product whose cart button is
@@ -374,13 +409,19 @@ export const MobileBuyBarWidget: WidgetComponent = () => {
           <p className="truncate text-[10px] font-semibold text-text-secondary">{packNote}</p>
         )}
       </div>
-      <AddToCartButton
-        productId={product.id}
-        variantId={cartVariantId}
-        quantity={quantity}
-        size="sm"
-        disabled={purchasingDisabled || !allOptionsSelected}
-      />
+      {/* A column of its own, so the button's refusal line wraps UNDER it instead of
+          becoming a third flex item that squeezes the button off a phone screen.
+          Same reasoning as the legacy bar in `ProductDetail.tsx`. */}
+      <div className="w-1/2 shrink-0">
+        <AddToCartButton
+          productId={product.id}
+          variantId={cartVariantId}
+          quantity={quantity}
+          size="sm"
+          disabled={purchasingDisabled || !allOptionsSelected}
+          addons={addonGroupsOffered ? selectedAddons : undefined}
+        />
+      </div>
     </div>
   );
 };

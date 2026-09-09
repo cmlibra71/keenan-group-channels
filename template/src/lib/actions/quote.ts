@@ -26,7 +26,11 @@ import {
   describeAddonSelection,
   type AddonSelectionInput,
 } from "@keenan/services";
-import { customisationRefusal } from "@/lib/product-customisation";
+import {
+  customisationRefusal,
+  storefrontOwnsLineComment,
+  priorStorefrontNote,
+} from "@/lib/product-customisation";
 import { slidingWindowAllow } from "@/lib/rate-limit";
 import { resolveCustomerRequestState } from "@keenan/services";
 import {
@@ -263,6 +267,21 @@ export async function addToQuote(
   } | null;
 
   if (existing) {
+    // ── WHOSE COMMENT IS IT? ───────────────────────────────────────────────────
+    // 7bmpuqei's rule on `quote-editor`: the storefront writes the line's Comment
+    // only when the line has none, or when what is on it is the note the storefront
+    // itself wrote last time — a comment a REP typed is never overwritten, because
+    // it is customer-visible on the quote link. This product is exactly the
+    // workflow that rule exists for: the customer describes a fabrication, the rep
+    // annotates and prices it, and the customer then re-presses Add to Quote.
+    // `addon_note` is the ownership marker, holding the exact string we last wrote.
+    // Lines written before it existed have none, so a line the STOREFRONT
+    // configured (it carries `addon_selection` or a `kit_kind`) is still read as
+    // ours; anything else is treated as a rep's and left alone.
+    const priorAttributes = existing.attributes ?? {};
+    const commentIsOurs = storefrontOwnsLineComment(existing.customer_notes, priorAttributes);
+    const priorNote = priorStorefrontNote(existing.customer_notes, priorAttributes);
+
     // A quote may hold only ONE line per product+variant, so re-configuring a bundle REPLACES the
     // captured configuration on the line the customer already has (and does not stack a second
     // quantity onto a different build). Everything else keeps counting up as before.
@@ -273,9 +292,12 @@ export async function addToQuote(
     // newer set of measurements. A custom fabrication is not a countable stock item.
     // A CLEAR-DOWN counts as a re-configure too: a shopper who empties the box and
     // presses the button again is withdrawing the request, not ordering a second one.
+    // "Did the configuration change" is measured against the note WE last wrote, not
+    // against whatever is on the line now — a rep having typed over the Comment must
+    // not turn a correction into a second unit.
     const reconfigured =
       (kit?.kind === "bundle" || (resolvedAddons?.length ?? 0) > 0 || clearedAddons) &&
-      lineNotes !== existing.customer_notes;
+      lineNotes !== priorNote;
     // MERGED into the bag, never over it. `quote_items.attributes` is replaced
     // WHOLESALE on write and has several owners — a rep's `indent` tick, a
     // `custom_line` marker, `zoey_item_id` on 62,351 ingested rows — so a
@@ -285,14 +307,27 @@ export async function addToQuote(
     // answer would have survived the Comment that explained it.
     let nextAttributes: Record<string, unknown> | null = null;
     if (lineAttributes) {
-      nextAttributes = { ...(existing.attributes ?? {}), ...lineAttributes };
+      nextAttributes = { ...priorAttributes, ...lineAttributes };
       if (clearedAddons) delete nextAttributes.addon_selection;
+      // The marker records what we WROTE. Skipping the write leaves the previous
+      // marker exactly where it is, so the rep keeps ownership on the next press too.
+      if (commentIsOurs) {
+        if (lineNotes) nextAttributes.addon_note = lineNotes;
+        else delete nextAttributes.addon_note;
+      }
     }
     await quoteItemService.updateForParent(quote.id, existing.id, {
       quantity: reconfigured
         ? existing.quantity
         : snapToPack(existing.quantity + packSize, packSize),
-      ...(nextAttributes ? { attributes: nextAttributes, customerNotes: lineNotes } : {}),
+      ...(nextAttributes
+        ? {
+            attributes: nextAttributes,
+            // The structured record ALWAYS updates — the rep can still see what the
+            // customer last asked for. Only the customer-visible sentence is held back.
+            ...(commentIsOurs ? { customerNotes: lineNotes } : {}),
+          }
+        : {}),
     });
   } else {
     await quoteItemService.createForParent(quote.id, {
@@ -308,7 +343,16 @@ export async function addToQuote(
       // frozen at the price it was added at for life (card laFQveZT). Say it out
       // loud here; the service will not guess it for us.
       priceSource: "customer",
-      ...(lineAttributes ? { attributes: lineAttributes, customerNotes: lineNotes } : {}),
+      // A brand-new line has no comment to protect, so the note goes on and the
+      // ownership marker goes with it (see the update branch above).
+      ...(lineAttributes
+        ? {
+            attributes: lineNotes
+              ? { ...lineAttributes, addon_note: lineNotes }
+              : lineAttributes,
+            customerNotes: lineNotes,
+          }
+        : {}),
     });
   }
 

@@ -27,6 +27,9 @@ import {
   paymentPosition,
   visibleTransaction,
   isNetTermsMethod,
+  // ONE reader for `product_options`, shared with the portal's rule that a value it
+  // cannot render as a scalar is shown as nothing (cards 0CDcCYmO + kyMjCmAw).
+  optionSummary,
 } from "@/lib/orders/order-presentation";
 import { orderDocumentName } from "@/lib/orders/order-document-name";
 import {
@@ -188,41 +191,6 @@ function formatDate(value: string | Date | null | undefined): string {
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
-}
-
-/**
- * Variant / option wording on a line, from the checkout's product_options snapshot.
- *
- * TWO SHAPES, both real. Every Zoey-imported line stores a BigCommerce-style array
- * of `{display_name, display_value}`; a line configured on our own product page
- * stores the `{group label: answer}` object `addonsAsOrderOptions` writes (cards
- * 0CDcCYmO + kyMjCmAw). Reading only the array meant a customer who typed
- * "1200mm bench, sink on the left" into the Instructions box could not see it back
- * on their own order — the one screen where they would check we got it right.
- */
-function optionSummary(raw: unknown): string {
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    return Object.entries(raw as Record<string, unknown>)
-      .map(([name, value]) => {
-        const text = String(value ?? "").trim();
-        if (!text) return "";
-        return name ? `${name}: ${text}` : text;
-      })
-      .filter(Boolean)
-      .join(" · ");
-  }
-  if (!Array.isArray(raw)) return "";
-  return raw
-    .map((entry) => {
-      if (!entry || typeof entry !== "object") return "";
-      const o = entry as Record<string, unknown>;
-      const name = String(o.display_name ?? o.name ?? "").trim();
-      const value = String(o.display_value ?? o.value ?? "").trim();
-      if (!value) return "";
-      return name ? `${name}: ${value}` : value;
-    })
-    .filter(Boolean)
-    .join(" · ");
 }
 
 export default async function OrderDetailPage({

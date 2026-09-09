@@ -309,17 +309,24 @@ export function ProductDetail({
             />
             <span className="ml-1 text-[10px] font-semibold text-steel-400">{isMember && memberPrice != null ? "member" : inclusive ? "inc GST" : "ex GST"}</span>
           </div>
-          <AddToCartButton
-            productId={productId}
-            variantId={cartVariantId}
-            quantity={quantity}
-            productName={product.name}
-            sku={product.sku}
-            price={displaySalePrice ?? displayPrice}
-            size="sm"
-            disabled={purchasingDisabled || !allOptionsSelected}
-            {...buyProps}
-          />
+          {/* The button carries its own refusal line under itself (a refused add SAYS
+              so — 7bmpuqei / 7vu2iEEZ). In a `flex` bar that paragraph would become a
+              third item BESIDE the button and squeeze it to nothing on a phone, so the
+              button gets a column of its own and the sentence wraps under it, growing
+              the bar rather than crushing it. */}
+          <div className="w-1/2 shrink-0">
+            <AddToCartButton
+              productId={productId}
+              variantId={cartVariantId}
+              quantity={quantity}
+              productName={product.name}
+              sku={product.sku}
+              price={displaySalePrice ?? displayPrice}
+              size="sm"
+              disabled={purchasingDisabled || !allOptionsSelected}
+              {...buyProps}
+            />
+          </div>
         </div>
       )}
     </div>

@@ -185,6 +185,9 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
   // Analytics enrichment (GA4/Klaviyo add_to_cart): leaf category.
   const buyboxCrumbs = await crumbsFor(product, extras);
 
+  // Read ONCE — it feeds two props below and they must not disagree.
+  const productAddons = readProductAddons(product.metafields);
+
   return (
     <div className={CONTAINER}>
       <ProductPageClient
@@ -215,8 +218,16 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
           bulkPricing: suppressCatalogPricing ? [] : (product.bulkPricing ?? []),
           // Authored customisation groups — priced extras and free-text questions
           // (cards 0CDcCYmO + kyMjCmAw). Null for every product that carries none.
-          addons: readProductAddons(product.metafields),
+          addons: productAddons,
         }}
+        // AND the same groups as the PANEL prop. Both are needed and they are not the
+        // same wiring: the one above goes into the shared purchase provider, whose
+        // `allOptionsSelected` greys Add to Cart while a required box is empty; this
+        // one is what makes `ProductDetail` RENDER the box. Passing only the first
+        // greys the buy button with nothing beside it to fill in, which
+        // `sf-product-page` forbids outright (7vu2iEEZ + CXnP1lrL). The legacy route
+        // (`app/products/[slug]/page.tsx`) passes this one and not the other.
+        addons={productAddons}
         memberPrice={memberPrice}
         memberPriceMap={memberPriceMap}
         isMember={isMember ?? false}
@@ -521,6 +532,13 @@ async function ProductOverviewBlock({ props, ctx }: BlockProps) {
     // @keenan/services, card Q9hRTbKO). Kept local as well, because a Bulk Pricing
     // table the cart refuses to charge is the defect this page must never show.
     bulkPricing: suppressCatalogPricing ? [] : (product.bulkPricing ?? []),
+    // Authored customisation groups — priced extras and free-text questions
+    // (cards 0CDcCYmO + kyMjCmAw). This is the WIDGET renderer: the groups reach the
+    // shared provider here, `ProductInstructionsWidget` renders the panel off it, and
+    // the three buy widgets hand `selectedAddons` back to the button. Leaving this
+    // out is not a missing panel, it is a question that is never asked and a bare
+    // line arriving at the rep. Null for every product that carries none.
+    addons: readProductAddons(product.metafields),
   };
 
   const def = BLOCK_REGISTRY.product_overview;

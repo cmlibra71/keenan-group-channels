@@ -91,9 +91,17 @@ async function bestBulkUnitPrice(productId: number, quantity: number, listPrice:
 async function resolveItemPricing(
   productId: number,
   variantId: number | null | undefined,
-  quantity: number
+  quantity: number,
+  /** The product row, when the CALLER has already read it. `addToCart` reads it to
+   *  find the product's customisation groups (card kyMjCmAw), and re-reading the
+   *  same row here would put a second round trip on the hottest storefront action
+   *  for nothing. Omitted everywhere else, and read below exactly as before. */
+  productRow?: { price: string; sale_price: string | null } | null
 ): Promise<{ listPrice: string; salePrice: string | null }> {
-  const product = (await productService.getById(productId)) as { price: string; sale_price: string | null } | null;
+  const product =
+    productRow !== undefined
+      ? productRow
+      : ((await productService.getById(productId)) as { price: string; sale_price: string | null } | null);
   if (!product) throw new Error("Product not found");
 
   // ── ACCOUNT CONTRACT PRICE: an unconditional override (Zoey: "takes priority over ALL other
@@ -235,7 +243,9 @@ export async function addToCart(
   // typed instruction changes nothing about the money; a PRICED extra does, and
   // `withAddonSurcharge` below is what keeps the till agreeing with the page (the
   // provider's `displayPrice` already includes the extras).
-  const productRow = (await productService.getById(productId)) as { metafields?: unknown } | null;
+  const productRow = (await productService.getById(productId)) as
+    | { metafields?: unknown; price: string; sale_price: string | null }
+    | null;
   if (!productRow) return { error: "Product not found" };
   const productAddons = readProductAddons(productRow.metafields);
 
@@ -262,24 +272,35 @@ export async function addToCart(
 
   // Is this product/variant already in the cart AS THIS CONFIGURATION? Two benches
   // with different measurements are two lines, not one line of quantity 2 carrying
-  // whichever instruction was typed first (card kyMjCmAw). A line with no
-  // configuration keys as "", so every pre-existing line behaves exactly as before.
-  const cartRows = (await cartService.getWithItems(cart.id)) as {
-    items?: {
-      id: number;
-      product_id: number;
-      variant_id: number | null;
-      quantity: number;
-      modifier_selections?: unknown;
-    }[];
-  } | null;
-  const existing =
-    (cartRows?.items ?? []).find(
-      (item) =>
-        item.product_id === productId &&
-        (item.variant_id ?? null) === (variantId ?? null) &&
-        addonSelectionKey(readStoredAddons(item.modifier_selections)) === wantedConfiguration
-    ) ?? null;
+  // whichever instruction was typed first (card kyMjCmAw).
+  //
+  // ONLY a product that actually asks a question pays for that. Add to Cart is the
+  // hottest action on either storefront and a customisable product is a handful of
+  // rows in the catalogue, so a product with no customisation groups keeps the ONE
+  // targeted lookup it has always used — the configuration of every line on it is
+  // the empty key, so product + variant already decides it. `listForParent` reads
+  // `cart_items` alone; `getWithItems` would join products and variants for every
+  // line in the cart to answer a question about one of them.
+  const existing = productAddons
+    ? ((
+        await cartItemService.listForParent(cart.id, {
+          page: 1,
+          limit: 200,
+          sort: "id",
+          direction: "asc",
+        })
+      ).data.find(
+        (item) =>
+          (item as { product_id: number }).product_id === productId &&
+          ((item as { variant_id: number | null }).variant_id ?? null) === (variantId ?? null) &&
+          addonSelectionKey(
+            readStoredAddons((item as { modifier_selections?: unknown }).modifier_selections)
+          ) === wantedConfiguration
+      ) as { id: number; quantity: number } | undefined) ?? null
+    : ((await cartItemService.findByProductVariant(cart.id, productId, variantId)) as {
+        id: number;
+        quantity: number;
+      } | null);
 
   const wantedQty = existing ? existing.quantity + Math.max(1, quantity) : Math.max(1, quantity);
 
@@ -299,7 +320,9 @@ export async function addToCart(
   let pricing: { listPrice: string; salePrice: string | null };
   try {
     pricing = withAddonSurcharge(
-      await resolveItemPricing(productId, variantId, finalQty),
+      // The row this action already read, handed straight on — one `getById` per
+      // add, the same as before this card.
+      await resolveItemPricing(productId, variantId, finalQty, productRow),
       resolvedAddons
     );
   } catch {

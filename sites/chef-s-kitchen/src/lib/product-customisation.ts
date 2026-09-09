@@ -54,3 +54,50 @@ export function customisationRefusal(
     ? `Please open the product page and fill in ${missing} before adding this to your ${where}.`
     : `Please fill in ${missing} before adding this to your ${where}.`;
 }
+
+/**
+ * MAY THE STOREFRONT WRITE THIS QUOTE LINE'S COMMENT?
+ *
+ * 7bmpuqei's rule on `quote-editor`: the storefront writes the line's Comment only
+ * when the line has none, or when what is on it is the note the storefront itself
+ * wrote last time — a comment a REP typed is never overwritten, because it is
+ * customer-visible on the quote link.
+ *
+ * Custom Stainless Steel is the exact workflow that rule protects. The customer
+ * describes a fabrication, the rep annotates and prices it in the line's Comment,
+ * and the customer then presses Add to Quote again with a corrected measurement.
+ * Writing unconditionally would replace the rep's pricing note with the customer's
+ * own sentence, on a quote the customer is already reading.
+ *
+ * `attributes.addon_note` is the ownership marker: the exact string the storefront
+ * last wrote on this line. Lines written before it existed carry none, so a line
+ * the storefront demonstrably CONFIGURED — it carries an `addon_selection` or a
+ * `kit_kind` — is still read as ours, and anything else is treated as a rep's.
+ *
+ * The STRUCTURED record (`addon_selection`) is written either way; only the
+ * customer-visible sentence is held back. A rep who has taken the Comment keeps
+ * it, and can still read what the customer last asked for.
+ */
+export function storefrontOwnsLineComment(
+  comment: string | null | undefined,
+  attributes: Record<string, unknown> | null | undefined
+): boolean {
+  if ((comment ?? "").trim() === "") return true;
+  const bag = attributes ?? {};
+  const marker = typeof bag.addon_note === "string" ? bag.addon_note : null;
+  if (marker !== null) return comment === marker;
+  return bag.addon_selection != null || bag.kit_kind != null;
+}
+
+/** The note the storefront last wrote on this line, for deciding whether the
+ *  configuration actually CHANGED. Measured against our own note rather than
+ *  against whatever is on the line now: a rep having typed over the Comment must
+ *  not turn a correction into a second unit. */
+export function priorStorefrontNote(
+  comment: string | null | undefined,
+  attributes: Record<string, unknown> | null | undefined
+): string {
+  const bag = attributes ?? {};
+  if (typeof bag.addon_note === "string") return bag.addon_note;
+  return comment ?? "";
+}

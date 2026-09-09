@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { customisationRefusal } from "./product-customisation";
+import {
+  customisationRefusal,
+  storefrontOwnsLineComment,
+  priorStorefrontNote,
+} from "./product-customisation";
 import type { ProductAddons } from "@keenan/services/product-addons";
 
 const required: ProductAddons = {
@@ -86,4 +90,46 @@ test("every unanswered field is named, in the author's order", () => {
     customisationRefusal(two, undefined, "quote"),
     "Please open the product page and fill in Instructions and Engraving before adding this to your quote."
   );
+});
+
+// ── Whose comment is it? (7bmpuqei's rule on `quote-editor`) ─────────────────
+
+test("an empty comment is always the storefront's to write", () => {
+  assert.equal(storefrontOwnsLineComment(null, null), true);
+  assert.equal(storefrontOwnsLineComment("", { addon_selection: [] }), true);
+  assert.equal(storefrontOwnsLineComment("   ", null), true);
+});
+
+test("the note the storefront wrote last time is its own to replace", () => {
+  const attrs = { addon_note: "Instructions: 1200mm bench", addon_selection: [{}] };
+  assert.equal(storefrontOwnsLineComment("Instructions: 1200mm bench", attrs), true);
+});
+
+test("A COMMENT A REP TYPED IS NEVER OVERWRITTEN", () => {
+  // The workflow this product exists for: the customer describes a fabrication,
+  // the rep annotates and prices it, the customer presses Add to Quote again.
+  const attrs = { addon_note: "Instructions: 1200mm bench", addon_selection: [{}] };
+  assert.equal(
+    storefrontOwnsLineComment("Quoted at $2,400 — 2mm 304, Tim to confirm splashback", attrs),
+    false
+  );
+});
+
+test("a line with no marker is ours only if the STOREFRONT configured it", () => {
+  // Every line written before the marker existed. A kit or addon line is one we
+  // wrote; a plain line carrying a comment is a rep's.
+  assert.equal(storefrontOwnsLineComment("Bundle: 1 x Fryer", { kit_kind: "bundle" }), true);
+  assert.equal(storefrontOwnsLineComment("Instructions: 800mm", { addon_selection: [{}] }), true);
+  assert.equal(storefrontOwnsLineComment("Rep: chase Tim on freight", { indent: true }), false);
+  assert.equal(storefrontOwnsLineComment("Rep: chase Tim on freight", null), false);
+});
+
+test("'did the configuration change' is measured against OUR note, not the rep's", () => {
+  const attrs = { addon_note: "Instructions: 1200mm bench", addon_selection: [{}] };
+  // A rep has taken the Comment. Re-pressing with the SAME instruction must still
+  // read as unchanged, or the correction would be counted as a second unit.
+  assert.equal(priorStorefrontNote("Quoted at $2,400", attrs), "Instructions: 1200mm bench");
+  // No marker: fall back to the comment on the line, exactly as before.
+  assert.equal(priorStorefrontNote("Instructions: 800mm", null), "Instructions: 800mm");
+  assert.equal(priorStorefrontNote(null, null), "");
 });
