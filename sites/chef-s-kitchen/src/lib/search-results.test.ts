@@ -11,6 +11,7 @@ import {
   clampPage,
   isCappedByLimit,
   remainingResults,
+  facetOptions,
   sanitizeFacetValues,
   sanitizePriceKeys,
   sanitizeQuery,
@@ -125,4 +126,75 @@ test("only a result set past the cap is reported as capped", () => {
   assert.equal(isCappedByLimit(MAX_RESULTS), false);
   assert.equal(isCappedByLimit(MAX_RESULTS + 1), true);
   assert.equal(isCappedByLimit(0), false);
+});
+
+// ── The rail's option list ────────────────────────────────────────────────────
+// A ticked value with no row cannot be unticked, and its chip prints the raw
+// percent-encoded parameter at the customer. (1RLP5nSJ.)
+
+test("facetOptions keeps the busiest values, in order", () => {
+  const opts = facetOptions({ Rational: 166, UNOX: 341, Giorik: 53 }, [], 2);
+  assert.deepEqual(
+    opts.map((o) => [o.label, o.count]),
+    [
+      ["UNOX", 341],
+      ["Rational", 166],
+    ]
+  );
+});
+
+test("a ticked value that fell off the list keeps its row, with its real count", () => {
+  const opts = facetOptions({ UNOX: 341, Rational: 166, "Alto-Shaam": 6 }, ["Alto-Shaam"], 2);
+  assert.deepEqual(
+    opts.map((o) => [o.label, o.count]),
+    [
+      ["UNOX", 341],
+      ["Rational", 166],
+      ["Alto-Shaam", 6],
+    ]
+  );
+});
+
+test("a ticked value the distribution does not hold at all still gets a row", () => {
+  const opts = facetOptions({ UNOX: 341 }, ["Chef Inox"], 15);
+  assert.deepEqual(opts.at(-1), { value: "Chef%20Inox", label: "Chef Inox", count: 0 });
+});
+
+test("a ticked value that is a PROTOTYPE key counts as absent, not as Object.prototype", () => {
+  // Reachable by anyone, no sign-in: /search?brand=Waldorf,__proto__.
+  // sanitizeFacetValues keeps the name, Waldorf still matches so the results
+  // branch renders, and the ticked row is kept by the rule above — so a count
+  // looked up on the raw distribution OBJECT would come back as
+  // Object.prototype (or a function, for "toString"), and React throws
+  // "Objects are not valid as a React child" when FacetCheckbox prints it. The
+  // shopper would get the site error page instead of results.
+  for (const key of ["__proto__", "constructor", "toString", "valueOf", "hasOwnProperty"]) {
+    const opts = facetOptions({ Waldorf: 12, UNOX: 341 }, [key], 15);
+    const row = opts[opts.length - 1];
+    assert.equal(row.label, key, key);
+    assert.equal(typeof row.count, "number", key);
+    assert.equal(row.count, 0, key);
+  }
+  // And a real value alongside one is unaffected.
+  const mixed = facetOptions({ Waldorf: 12 }, ["Waldorf", "__proto__"], 15);
+  assert.deepEqual(
+    mixed.map((o) => [o.label, o.count]),
+    [
+      ["Waldorf", 12],
+      ["__proto__", 0],
+    ]
+  );
+});
+
+test("a ticked value already on the list is not duplicated", () => {
+  const opts = facetOptions({ UNOX: 341, Rational: 166 }, ["UNOX"], 15);
+  assert.equal(opts.length, 2);
+});
+
+test("option values are encoded the way the rail and the URL expect", () => {
+  const opts = facetOptions({ "Smith, Jones": 3 }, [], 15);
+  assert.equal(opts[0].value, encodeURIComponent("Smith, Jones"));
+  assert.deepEqual(sanitizeFacetValues(new URLSearchParams({ brand: opts[0].value }).get("brand")), [
+    "Smith, Jones",
+  ]);
 });

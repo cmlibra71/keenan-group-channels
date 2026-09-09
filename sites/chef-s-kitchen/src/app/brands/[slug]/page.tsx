@@ -5,12 +5,43 @@ import type { Metadata } from "next";
 import { draftMode, headers } from "next/headers";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { getBrandBySlug, getProducts, getFeatureFlag, getCmsPage } from "@/lib/store";
+import {
+  getBrandBySlug,
+  getBrandListing,
+  getProducts,
+  getStorefrontFilters,
+  getFeatureFlag,
+  getCmsPage,
+} from "@/lib/store";
 import { getListingPricing } from "@/lib/member";
-import { renderBrandNodeBranch, type BrandListingPricing } from "@/builder/brand-node-branch";
+import {
+  brandNodePathApplies,
+  renderBrandNodeBranch,
+  type BrandListingPricing,
+} from "@/builder/brand-node-branch";
+import { BrandCategories } from "@/components/brand/BrandCategories";
+import { FacetRail, FacetChips, SortSelect } from "@/components/category/FilterRail";
+import { enabledFilterIds } from "@/lib/storefront-filters";
+import { parsePriceBands, parseRangeParam } from "@/lib/category-attributes";
+import { parseAttributeSelections } from "@keenan/services/services";
+import {
+  CATEGORY_PARAM,
+  MAX_PAGES,
+  PER_PAGE,
+  attributeParamsOf,
+  brandClearParams,
+  brandFacetGroups,
+  brandNextPageHref,
+  parseBrandPage,
+  parseBrandSort,
+  parseIds,
+  type BrandListingFacets,
+  type BrandSearchParams,
+} from "@/lib/brand-listing";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BrandHero, BrandProducts, DEFAULT_BRAND_BLOCKS } from "@/blocks/brand-page-blocks";
 import { BrandIntro } from "@/components/brand/BrandIntro";
+import { BrandSearch } from "@/components/brand/BrandSearch";
 import { TemplateRenderer } from "@/blocks/TemplateRenderer";
 import { effectiveSubBlocks } from "@/blocks/BlockRenderer";
 import { BLOCK_REGISTRY } from "@keenan/services";
@@ -47,12 +78,26 @@ export async function generateMetadata({
   };
 }
 
+/**
+ * The brand page lists the brand's CATEGORIES and its PRODUCTS, with the same
+ * filters, sort and "Load more" the category page has (card xOBnQarT). Every
+ * control is the category page's own component — `FacetRail`, `FacetChips`,
+ * `SortSelect` — driven by `lib/brand-listing.ts`; the grid stays whatever the
+ * authored `brand_products` block renders, so nothing about the designed page
+ * changes except that it is now filterable and pageable.
+ *
+ * When the AUTHORED brand tree renders the page instead, the listing furniture
+ * is not on screen to drive, so the route hands that tree the load it has always
+ * had — see `brandNodePathApplies`.
+ */
 export default async function BrandPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<BrandSearchParams>;
 }) {
-  const { slug } = await params;
+  const [{ slug }, sp] = await Promise.all([params, searchParams]);
   // getBrandBySlug → getBySlug runs transformRow, so the row is snake_case at runtime
   // (image_url). Type it so the loose Record<string,unknown> doesn't surface as `unknown`.
   const brand = (await getBrandBySlug(slug)) as
@@ -72,16 +117,6 @@ export default async function BrandPage({
     notFound();
   }
 
-  const [{ products, total }, memberPricingEnabled] = await Promise.all([
-    getProducts({ brandId: brand.id as number, limit: 48 }),
-    getFeatureFlag("member_pricing_enabled"),
-  ]);
-  const productCtx = {
-    products,
-    memberPricingAvailable: memberPricingEnabled,
-    pricing: await getListingPricing(products),
-  };
-
   // Brand page content is an ordered block list (the __brand__ template's `main`
   // region), editable in Pages & Content. Defaults to hero + products when unset,
   // so an unedited template renders exactly as before.
@@ -93,17 +128,112 @@ export default async function BrandPage({
   // designer. The body of this branch used to live here, and only here, which
   // is exactly why Industry Kitchens could not have one; it is now engine
   // (src/builder/brand-node-branch.tsx) shared by both sites. The route stays
-  // data owner and hands its own pricing shape in. ═══
-  const nodeRendered = await renderBrandNodeBranch({
-    brandCms,
-    brand: brand as unknown as Record<string, unknown>,
-    products,
-    total,
-    pricing: productCtx.pricing as BrandListingPricing,
-    memberPricingEnabled,
-    draft,
+  // data owner and hands its own pricing shape in.
+  //
+  // That tree binds a plain product list and carries no filter rail, so it keeps
+  // the load it has always had: asking for the faceted listing here would hand a
+  // designed page 24 rows where it shows 48, with nothing on screen to page or
+  // filter them. ═══
+  if (await brandNodePathApplies({ brandCms, draft })) {
+    const [{ products: nodeProducts, total: nodeTotal }, nodeMemberPricing] = await Promise.all([
+      getProducts({ brandId: brand.id as number, limit: 48 }),
+      getFeatureFlag("member_pricing_enabled"),
+    ]);
+    const nodeRendered = await renderBrandNodeBranch({
+      brandCms,
+      brand: brand as unknown as Record<string, unknown>,
+      products: nodeProducts,
+      total: nodeTotal,
+      pricing: (await getListingPricing(nodeProducts)) as BrandListingPricing,
+      memberPricingEnabled: nodeMemberPricing,
+      draft,
+    });
+    if (nodeRendered) return nodeRendered;
+  }
+
+  const page = parseBrandPage(sp.page);
+  const sort = parseBrandSort(sp.sort);
+
+  // This storefront's rail configuration (portal: Products > Filtering). A
+  // switched-off facet must stop FILTERING, not merely displaying, so its URL
+  // selections are dropped before they reach the query (NfYe3P3G). Brand is
+  // skipped outright: the page IS the brand.
+  const storefrontFilters = await getStorefrontFilters();
+  const filtersOn = enabledFilterIds(storefrontFilters);
+  const categoryEnabled = filtersOn.has("sub");
+  const priceEnabled = filtersOn.has("price");
+
+  const rawPrice = priceEnabled ? sp.price : undefined;
+  const priceBands = parsePriceBands(rawPrice) as ("lt1000" | "1000to3000" | "gt3000")[];
+  const priceRange = priceBands.length === 0 ? parseRangeParam(rawPrice) : undefined;
+  const attributeSelections = parseAttributeSelections(sp as Record<string, string | undefined>);
+  const selectedCategoryIds = categoryEnabled ? parseIds(sp[CATEGORY_PARAM]) : [];
+
+  // "Nothing here" and "nothing MATCHES" are different sentences: a brand with
+  // no products at all is a fact about the catalogue, an empty filtered listing
+  // is something the shopper can undo. Decided BEFORE the reads because the
+  // hero's unfiltered count is one of them.
+  const filtered =
+    selectedCategoryIds.length > 0 ||
+    (priceEnabled && Boolean(rawPrice)) ||
+    Object.keys(attributeSelections).length > 0;
+
+  const [listing, memberPricingEnabled, unfiltered] = await Promise.all([
+    getBrandListing(brand.id, {
+      // Cumulative for Load more: each press re-asks for the SAME listing with a
+      // bigger limit, and `total` + `facets` stay anchored to page 1 inside
+      // getBrandListing so the toolbar's numbers do not move as the shopper pages.
+      page: 1,
+      limit: PER_PAGE * page,
+      categoryIds: selectedCategoryIds,
+      priceBands,
+      priceRange,
+      attributes: attributeSelections,
+      sort,
+    }),
+    getFeatureFlag("member_pricing_enabled"),
+    // The HERO states how many products the BRAND has; the toolbar states how
+    // many match. They are the same number until something is ticked, and after
+    // that they must not be: "Vogue — 0 products" beside a price filter reads as
+    // "we do not stock Vogue", which is false. Only a filtered request pays for
+    // the extra read, it is the same cache entry that shopper's own unfiltered
+    // first load already populated, and it rides ALONGSIDE the listing rather
+    // than after it — an extra serial round trip on the page Tim calls slow is
+    // exactly the thing we are told not to add.
+    filtered ? getBrandListing(brand.id, {}) : Promise.resolve(null),
+  ]);
+
+  const { products, total } = listing;
+  const facets = listing.facets as unknown as BrandListingFacets;
+  const groups = brandFacetGroups(facets, storefrontFilters, selectedCategoryIds);
+  // Where a tile GOES depends on the rail configuration: with the Category
+  // facet on it narrows this brand page, with it switched off it goes to the
+  // category's own page rather than being a control that does nothing.
+  const categoryTiles = facets.categories.map((category) => ({
+    ...category,
+    href: categoryEnabled
+      ? `/brands/${slug}?${CATEGORY_PARAM}=${category.id}`
+      : `/categories/${category.slug}`,
+  }));
+  const shown = products.length;
+  const hasMore = shown < total && page < MAX_PAGES;
+
+  const brandTotal = unfiltered ? unfiltered.total : total;
+
+  const nextPageHref = brandNextPageHref({
+    slug,
+    searchParams: sp,
+    page,
+    categoryEnabled,
+    priceEnabled,
+    attributeParams: attributeParamsOf(facets),
   });
-  if (nodeRendered) return nodeRendered;
+
+  const productCtx = {
+    products,
+    memberPricingAvailable: memberPricingEnabled,
+    pricing: await getListingPricing(products),
+  };
   const mainBlocks = ((brandCms?.blocks as unknown as RenderedBlock[]) ?? []).filter(
     (b) => b.region === "main"
   );
@@ -116,6 +246,69 @@ export default async function BrandPage({
   // brand template keeps it with the heading; with no hero block it leads the page.
   const heroIndex = blocks.findIndex((b) => b.block_type === "brand_hero");
   const intro = <BrandIntro html={brand.channel_intro_html} />;
+  // Search within this brand — a plain form onto the site search, narrowed to
+  // this brand (card 1RLP5nSJ). It rides with the intro so a reordered brand
+  // template keeps both with the heading, and it is only offered where there is
+  // something to search: a brand with no products returns nothing whatever is
+  // typed. It is gated on the BRAND's total, not the filtered one: the search box
+  // is the shopper's way out of an empty result, so it must not be the thing that
+  // disappears with the results.
+  const heroExtras = (
+    <>
+      {intro}
+      {brandTotal > 0 && <BrandSearch brandName={brand.name as string} />}
+    </>
+  );
+
+  /**
+   * The listing furniture the card asks for, wrapped around whichever grid the
+   * authored `brand_products` block renders: the brand's category tiles above,
+   * the category page's own rail beside it, its toolbar (count, chips, sort)
+   * over it and its "Load more" under it. The block keeps its heading and its
+   * grid — only what surrounds them is new.
+   */
+  const withListing = (node: React.ReactNode) => (
+    <>
+      {/* A tile narrows this page while the Category facet is on; with it
+          switched off the tile goes to the category's own page rather than
+          being a control that does nothing. */}
+      <div className="mt-10">
+        <BrandCategories categories={categoryTiles} />
+      </div>
+
+      <div className="flex gap-6">
+        <FacetRail groups={groups} clearParams={brandClearParams(facets, storefrontFilters)} />
+
+        <div className="min-w-0 flex-1">
+          {/* Toolbar — the same white card the category page uses */}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-border bg-white px-4 py-[11px] shadow-sm">
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-[13px] text-text-secondary">
+                Showing <b className="text-text-primary">1–{shown}</b> of{" "}
+                <b className="text-text-primary">{total}</b>
+              </p>
+              <FacetChips groups={groups} />
+            </div>
+            <SortSelect />
+          </div>
+
+          {products.length === 0 && filtered ? (
+            <p className="text-steel-500 text-center py-12">No products match these filters.</p>
+          ) : (
+            node
+          )}
+
+          {hasMore && (
+            <div className="mt-10 text-center">
+              <Link href={nextPageHref} scroll={false} className="btn-secondary">
+                Load more ({total - shown} remaining)
+              </Link>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
@@ -126,14 +319,14 @@ export default async function BrandPage({
         <span className="text-ink-700">{brand.name as string}</span>
       </nav>
 
-      {heroIndex < 0 && intro}
+      {heroIndex < 0 && heroExtras}
 
       {blocks.map((b, i) => {
         const withIntro = (node: React.ReactNode) =>
           i === heroIndex ? (
             <Fragment key={i}>
               {node}
-              {intro}
+              {heroExtras}
             </Fragment>
           ) : (
             node
@@ -147,10 +340,10 @@ export default async function BrandPage({
               process.env.CMS_V2_FORCE === "1");
           if (v2) {
             return withIntro(
-              <BrandHeroV2 key={i} props={b.props ?? {}} brand={brand} total={total} draft={draft} />
+              <BrandHeroV2 key={i} props={b.props ?? {}} brand={brand} total={brandTotal} draft={draft} />
             );
           }
-          return withIntro(<BrandHero key={i} brand={brand} total={total} />);
+          return withIntro(<BrandHero key={i} brand={brand} total={brandTotal} />);
         }
         if (b.block_type === "brand_products") {
           const v2 =
@@ -160,17 +353,22 @@ export default async function BrandPage({
               process.env.CMS_V2_FORCE === "1");
           if (v2) {
             return withIntro(
-              <BrandProductsV2
-                key={i}
-                props={b.props ?? {}}
-                products={products as never}
-                pricing={productCtx.pricing}
-                memberPricingEnabled={memberPricingEnabled}
-                draft={draft}
-              />
+              <Fragment key={i}>
+                {withListing(
+                  <BrandProductsV2
+                    props={b.props ?? {}}
+                    products={products as never}
+                    pricing={productCtx.pricing}
+                    memberPricingEnabled={memberPricingEnabled}
+                    draft={draft}
+                  />
+                )}
+              </Fragment>
             );
           }
-          return withIntro(<BrandProducts key={i} {...productCtx} />);
+          return withIntro(
+            <Fragment key={i}>{withListing(<BrandProducts {...productCtx} />)}</Fragment>
+          );
         }
         return withIntro(<BlockRenderer key={i} blocks={[b]} draft={draft} />);
       })}

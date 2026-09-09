@@ -11,6 +11,11 @@
  * `gstSplit` / `quoteGstTotals` (quote-gst.ts), never re-derived inline — inline
  * arithmetic is exactly how GST once got dropped on every converted order.
  *
+ * The REP the order carries is resolved by the caller through the one shared
+ * ladder in `@keenan/services` (`resolveQuoteOrderRep`, card QRA0m4vh) and
+ * handed in as `ctx.salesRep`, so a quote paid on the website books the same
+ * owner a staff conversion would have booked.
+ *
  * KNOWN NARROWING vs the portal planner, deliberate and recorded: file-valued
  * quote attributes (spec sheets, proof-of-payment slots) do not carry across
  * here. They are a staff-conversion nicety, the storefront has no file-slot
@@ -19,6 +24,7 @@
  * same values either way.
  */
 import { gstSplit } from "@keenan/services/calc";
+import { normaliseAddressType } from "@keenan/services/residential";
 import { quoteGstTotals, MONEY_EPSILON, type QuoteGstInput } from "./quote-gst";
 import { resolveQuoteTotal } from "./price-visibility";
 import { quoteFreightStillPending } from "./freight-pending";
@@ -60,6 +66,13 @@ export interface PlannedOrder {
   billing_address: Record<string, unknown>;
   customer_message: unknown;
   internal_memo: string | null;
+  /**
+   * The rep the order carries (card QRA0m4vh). Resolved by the caller through
+   * `@keenan/services` `resolveQuoteOrderRep` — the SAME ladder the portal's
+   * conversion uses — and null when nobody owns the quote, the customer or the
+   * storefront desk.
+   */
+  sales_rep_id: number | null;
   metafields: Record<string, unknown>;
 }
 
@@ -102,6 +115,13 @@ export interface PlannedShipTo {
   costExTax: string;
   costIncTax: string;
   costTax: string;
+  /**
+   * Residential vs commercial, carried off the quote's own address snapshot (card
+   * HMtUxvwZ). The PORTAL's conversion carries it too, and both paths write the same
+   * `order_shipping_addresses.address_type`, so the two cannot disagree about one
+   * record. Null when the quote never carried one — the order then reads commercial.
+   */
+  addressType?: string | null;
 }
 
 export interface QuoteOrderPlan {
@@ -128,6 +148,17 @@ export interface QuotePlanContext {
   > | null;
   /** Billing address when the quote carries none (falls back to the ship-to). */
   fallbackBilling?: Record<string, unknown> | null;
+  /**
+   * The rep this order carries, already resolved by `resolveQuoteOrderRep`
+   * (card QRA0m4vh). Passed in rather than resolved here so this module stays
+   * pure and the storefront and the portal share ONE rule: the quote's
+   * `sales_agent` pick, else its `sales_rep_id`, else the rep FLAGGED as the
+   * customer's account primary, else cs@ this storefront's own domain.
+   *
+   * Omitted ⇒ the order carries no rep, which is what every quote paid on the
+   * website did before this card.
+   */
+  salesRep?: { id: number | null; name: string | null } | null;
 }
 
 /** A rendered scalar for the order's metafields / memo. Objects and lists are skipped. */
@@ -226,6 +257,27 @@ export function planOrderFromPaidQuote(
     ? (quoteBilling as Record<string, unknown>)
     : (ctx.fallbackBilling ?? {});
 
+  // The quote's rep becomes the ORDER's rep (card QRA0m4vh, reopened by Steve
+  // 2026-09-03 for exactly this path). Two writes, one rep: the FK feeds the
+  // orders list's Owner / Sales Reps columns, the Owner filter and the chase
+  // logic's FK step; `metafields.sales_agent` feeds the Order Information
+  // drop-down — filled from the resolved rep ONLY when the quote's own
+  // copy-to-order attributes did not already bring a value, so a carried
+  // `sales_agent` is never overwritten.
+  //
+  // The two screens can still differ where the quote's OWN `sales_rep_id`
+  // disagrees with the `sales_agent` text it carries — that is the portal's
+  // shipped two-step rule and predates this path. What this card's two extra
+  // arms may NOT do is create such a disagreement: `resolveQuoteOrderRep`
+  // refuses the account and desk arms whenever the quote carries a name it could
+  // not match, so nothing here ever stamps a rep the customer's paperwork never
+  // mentioned.
+  const rep = ctx.salesRep ?? null;
+  const metafields = buildOrderMetafields(quote, ctx.copyAttributeCodes ?? new Set());
+  if (rep?.name && !scalarText(metafields.sales_agent).trim()) {
+    metafields.sales_agent = rep.name;
+  }
+
   const order: PlannedOrder = {
     channel_id: quote.channel_id,
     account_id: quote.account_id ?? null,
@@ -245,7 +297,8 @@ export function planOrderFromPaidQuote(
     billing_address: billing,
     customer_message: quote.customer_notes ?? null,
     internal_memo: buildInternalMemo(quote, items),
-    metafields: buildOrderMetafields(quote, ctx.copyAttributeCodes ?? new Set()),
+    sales_rep_id: rep?.id ?? null,
+    metafields,
   };
 
   const plannedItems: PlannedOrderItem[] = items.map((it) => {
@@ -306,6 +359,9 @@ export function planOrderFromPaidQuote(
       countryCode: s.country_code ?? null,
       email: s.email ?? null,
       phone: s.phone ?? s.telephone ?? null,
+      // Card HMtUxvwZ — the quote's Ship To said residential, so the order it becomes
+      // says residential too, whichever side converted it.
+      addressType: normaliseAddressType(s.address_type ?? s.addressType),
       ...freightMoney,
     };
   } else if (ctx.fallbackShipTo) {

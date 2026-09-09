@@ -56,7 +56,10 @@ export function CategoryTiles({
             href={`/categories/${category.slug}`}
             className="group overflow-hidden rounded-lg border border-zinc-200 bg-white transition-all hover:border-zinc-400 hover:shadow-sm"
           >
-            <div className="relative aspect-[4/3] overflow-hidden bg-zinc-100">
+            {/* 3:1 is the category BANNER ratio (card RyMa2mkX): artwork with its heading baked
+                in fits whole instead of being sliced. object-cover is kept knowing the cost: until
+                the artwork is banners, a square photo shows as a horizontal slice. */}
+            <div className="relative aspect-[3/1] overflow-hidden bg-zinc-100">
               {category.image_url && isAllowedImageUrl(category.image_url) ? (
                 <Image
                   src={category.image_url}
