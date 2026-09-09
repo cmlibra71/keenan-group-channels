@@ -19,6 +19,8 @@ import { Price } from "@/components/ui/Price";
 import { PriceBlock } from "@/components/ui/PriceBlock";
 import { Minus, Plus, Truck, ShieldCheck } from "lucide-react";
 import { useProductPurchase } from "./ProductPurchaseProvider";
+import { stepPackQuantity } from "@keenan/services/pack";
+import { ProductPackNote } from "./ProductPackNote";
 import { ProductInstructionsPanel } from "./ProductInstructionsPanel";
 import {
   unansweredAddonGroups,
@@ -55,6 +57,7 @@ export function ProductDetail({
     selectOption,
     quantity,
     setQuantity,
+    packSize,
     useGroupedMode,
     disabledValuesPerOption,
     activeMemberPrice: memberPrice,
@@ -199,8 +202,17 @@ export function ProductDetail({
         />
       )}
 
+      {/* The pack sentence, on THIS renderer too. The live page places it on the authored node
+          tree (`builder/product-pack-note.ts`), which this fallback renderer never sees — and
+          without it a shopper would meet a quantity box opening at a whole carton with nothing
+          on screen explaining why (card CXnP1lrL: this page carries no other wording that could
+          explain a control). Renders nothing on a product sold individually. */}
+      <ProductPackNote />
+
       {/* Free-text customisation — Zoey puts it directly above Qty and the buy
-          buttons on the Custom Stainless Steel page (card kyMjCmAw). */}
+          buttons on the Custom Stainless Steel page (card kyMjCmAw). Below the pack
+          sentence for the same reason the node placer runs outermost: both anchor on
+          the buy row, and the instruction box is the one the shopper has to fill in. */}
       {addons && (
         <ProductInstructionsPanel
           groups={addons.groups}
@@ -212,20 +224,24 @@ export function ProductDetail({
 
       {/* ═══ Qty + dual CTAs (design buy row) ═══ */}
       <div className="mt-6 flex flex-wrap items-stretch gap-3">
+        {/* The +/- step by ONE WHOLE PACK on a product sold by the carton, and by 1 on every
+            other product. This must stay in step with the provider: `setQuantity` snaps every
+            value UP to a whole pack, so a plain `quantity - 1` here would be snapped straight
+            back and the minus button would do nothing (cards O108e4jH / zeMPVcA3). */}
         {canBuyNow && (
           <div className="flex items-center rounded-btn border border-border-strong bg-white">
             <button
               type="button"
-              onClick={() => setQuantity(Math.max(1, quantity - 1))}
+              onClick={() => setQuantity(stepPackQuantity(quantity, packSize, -1))}
               aria-label="Decrease quantity"
               className="px-3 py-3 text-text-secondary transition-colors hover:text-text-primary"
             >
               <Minus className="h-3.5 w-3.5" />
             </button>
-            <span className="w-8 text-center text-sm font-semibold">{quantity}</span>
+            <span className="min-w-8 px-1 text-center text-sm font-semibold">{quantity}</span>
             <button
               type="button"
-              onClick={() => setQuantity(quantity + 1)}
+              onClick={() => setQuantity(stepPackQuantity(quantity, packSize, 1))}
               aria-label="Increase quantity"
               className="px-3 py-3 text-text-secondary transition-colors hover:text-text-primary"
             >

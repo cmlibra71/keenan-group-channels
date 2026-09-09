@@ -15,6 +15,7 @@ import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { withSilverChefNode } from "@/builder/silverchef-node";
 import { withProductInstructionsNode } from "@/builder/product-instructions-node";
 import { withImageNoticeNode } from "@/builder/product-image-notice";
+import { withPackNoteNode } from "@/builder/product-pack-note";
 import { withModularNoticeNode } from "@/builder/modular-notice";
 import { withUpsellBlock } from "@/builder/upsell-node";
 import { attachBrandLogos } from "@/lib/brand-logo-fallback";
@@ -206,7 +207,11 @@ export async function renderProductNodeBranch({
     withProductInstructionsNode(
       withCdMemberPricingNode(
         withUpsellBlock(
-          withModularNoticeNode(withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE)))
+          withPackNoteNode(
+            withModularNoticeNode(
+              withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE))
+            )
+          )
         )
       )
     )
