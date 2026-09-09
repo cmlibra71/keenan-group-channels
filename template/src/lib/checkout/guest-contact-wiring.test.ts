@@ -90,3 +90,26 @@ test("the returning-customer hint does not call a guest record an account", () =
       "cannot complete"
   );
 });
+
+/**
+ * ORDERING GUARD between this card and gk23c1VK's buying-group snapshot.
+ *
+ * Both cards insert at the same point in `placeOrder`, and the order is not
+ * cosmetic: `snapshotOrderLadderPricing` reads `orders.contact_id` to resolve
+ * the buyer's ladder rung and stamps it on every audit row it writes. Run it
+ * first and a first-time guest's prices are recorded against a null buyer — the
+ * one line that answers "who was this priced for" would be blank on exactly the
+ * orders card LiuLvc5b exists to give a buyer.
+ */
+test("the ladder snapshot runs after the guest customer record is stamped", () => {
+  const source = readFileSync(PLACE_ORDER, "utf8");
+  const snapshotAt = source.indexOf("snapshotOrderLadderPricing(order.id");
+  assert.notEqual(snapshotAt, -1, "the buying-group snapshot is no longer wired into placeOrder");
+  const callAt = source.indexOf("createGuestContactForCheckout(");
+  assert.notEqual(callAt, -1, "placeOrder no longer attaches a customer record to a guest order");
+  assert.ok(
+    callAt < snapshotAt,
+    "the buying-group snapshot must run below the guest-contact stamp, or it records a " +
+      "first-time guest's prices against no buyer (gk23c1VK + LiuLvc5b)"
+  );
+});

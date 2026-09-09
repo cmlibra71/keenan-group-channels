@@ -1,6 +1,6 @@
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, channelSettingsService, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, getLadderConfig, channelSettingsService, CHANNEL_ID } from "@/lib/store";
 import { CartPageClient } from "@/components/cart/CartPageClient";
 import { activeBrandFreeShippingSpecials } from "@/lib/checkout/free-shipping-brands";
 import { Ga4ViewCart } from "@/components/analytics/Ga4ViewCart";
@@ -31,13 +31,17 @@ export default async function CartPage() {
   let billingInterval = "month";
   let isMember = false;
 
-  const [subscriptionsEnabled, checkoutSettings, brandSpecials] = await Promise.all([
+  const [subscriptionsEnabled, checkoutSettings, brandSpecials, ladder] = await Promise.all([
     getFeatureFlag("subscriptions_enabled"),
     getCheckoutSettings(),
     // Brand free-shipping specials running today (card 88Ay7UGA). Handed to the
     // island rather than resolved here, because the island re-decides after every
     // quantity change and removal.
     activeBrandFreeShippingSpecials(),
+    // The upsell's pitch names the spend ladder, so it reads whether this channel
+    // actually runs one. Memoised settings read; DISABLED on a channel that has
+    // never been given a ladder (card gk23c1VK).
+    getLadderConfig().catch(() => null),
   ]);
   if (subscriptionsEnabled && items.length > 0) {
     const session = await getSession();
@@ -81,6 +85,7 @@ export default async function CartPage() {
             ? {
                 planPrice,
                 billingInterval,
+                ladderOn: Boolean(ladder?.enabled) && (ladder?.levels.length ?? 0) > 1,
               }
             : null
         }

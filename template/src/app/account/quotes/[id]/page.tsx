@@ -37,6 +37,8 @@ import { isStaffOnlyDraft } from "@/lib/quotes/draft-visibility";
 import { stripStaffOnlyFields } from "@/lib/quotes/staff-only-fields";
 import { quoteGstTotals, isMoneyRow } from "@/lib/quotes/quote-gst";
 import { resolveQuoteGstRate } from "@/lib/quotes/quote-gst-rate";
+import { readQuoteRepriceDeltasForChannel } from "@/lib/quotes/reprice-deltas";
+import { QuoteRepriceNotice } from "@/components/quote/QuoteRepriceNotice";
 import { quoteStatusLabel } from "@/lib/quotes/quote-status-label";
 import {
   isCustomerEditableStatus,
@@ -223,7 +225,20 @@ export default async function QuoteDetailPage({
   // The quote total is the amount payable, so GST is broken out rather than left
   // implicit — the same split the cart summary and the emailed quote show, at the
   // same per-quote rate the portal resolves.
-  const gst = quoteGstTotals(total ?? 0, quote, await resolveQuoteGstRate(raw.tax_class_id));
+  const quoteGstRate = await resolveQuoteGstRate(raw.tax_class_id);
+  const gst = quoteGstTotals(total ?? 0, quote, quoteGstRate);
+
+  // Buying-group repricing (card gk23c1VK, blueprint AC 19). This page carries
+  // its own Accept AND its own Pay, so the per-line movement since the quote was
+  // issued has to be shown HERE too — not only on the emailed /q/<uuid> copy —
+  // or the same member reads the movement on one of our screens and pays the
+  // moved price silently on the other. Same reader, same gate and the same GST
+  // rate the totals below use. Empty on every quote no ladder ever priced, which
+  // is every quote until a channel switches its ladder on. A price-hidden quote
+  // has no figures to compare.
+  const repriceDeltas = hidePrices
+    ? null
+    : await readQuoteRepriceDeltasForChannel(raw.id, raw.channel_id, { gstRate: quoteGstRate });
 
   // ── Paying this quote (card 0Wy0xHuq) ────────────────────────────────────
   // The rep may have set a deposit on the quote; that is what the customer is
@@ -428,6 +443,17 @@ export default async function QuoteDetailPage({
             ? "Need a different quantity? Change it below — we'll re-price the quote and send it back to you."
             : "You can still change quantities or remove items below."}
         </p>
+      )}
+
+      {/* Prices moved since this quote was sent — shown before Accept and before
+          Pay, line by line, on the same predicate the Accept button uses so an
+          already-accepted quote stops saying "Before you accept" (gk23c1VK). */}
+      {repriceDeltas && (
+        <QuoteRepriceNotice
+          summary={repriceDeltas}
+          acceptanceOpen={acceptState.kind !== "hidden"}
+          currency={quote.currency_code}
+        />
       )}
 
       {/* Items */}

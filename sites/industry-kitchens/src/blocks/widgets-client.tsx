@@ -88,7 +88,7 @@ export const PriceWidget: WidgetComponent = () => {
           href="/membership"
           className="mt-3 block rounded-lg border border-emerald-200 bg-emerald-50 p-3 hover:bg-emerald-100 transition-colors"
         >
-          <p className="text-sm font-semibold text-emerald-800">Members save 10&ndash;25% off retail</p>
+          <p className="text-sm font-semibold text-emerald-800">Members buy at a different price tier</p>
           <p className="text-xs text-emerald-600 mt-1">
             Plus prize draw entries, exclusive partner discounts &amp; priority support
           </p>
