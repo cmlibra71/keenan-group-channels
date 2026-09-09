@@ -38,6 +38,27 @@ export const EXIT_SURVEY_OTHER_MAX_LENGTH = 500;
 export const EXIT_SURVEY_FRAME_GUTTER_PX = 24;
 
 /**
+ * Below this width the checkout is ONE column (`lg:grid-cols-5` in
+ * CheckoutForm), so the Order Summary — the Total, Place Order and the sentence
+ * saying why that button is disabled — is the last thing on the page and a
+ * bottom-anchored card would sit on it with nothing left to scroll. That is the
+ * only case the flow spacer exists for.
+ *
+ * At `lg` and above the summary is the RIGHT-hand column and the card is
+ * bottom-LEFT, so nothing is covered and the spacer would only add up to 75vh
+ * of dead page and jump the scrollbar the moment the pop-up opens.
+ */
+export const EXIT_SURVEY_TWO_COLUMN_MIN_PX = 1024;
+export const EXIT_SURVEY_SINGLE_COLUMN_QUERY = `(max-width: ${EXIT_SURVEY_TWO_COLUMN_MIN_PX - 1}px)`;
+
+/** True when the checkout is one column at this width, so the spacer is
+ *  load-bearing. Unknown width (no `matchMedia`) reserves: covering the Total
+ *  is the failure that matters, dead page is not. */
+export function reservesFlowSpace(singleColumn: boolean | null): boolean {
+  return singleColumn !== false;
+}
+
+/**
  * True when the pointer left through the TOP edge of the window — the browser's
  * only honest "they are reaching for the address bar, the back button or the
  * tab strip" signal.
@@ -90,6 +111,45 @@ export interface SurveyDraft {
 }
 
 export const EMPTY_SURVEY_DRAFT: SurveyDraft = { reason: "", other: "", likelihood: "" };
+
+/** Where an answer is posted. A plain route, NOT a server action — see below. */
+export const CHECKOUT_SURVEY_ENDPOINT = "/api/checkout-survey";
+
+/**
+ * Post the answers in a way that SURVIVES THE SHOPPER LEAVING, because leaving
+ * is the whole event this survey is about.
+ *
+ * A server action is an ordinary `fetch`, and a browser cancels in-flight
+ * fetches when the document goes away: it would land for somebody who merely
+ * switched tabs and be dropped for somebody who closed the tab, pressed Back or
+ * followed a link — the exact population the card is aimed at, and the one case
+ * that would never show up in testing. `sendBeacon` is queued by the browser
+ * and delivered after the page is gone; `keepalive` is the same guarantee on
+ * `fetch` for anything without it (older Safari).
+ *
+ * Neither of them waits, blocks or delays the navigation — the rule this whole
+ * component is arranged around still holds.
+ */
+export function sendSurveyDraft(draft: SurveyDraft): void {
+  const body = JSON.stringify(draft);
+  try {
+    const blob = new Blob([body], { type: "application/json" });
+    if (navigator.sendBeacon?.(CHECKOUT_SURVEY_ENDPOINT, blob)) return;
+  } catch {
+    // No sendBeacon, or it refused the payload — fall through to fetch.
+  }
+  try {
+    void fetch(CHECKOUT_SURVEY_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      keepalive: true,
+      credentials: "same-origin",
+    }).catch(() => undefined);
+  } catch {
+    // Nothing left to try. An answer is never worth an error on the way out.
+  }
+}
 
 /**
  * The answers, keyed by the STORED contract's own field names, with everything

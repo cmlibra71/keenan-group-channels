@@ -5,9 +5,12 @@ import {
   hasSurveyAnswer,
   isExitIntent,
   mayArmSurvey,
+  reservesFlowSpace,
   returnedFromLeaving,
   surveyAnswers,
+  CHECKOUT_SURVEY_ENDPOINT,
   EXIT_SURVEY_OTHER_MAX_LENGTH,
+  EXIT_SURVEY_TWO_COLUMN_MIN_PX,
 } from "./exit-survey";
 import {
   CHECKOUT_SURVEY_EMAIL_FIELD,
@@ -135,12 +138,24 @@ test("the pop-up frame keeps the card away from the Order Summary column", () =>
 });
 
 test("the page reserves room below the checkout while the pop-up is open", () => {
-  // On a phone the checkout is one column and the Order Summary is the LAST
-  // thing on the page, so a bottom-anchored card would cover it with nothing
-  // left to scroll. The spacer is what makes "the checkout stays usable behind
-  // it" true rather than aspirational.
+  // While the checkout is ONE column the Order Summary is the LAST thing on the
+  // page, so a bottom-anchored card would cover it with nothing left to scroll.
+  // The spacer is what makes "the checkout stays usable behind it" true rather
+  // than aspirational.
   assert.match(component, /aria-hidden style=\{\{ height: reserve \}\}/);
-  assert.match(component, /setReserve\(el\.offsetHeight \+ EXIT_SURVEY_FRAME_GUTTER_PX\)/);
+  assert.match(component, /el\.offsetHeight \+ EXIT_SURVEY_FRAME_GUTTER_PX/);
+  // …and only there. Above `lg` the summary is the right-hand column, the card
+  // is bottom-left, and a spacer would be up to 75vh of dead page plus a
+  // scrollbar that jumps the moment the pop-up opens.
+  assert.match(component, /EXIT_SURVEY_SINGLE_COLUMN_QUERY/);
+  assert.match(component, /reservesFlowSpace\(/);
+});
+
+test("the spacer runs where it is load-bearing, and reserves when the width is unknown", () => {
+  assert.equal(EXIT_SURVEY_TWO_COLUMN_MIN_PX, 1024, "CheckoutForm is `lg:grid-cols-5`");
+  assert.equal(reservesFlowSpace(true), true, "one column — the summary is under the card");
+  assert.equal(reservesFlowSpace(false), false, "two columns — the card is beside it");
+  assert.equal(reservesFlowSpace(null), true, "no matchMedia: cover nothing, waste a little page");
 });
 
 test("nothing in the pop-up ever delays a navigation", () => {
@@ -152,19 +167,64 @@ test("nothing in the pop-up ever delays a navigation", () => {
   assert.ok(!/preventDefault/.test(code), "nothing here may cancel a click or a key");
 });
 
-// ── Neither half of the Delivery card is left promising mail ────────────────
+// ── An answer survives the shopper actually leaving ─────────────────────────
 //
-// Another source guard: the filing module is the only place that knows this
-// form sends nothing. `notify_status` and `ack_status` both default to
-// "pending" on the row, and the enquiry screen renders them verbatim as "Staff
-// email" and "Thank-you". This form has no recipients and `notifySubmitter`
-// false, so an unstamped row would tell customer service, on every survey and
-// for good, that two emails are still on their way. Verified in the portal
-// against a real row (card loDyEE3S).
+// The whole point of this survey is the person who goes. A server action is an
+// ordinary `fetch`, and a browser CANCELS in-flight fetches when the document
+// goes away — so the first build worked for somebody who switched tabs (which
+// is what a CDP visibilitychange reproduces) and would have quietly dropped
+// every answer from somebody who closed the tab, pressed Back or followed a
+// link. `sendBeacon`/`keepalive` are the only transports that survive it.
+
+test("an answer is posted with a transport that outlives the page", () => {
+  const transport = readFileSync(new URL("./exit-survey.ts", import.meta.url), "utf8").replace(
+    /\/\/[^\n]*/g,
+    ""
+  );
+  assert.match(transport, /navigator\.sendBeacon/);
+  assert.match(transport, /keepalive: true/);
+  assert.equal(CHECKOUT_SURVEY_ENDPOINT, "/api/checkout-survey");
+  assert.ok(
+    !/submitCheckoutSurvey|lib\/actions\/checkout-survey/.test(component),
+    "a server action would be cancelled by the departure this survey is about"
+  );
+});
+
+test("nothing is ever filed against a checkout that was submitted", () => {
+  // Open the pop-up, tick "Delivery cost too high", change your mind, press Pay,
+  // then switch tabs while Stripe confirms the card: without this guard the page
+  // going away files an abandonment reason against an order that was placed.
+  const body = component.slice(component.indexOf("const file = useCallback"));
+  const filing = body.slice(0, body.indexOf("}, []);"));
+  assert.match(filing, /if \(submitted\.current\) return;/);
+});
+
+// ── The Delivery card says what actually happened ───────────────────────────
+//
+// Another source guard, on the filing module. `notify_status` and `ack_status`
+// both default to "pending" on the row and the enquiry screen renders them
+// verbatim as "Staff email" and "Thank-you", so an unstamped row tells customer
+// service, on every survey and for good, that two emails are still on their
+// way. And the stamp has to be CONDITIONAL: this form ships with no recipients,
+// but "adding a destination later is a settings change, not a rebuild" is a
+// promise the register makes, so an unconditional `skipped` would make it a lie
+// the day somebody sets one.
 
 const filing = readFileSync(new URL("./checkout-survey.ts", import.meta.url), "utf8");
 
-test("a survey row says the staff email AND the thank-you were skipped", () => {
-  assert.match(filing, /recordNotifyResult\([\s\S]*?status: "skipped"/);
-  assert.match(filing, /recordAckResult\([\s\S]*?"skipped"/);
+test("the destination is resolved, not assumed — a survey mails whoever the form names", () => {
+  assert.match(filing, /resolveFormNotificationRecipients\(/);
+  assert.match(filing, /if \(!to\.length\)[\s\S]{0,200}status: "skipped"/);
+  assert.match(filing, /sendFormSubmissionStaffEmail\(/);
+  assert.match(filing, /status: sent \? "sent" : "failed"/);
+});
+
+test("the thank-you is stamped from the form's own setting, not from a guess", () => {
+  assert.match(filing, /form\.notify_submitter === false/);
+  assert.match(filing, /recordAckResult\(submissionId, "skipped"\)/);
+});
+
+test("filing still cannot throw at a shopper on their way out", () => {
+  const code = filing.replace(/\/\/[^\n]*/g, "");
+  assert.match(code, /catch \(e\) \{[\s\S]*?return \{ stored: false \};/);
 });

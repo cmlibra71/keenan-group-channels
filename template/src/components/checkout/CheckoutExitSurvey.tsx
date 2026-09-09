@@ -14,18 +14,24 @@
 //   * NO backdrop, and the card is kept OFF the controls that matter. On a
 //     laptop it sits bottom-LEFT, over the form column, never over the
 //     right-hand Order Summary that carries the Total and Place Order. On a
-//     phone the checkout is one column and that summary is the LAST thing on
-//     the page, so while the pop-up is open the page is grown by exactly the
-//     card's height — the Total, the button and its hint can always be
-//     scrolled clear of it. A pop-up sitting on the one control the shopper
-//     needs is a gate in everything but name (sf-checkout, "Do not break").
+//     narrow screen the checkout is ONE column and that summary is the LAST
+//     thing on the page, so while the pop-up is open the page is grown by
+//     exactly the card's height — the Total, the button and its hint can always
+//     be scrolled clear of it. That spacer is gated to the single-column case,
+//     because at `lg` and up the summary is the right-hand column and nothing
+//     is covered. A pop-up sitting on the one control the shopper needs is a
+//     gate in everything but name (sf-checkout, "Do not break").
 //   * Nothing listens to `beforeunload`, cancels a click or delays a
 //     navigation. Leaving is exactly as fast with the pop-up open as without.
 //   * The X closes it, Escape closes it, and answering closes it. Whatever is
 //     answered by then is filed; nothing is ever demanded.
 //   * It NEVER arms on a submitted checkout — one `submit` anywhere on the page
 //     turns it off for good (see `mayArmSurvey`). Somebody who has just paid is
-//     never asked why they did not.
+//     never asked why they did not, and an answer picked BEFORE they pressed Pay
+//     is never filed afterwards either (see `file`).
+//   * An answer goes out as a BEACON, not as a server action, because the
+//     shopper this survey is for is one whose page is going away — and a browser
+//     cancels an ordinary fetch with the document.
 // ============================================================================
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -40,15 +46,17 @@ import {
   CHECKOUT_SURVEY_REASON_QUESTION,
   CHECKOUT_SURVEY_THANKS,
 } from "@keenan/services/checkout-survey";
-import { submitCheckoutSurvey } from "@/lib/actions/checkout-survey";
 import {
   EMPTY_SURVEY_DRAFT,
   EXIT_SURVEY_FRAME_GUTTER_PX,
   EXIT_SURVEY_OTHER_MAX_LENGTH,
   EXIT_SURVEY_SESSION_KEY,
+  EXIT_SURVEY_SINGLE_COLUMN_QUERY,
   isExitIntent,
   mayArmSurvey,
+  reservesFlowSpace,
   returnedFromLeaving,
+  sendSurveyDraft,
   type SurveyDraft,
 } from "@/lib/checkout/exit-survey";
 
@@ -73,13 +81,22 @@ export function CheckoutExitSurvey() {
    *  pop-up is never allowed to wait on the network. */
   const file = useCallback(() => {
     if (filed.current) return;
+    // NEVER against a checkout that has been submitted. Somebody can open the
+    // pop-up, tick "Delivery cost too high", change their mind, press Pay and
+    // then switch tabs while Stripe confirms the card — and without this the
+    // page going away would file an abandonment reason against an order they
+    // actually placed. Same rule as `mayArmSurvey`, enforced at the other end.
+    if (submitted.current) return;
     const d = draftRef.current;
     // Latch AFTER the empty check, not before: filing is also attempted when
     // the page goes away with nothing answered yet, and latching there would
     // silently throw away the answer that came afterwards.
     if (!d.reason && !d.likelihood) return;
     filed.current = true;
-    void submitCheckoutSurvey(d).catch(() => undefined);
+    // Beacon, not a server action: an ordinary fetch is cancelled when the
+    // document goes away, which is precisely the moment this survey exists to
+    // capture. See `sendSurveyDraft`.
+    sendSurveyDraft(d);
   }, []);
 
   useEffect(() => {
@@ -132,8 +149,10 @@ export function CheckoutExitSurvey() {
         // They are on their way out with an answer already picked. File it now
         // — this is the ONLY moment we get from a shopper who closes the tab,
         // presses Back or follows a link, which is exactly the population this
-        // survey is aimed at. Fire and forget, and NOT `beforeunload`, so it
-        // still delays nothing.
+        // survey is aimed at. It goes out as a BEACON, which is what makes that
+        // true: a plain fetch is cancelled with the document, so it would have
+        // worked for a tab switch and quietly failed for a real departure. NOT
+        // `beforeunload`, and nothing here waits, so it still delays nothing.
         file();
         return;
       }
@@ -181,12 +200,27 @@ export function CheckoutExitSurvey() {
     }
     const el = cardRef.current;
     if (!el) return;
-    const measure = () => setReserve(el.offsetHeight + EXIT_SURVEY_FRAME_GUTTER_PX);
+    // ONLY while the checkout is one column. At `lg` and up the Order Summary
+    // is the right-hand column and the card is bottom-left, so nothing is
+    // covered and a spacer there would just add dead page and jump the
+    // scrollbar the moment the pop-up opens.
+    const mq =
+      typeof window.matchMedia === "function"
+        ? window.matchMedia(EXIT_SURVEY_SINGLE_COLUMN_QUERY)
+        : null;
+    const measure = () =>
+      setReserve(
+        reservesFlowSpace(mq ? mq.matches : null) ? el.offsetHeight + EXIT_SURVEY_FRAME_GUTTER_PX : 0
+      );
     measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
+    mq?.addEventListener?.("change", measure);
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(el);
+    return () => {
+      mq?.removeEventListener?.("change", measure);
+      observer?.disconnect();
+    };
   }, [open, step]);
 
   useEffect(() => {
@@ -212,8 +246,10 @@ export function CheckoutExitSurvey() {
 
   return (
     <>
-      {/* Grows the page by the card's height so the checkout's own bottom —
-          Order Summary, Total, Place Order, its hint — always scrolls clear. */}
+      {/* Grows the page by the card's height, in the single-column case only, so
+          the checkout's own bottom — Order Summary, Total, Place Order, its
+          hint — always scrolls clear. Zero at `lg` and up, where the card sits
+          beside that column rather than under it. */}
       <div aria-hidden style={{ height: reserve }} />
       {/* No backdrop, and `pointer-events-none` on the frame so the checkout
           behind it stays clickable everywhere the card itself is not. */}
