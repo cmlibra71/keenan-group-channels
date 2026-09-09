@@ -173,6 +173,7 @@ export default async function ProductPage({
         planPrice: null,
         teaserCustomerGroupId: null,
         accountId: memberCtx?.accountId ?? null,
+        ladderLevelId: memberCtx?.ladderLevelId ?? null,
       },
       viewedProduct: {
         id: product.id,
@@ -329,6 +330,12 @@ export default async function ProductPage({
           options: product.options ?? [],
           optionValues: product.optionValues ?? [],
           variantOptionMappings: product.variantOptionMappings ?? [],
+          // Quantity breaks. EMPTY on a channel that suppresses the shared catalogue
+          // pricing: the strip runs once, at the read, in `getProductBySlug` ->
+          // `stripSuppressedCatalogPricing` (@keenan/services). Chef's Depot suppresses the
+          // sale price AND the tiers, and its cart charges RRP at every quantity, so a Bulk
+          // Pricing table here would advertise a price the cart refuses to honour. Do not
+          // re-fetch the raw rules on this page. (Card Q9hRTbKO.)
           bulkPricing: product.bulkPricing ?? [],
           // Paid optional extras (card 0CDcCYmO), read off the same portal-owned metafields bag
           // the kit below comes from. Without this the legacy renderer's own `<ProductAddons />`

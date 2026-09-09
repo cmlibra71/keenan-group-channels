@@ -4,6 +4,9 @@ import {
   paymentMethodLabel,
   paymentStatusLabel,
   orderStatusChipClass,
+  orderStatusPillClass,
+  orderStageColourClass,
+  ORDER_STAGE_COLOUR_CLASS,
   orderTaxFactor,
   orderLineBasis,
   lineSubtotalIncTax,
@@ -26,6 +29,7 @@ import {
   outstandingGuidance,
 } from "./order-presentation.ts";
 import { isUnpayableOrderStatus } from "./pay-balance.ts";
+import { ORDER_STAGES } from "./order-status-label.ts";
 
 // ── paymentMethodLabel ───────────────────────────────────────────────────────
 
@@ -51,6 +55,41 @@ test("method label handles a blank / unknown method without leaking an id", () =
 
 test("method label ignores a configured entry with a blank name", () => {
   assert.equal(paymentMethodLabel("stripe", [{ id: "stripe", name: "   " }]), "Card");
+});
+
+test("an order settled out of the customer's balance names it, not 'Not recorded'", () => {
+  // The portal's Capture Payment screen can settle an invoice out of an account's store credit
+  // (card OmIgGv2C) and stamps `store_credit` on an order that carried no method at all. Without
+  // an entry here the customer's own page would read "Not recorded" while the portal read
+  // "Store Credit" — two of our screens disagreeing about one record.
+  assert.equal(paymentMethodLabel("store_credit", []), "Store credit");
+  assert.equal(paymentMethodLabel("storecredit", []), "Store credit");
+  assert.equal(paymentMethodLabel("Store_Credit", []), "Store credit");
+});
+
+test("store credit is not a family, so a balance owing still gets the contact-us sentence", () => {
+  // Deliberate: spending a balance is not an arrangement to pay, so there is no bank-details or
+  // account-terms block it could produce. What it must NOT do is answer "nothing".
+  assert.equal(paymentMethodFamily("store_credit"), null);
+  assert.equal(
+    outstandingGuidance({
+      methodId: "store_credit",
+      orderPayable: true,
+      owed: 2295,
+      explainedElsewhere: false,
+    }),
+    "contact_us"
+  );
+  // Fully settled: nothing owing, so nothing to say.
+  assert.equal(
+    outstandingGuidance({
+      methodId: "store_credit",
+      orderPayable: true,
+      owed: 0,
+      explainedElsewhere: false,
+    }),
+    null
+  );
 });
 
 // ── Legacy Zoey / Magento method ids (Industry Kitchens) ─────────────────────
@@ -285,15 +324,57 @@ test("a blank payment status reads as awaiting payment, not blank", () => {
   assert.equal(paymentStatusLabel(""), "Awaiting payment");
 });
 
-// ── orderStatusChipClass ─────────────────────────────────────────────────────
+// ── the status pill and chip (card a1lgdzW7) ───────────────────────────
 
-test("the status chip is coloured exactly as the Order History list colours it", () => {
-  // Same three cases, same classes, so the chip a customer clicks and the chip
-  // they land on cannot diverge while a separate card owns the wording.
-  assert.equal(orderStatusChipClass("completed"), "text-accent bg-accent-subtle");
-  assert.equal(orderStatusChipClass("shipped"), "bg-accent-subtle text-accent-dark");
-  assert.equal(orderStatusChipClass("pending"), "bg-surface-secondary text-text-secondary");
-  assert.equal(orderStatusChipClass(null), "bg-surface-secondary text-text-secondary");
+test("every customer stage has a colour, and it is a solid one with white text", () => {
+  // The map is keyed on the closed eight-word stage set, so this sweep is
+  // exhaustive by construction: a ninth stage would fail to compile, and a
+  // missing colour would fail here.
+  for (const stage of ORDER_STAGES) {
+    const colour = ORDER_STAGE_COLOUR_CLASS[stage];
+    assert.ok(colour, `no colour for ${stage}`);
+    assert.ok(/^bg-[a-z]+-\d{3} text-white$/.test(colour), `${stage} is not a solid colour: ${colour}`);
+  }
+});
+
+test("the colour follows the STAGE, so every spelling of one stage is one colour", () => {
+  // `complete` (Zoey) and `completed` (portal) are the same word to a customer,
+  // and the old raw-status version coloured only one of them.
+  assert.equal(orderStageColourClass("complete"), orderStageColourClass("completed"));
+  assert.equal(orderStageColourClass("canceled"), orderStageColourClass("cancelled"));
+  assert.equal(orderStageColourClass("pending"), orderStageColourClass("pending_payment"));
+});
+
+test("being prepared is green, and an unpaid order is not", () => {
+  // Chris's ask on the card: the being-prepared pill is green. An unpaid order
+  // reads "Placed" (card XJo20XmX) and so must not wear the green.
+  assert.equal(orderStageColourClass("processing"), "bg-emerald-700 text-white");
+  assert.notEqual(orderStageColourClass("pending_payment"), orderStageColourClass("processing"));
+});
+
+test("a status nobody has seen before is coloured, not left blank", () => {
+  // Same total fallback the wording has: unknown reads "Being prepared".
+  assert.equal(orderStageColourClass("some_new_zoey_status"), orderStageColourClass("processing"));
+  assert.equal(orderStageColourClass(null), orderStageColourClass("processing"));
+  assert.equal(orderStageColourClass(""), orderStageColourClass("processing"));
+});
+
+test("no finance company and no raw status can reach the class string", () => {
+  for (const status of ["silverchef", "skope_funding", "food_by_us", "awaiting_fulfillment"]) {
+    const pill = orderStatusPillClass(status);
+    assert.ok(!/silverchef|skope|food_by_us|awaiting/i.test(pill), pill);
+  }
+});
+
+test("the pill is visibly bigger than the list chip, and both carry the same colour", () => {
+  const pill = orderStatusPillClass("processing");
+  const chip = orderStatusChipClass("processing");
+  const colour = ORDER_STAGE_COLOUR_CLASS["Being prepared"];
+  assert.ok(pill.includes(colour), pill);
+  assert.ok(chip.includes(colour), chip);
+  // Bigger type and more padding, which is the whole card.
+  assert.ok(pill.includes("text-sm") && pill.includes("px-4") && pill.includes("py-2"), pill);
+  assert.ok(chip.includes("text-xs") && chip.includes("px-2.5"), chip);
 });
 
 // ── orderTaxFactor / gstInclusiveAmount ──────────────────────────────────────

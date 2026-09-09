@@ -18,7 +18,7 @@ import {
 } from "./master-leaves";
 import { useGst } from "@/lib/gst";
 import { overlayLiveGst } from "./live-gst";
-import { useFormHandlers } from "./use-form-handlers";
+import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 
 // ============================================================================
 // The homepage rendered from the 'home' node doc — ENGINE.
@@ -68,6 +68,10 @@ export function BuilderHomePage({
     [payload, inclusive, pricesIncludeTax]
   );
   const formHandlers = useFormHandlers();
+  // A form success panel shows its form's authored confirmation message when
+  // one is set (card XBOxpQmd). Identity-returning when the page carries no
+  // form, which is almost every page.
+  const confirmed = useFormConfirmations(tree, components);
   // Memoized: a fresh object literal each render defeats the actions
   // provider's useMemo and re-creates every handler on every paint.
   const homeHandlers = React.useMemo(
@@ -96,12 +100,12 @@ export function BuilderHomePage({
       navigate={(to) => router.push(to)}
     >
       <BuilderTree
-        tree={tree}
+        tree={confirmed.tree}
         payload={livePayload}
         namedStyles={namedStyles}
         jsFunctions={jsFunctions}
         callResults={callResults}
-        components={components}
+        components={confirmed.components}
         nativeComponents={nativeComponents}
         linkComponent={Link as unknown as React.ComponentType<Record<string, unknown>>}
         imageComponent={BuilderImage}

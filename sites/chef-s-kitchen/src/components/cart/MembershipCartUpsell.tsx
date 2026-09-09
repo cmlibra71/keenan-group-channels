@@ -27,6 +27,7 @@ export function MembershipCartUpsell({
   billingInterval,
   freeShippingEnabled = false,
   freeShippingThreshold = 500,
+  ladderOn = false,
 }: {
   cartTotal: number;
   planPrice: number;
@@ -34,6 +35,14 @@ export function MembershipCartUpsell({
   /** Free-delivery messaging only renders on channels that actually offer it. */
   freeShippingEnabled?: boolean;
   freeShippingThreshold?: number;
+  /**
+   * Does this CHANNEL run the spend ladder (`channel_settings.cd_member_ladder`)?
+   * Only the tail of the pitch depends on it — "keeps stepping down as your spend
+   * builds" is levels, thresholds and a monthly review, none of which exist with
+   * the ladder off, which is every channel today. Defaults to FALSE so a caller
+   * that has not read the channel's ladder state cannot publish the claim.
+   */
+  ladderOn?: boolean;
 }) {
   const freeDeliveryEligible = freeShippingEnabled && cartTotal >= freeShippingThreshold;
 
@@ -44,8 +53,9 @@ export function MembershipCartUpsell({
         <div>
           <h3 className="font-semibold text-ink-900">Buying for a commercial kitchen?</h3>
           <p className="text-sm text-steel-500 mt-1">
-            Join the buying group and every line reprices from your next order &mdash; then keeps
-            stepping down as your spend builds.
+            {ladderOn
+              ? "Join the buying group and every line reprices from your next order \u2014 then keeps stepping down as your spend builds."
+              : "Join the buying group and every line reprices from your next order."}
           </p>
         </div>
       </div>

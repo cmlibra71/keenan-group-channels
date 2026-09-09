@@ -7,6 +7,9 @@ import { WarrantyDirectory } from "@/components/product/WarrantyDirectory";
 import { GstToggle } from "@/components/layout/GstToggle";
 import { SilverChefPanel } from "@/components/product/SilverChefPanel";
 import { ProductImageNotice } from "@/components/product/ProductImageNotice";
+import { ProductResidentialNotice } from "@/components/product/ProductResidentialNotice";
+import { ProductPackNote } from "@/components/product/ProductPackNote";
+import { MODULAR_NOTICE_TEXT, slugIsModularSystems } from "@/builder/modular-notice";
 import { usableBrandLogo } from "@/lib/brand-logo-url";
 import { CdMemberPricingPanel } from "@/components/product/CdMemberPricingPanel";
 import type { CdMembershipData } from "@/lib/pricing/cd-member-pricing";
@@ -105,6 +108,31 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // Renders null unless this product carries the tick.
     "product-image-notice": () => (
       <ProductImageNotice show={product.imageIsIllustrative === true} />
+    ),
+    // "This product can not be shipped to a residential address" (card HMtUxvwZ). Sealed
+    // for the same reason as the banner above: the line has to be able to appear on any
+    // product on either site, and both sites render this page from a stored tree. It
+    // WARNS ONLY — Add to Cart and Add to Quote are untouched. Renders null unless this
+    // product carries the tick.
+    "product-residential-notice": () => (
+      <ProductResidentialNotice show={product.restrictResidentialPurchase === true} />
+    ),
+    // "Carton contains 12 Pcs" (cards O108e4jH / zeMPVcA3). Sealed rather than exploded: it
+    // multiplies the price the shopper is being shown by the pack size, which is live purchase
+    // state a stored tree cannot carry, and it renders NULL on every product sold individually.
+    "product-pack-note": () => <ProductPackNote />,
+    // The Modular Systems banner (card qGfWAzQx, Steve — CE-40). The SAME sealed
+    // panel as the notice above, because it is the same message: one look, one
+    // colour, red panel with white writing. What differs is the rule — the slug
+    // instead of the per-product tick — and the wording Steve supplied on the
+    // card. Suppressed when the tick has already put the panel on this page, so
+    // a product can never carry the banner twice.
+    "product-modular-notice": () => (
+      <ProductImageNotice
+        show={product.imageIsIllustrative !== true && slugIsModularSystems(product.slug)}
+        text={MODULAR_NOTICE_TEXT}
+        className="my-4 w-full"
+      />
     ),
   };
 }
