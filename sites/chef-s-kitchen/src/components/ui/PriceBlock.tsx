@@ -15,6 +15,8 @@ import { derivePriceDisplay } from "./price-display";
  *            (pdp) gold box, Tim's price note: "You're seeing our standard
  *            price. Members buy this line lower — and almost 40,000 others —
  *            lower again as their twelve-month spend grows." [See member pricing]
+ *            The last clause is the SPEND LADDER and is printed only where the
+ *            channel runs one (`ladderOn`, default false) — see that prop.
  *   Member   $1,346.40 ex GST [★ MEMBER PRICE] / RRP ~~$1,683~~ · You save $337 (20%)
  *   Account  $1,500.00 ex GST · Your account price / RRP ~~$1,683~~
  *
@@ -30,6 +32,7 @@ export function PriceBlock({
   isMember,
   accountPricing = false,
   memberSavingsPct = 0,
+  ladderOn = false,
   size = "card",
   className = "",
 }: {
@@ -49,6 +52,16 @@ export function PriceBlock({
   /** What membership saves on this product, as a whole percentage — non-members
    *  only. Never paired with a price. */
   memberSavingsPct?: number;
+  /**
+   * Does this CHANNEL actually run the spend ladder
+   * (`channel_settings.cd_member_ladder`)? Only the tail of Tim's join note
+   * depends on it — "lower again as their twelve-month spend grows" describes
+   * levels and a monthly review, and neither exists with the ladder off, which
+   * is every channel today. DEFAULTS TO FALSE, so a caller that has not been
+   * given the channel's ladder state cannot accidentally publish the claim; the
+   * day a ladder is switched on, the callers that draw a PDP thread it through.
+   */
+  ladderOn?: boolean;
   size?: "card" | "pdp";
   className?: string;
 }) {
@@ -149,8 +162,15 @@ export function PriceBlock({
       {d.showJoin && size === "pdp" && (
         <div className="mt-3.5 flex items-center justify-between gap-3 rounded-btn bg-member-bg px-3.5 py-[11px] text-[12.5px] text-member-text">
           <span>
-            <b>You&rsquo;re seeing our standard price.</b> Members buy this line lower &mdash; and
-            almost 40,000 others &mdash; lower again as their twelve-month spend grows.
+            <b>You&rsquo;re seeing our standard price.</b>{" "}
+            {ladderOn ? (
+              <>
+                Members buy this line lower &mdash; and almost 40,000 others &mdash; lower again as
+                their twelve-month spend grows.
+              </>
+            ) : (
+              <>Members buy this line lower &mdash; and almost 40,000 others.</>
+            )}
           </span>
           <Link href="/membership" className="btn-gold btn-sm shrink-0">
             See member pricing

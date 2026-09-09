@@ -15,6 +15,7 @@ import { AddToQuoteButton } from "@/components/product/AddToQuoteButton";
 import { OptionSelector } from "@/components/product/OptionSelector";
 import { Price } from "@/components/ui/Price";
 import { useProductPurchaseOptional } from "@/components/product/ProductPurchaseProvider";
+import { packPrice } from "@keenan/services/pack";
 
 export type WidgetComponent = FC<{ attrs: Record<string, unknown>; ctx?: RenderContext }>;
 
@@ -39,6 +40,28 @@ export const ProductGalleryWidget: WidgetComponent = () => {
     />
   );
 };
+
+/**
+ * What one purchase actually hands the customer, when the product is sold by the carton (cards
+ * O108e4jH / zeMPVcA3). Zoey's own IK page states both halves — "Carton contains 12 Pcs" beside
+ * the quantity, and twelve pieces priced into the subtotal — so this says both rather than
+ * leaving a shopper to multiply a per-piece price by a number that is not on the screen.
+ *
+ * `unitPrice` is the price the panel above it is ALREADY showing, so the two cannot disagree.
+ */
+function PackLine({ unitPrice }: { unitPrice: number }) {
+  const purchase = useProductPurchaseOptional();
+  if (!purchase) return null;
+  const { packSize, packNote, packUnit } = purchase;
+  if (packSize <= 1 || !packNote || unitPrice <= 0) return null;
+  return (
+    <p className="mt-2 text-sm text-zinc-600">
+      <span className="font-semibold text-zinc-900">{packNote}</span>
+      {" \u00b7 "}
+      <Price amount={packPrice(unitPrice, packSize)} gst /> per {packUnit.toLowerCase()}
+    </p>
+  );
+}
 
 export const PriceWidget: WidgetComponent = () => {
   const purchase = useProductPurchaseOptional();
@@ -83,12 +106,19 @@ export const PriceWidget: WidgetComponent = () => {
           )}
         </div>
       )}
+      <PackLine
+        unitPrice={
+          isMember && memberPrice != null && memberPrice < (displaySalePrice ?? displayPrice)
+            ? memberPrice
+            : (displaySalePrice ?? displayPrice)
+        }
+      />
       {!isMember && membershipTeaser && displayPrice > 0 && (
         <Link
           href="/membership"
           className="mt-3 block rounded-lg border border-emerald-200 bg-emerald-50 p-3 hover:bg-emerald-100 transition-colors"
         >
-          <p className="text-sm font-semibold text-emerald-800">Members save 10&ndash;25% off retail</p>
+          <p className="text-sm font-semibold text-emerald-800">Members buy at a different price tier</p>
           <p className="text-xs text-emerald-600 mt-1">
             Plus prize draw entries, exclusive partner discounts &amp; priority support
           </p>
@@ -169,6 +199,7 @@ export const AddToCartWidget: WidgetComponent = () => {
   const {
     product,
     displayPrice,
+    quantity,
     cartVariantId,
     purchaseBlockedByStock,
     restrictAddToCart,
@@ -188,6 +219,9 @@ export const AddToCartWidget: WidgetComponent = () => {
     <AddToCartButton
       productId={product.id}
       variantId={cartVariantId}
+      // This fork has no quantity control, so the provider's quantity IS the buy: 1 normally, and
+      // one whole pack on a product sold by the carton (cards O108e4jH / zeMPVcA3).
+      quantity={quantity}
       disabled={purchasingDisabled || !allOptionsSelected}
     />
   );

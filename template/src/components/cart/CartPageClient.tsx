@@ -41,7 +41,7 @@ export function CartPageClient({
   freeShippingThreshold: number;
   /** Brand free-shipping specials running today on this storefront (card 88Ay7UGA). */
   brandSpecials?: MatchedBrandSpecial[];
-  upsell: { planPrice: number; billingInterval: string } | null;
+  upsell: { planPrice: number; billingInterval: string; ladderOn: boolean } | null;
 }) {
   const [cart, setCart] = useState<CartData>(initialCart);
   const mutationInFlight = useRef(false);
@@ -128,6 +128,7 @@ export function CartPageClient({
               cartTotal={total}
               planPrice={upsell.planPrice}
               billingInterval={upsell.billingInterval}
+              ladderOn={upsell.ladderOn}
               freeShippingEnabled={freeShippingEnabled}
               freeShippingThreshold={freeShippingThreshold}
             />
