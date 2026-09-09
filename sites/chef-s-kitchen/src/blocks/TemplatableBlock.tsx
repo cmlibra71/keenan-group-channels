@@ -16,6 +16,7 @@ import "server-only";
 
 import {
   BLOCK_REGISTRY,
+  blockSeedsResolve,
   type BlockTypeDefinition,
   type RenderContext,
 } from "@keenan/services";
@@ -29,7 +30,27 @@ function hasStoredSubBlocks(props: Record<string, unknown> | undefined): boolean
   return Array.isArray(props?.subBlocks) && (props!.subBlocks as unknown[]).length > 0;
 }
 
-/** The single v2 gate: doc opted in, OR any draft/editor surface, OR forced. */
+/**
+ * The single v2 gate: doc opted in, OR any draft/editor surface, OR forced —
+ * and, when the doc has NOT opted in, only where this fork can actually draw the
+ * block's default design.
+ *
+ * That last clause is card PukVI53u. With no stored `subBlocks` the default
+ * design comes from the registry's schema seeds, and a seed missing for this
+ * fork is not an error anybody sees: `effectiveSubBlocks` hands the renderer an
+ * empty template, an empty template compiles to zero segments and throws
+ * nothing, so TemplateRenderer's seed/legacy fallback never fires and the block
+ * renders as NOTHING. Industry Kitchens had no `block/content_page` seed, so
+ * every one of its 79 imported information pages showed an empty card in the
+ * portal's canvas — Steve's "does not provide any apparent content when looking
+ * at it in the site CMS backend". IK is still seedless for thirteen other
+ * blocks, so the gate asks the question rather than the fix being one seed.
+ *
+ * Falling back means the fork's COMPILED component draws it, which is what the
+ * live page already shows — so the editor canvas and the site agree. A doc that
+ * carries stored sub-blocks is unaffected: the stored template is the design,
+ * seed or no seed.
+ */
 export function blockRendersV2(
   def: BlockTypeDefinition | undefined,
   props: Record<string, unknown> | undefined,
@@ -38,9 +59,9 @@ export function blockRendersV2(
   if (!def?.templatable || def.selfManagedV2) return false;
   if ((def.composition ?? "grid") !== "grid") return false;
   if (process.env.CMS_V2_DISABLED === "1") return false;
-  return (
-    hasStoredSubBlocks(props) || ctx?.draft === true || process.env.CMS_V2_FORCE === "1"
-  );
+  if (hasStoredSubBlocks(props)) return true;
+  if (!blockSeedsResolve(def, CHANNEL_KEY)) return false;
+  return ctx?.draft === true || process.env.CMS_V2_FORCE === "1";
 }
 
 export async function GenericTemplatableBlock({
