@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { contactService, CHANNEL_ID } from "@/lib/store";
-import { setSession, endShopperSession } from "@/lib/auth";
+import { setSession, endShopperSession, forgetDevice } from "@/lib/auth";
 import { safeNextPath } from "@/lib/account-redirect";
 import { verifyPassword, validatePasswordStrength } from "@/lib/password";
 import { createAccountlessContact, EmailTakenError, type LoginCandidate } from "@/lib/contact-auth";
@@ -159,4 +159,16 @@ export async function register(
 export async function logout() {
   await endShopperSession();
   redirect("/account");
+}
+
+/**
+ * "Not you?" on a sign-in panel that opened with a remembered address.
+ *
+ * Card upTMAqRc. Signing out already forgets the device; this is the other way
+ * out — somebody else on a shared computer who never signed in and so has no
+ * sign-out to press. It only deletes a cookie, so it is safe to call at any time
+ * and does nothing when the device was not remembered.
+ */
+export async function forgetThisDevice(): Promise<void> {
+  await forgetDevice();
 }

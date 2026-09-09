@@ -32,11 +32,14 @@ const ContentPageBlock: FC<BlockProps> = ({ props }) => (
     {str(props.summary) && (
       <p className="text-base text-zinc-600 leading-relaxed mb-8">{str(props.summary)}</p>
     )}
-    <RichContent
-      html={str(props.body_html)}
-      stripStyles
-      className="prose prose-zinc max-w-none text-zinc-700 leading-relaxed"
-    />
+    {/* `kg-page-copy`, not `prose prose-zinc`: this fork installs no
+        @tailwindcss/typography either, so the `prose` names generated NOTHING —
+        headings at body weight, lists with no bullets. `kg-page-copy` is the
+        cross-fork name for author-written page copy (cards nYxPgpvK, leNXsdgf)
+        and is defined in this fork's own globals.css, so a site cut from the
+        template starts with a styled content page. Keep in sync with the
+        `block/content_page` seed for the `template` generation. [card PukVI53u] */}
+    <RichContent html={str(props.body_html)} stripStyles className="kg-page-copy" />
     {str(props.updated) && (
       <p className="mt-12 text-xs text-zinc-400">Last updated: {str(props.updated)}</p>
     )}

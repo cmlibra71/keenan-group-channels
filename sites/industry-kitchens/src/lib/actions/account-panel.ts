@@ -2,7 +2,7 @@
 
 import { refresh } from "next/cache";
 import { contactService, CHANNEL_ID } from "@/lib/store";
-import { getSession, setSession, endShopperSession } from "@/lib/auth";
+import { getSession, setSession, endShopperSession, readRememberedEmail } from "@/lib/auth";
 import { verifyPassword } from "@/lib/password";
 import { createAccountlessContact, EmailTakenError, type LoginCandidate } from "@/lib/contact-auth";
 import { claimGuestCheckoutContact } from "@/lib/checkout/guest-contact";
@@ -33,6 +33,23 @@ export async function getSessionInfo() {
     firstName: contact.first_name ?? "",
     lastName: contact.last_name ?? "",
   };
+}
+
+/**
+ * The address this browser last signed in with, for the drawer's sign-in face.
+ *
+ * Card upTMAqRc. The drawer is a client component and the cookie is httpOnly, so
+ * the remembered address has to come back over a server action like the session
+ * does. Answers null for a signed-in shopper — they are not looking at a sign-in
+ * form — and never throws: a missing hint must not break the drawer.
+ */
+export async function getRememberedEmail(): Promise<string | null> {
+  try {
+    if (await getSession()) return null;
+    return await readRememberedEmail();
+  } catch {
+    return null;
+  }
 }
 
 export async function loginFromPanel(formData: FormData): Promise<{

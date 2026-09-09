@@ -10,6 +10,8 @@ import {
   getMemberSavingsPctMap,
   accountService,
   applyAccountPricesToProducts,
+  applyAdvertisedLadderPrices,
+  getMemberLadderLevelId,
 } from "@/lib/store";
 
 export interface MemberContext {
@@ -41,6 +43,13 @@ export interface MemberContext {
    * price is not a membership perk. Null for guests and accountless shoppers.
    */
   accountId: number | null;
+  /**
+   * The shopper's rung on the Chefs Depot buying-group ladder (card gk23c1VK),
+   * or null when the channel has no ladder switched on. Resolved once per
+   * request and threaded into every pricing call, so a listing card, the
+   * product page and the cart cannot land on different rungs in one page load.
+   */
+  ladderLevelId: string | null;
 }
 
 /**
@@ -58,16 +67,27 @@ export const getAccountId = cache(async (): Promise<number | null> => {
 });
 
 /**
- * Apply this shopper's account prices to catalogue rows that came out of a SHARED source —
- * `unstable_cache`, the `category_listing_cache` table or the Meilisearch index — none of which can
- * hold a per-account price without leaking it to everyone. Applied HERE, per request, to a copy of
- * the rows; the cache/index is never written to. Guests are a no-op.
+ * Apply this request's PRICE OVERLAYS to catalogue rows that came out of a SHARED source —
+ * `unstable_cache`, the `category_listing_cache` table or the Meilisearch index — none of which
+ * can hold a per-request price without leaking it to everyone. Both overlays are applied HERE,
+ * per request, to a copy of the rows; the cache/index is never written to.
+ *
+ * Two layers, in order:
+ *  1. the buying-group ADVERTISED price (card gk23c1VK) — what a logged-out visitor pays on a
+ *     channel whose ladder advertises the Industry Kitchens trade price. A no-op on a channel
+ *     with no ladder, which is every channel until one is switched on.
+ *  2. the shopper's ACCOUNT contract prices, which override everything above them.
+ *
+ * Named `applyAccountPrices` for its original single job and kept that way deliberately: it is
+ * called from a dozen surfaces, and one funnel is what stops a rail, a grid and a search page
+ * quoting three prices for one product.
  */
 export async function applyAccountPrices<T extends { id: number }[]>(products: T): Promise<T> {
   if (products.length === 0) return products;
+  const advertised = (await applyAdvertisedLadderPrices(products as never)) as T;
   const accountId = await getAccountId();
-  if (!accountId) return products;
-  return applyAccountPricesToProducts(products as never, accountId) as Promise<T>;
+  if (!accountId) return advertised;
+  return applyAccountPricesToProducts(advertised as never, accountId) as Promise<T>;
 }
 
 /** The plan's base member group — what a new subscriber would be priced at. */
@@ -99,7 +119,7 @@ export async function getMemberContext(): Promise<MemberContext> {
       ? ((await contactService.getById(session.contactId)) as { customer_group_id: number | null } | null)
       : null;
 
-  return resolveMemberPricing({
+  const resolved = resolveMemberPricing({
     featureEnabled: !!enabled,
     hasSession: session != null,
     hasActiveSubscription: activeSub != null,
@@ -108,6 +128,19 @@ export async function getMemberContext(): Promise<MemberContext> {
     basePlanPrice: base.price,
     accountId,
   });
+
+  // The ladder rung (card gk23c1VK). Only an ACTIVE MEMBER has one: a non-member
+  // is priced at the advertised price and never at a level, which is the same
+  // rule that keeps a member price off a guest's screen (cd_guest_pricing_gate).
+  // Null on a channel with no ladder switched on, i.e. everywhere until one is.
+  const ladderLevelId = resolved.isMember
+    ? await getMemberLadderLevelId({
+        accountId,
+        contactId: session?.contactId ?? null,
+      }).catch(() => null)
+    : null;
+
+  return { ...resolved, ladderLevelId };
 }
 
 /**
@@ -118,9 +151,9 @@ export async function getListingMemberPrices(
   products: { id: number }[]
 ): Promise<Record<number, number>> {
   if (products.length === 0) return {};
-  const { customerGroupId, accountId } = await getMemberContext();
+  const { customerGroupId, accountId, ladderLevelId } = await getMemberContext();
   if (!customerGroupId && !accountId) return {};
-  return getMemberPriceMap(products.map((p) => p.id), customerGroupId, accountId);
+  return getMemberPriceMap(products.map((p) => p.id), customerGroupId, accountId, ladderLevelId);
 }
 
 export interface ListingPricing {
@@ -145,7 +178,7 @@ export async function getListingPricing(products: { id: number }[]): Promise<Lis
 
   const [memberPriceMap, savingsPctMap] = await Promise.all([
     (ctx.customerGroupId || ctx.accountId) && has
-      ? getMemberPriceMap(ids, ctx.customerGroupId, ctx.accountId)
+      ? getMemberPriceMap(ids, ctx.customerGroupId, ctx.accountId, ctx.ladderLevelId)
       : Promise.resolve({} as Record<number, number>),
     // Non-members: percentage only, so the cards can still sell membership.
     !ctx.isMember && ctx.teaserCustomerGroupId && has
