@@ -197,7 +197,6 @@ export async function createSubscription(planId: number): Promise<{
       return { success: false, error: "Plan is not properly configured" };
     }
 
-
     // THE FREE MONTHS, SPENT HERE AND NOWHERE ELSE (card ASTb3tCf).
     //
     // Tim: "3 months free - Users can only use this feature once. Otherwise they will
