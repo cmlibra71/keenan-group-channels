@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { BLOCK_REGISTRY, isBlockAvailable } from "@keenan/services";
+import { BLOCK_REGISTRY, blockSeedsResolve, isBlockAvailable } from "@keenan/services";
 
 /** Which storefront this fork is, matching the registry's channelKeys. */
 const CHANNEL_KEY = "industry-kitchens";
@@ -73,5 +73,24 @@ test("every block this fork can draw is a real registry type", () => {
     unknown,
     [],
     `component map carries types the shared registry does not define: ${unknown.join(", ")}`
+  );
+});
+
+// ── card PukVI53u ───────────────────────────────────────────────────────────
+// A templatable block with no stored sub-blocks is drawn from the registry's
+// schema SEEDS. A seed missing for this fork is silent: the renderer gets an
+// empty template, an empty template compiles to zero segments and throws
+// nothing, so the block draws NOTHING on every draft/editor surface. That is how
+// Industry Kitchens' 79 imported information pages came to show an empty card
+// labelled "Content Page" in the portal. `blockRendersV2` now falls back to the
+// compiled component when the seeds are missing — and `content_page`, the block
+// every imported page is made of, must have a real seed on every fork so its
+// "editable code" panel opens on the fork's own design rather than an empty box.
+test("content_page's default design can be seeded on this fork", () => {
+  assert.equal(
+    blockSeedsResolve(BLOCK_REGISTRY.content_page, CHANNEL_KEY),
+    true,
+    `${CHANNEL_KEY} has no block/content_page seed — the Sections panel would open empty ` +
+      `and an imported page would render as a blank card in the portal.`
   );
 });
