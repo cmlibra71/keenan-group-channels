@@ -416,7 +416,10 @@ async function ShopByCategory(props: Record<string, unknown> = {}) {
               href={`/categories/${category.slug}`}
               className="group overflow-hidden rounded-card border border-border bg-white transition-all duration-200 hover:-translate-y-[3px] hover:border-brand-light hover:shadow-hover"
             >
-              <div className="relative aspect-[4/3] bg-gradient-to-br from-brand-tint to-steel-200">
+              {/* 3:1 is the category BANNER ratio (card RyMa2mkX): artwork with its heading baked
+                  in fits whole instead of being sliced. object-cover is kept knowing the cost: until
+                  the artwork is banners, a square photo shows as a horizontal slice. */}
+              <div className="relative aspect-[3/1] bg-gradient-to-br from-brand-tint to-steel-200">
                 {category.image_url && (
                   <Image
                     src={category.image_url}
