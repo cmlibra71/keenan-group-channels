@@ -14,7 +14,7 @@
 // the Order Summary is the one the shopper already saw on the tile they clicked.
 // ============================================================================
 
-import { isFetchableImageUrl } from "@/lib/image-origin";
+import { isFetchableImageUrl } from "../image-origin";
 
 /** Read the primary photograph per product id. Injected so the policy above it is testable. */
 export type PrimaryImageReader = (productIds: number[]) => Promise<Map<number, string>>;
