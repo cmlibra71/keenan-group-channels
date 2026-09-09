@@ -52,7 +52,9 @@ export default async function CategoriesPage() {
                   />
                 ) : (
                   <div className="h-full w-full flex items-center justify-center text-text-muted">
-                    <Package className="h-12 w-12" />
+                    {/* 48px would be CLIPPED by the 3:1 box below the `sm` breakpoint: at 320px the box is
+                        ~43px tall and overflow-hidden cuts the icon top and bottom (RyMa2mkX, gRLRF8yu). */}
+                    <Package className="h-8 w-8 sm:h-12 sm:w-12" />
                   </div>
                 )}
               </div>
