@@ -2,6 +2,8 @@ import { redirect, notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { signInRedirect } from "@/lib/account-redirect";
 import { getFeatureFlag, getActiveSubscriptionForContact, subscriptionPlanService, CHANNEL_ID } from "@/lib/store";
+import { resolveFreeTrialOffer } from "@/lib/membership/free-trial";
+import { subscribeOfferCopy } from "@/lib/membership/free-trial-copy";
 import { SubscribeForm } from "./SubscribeForm";
 import { stripePublishableKeyForScope, stripeScopeOf } from "@/lib/stripe";
 
@@ -31,6 +33,22 @@ export default async function SubscribePage({
   if (!plan) notFound();
 
   const metafields = plan.metafields as Record<string, string> | null;
+
+  // What happens to this person's money before they hand over a card (card ASTb3tCf).
+  // Three sentences are possible and only one of them is shown: the first months are
+  // free; they have already had their free months, so it is the full price from today;
+  // or nothing extra, because no free period is on offer to anybody. The offer is
+  // decided by the SAME call `createSubscription` re-runs when it creates the
+  // subscription, so nothing promised here can be quietly not honoured there. It is
+  // resolved with no basket, because there is none on this page — a threshold, where
+  // one is configured, is met by an order the shopper has already placed.
+  const freeTrialNote = await resolveFreeTrialOffer({
+    contactId: session.contactId,
+    trialDays: Number(plan.trial_period_days) || 0,
+    planPrice: plan.price,
+  })
+    .then((offer) => subscribeOfferCopy(offer.view))
+    .catch(() => null);
 
   // THE PLAN'S ACCOUNT DECIDES — the same rule `createSubscription` follows
   // (card OHDx84DK). A plan's Stripe price, the customer and the subscription
@@ -70,9 +88,15 @@ export default async function SubscribePage({
       <h1 className="page-title mb-2">
         Subscribe to {plan.name}
       </h1>
-      <p className="text-steel-500 mb-6">
+      <p className="text-steel-500 mb-2">
         ${parseFloat(plan.price).toFixed(2)} / {plan.billing_interval}
       </p>
+      {freeTrialNote && (
+        <p className="mb-6 rounded-md border border-steel-200 bg-steel-50 px-3 py-2 text-sm text-ink-700">
+          {freeTrialNote}
+        </p>
+      )}
+      {!freeTrialNote && <div className="mb-6" />}
 
       <SubscribeForm
         planId={plan.id}

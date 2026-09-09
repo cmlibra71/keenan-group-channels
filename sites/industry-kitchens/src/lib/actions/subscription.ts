@@ -10,6 +10,8 @@ import {
 } from "@/lib/store";
 import { wantsStripeTestMode, STRIPE_SCOPE_GLOBAL } from "@keenan/services";
 import { stripeProviderForScope, stripeScopeOf } from "@/lib/stripe";
+import { resolveFreeTrialGrant } from "@/lib/membership/free-trial";
+import { freeTrialStamp } from "@keenan/services/membership-trial";
 
 // Per-customer in-flight guard (per container): the active/pending check and the
 // Stripe+local create aren't atomic, so two concurrent submits (double-click / retry)
@@ -23,7 +25,17 @@ const subscriptionLocks = new Set<string>();
  */
 export async function createSubscription(planId: number): Promise<{
   success: boolean;
+  /** Confirm with `stripe.confirmCardPayment` — a first payment is due now. */
   clientSecret?: string | null;
+  /**
+   * Confirm with `stripe.confirmCardSetup` — nothing is due now because the first
+   * period is FREE, and this is how the card gets filed so the membership can roll
+   * into the paid month when the free period ends (card ASTb3tCf). A free trial
+   * produces this secret and never `clientSecret`: its first invoice is $0, so Stripe
+   * raises no PaymentIntent at all. Ignore it and the card the shopper typed is thrown
+   * away and the membership lapses on its first real invoice.
+   */
+  setupClientSecret?: string | null;
   subscriptionId?: number;
   error?: string;
 }> {
@@ -105,12 +117,34 @@ export async function createSubscription(planId: number): Promise<{
       return { success: false, error: "Plan is not properly configured" };
     }
 
+    // THE FREE MONTHS, SPENT HERE AND NOWHERE ELSE (card ASTb3tCf).
+    //
+    // Tim: "3 months free - Users can only use this feature once. Otherwise they will
+    // perpetually use the free feature, then cancel and resign." So the plan's
+    // `trial_period_days` is no longer handed to Stripe unconditionally: it is granted
+    // only where this PERSON has never had it, and — where the storefront sets a
+    // free-membership order threshold — only where they have placed an order that earns
+    // it. Decided server-side, from the database, at the moment the subscription is
+    // created, so a stale checkout page cannot buy a second free period; and stamped
+    // onto the subscription, because that stamp is the only memory the rule has.
+    //
+    // THE READ FAILS CLOSED HERE. `resolveFreeTrialGrant` lets a failed eligibility
+    // read reject instead of reading as "never had one" — swallowing it would hand a
+    // returning subscriber a second free period and a fresh stamp, which is exactly
+    // what this card exists to stop. The catch below turns it into a plain failure.
+    const freeTrial = await resolveFreeTrialGrant({
+      contactId: session.contactId,
+      trialDays: (plan.trial_period_days as number) || 0,
+      planPrice: plan.price as string,
+    });
+    const trialStamp = freeTrialStamp(freeTrial.decision);
+
     // Create Stripe subscription
     const stripeSub = await stripeProvider.createSubscription(
       stripeCustomerId,
       stripePriceId,
       {
-        trialPeriodDays: (plan.trial_period_days as number) || 0,
+        trialPeriodDays: freeTrial.grantedDays,
         metadata: {
           channel_id: String(CHANNEL_ID),
           customer_id: String(session.contactId),
@@ -135,6 +169,20 @@ export async function createSubscription(planId: number): Promise<{
       // this storefront moves onto its own Stripe account.
       metafields: {
         stripe_account_scope: planScope ?? STRIPE_SCOPE_GLOBAL,
+        // The free months this subscription was given, if any (card ASTb3tCf). This
+        // stamp IS the once-per-person memory: eligibility asks it, never "have you
+        // ever subscribed", so a shopper who never reached this form burns nobody's
+        // free period and a member who paid from day one keeps theirs.
+        //
+        // IT IS WRITTEN BEFORE THE CARD IS CONFIRMED, and that is deliberate rather
+        // than overlooked: this row is what the client confirms AGAINST. So a shopper
+        // whose card is then declined has spent their once-ever free months, and there
+        // is no staff control anywhere to clear a stamp. Unreachable while the plan's
+        // free period is 0, which is every day so far. Do not "fix" it by stamping
+        // after confirmation without reading the register rule on `membership-overview`
+        // first: the confirmation happens in the BROWSER, and a rule the browser has to
+        // come back and tell us about is not a rule.
+        ...(trialStamp ? { free_trial: trialStamp } : {}),
         ...((await wantsStripeTestMode(CHANNEL_ID)) ? { test_mode: true } : {}),
       },
     });
@@ -144,6 +192,7 @@ export async function createSubscription(planId: number): Promise<{
     return {
       success: true,
       clientSecret: stripeSub.clientSecret,
+      setupClientSecret: stripeSub.setupClientSecret,
       subscriptionId: localSub.id as number,
     };
   } catch (err) {
