@@ -23,6 +23,7 @@ import { PriceBlock } from "@/components/ui/PriceBlock";
 import { useProductPurchaseOptional } from "@/components/product/ProductPurchaseProvider";
 import { packPrice } from "@keenan/services/pack";
 import { ProductInstructionsPanel } from "@/components/product/ProductInstructionsPanel";
+import { buyAreaSuppressed } from "@/lib/product-customisation";
 
 export type WidgetComponent = FC<{ attrs: Record<string, unknown>; ctx?: RenderContext }>;
 
@@ -240,6 +241,10 @@ export const QuantityWidget: WidgetComponent = () => {
 export const ProductInstructionsWidget: WidgetComponent = () => {
   const purchase = useProductPurchaseOptional();
   if (!purchase) return <NoProvider name="product_instructions" />;
+  // 7vu2iEEZ on `sf-product-page`: a product with BOTH buy controls restricted
+  // renders no buy area at all — no control, no wording. Both widgets above
+  // return null on it, so the field would be a required box with nothing to press.
+  if (buyAreaSuppressed(purchase.restrictAddToCart, purchase.restrictAddToQuote)) return null;
   return (
     <ProductInstructionsPanel
       groups={purchase.product.addons?.groups ?? []}

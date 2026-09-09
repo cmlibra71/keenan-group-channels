@@ -22,6 +22,7 @@ import { useProductPurchase } from "./ProductPurchaseProvider";
 import { stepPackQuantity } from "@keenan/services/pack";
 import { ProductPackNote } from "./ProductPackNote";
 import { ProductInstructionsPanel } from "./ProductInstructionsPanel";
+import { buyAreaSuppressed } from "@/lib/product-customisation";
 import {
   unansweredAddonGroups,
   type AddonSelectionInput,
@@ -213,7 +214,10 @@ export function ProductDetail({
           buttons on the Custom Stainless Steel page (card kyMjCmAw). Below the pack
           sentence for the same reason the node placer runs outermost: both anchor on
           the buy row, and the instruction box is the one the shopper has to fill in. */}
-      {addons && (
+      {/* 7vu2iEEZ on `sf-product-page`: a product with BOTH buy controls restricted
+          renders no buy area at all — no control, no wording — so a required box
+          above nothing to press goes with the buttons. */}
+      {addons && !buyAreaSuppressed(restrictAddToCart, restrictAddToQuote) && (
         <ProductInstructionsPanel
           groups={addons.groups}
           values={addonText}

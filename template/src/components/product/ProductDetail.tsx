@@ -18,6 +18,7 @@ import { useProductPurchase } from "./ProductPurchaseProvider";
 import { ProductKitBlock } from "./ProductKitBlock";
 import { defaultKitSelection, toKitChoices, type ProductKit } from "@/lib/product-kit";
 import { ProductInstructionsPanel } from "./ProductInstructionsPanel";
+import { buyAreaSuppressed } from "@/lib/product-customisation";
 import {
   unansweredAddonGroups,
   type AddonSelectionInput,
@@ -215,7 +216,10 @@ export function ProductDetail({
 
       {/* Free-text customisation — Zoey puts it directly above Qty and the buy
           buttons on the Custom Stainless Steel page (card kyMjCmAw). */}
-      {addons && (
+      {/* 7vu2iEEZ on `sf-product-page`: a product with BOTH buy controls restricted
+          renders no buy area at all — no control, no wording — so a required box
+          above nothing to press goes with the buttons. */}
+      {addons && !buyAreaSuppressed(restrictAddToCart, restrictAddToQuote) && (
         <ProductInstructionsPanel
           groups={addons.groups}
           values={addonText}

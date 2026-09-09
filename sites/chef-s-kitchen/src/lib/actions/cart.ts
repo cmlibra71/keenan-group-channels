@@ -222,6 +222,55 @@ async function refuseCartQuantity(
   return null;
 }
 
+/**
+ * The cart line carrying THIS product/variant in THIS configuration, or null.
+ *
+ * Scanned rather than looked up because `findByProductVariant` answers "is this
+ * product in the cart", and on a customisable product that is the wrong question:
+ * two benches with different measurements are two lines of the same product.
+ *
+ * SCOPED IN SQL AND PAGED TO EXHAUSTION, both for the same reason. A single
+ * fixed page of the whole cart could miss the match on a long cart, and a missed
+ * match does not degrade gracefully — it falls through to `createForParent`,
+ * whose `validateUniqueConstraints` then throws a `ConflictError` out of an
+ * unguarded server action. That is a 500 on Add to Cart where the targeted lookup
+ * this replaced could not fail. `product_id` is an allowed filter on
+ * `cart_items`, so the scan reads only the lines of the one product being added
+ * and the pages are the different CONFIGURATIONS of it, which is a handful.
+ */
+async function findConfiguredCartLine(
+  cartId: number,
+  productId: number,
+  variantId: number | null,
+  wantedConfiguration: string
+): Promise<{ id: number; quantity: number } | null> {
+  const limit = 100;
+  for (let page = 1; ; page += 1) {
+    const result = await cartItemService.listForParent(cartId, {
+      page,
+      limit,
+      sort: "id",
+      direction: "asc",
+      filters: { product_id: { type: "eq", value: productId } },
+    });
+    const rows = result.data as unknown as Array<{
+      id: number;
+      quantity: number;
+      variant_id: number | null;
+      modifier_selections?: unknown;
+    }>;
+    const match = rows.find(
+      (item) =>
+        (item.variant_id ?? null) === variantId &&
+        addonSelectionKey(readStoredAddons(item.modifier_selections)) === wantedConfiguration
+    );
+    if (match) return { id: match.id, quantity: match.quantity };
+    // Stop on a short page as well as on the count: a `total` that disagrees with
+    // what came back must never turn this into an unbounded loop.
+    if (rows.length < limit || page * limit >= (result.pagination?.total ?? 0)) return null;
+  }
+}
+
 export async function addToCart(
   productId: number,
   variantId?: number | null,
@@ -282,21 +331,7 @@ export async function addToCart(
   // `cart_items` alone; `getWithItems` would join products and variants for every
   // line in the cart to answer a question about one of them.
   const existing = productAddons
-    ? ((
-        await cartItemService.listForParent(cart.id, {
-          page: 1,
-          limit: 200,
-          sort: "id",
-          direction: "asc",
-        })
-      ).data.find(
-        (item) =>
-          (item as { product_id: number }).product_id === productId &&
-          ((item as { variant_id: number | null }).variant_id ?? null) === (variantId ?? null) &&
-          addonSelectionKey(
-            readStoredAddons((item as { modifier_selections?: unknown }).modifier_selections)
-          ) === wantedConfiguration
-      ) as { id: number; quantity: number } | undefined) ?? null
+    ? await findConfiguredCartLine(cart.id, productId, variantId ?? null, wantedConfiguration)
     : ((await cartItemService.findByProductVariant(cart.id, productId, variantId)) as {
         id: number;
         quantity: number;

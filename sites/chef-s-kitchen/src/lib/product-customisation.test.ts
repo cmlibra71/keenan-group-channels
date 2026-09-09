@@ -5,6 +5,8 @@ import {
   customisationRefusal,
   storefrontOwnsLineComment,
   priorStorefrontNote,
+  quoteLineReconfigured,
+  buyAreaSuppressed,
 } from "./product-customisation";
 import type { ProductAddons } from "@keenan/services/product-addons";
 
@@ -132,4 +134,109 @@ test("'did the configuration change' is measured against OUR note, not the rep's
   // No marker: fall back to the comment on the line, exactly as before.
   assert.equal(priorStorefrontNote("Instructions: 800mm", null), "Instructions: 800mm");
   assert.equal(priorStorefrontNote(null, null), "");
+});
+
+// ── Re-configure, or a second one? (`addToQuote`'s quantity decision) ────────
+
+/** The ordinary press: a product with groups, an answer typed, nothing on the line yet. */
+const press = (over: Partial<Parameters<typeof quoteLineReconfigured>[0]> = {}) =>
+  quoteLineReconfigured({
+    isBundle: false,
+    answeredCount: 1,
+    clearedPanel: false,
+    lineWasConfigured: false,
+    note: "Instructions: 1200mm bench",
+    priorNote: "Instructions: 1200mm bench",
+    ...over,
+  });
+
+// THE REGRESSION THIS FUNCTION EXISTS FOR. An author may untick Required, so a
+// product carrying a customisation group can be added with the box empty. The
+// second such press resolved nothing, wrote no note, and was read as a
+// clear-down against a line that had never been configured — the quantity stayed
+// at 1, the panel re-opened, the count did not move, and nothing said why.
+test("NEVER CONFIGURED + nothing answered = a second unit, not a withdrawal", () => {
+  assert.equal(
+    quoteLineReconfigured({
+      isBundle: false,
+      answeredCount: 0,
+      clearedPanel: true,
+      lineWasConfigured: false,
+      note: null,
+      priorNote: "",
+    }),
+    false
+  );
+  // The worse variant: a REP has typed over the Comment, so the prior note differs
+  // on every press. The customer must still be able to raise the quantity.
+  assert.equal(
+    quoteLineReconfigured({
+      isBundle: false,
+      answeredCount: 0,
+      clearedPanel: true,
+      lineWasConfigured: false,
+      note: null,
+      priorNote: "Rep: chase Tim on freight",
+    }),
+    false
+  );
+});
+
+test("CLEARED FROM CONFIGURED still holds the quantity", () => {
+  // The shopper emptied an optional box on a line that carried an instruction:
+  // a withdrawal, not a second bench. No note comparison is involved.
+  assert.equal(
+    quoteLineReconfigured({
+      isBundle: false,
+      answeredCount: 0,
+      clearedPanel: true,
+      lineWasConfigured: true,
+      note: null,
+      priorNote: "Instructions: 1200mm bench",
+    }),
+    true
+  );
+  // Even where our note is somehow gone, the clear-down stands on the LINE's
+  // configuration rather than on the text.
+  assert.equal(
+    quoteLineReconfigured({
+      isBundle: false,
+      answeredCount: 0,
+      clearedPanel: true,
+      lineWasConfigured: true,
+      note: null,
+      priorNote: null,
+    }),
+    true
+  );
+});
+
+test("a CORRECTED instruction is a re-configure; the same one is a second unit", () => {
+  assert.equal(press({ note: "Instructions: 800mm bench" }), true);
+  assert.equal(press(), false);
+});
+
+test("an absent note and an empty note are the same note", () => {
+  // `null !== ""` is what made the original expression fire on a press that
+  // changed nothing.
+  assert.equal(press({ answeredCount: 0, note: null, priorNote: "" }), false);
+  assert.equal(press({ answeredCount: 0, note: "", priorNote: null }), false);
+});
+
+test("a bundle press is judged on its choices, answered or not", () => {
+  assert.equal(press({ isBundle: true, answeredCount: 0, note: "Bundle: 1 x Fryer" }), true);
+  assert.equal(
+    press({ isBundle: true, answeredCount: 0, note: "Bundle: 1 x Fryer", priorNote: "Bundle: 1 x Fryer" }),
+    false
+  );
+});
+
+// ── Is there a buy area to fill the field in for? (7vu2iEEZ) ────────────────
+
+test("only BOTH buy controls restricted suppresses the panel", () => {
+  assert.equal(buyAreaSuppressed(true, true), true);
+  assert.equal(buyAreaSuppressed(true, false), false);
+  assert.equal(buyAreaSuppressed(false, true), false);
+  assert.equal(buyAreaSuppressed(null, undefined), false);
+  assert.equal(buyAreaSuppressed(undefined, undefined), false);
 });

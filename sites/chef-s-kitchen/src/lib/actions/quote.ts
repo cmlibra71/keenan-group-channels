@@ -30,6 +30,7 @@ import {
   customisationRefusal,
   storefrontOwnsLineComment,
   priorStorefrontNote,
+  quoteLineReconfigured,
 } from "@/lib/product-customisation";
 import { slidingWindowAllow } from "@/lib/rate-limit";
 import { resolveCustomerRequestState } from "@keenan/services";
@@ -295,9 +296,27 @@ export async function addToQuote(
     // "Did the configuration change" is measured against the note WE last wrote, not
     // against whatever is on the line now — a rep having typed over the Comment must
     // not turn a correction into a second unit.
-    const reconfigured =
-      (kit?.kind === "bundle" || (resolvedAddons?.length ?? 0) > 0 || clearedAddons) &&
-      lineNotes !== priorNote;
+    //
+    // WHETHER THERE WAS ANYTHING TO WITHDRAW is a fact about the LINE, not about
+    // the request. `clearedAddons` says only that this press answered nothing on a
+    // product that asks something — which is also what an ordinary second press on
+    // an OPTIONAL field looks like — so the clear-down has to be confirmed against
+    // the configuration the line actually carries, or "never answered" reads as
+    // "the shopper withdrew their answer" and the quantity silently stops moving.
+    // The judgement itself is a pure, unit-tested function so both directions can
+    // be held still: see `quoteLineReconfigured`.
+    const priorSelection = priorAttributes.addon_selection;
+    const lineWasConfigured = Array.isArray(priorSelection)
+      ? priorSelection.length > 0
+      : priorSelection != null;
+    const reconfigured = quoteLineReconfigured({
+      isBundle: kit?.kind === "bundle",
+      answeredCount: resolvedAddons?.length ?? 0,
+      clearedPanel: clearedAddons,
+      lineWasConfigured,
+      note: lineNotes,
+      priorNote,
+    });
     // MERGED into the bag, never over it. `quote_items.attributes` is replaced
     // WHOLESALE on write and has several owners — a rep's `indent` tick, a
     // `custom_line` marker, `zoey_item_id` on 62,351 ingested rows — so a

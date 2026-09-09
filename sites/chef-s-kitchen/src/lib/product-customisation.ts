@@ -101,3 +101,78 @@ export function priorStorefrontNote(
   if (typeof bag.addon_note === "string") return bag.addon_note;
   return comment ?? "";
 }
+
+/**
+ * DID THIS PRESS RE-CONFIGURE THE LINE THE CUSTOMER ALREADY HAS, or is it a
+ * second one of the same thing?
+ *
+ * A re-configure holds the quantity where it is; anything else counts up. The
+ * distinction matters because a custom fabrication is not a countable stock item:
+ * a shopper who changes "1200mm bench" to "800mm bench" and presses the button
+ * again is correcting the request, not ordering a second bench, and stacking
+ * would leave the rep one line at quantity 2 carrying only the newer
+ * measurements.
+ *
+ * IT IS A PURE FUNCTION BECAUSE THE INLINE VERSION WAS WRONG IN A WAY NO TEST
+ * COULD SEE. It read, in effect, "(a bundle, or an answer, or a cleared panel)
+ * AND the note changed", with the note compared as `null !== ""`. On a product
+ * carrying ANY authored group with the box left empty — an author may untick
+ * Required — a shopper's SECOND press resolved nothing (`clearedPanel`), wrote
+ * `null` where an absent note reads back as `""`, and so counted as a
+ * re-configure: the quantity silently stayed at 1, the panel re-opened, the count
+ * did not move and nothing on the screen explained it. Worse on a line a REP had
+ * commented on, where the prior note is the rep's own text and therefore differs
+ * on EVERY press, so the customer could never raise the quantity from the
+ * storefront again. The cart never had the bug (an empty configuration keys the
+ * same as no configuration, so it matched and incremented), which left the two
+ * surfaces disagreeing about the same click.
+ *
+ * The two rules that fix it, and the two directions to verify:
+ *  - a CLEAR-DOWN is a re-configure on its own, no note comparison — but only
+ *    when the line actually CARRIED a configuration to withdraw. "Nothing was
+ *    answered" is a fact about the REQUEST; "there was something to clear" is a
+ *    fact about the LINE, and treating the first as the second turned "never
+ *    answered" into "the shopper withdrew their answer".
+ *  - every note comparison is normalised, so an absent note and an empty one are
+ *    the same note.
+ */
+export interface QuoteLineReconfigure {
+  /** A bundle press always REPLACES the captured configuration (card 7bmpuqei). */
+  isBundle: boolean;
+  /** How many customisation answers THIS press resolved against the product. */
+  answeredCount: number;
+  /** The panel was offered, the product has groups, and nothing came back. */
+  clearedPanel: boolean;
+  /** Does the line the customer already has actually carry a configuration? */
+  lineWasConfigured: boolean;
+  /** The note this press would write. */
+  note: string | null;
+  /** The note the storefront wrote last time (`priorStorefrontNote`). */
+  priorNote: string | null;
+}
+
+export function quoteLineReconfigured(input: QuoteLineReconfigure): boolean {
+  if (input.clearedPanel) return input.lineWasConfigured;
+  if (!input.isBundle && input.answeredCount === 0) return false;
+  return (input.note ?? "") !== (input.priorNote ?? "");
+}
+
+/**
+ * IS THERE A BUY AREA AT ALL to fill this field in for?
+ *
+ * 7vu2iEEZ's rule on `sf-product-page`: a product with BOTH `restrict_add_to_cart`
+ * and `restrict_add_to_quote` renders no buy area — no control and no wording.
+ * A customisation panel above it would then be a box marked Required with nothing
+ * to press, which is the one shape that page is not allowed to take. Named here
+ * rather than repeated as `a && b` in each renderer, so the three that draw the
+ * panel cannot drift apart on it.
+ *
+ * No live product carries either flag today; this keeps the first one that does
+ * from arriving as a bug report.
+ */
+export function buyAreaSuppressed(
+  restrictAddToCart: boolean | null | undefined,
+  restrictAddToQuote: boolean | null | undefined
+): boolean {
+  return restrictAddToCart === true && restrictAddToQuote === true;
+}

@@ -27,6 +27,7 @@ import { SilverChefPanel } from "@/components/product/SilverChefPanel";
 import { ProductImageNotice } from "@/components/product/ProductImageNotice";
 import { ProductPackNote } from "@/components/product/ProductPackNote";
 import { ProductInstructionsPanel } from "@/components/product/ProductInstructionsPanel";
+import { buyAreaSuppressed } from "@/lib/product-customisation";
 import { useProductPurchase } from "@keenan/services/product-page";
 import { MODULAR_NOTICE_TEXT, slugIsModularSystems } from "@/builder/modular-notice";
 import { CdMemberPricingPanel } from "@/components/product/CdMemberPricingPanel";
@@ -122,6 +123,11 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
  */
 function ProductInstructionsNative() {
   const purchase = useProductPurchase();
+  // 7vu2iEEZ on `sf-product-page`: a product with BOTH buy controls restricted
+  // renders no buy area at all — no control, no wording. A required box above
+  // nothing to press is the one shape this page may not take, so the panel goes
+  // with the buttons.
+  if (buyAreaSuppressed(purchase.restrictAddToCart, purchase.restrictAddToQuote)) return null;
   const groups = purchase.product.addons?.groups ?? [];
   return (
     <ProductInstructionsPanel
