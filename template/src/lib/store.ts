@@ -90,6 +90,14 @@ export const {
   getCategoryStats,
   getCategoryBreadcrumbs,
   getProductBreadcrumbs,
+  // Names of the categories REMOVED from this storefront (channel_settings
+  // `hidden_category_ids`, card ZVbjSoKN). Every category read resolves the
+  // removal by id; the /search facet rail speaks NAMES, so it needs these.
+  getRemovedCategoryNames,
+  // The same removal as IDS (whole subtree). The Sub-category rail and `?sub=`
+  // on a category page are id-keyed, so the removal has to be resolvable in
+  // that language too — see the route's `?sub=` canonicalisation. (ZVbjSoKN.)
+  getRemovedCategoryIds,
   getCategoryById,
   getBrandsForChannel,
   getBrandBySlug,
@@ -103,9 +111,10 @@ export const {
   getActiveSubscription,
   getMemberPriceMap,
   applyAccountPricesToProducts,
-  // The Chefs Depot buying-group ladder (cards gk23c1VK / Nyp8bkPm). All four are
+  // The Chefs Depot buying-group ladder (cards gk23c1VK / Nyp8bkPm). These are
   // no-ops on a channel with no ladder in `channel_settings`, which is every
   // channel until one is written.
+  applyAdvertisedLadderPrices,
   getMemberLadderLevelId,
   getLadderConfig,
   getLadderVariantPrices,

@@ -17,6 +17,7 @@ import {
   sendFormThankYouEmail,
 } from "@keenan/services";
 import { CHANNEL_ID } from "@/lib/channel";
+import { resolvePostSubmit } from "@/lib/forms/post-submit";
 import { slidingWindowAllow } from "@/lib/rate-limit";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { sizeLabel } from "@/lib/form-uploads";
@@ -47,7 +48,20 @@ export interface SubmitFormInput {
 }
 
 export type SubmitFormResult =
-  | { success: true; submissionUuid: string }
+  | {
+      success: true;
+      submissionUuid: string;
+      /**
+       * The form author's confirmation wording, shown IN PLACE OF the form
+       * (card XBOxpQmd). Absent when nothing is authored, which is what leaves
+       * the standard "Thanks — we've got it." panel showing. `message` is the
+       * key the builder's action-result normaliser reads.
+       */
+      message?: string;
+      /** Where to send the submitter instead of showing the message. Always a
+       *  site-relative path — see `resolvePostSubmit`. */
+      redirectTo?: string;
+    }
   | { success: false; error: string };
 
 export async function submitForm(input: SubmitFormInput): Promise<SubmitFormResult> {
@@ -111,7 +125,7 @@ export async function submitForm(input: SubmitFormInput): Promise<SubmitFormResu
     console.error("[submitForm] notification pipeline failed:", e)
   );
 
-  return { success: true, submissionUuid: String(submission.uuid) };
+  return { success: true, submissionUuid: String(submission.uuid), ...resolvePostSubmit(form) };
 }
 
 /** A bot sees exactly what a person sees. */

@@ -15,6 +15,7 @@ import {
 } from "@/lib/store";
 import {
   quoteAttributeService,
+  loadQuoteOrderRep,
   withTransaction,
   runWithOrderOrigin,
   wantsStripeTestMode,
@@ -25,6 +26,7 @@ import {
   sendOrderConfirmationEmail,
   sendOrderStaffNotificationEmail,
   productImageService,
+  snapshotOrderLadderPricing,
 } from "@keenan/services";
 import { getSession } from "@/lib/auth";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
@@ -325,8 +327,36 @@ export async function payQuote(
     /* carry nothing rather than leaking every attribute */
   }
 
+  // WHO OWNS THIS ORDER (card QRA0m4vh, Steve 2026-09-03: "When a customer pays
+  // a quote on the website, it needs to carry the rep across. If no rep is
+  // associated with that customer, the rep should be cs@(domain)").
+  //
+  // One shared ladder in `@keenan/services`, the same one the portal's staff
+  // conversion resolves its first two steps from: the quote's `sales_agent`
+  // pick, else its own `sales_rep_id`, else the rep FLAGGED as the customer's
+  // account primary (storefront-scoped, so a Chefs Depot order never takes an
+  // Industry Kitchens rep), else the ACTIVE rep row on this storefront's own cs@
+  // address. Tolerated like the attribute codes above: a failed lookup carries no
+  // rep — exactly what every quote paid here did before this card — and never
+  // stops a customer paying.
+  //
+  // The last arm STAMPS the desk, so an order nobody else owns arrives owned:
+  // the portal stops offering "Take it" on it and a manager must move it
+  // (card nz251xZr). Deliberate — Steve asked for the order's rep to BE
+  // cs@(domain) — and recorded under `order-detail` in the portal's
+  // `docs/behaviour/orders.md`.
+  const salesRep = await loadQuoteOrderRep({
+    channelId: quote.channel_id as number,
+    salesRepId: (quote.sales_rep_id as number | null) ?? null,
+    // "no rep associated with that CUSTOMER": the quote's account, else the one
+    // this buyer signs in under.
+    accountId: (quote.account_id as number | null) ?? perms.accountId ?? null,
+    attributes: quote.attributes,
+  }).catch(() => ({ id: null, name: null, source: null as null }));
+
   const plan = planOrderFromPaidQuote(quote, {
     gstRate,
+    salesRep,
     copyAttributeCodes,
     fallbackShipTo,
     fallbackBilling: fallbackShipTo
@@ -423,6 +453,10 @@ export async function payQuote(
               items_total: plan.items.length,
             });
           }
+          // The buying-group M/W/R snapshot on the ORDER's own lines (card gk23c1VK):
+          // the quote's snapshot does not carry over, because these are new lines
+          // with new ids on the document the customer is actually charged on.
+          await snapshotOrderLadderPricing(order.id).catch(() => ({ written: 0 }));
           // The quote is settled the moment the order exists. markAccepted first so
           // the acceptance is audited and staff alerted exactly as any other
           // acceptance, then markConverted stamps the linkage.

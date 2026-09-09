@@ -1,4 +1,5 @@
-import { getFeatureFlag, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getRemovedCategoryNames, CHANNEL_ID } from "@/lib/store";
+import { dropRemovedCategoryNames } from "@keenan/services";
 import { getListingMemberPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
 import { ProductGrid } from "@/components/product/ProductGrid";
@@ -44,7 +45,11 @@ async function fetchFacetGroups(query: string, params: SearchFeedParams): Promis
   try {
     const { searchProducts } = await import("@keenan/services/search");
     const { brandClause, categoryClause, priceClause, brandValues, categoryValues } =
-      resolveFeedFilters(params);
+      await resolveFeedFilters(params);
+    // Categories REMOVED from this storefront (card ZVbjSoKN). The Meilisearch
+    // index is built from product_categories and cannot know about the setting,
+    // so the shelf whose page now 404s would still be offered here as a filter.
+    const removedCategoryNames = await getRemovedCategoryNames();
 
     const [brandRes, catRes, ...priceCounts] = await Promise.all([
       searchProducts(CHANNEL_ID, query, {
@@ -69,8 +74,25 @@ async function fetchFacetGroups(query: string, params: SearchFeedParams): Promis
     // — a brand handed in from a brand page's search box, or a hand-typed URL,
     // is very often not among the fifteen, and a ticked value with no row can
     // neither be unticked nor named by its chip. (1RLP5nSJ.)
+    //
+    // A category REMOVED from this storefront (card ZVbjSoKN) is dropped from the
+    // distribution BEFORE that top-15 slice, or a removed shelf would still eat
+    // one of the fifteen slots a real category should have had. `categoryValues`
+    // has already lost them in `resolveFeedFilters`, so a hand-typed
+    // `?category=Chefs+Hat+Sydney` cannot come back as a ticked row either.
+    // A null-prototype object, like `facetOptions`' own Map, so a name such as
+    // `__proto__` stays a plain own property.
+    const catDist: Record<string, number> = Object.create(null);
+    for (const [name, count] of dropRemovedCategoryNames(
+      Object.entries(catRes.facetDistribution?.categoryNames ?? {}),
+      removedCategoryNames,
+      ([name]) => name
+    )) {
+      catDist[name] = count;
+    }
+
     const groups: FacetGroupDef[] = [];
-    const catOpts = facetOptions(catRes.facetDistribution?.categoryNames, categoryValues);
+    const catOpts = facetOptions(catDist, categoryValues);
     if (catOpts.length) groups.push({ param: "category", title: "Category", options: catOpts });
     const brandOpts = facetOptions(brandRes.facetDistribution?.brandName, brandValues);
     if (brandOpts.length) groups.push({ param: "brand", title: "Brand", options: brandOpts });
@@ -113,7 +135,7 @@ export default async function SearchPage({
     price: sp.price,
     sort: sp.sort,
   };
-  const { brandValues, categoryValues, priceKeys, sortKey } = resolveFeedFilters(params);
+  const { brandValues, categoryValues, priceKeys, sortKey } = await resolveFeedFilters(params);
   const hasFilters = brandValues.length > 0 || categoryValues.length > 0 || priceKeys.length > 0;
 
   // The first render is CUMULATIVE: `?page=N` (the no-JavaScript path) renders
@@ -201,7 +223,12 @@ export default async function SearchPage({
                   <p className="text-sm text-zinc-500">
                     {results.total} result{results.total !== 1 ? "s" : ""} for &ldquo;{query}&rdquo;
                   </p>
-                  {showRail && <FacetChips groups={groups} />}
+                  {showRail && (
+                    <FacetChips
+                      groups={groups}
+                      selected={{ category: categoryValues, brand: brandValues }}
+                    />
+                  )}
                 </div>
                 {showRail && <SortSelect options={SEARCH_SORT_OPTIONS} />}
               </div>
