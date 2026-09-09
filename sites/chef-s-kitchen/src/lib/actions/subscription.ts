@@ -13,7 +13,7 @@ import {
 import { STRIPE_SCOPE_GLOBAL, sameStripeAccountScope } from "@keenan/services";
 import { createAddressForContact } from "@/lib/contact-addresses";
 import { stripeProviderForScope, stripeScopeOf } from "@/lib/stripe";
-import { resolveFreeTrialOffer } from "@/lib/membership/free-trial";
+import { resolveFreeTrialGrant } from "@/lib/membership/free-trial";
 import { freeTrialStamp } from "@keenan/services/membership-trial";
 import { normaliseAuState, isValidAuPostcode } from "@/lib/checkout/au-address";
 
@@ -207,7 +207,12 @@ export async function createSubscription(planId: number): Promise<{
     // it. Decided server-side, from the database, at the moment the subscription is
     // created, so a stale checkout page cannot buy a second free period; and stamped
     // onto the subscription, because that stamp is the only memory the rule has.
-    const freeTrial = await resolveFreeTrialOffer({
+    //
+    // THE READ FAILS CLOSED HERE. `resolveFreeTrialGrant` lets a failed eligibility
+    // read reject instead of reading as "never had one" — swallowing it would hand a
+    // returning subscriber a second free period and a fresh stamp, which is exactly
+    // what this card exists to stop. The catch below turns it into a plain failure.
+    const freeTrial = await resolveFreeTrialGrant({
       contactId: session.contactId,
       trialDays: (plan.trial_period_days as number) || 0,
       planPrice: plan.price as string,

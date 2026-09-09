@@ -199,6 +199,8 @@
     "lib/mega-menu.ts",
     "lib/membership/free-trial-copy.test.ts",
     "lib/membership/free-trial-copy.ts",
+    "lib/membership/free-trial-offer.test.ts",
+    "lib/membership/free-trial-offer.ts",
     "lib/membership/free-trial.ts",
     "lib/orders/customer-order-notes.test.ts",
     "lib/orders/customer-order-notes.ts",
