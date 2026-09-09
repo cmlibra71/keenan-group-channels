@@ -171,8 +171,17 @@ export async function createSubscription(planId: number): Promise<{
         stripe_account_scope: planScope ?? STRIPE_SCOPE_GLOBAL,
         // The free months this subscription was given, if any (card ASTb3tCf). This
         // stamp IS the once-per-person memory: eligibility asks it, never "have you
-        // ever subscribed", so an abandoned sign-up burns nobody's free period and a
-        // member who paid from day one keeps theirs.
+        // ever subscribed", so a shopper who never reached this form burns nobody's
+        // free period and a member who paid from day one keeps theirs.
+        //
+        // IT IS WRITTEN BEFORE THE CARD IS CONFIRMED, and that is deliberate rather
+        // than overlooked: this row is what the client confirms AGAINST. So a shopper
+        // whose card is then declined has spent their once-ever free months, and there
+        // is no staff control anywhere to clear a stamp. Unreachable while the plan's
+        // free period is 0, which is every day so far. Do not "fix" it by stamping
+        // after confirmation without reading the register rule on `membership-overview`
+        // first: the confirmation happens in the BROWSER, and a rule the browser has to
+        // come back and tell us about is not a rule.
         ...(trialStamp ? { free_trial: trialStamp } : {}),
         ...((await wantsStripeTestMode(CHANNEL_ID)) ? { test_mode: true } : {}),
       },

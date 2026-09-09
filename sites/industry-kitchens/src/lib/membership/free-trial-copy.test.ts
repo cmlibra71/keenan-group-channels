@@ -16,11 +16,14 @@ test("a free period renames the button, exactly as the card asks", () => {
     priceLabel: "$14.95",
     pending: false,
   });
-  assert.equal(copy.headline, "Free membership — 3 months");
+  // The CARD asks for the BUTTON to say it. The headline says what is true of this
+  // shopper — and is deliberately a DIFFERENT sentence, or the banner prints the offer's
+  // name twice, once as its heading and again on the link right beneath it.
   assert.equal(copy.cta, "Free membership — 3 months");
+  assert.equal(copy.headline, "Your first 3 months are free");
+  assert.notEqual(copy.headline, copy.cta);
   assert.equal(copy.highlight, true);
   assert.equal(copy.linkToPlan, true);
-  assert.match(copy.detail ?? "", /Your first 3 months are free\./);
   // The card's "rolls automatically into the paid monthly membership" — said in words.
   assert.match(copy.detail ?? "", /continues at \$14\.95 a month from 4 December 2026/);
   assert.match(copy.detail ?? "", /cancel any time before that/);
@@ -139,17 +142,18 @@ test("the subscribe page says the same thing about the money", () => {
     priceLabel: "$14.95",
     pending: false,
   });
-  assert.equal(
-    free,
-    checkoutOfferCopy({
-      kind: "free",
-      identified: true,
-      periodLabel: "3 months",
-      endsLabel: "4 December 2026",
-      priceLabel: "$14.95",
-      pending: false,
-    }).detail
-  );
+  // Same facts, same words — split differently. The checkout leads with the claim as a
+  // headline and follows with the rollover; the subscribe page, which has no banner,
+  // says both in one sentence. Neither may drift from the other.
+  const checkout = checkoutOfferCopy({
+    kind: "free",
+    identified: true,
+    periodLabel: "3 months",
+    endsLabel: "4 December 2026",
+    priceLabel: "$14.95",
+    pending: false,
+  });
+  assert.equal(free, `${checkout.headline}. ${checkout.detail}`);
 
   const used = subscribeOfferCopy({
     kind: "used",
@@ -178,14 +182,17 @@ test("THE PROMISE IS NOT BROKEN: a pending offer says the free months come with 
     priceLabel: "$14.95",
     pending: true,
   });
-  assert.equal(copy.headline, "Free membership — 3 months");
+  assert.equal(copy.headline, "Place this order and your first 3 months are free");
   assert.equal(copy.cta, "Free membership — 3 months");
+  assert.notEqual(copy.headline, copy.cta);
   assert.equal(copy.linkToPlan, false);
   assert.equal(
     copy.detail,
-    "Place this order and your first 3 months are free. It then continues at $14.95 a month, and you can cancel any time before that."
+    "It then continues at $14.95 a month, and you can cancel any time before that."
   );
+  // No end date on a pending offer: the free period starts when the order is placed.
   assert.doesNotMatch(copy.detail ?? "", /from 4 December 2026/);
+  assert.doesNotMatch(copy.headline, /from 4 December 2026/);
 });
 
 test("the subscribe page says what earns the free months rather than going quiet", () => {

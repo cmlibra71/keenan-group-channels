@@ -74,6 +74,15 @@ export interface FreeTrialRequest {
   /** The basket in front of the shopper, GST inclusive. */
   basketIncTax?: number | null;
   /**
+   * The storefront's free-membership threshold, GST inclusive, when the CALLER already
+   * holds it. The checkout does: it destructures the same `getCheckoutSettings()` a few
+   * lines earlier and that read is not cached, so letting this module ask for it again
+   * costs every non-member checkout render a second `channel_settings` round trip for a
+   * number already in scope. Absent (the subscribe page, the subscribe action) and the
+   * reader is used. Speed is a stakeholder-visible feature (Product Brief §3).
+   */
+  thresholdIncTax?: number | null;
+  /**
    * True where this call is about to SPEND the free period rather than describe it.
    * The eligibility read then fails CLOSED: a database error refuses the subscription
    * instead of quietly granting a second free period. See the file header.
@@ -115,7 +124,12 @@ export async function buildFreeTrialOffer(
   opts: FreeTrialRequest
 ): Promise<FreeTrialOffer> {
   const trialDays = Number(opts.trialDays) || 0;
-  const thresholdIncTax = Number(await readers.readThresholdIncTax()) || 0;
+  // The caller may already hold the threshold (the checkout does) — see
+  // `FreeTrialRequest.thresholdIncTax`. Only ask the store when it does not.
+  const thresholdIncTax =
+    opts.thresholdIncTax != null && Number.isFinite(Number(opts.thresholdIncTax))
+      ? Number(opts.thresholdIncTax) || 0
+      : Number(await readers.readThresholdIncTax()) || 0;
 
   const contactId = opts.contactId;
   // FAILS CLOSED WHERE IT MATTERS. On the grant path a rejection propagates and no

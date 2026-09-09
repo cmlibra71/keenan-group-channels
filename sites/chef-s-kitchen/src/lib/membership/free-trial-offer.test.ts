@@ -150,3 +150,48 @@ test("a plan with no free period offers nothing to anybody", async () => {
   assert.equal(offer.view.kind, "paid");
   assert.equal(offer.grantedDays, 0);
 });
+
+// SPEED IS A FEATURE (Product Brief §3). The checkout already holds the threshold — it
+// destructures the same uncached `getCheckoutSettings()` a few lines above — so it hands
+// it in rather than making every non-member checkout render a second `channel_settings`
+// round trip for a number already in scope.
+test("a caller that already holds the threshold is not made to read it again", async () => {
+  let reads = 0;
+  const readers = readersFor({
+    readThresholdIncTax: async () => {
+      reads += 1;
+      return 0;
+    },
+    readQualifyingOrder: async () => null,
+  });
+
+  const offer = await buildFreeTrialOffer(readers, {
+    contactId: 55,
+    trialDays: 90,
+    basketIncTax: 100,
+    thresholdIncTax: 1000,
+  });
+
+  assert.equal(reads, 0);
+  // And it is the HANDED-IN figure that decides: $100 against a $1,000 threshold.
+  assert.equal(offer.view.kind, "earn");
+});
+
+test("a caller that does not hold the threshold still gets it from the store", async () => {
+  let reads = 0;
+  const readers = readersFor({
+    readThresholdIncTax: async () => {
+      reads += 1;
+      return 1000;
+    },
+  });
+
+  const offer = await buildFreeTrialOffer(readers, {
+    contactId: 55,
+    trialDays: 90,
+    basketIncTax: 100,
+  });
+
+  assert.equal(reads, 1);
+  assert.equal(offer.view.kind, "earn");
+});

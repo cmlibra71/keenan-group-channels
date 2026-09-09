@@ -406,7 +406,13 @@ export default async function CheckoutPage() {
       memberNumber = await getMembershipNumber(session.contactId).catch(() => null);
     } else if (!isMember) {
       const plans = await getSubscriptionPlans();
-      if (plans.length > 0) {
+      // The plan the offer is about, chosen rather than assumed. Chefs Depot carries
+      // exactly ONE membership plan (register: membership-overview), so this is plans[0]
+      // today — but if a second one is ever added, the free-period offer and the link
+      // under it must both be about the plan that actually HAS a free period, not
+      // whichever happens to sort first.
+      const offerPlan = plans.find((p) => Number(p.trial_period_days) > 0) ?? plans[0] ?? null;
+      if (offerPlan) {
         showMemberBanner = true;
         // The free-membership offer, decided against THIS basket. The basket is
         // GST-inclusive here because the threshold is (Product Brief §3: a figure a
@@ -418,12 +424,15 @@ export default async function CheckoutPage() {
           : Math.round((subtotal + gstAmount) * 100) / 100;
         const offer = await resolveFreeTrialOffer({
           contactId: session?.contactId ?? null,
-          trialDays: Number(plans[0].trial_period_days) || 0,
-          planPrice: plans[0].price,
+          trialDays: Number(offerPlan.trial_period_days) || 0,
+          planPrice: offerPlan.price,
           basketIncTax,
+          // Handed in, not re-read: `checkoutSettings` above is the same
+          // `getCheckoutSettings()` call, and that read is not cached.
+          thresholdIncTax: checkoutSettings.freeMembershipThresholdIncTax,
         }).catch(() => null);
         joinOffer = offer
-          ? { view: offer.view, planSlug: (plans[0].slug as string | null) ?? null }
+          ? { view: offer.view, planSlug: (offerPlan.slug as string | null) ?? null }
           : null;
       }
     }
@@ -457,8 +466,11 @@ export default async function CheckoutPage() {
           a paying member read no acknowledgement of their membership at all on the one
           screen where they are spending money. The MEASURED sentence is unchanged in
           substance (card Nyp8bkPm keeps it, and it must never become a percentage); all
-          that changed is that a member with no measurable saving now gets a line too. */}
-      {isMember && (
+          that changed is that a member with no measurable saving now gets a line too.
+          The `subtotal > 0` guard is the SAME one the join banner keeps: it was never
+          about the savings figure, it was about there being a basket, and "member
+          pricing is applied to this order" over an empty one would be nonsense. */}
+      {isMember && subtotal > 0 && (
         <div className="mb-6 flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
           <Crown className="h-4 w-4 text-green-600 shrink-0" />
           <span className="text-sm text-green-800">

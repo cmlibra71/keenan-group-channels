@@ -97,11 +97,17 @@ export function checkoutOfferCopy(view: FreeTrialView): OfferCopy {
           linkToPlan: false,
         };
       }
+      // The HEADLINE says what is true of this shopper; the BUTTON is the one the card
+      // names ("Free membership — 3 months"). They are deliberately not the same string:
+      // the banner would otherwise print the offer's name twice, once as its own heading
+      // and again on the link directly beneath it.
       return {
-        headline: `Free membership — ${view.periodLabel}`,
-        detail: view.pending
-          ? pendingFreeDetail(view.periodLabel, view.priceLabel)
-          : freeDetail(view.periodLabel, view.endsLabel, view.priceLabel),
+        headline: view.pending
+          ? `Place this order and your first ${view.periodLabel} are free`
+          : `Your first ${view.periodLabel} are free`,
+        // A pending offer never quotes an end date — the free period starts when the
+        // order is placed, not now.
+        detail: rollsIntoPaid(view.pending ? null : view.endsLabel, view.priceLabel),
         cta: `Free membership — ${view.periodLabel}`,
         highlight: true,
         // Sending them to pay while the order that earns the free months does not exist
@@ -190,22 +196,26 @@ export function memberStateLine(opts: {
  * claimable once per person, ever. A description, not a promise.
  */
 function unidentifiedFreeDetail(periodLabel: string, priceLabel: string | null): string {
-  const rolls = priceLabel
-    ? ` It then continues at ${priceLabel} a month, and you can cancel any time before that.`
-    : "";
-  return `Your first ${periodLabel} are free if you have not had them before.${rolls}`;
+  const rolls = rollsIntoPaid(null, priceLabel);
+  return `Your first ${periodLabel} are free if you have not had them before.${rolls ? ` ${rolls}` : ""}`;
 }
 
 /**
- * The offer as it stands at a checkout, before the order exists. The free months are
- * real and this basket earns them — but only once the order is placed, so the sentence
- * says so rather than implying the shopper can take them right now.
+ * "…and then it costs money", in one sentence — the card's "rolls automatically into the
+ * paid monthly membership". ONE definition, because the checkout banner says it under a
+ * headline and the subscribe page says it as part of a longer sentence, and a shopper
+ * who reads both must not be told two different things about the same rollover.
+ * Null only when we can quote neither a price nor an end date.
  */
-function pendingFreeDetail(periodLabel: string, priceLabel: string | null): string {
-  const rolls = priceLabel
-    ? ` It then continues at ${priceLabel} a month, and you can cancel any time before that.`
-    : "";
-  return `Place this order and your first ${periodLabel} are free.${rolls}`;
+function rollsIntoPaid(endsLabel: string | null, priceLabel: string | null): string | null {
+  if (priceLabel) {
+    return endsLabel
+      ? `It then continues at ${priceLabel} a month from ${endsLabel}, and you can cancel any time before that.`
+      : `It then continues at ${priceLabel} a month, and you can cancel any time before that.`;
+  }
+  return endsLabel
+    ? `Paid membership starts on ${endsLabel}, and you can cancel any time before that.`
+    : null;
 }
 
 function freeDetail(
@@ -213,14 +223,8 @@ function freeDetail(
   endsLabel: string | null,
   priceLabel: string | null
 ): string {
-  const rolls = priceLabel
-    ? endsLabel
-      ? ` It then continues at ${priceLabel} a month from ${endsLabel}, and you can cancel any time before that.`
-      : ` It then continues at ${priceLabel} a month, and you can cancel any time before that.`
-    : endsLabel
-      ? ` Paid membership starts on ${endsLabel}, and you can cancel any time before that.`
-      : "";
-  return `Your first ${periodLabel} are free.${rolls}`;
+  const rolls = rollsIntoPaid(endsLabel, priceLabel);
+  return `Your first ${periodLabel} are free.${rolls ? ` ${rolls}` : ""}`;
 }
 
 /**
