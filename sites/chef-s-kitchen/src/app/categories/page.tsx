@@ -38,7 +38,10 @@ export default async function CategoriesPage() {
               href={`/categories/${category.slug || category.id}`}
               className="group block card hover:border-text-primary/30 hover:shadow-sm transition-all duration-300"
             >
-              <div className="relative aspect-[4/3] bg-surface-secondary overflow-hidden">
+              {/* 3:1 is the category BANNER ratio (card RyMa2mkX): artwork with its heading baked
+                  in fits whole instead of being sliced. object-cover is kept knowing the cost: until
+                  the artwork is banners, a square photo shows as a horizontal slice. */}
+              <div className="relative aspect-[3/1] bg-surface-secondary overflow-hidden">
                 {category.image_url ? (
                   <Image
                     src={category.image_url}
@@ -49,7 +52,9 @@ export default async function CategoriesPage() {
                   />
                 ) : (
                   <div className="h-full w-full flex items-center justify-center text-text-muted">
-                    <Package className="h-12 w-12" />
+                    {/* 48px would be CLIPPED by the 3:1 box below the `sm` breakpoint: at 320px the box is
+                        ~43px tall and overflow-hidden cuts the icon top and bottom (RyMa2mkX, gRLRF8yu). */}
+                    <Package className="h-8 w-8 sm:h-12 sm:w-12" />
                   </div>
                 )}
               </div>
