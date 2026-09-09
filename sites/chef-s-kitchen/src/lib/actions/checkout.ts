@@ -6,7 +6,7 @@ import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogS
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { hasTestCheckoutSession } from "@/lib/checkout/test-session";
-import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveOrderBusinessName, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, siteAccessProfileService, loadOrderContactForOrder, ensureContactStripeCustomerForGateway, listSavedCardsForContact, type EmailLineItem } from "@keenan/services";
+import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveOrderBusinessName, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, snapshotOrderLadderPricing, siteAccessProfileService, loadOrderContactForOrder, ensureContactStripeCustomerForGateway, listSavedCardsForContact, type EmailLineItem } from "@keenan/services";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, type BelowCostLine } from "@/lib/checkout/order-draft";
 import { backorderFactsForProducts } from "@/lib/cart/backorder-facts";
 import { canPurchaseQuantity } from "@keenan/services/backorder";
@@ -532,6 +532,11 @@ export async function placeOrder(
       const shippingResult = await calculateShipping(postalCode, subtotalExTax, {
         weightKg: cartFreight?.weight_kg ?? null,
         itemCount: cartFreight?.item_count ?? null,
+        // The BULKY ARM (card NuBmIxuL). Only a CURBSIDE bulky order reaches here — a
+        // specialised one is held above at $0 for a human quote — and a bulky item still needs
+        // a tail lift to reach the kerb, so the zone's bulky surcharge applies. Same read the
+        // checkout page priced its summary from, so show equals charge.
+        hasBulkyItems: bulkyProducts.length > 0,
         // A weight-rated zone must not price a cart where some lines have no catalogue
         // weight — the weighed lines alone would land it in a cheap tier.
         weightIncomplete: cartFreight ? cartFreight.has_unweighed_lines : true,
@@ -1034,6 +1039,13 @@ export async function placeOrder(
       console.error("[placeOrder] guest customer record not attached (non-fatal):", e);
     }
   }
+
+  // The buying-group M/W/R snapshot on the order's lines (card gk23c1VK). The
+  // order is the document the customer is charged on, so it carries the record of
+  // how each line was priced — a cart line is not a document and never writes one.
+  // No-op on a channel with no ladder switched on, idempotent per line, and never
+  // fatal: the money has already been taken.
+  await snapshotOrderLadderPricing(order.id).catch(() => ({ written: 0 }));
 
   // File the finance application and tell the rep (card VAjaPj0t). The order is
   // already placed and unpaid; this never throws, and a failure is stamped on
