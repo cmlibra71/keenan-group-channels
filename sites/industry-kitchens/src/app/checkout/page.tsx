@@ -1,11 +1,20 @@
 import { redirect } from "next/navigation";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getMembershipNumber, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
+import { resolveFreeTrialOffer } from "@/lib/membership/free-trial";
+import {
+  checkoutOfferCopy,
+  JOIN_PITCH,
+  memberStateLine,
+  type FreeTrialView,
+} from "@/lib/membership/free-trial-copy";
+import { planPriceLine } from "@/lib/membership/checkout-join";
 import { getContactPermissions } from "@/lib/role-permissions";
 import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import {
   summariseLinesFreight,
+  listResidentialRestrictedProductNames,
   listSavedCardsForContact,
   RENDER_PATH_TIMEOUT_MS,
   type SavedCard,
@@ -33,7 +42,6 @@ import {
 } from "@/lib/checkout/finance";
 import { financeApplicationForm } from "@/lib/checkout/finance-form";
 import { CheckoutForm } from "@/components/checkout/CheckoutForm";
-import { planPriceLine } from "@/lib/membership/checkout-join";
 import { StartedCheckoutTracker } from "@/components/analytics/StartedCheckoutTracker";
 
 export const metadata = {
@@ -362,6 +370,14 @@ export default async function CheckoutPage() {
     .then((f) => f.bulky.map((p) => p.name))
     .catch(() => [] as string[]);
 
+  // Commercial-only items in this cart (card HMtUxvwZ). Non-empty ⇒ CheckoutForm shows the
+  // commercial-appliance note once, in the card's own words. It refuses nothing, so unlike
+  // the bulky read above it has no counterpart in placeOrder; a failed lookup simply means
+  // no note, never a blocked checkout.
+  const commercialProductNames = await listResidentialRestrictedProductNames(
+    (cart.items as Array<{ product_id: number }>).map((i) => Number(i.product_id))
+  ).catch(() => [] as string[]);
+
   // Check if shipping rate calculation is available
   let shippingEnabled = false;
   try {
@@ -369,25 +385,36 @@ export default async function CheckoutPage() {
     shippingEnabled = !!activeCard;
   } catch {}
 
-  // The membership panel in the Order Summary rail (card pktBo874). It REPLACES the two thin
-  // banners that ran across the top of this page: one place on the screen talks about membership,
-  // in the empty rail space Tim's "Membership Real Estate" screenshot circles, and no shopper
-  // meets the same offer twice.
+  // MEMBERSHIP AT THE CHECKOUT — one panel, in the Order Summary rail.
   //
-  // What did NOT change: the pitch still quotes no estimated saving (card Nyp8bkPm — the flat
-  // `member_savings_percentage` figure is deleted and must not come back), and the MEMBER's line
-  // is still list value minus what is actually charged, the measured figure the register
-  // protects. The old `subtotal > 0` render guard survives as the `subtotal > 0` test below: it
-  // was never about a savings figure, it was about there being a basket.
+  // Card pktBo874 moves it there: Tim's "Membership Real Estate" screenshot is this very page with
+  // a large empty area under the Order Summary card, and Myer's checkout is his stated reference
+  // for what belongs in it. The two thin banners that used to run across the top of this page are
+  // gone with it, so ONE place on this screen talks about membership and no shopper meets the same
+  // offer twice.
   //
-  // `membership` stays null on a storefront that sells no membership (Industry Kitchens has
-  // `subscriptions_enabled` unset), so nothing membership-shaped is drawn or computed there.
+  // Everything the panel SAYS about the free months is still card ASTb3tCf's, unchanged:
+  // `checkoutOfferCopy` decides all four join states and `memberStateLine` the member's own line,
+  // and the panel renders what they return rather than writing a second set of sentences about the
+  // same money. The panel links to `/membership` and never to the payment page, in every state —
+  // which is stricter than that card's free-link rule and satisfies it by construction: its way in
+  // is the join tick, which charges nothing and grants nothing, and `createSubscription` re-decides
+  // the free period server-side when the card is finally handed over.
+  let showMemberBanner = false;
   let isMember = false;
-  let membership: {
-    planName: string;
-    priceLine: string | null;
-    memberSavings: number;
-  } | null = null;
+  let memberSavings = 0;
+  // The MEMBER's own state (card ASTb3tCf, item 4: "the checkout shows the shopper's
+  // current membership state"). Their number, so the line is about THEIR membership and
+  // not memberships in general.
+  let memberNumber: string | null = null;
+  // The free months on offer, if any (card ASTb3tCf). Null keeps the panel on Tim's
+  // plain join pitch, which is what every shopper saw before this rule existed.
+  let joinOffer: { view: FreeTrialView; planSlug: string | null } | null = null;
+  // What the panel calls the plan and what it says the plan costs (card pktBo874), read off the
+  // SAME plan row the offer is about — so the tick box and the offer can never be about two
+  // different memberships.
+  let joinPlanName = "Membership";
+  let joinPlanPriceLine: string | null = null;
 
   const subscriptionsEnabled = await getFeatureFlag("subscriptions_enabled");
   if (subscriptionsEnabled) {
@@ -395,26 +422,88 @@ export default async function CheckoutPage() {
       const activeSub = await getActiveSubscriptionForContact(session.contactId);
       isMember = !!activeSub;
     }
-    const plans = await getSubscriptionPlans();
-    const plan = plans[0] as
-      | { name?: string; price?: string; billing_interval?: string }
-      | undefined;
-    if (plan && (isMember || subtotal > 0)) {
-      // Member savings flow through item salePrice (cart.discountAmount stays 0): the saving is
-      // full list value minus what's actually charged.
-      const listValue = isMember
-        ? (cart.items as { list_price: string | null; quantity: number }[]).reduce(
-            (sum, i) => sum + (i.list_price ? parseFloat(i.list_price) : 0) * i.quantity,
-            0
-          )
-        : 0;
-      membership = {
-        planName: plan.name || "Membership",
-        priceLine: planPriceLine(plan.price, plan.billing_interval),
-        memberSavings: isMember ? Math.max(0, Math.round((listValue - subtotal) * 100) / 100) : 0,
-      };
+    if (isMember && session) {
+      // Member savings flow through item salePrice (cart.discountAmount stays
+      // 0): the saving is full list value minus what's actually charged.
+      const listValue = (cart.items as { list_price: string | null; quantity: number }[]).reduce(
+        (sum, i) => sum + (i.list_price ? parseFloat(i.list_price) : 0) * i.quantity,
+        0
+      );
+      memberSavings = Math.max(0, Math.round((listValue - subtotal) * 100) / 100);
+      memberNumber = await getMembershipNumber(session.contactId).catch(() => null);
+    } else if (!isMember) {
+      const plans = await getSubscriptionPlans();
+      // The plan the offer is about, chosen rather than assumed. Chefs Depot carries
+      // exactly ONE membership plan (register: membership-overview), so this is plans[0]
+      // today — but if a second one is ever added, the free-period offer and the link
+      // under it must both be about the plan that actually HAS a free period, not
+      // whichever happens to sort first.
+      const offerPlan = plans.find((p) => Number(p.trial_period_days) > 0) ?? plans[0] ?? null;
+      if (offerPlan) {
+        showMemberBanner = true;
+        joinPlanName = String(offerPlan.name || "Membership");
+        joinPlanPriceLine = planPriceLine(
+          offerPlan.price as string | number | null,
+          offerPlan.billing_interval as string | null
+        );
+        // The free-membership offer, decided against THIS basket. The basket is
+        // GST-inclusive here because the threshold is (Product Brief §3: a figure a
+        // customer recognises), and because the order this basket becomes carries
+        // freight on top — so a basket that clears the threshold always becomes an
+        // order that clears it. The offer can under-promise, never over-promise.
+        const basketIncTax = pricesIncludeTax
+          ? subtotal
+          : Math.round((subtotal + gstAmount) * 100) / 100;
+        const offer = await resolveFreeTrialOffer({
+          contactId: session?.contactId ?? null,
+          trialDays: Number(offerPlan.trial_period_days) || 0,
+          planPrice: offerPlan.price,
+          basketIncTax,
+          // Handed in, not re-read: `checkoutSettings` above is the same
+          // `getCheckoutSettings()` call, and that read is not cached.
+          thresholdIncTax: checkoutSettings.freeMembershipThresholdIncTax,
+        }).catch(() => null);
+        joinOffer = offer
+          ? { view: offer.view, planSlug: (offerPlan.slug as string | null) ?? null }
+          : null;
+      }
     }
   }
+
+  // What the panel says, how loudly, and the member's own line — all decided in the shared
+  // wording modules, not re-derived from `view.kind` here. Three trees render this panel and
+  // "is it free" stopped being the same question as "may we promise it to THIS visitor" the
+  // moment a signed-out shopper could see it.
+  const joinCopy = joinOffer
+    ? checkoutOfferCopy(joinOffer.view)
+    : { headline: JOIN_PITCH, detail: null, cta: "Join members", highlight: false, linkToPlan: false };
+
+  // The panel's own props: the member's line, or the join offer, never both. The `subtotal > 0`
+  // guard is the one BOTH retired banners carried, kept intact — it was never about a savings
+  // figure, it was about there being a basket, and neither "member pricing is applied to this
+  // order" nor a join pitch means anything over an empty one. `membership` stays null on a
+  // storefront that sells no membership, which is how Industry Kitchens draws nothing at all.
+  const membership =
+    subtotal > 0 && (isMember || showMemberBanner)
+      ? {
+          planName: joinPlanName,
+          priceLine: joinPlanPriceLine,
+          memberLine: isMember
+            ? memberStateLine({
+                savingsLabel: memberSavings > 0 ? `$${memberSavings.toFixed(2)}` : null,
+                membershipNumber: memberNumber,
+              })
+            : null,
+          join: isMember
+            ? null
+            : {
+                headline: joinCopy.headline,
+                detail: joinCopy.detail,
+                cta: joinCopy.cta,
+                highlight: joinCopy.highlight,
+              },
+        }
+      : null;
 
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
@@ -446,6 +535,7 @@ export default async function CheckoutPage() {
         brandSpecial={brandSpecial}
         shippingEnabled={shippingEnabled}
         bulkyProductNames={bulkyProductNames}
+        commercialProductNames={commercialProductNames}
         stripePublishableKey={stripePublishableKey}
         savedCards={savedCards}
         savedCardsUnavailable={savedCardsUnavailable}

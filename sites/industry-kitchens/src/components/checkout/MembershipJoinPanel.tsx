@@ -7,7 +7,6 @@ import {
   MEMBERSHIP_DOB_FIELD,
   MEMBERSHIP_JOIN_FIELD,
   MEMBERSHIP_JOIN_NOTHING_CHARGED,
-  MEMBERSHIP_JOIN_PITCH,
 } from "@/lib/membership/checkout-join";
 
 /**
@@ -19,32 +18,45 @@ import {
  * banners that ran across the top of the page — one place on the screen talks about membership,
  * not two.
  *
- * TWO RULES FROM OTHER CARDS BIND EVERY WORD HERE, and both are in the behaviour register under
- * `sf-checkout`:
+ * THREE RULES FROM OTHER CARDS BIND EVERY WORD HERE, and all three are in the behaviour register
+ * under `sf-checkout`:
  *
  *  1. **No estimated saving.** Card Nyp8bkPm deleted "Members save up to $X on this order" from
  *     the cart and the checkout: it was the basket times a flat percentage, Tim's model prices a
  *     member by interpolating between two trade prices whose spread differs SKU by SKU, and his
  *     compliance note makes an unsubstantiated published claim a hard no. The pitch, the crown,
- *     the plan price and the join CTA all stand; the invented figure does not. The copy below is
- *     his, verbatim, and its order-exclusive phrasing is deliberate — membership reprices from the
- *     NEXT order, not this one. The MEMBER's own line ("You're saving $X with your membership on
- *     this order") is a measured figure and is untouched.
- *  2. **Nothing on this panel charges anybody.** It sits beside a Pay Now button, so it says so in
- *     plain words, and the order total in the summary above is unaffected by ticking the box.
+ *     the plan price and the join CTA all stand; the invented figure does not.
+ *  2. **This panel writes no sentence of its own about the membership money.** Card ASTb3tCf owns
+ *     the wording — `checkoutOfferCopy` for all four join states and `memberStateLine` for the
+ *     member's own line — and this component renders what those return. That is how the promise
+ *     made here is the promise the subscribe page honours, and it is why a second copy of the
+ *     free-membership sentences may never grow inside this file.
+ *  3. **Nothing on this panel charges anybody, and it never links to the payment page.** It sits
+ *     beside a Pay Now button, so it says so in plain words, and the order total in the summary
+ *     above is unaffected by ticking the box. Its only link is `/membership`, in every state —
+ *     which satisfies that card's free-link rule by construction, because the way IN here is the
+ *     tick, and the free period is re-decided server-side by `createSubscription` later.
  */
 export function MembershipJoinPanel({
-  isMember,
-  memberSavings,
+  memberLine,
+  join,
   planPriceLine,
   planName,
   isSignedIn,
   contactEmail,
 }: {
-  /** Already paid for a membership — the confirmation face. */
-  isMember: boolean;
-  /** What the membership actually saved on THIS order: list value minus what is charged. */
-  memberSavings: number;
+  /**
+   * The member's own line, already written by `memberStateLine` (card ASTb3tCf, item 4). Non-null
+   * exactly when this shopper is a member, and it carries the MEASURED saving where the basket has
+   * one and their membership number where we hold it.
+   */
+  memberLine: string | null;
+  /**
+   * The join offer in card ASTb3tCf's own words (`checkoutOfferCopy`). Null for a member. Rendered
+   * as given: `headline` leads, `detail` is the one sentence under it, `cta` labels the tick, and
+   * `highlight` is the only thing that decides whether this panel dresses itself as good news.
+   */
+  join: { headline: string; detail: string | null; cta: string; highlight: boolean } | null;
   /** "$14.95 per month", off the plan — null when the plan carries no usable price. */
   planPriceLine: string | null;
   planName: string;
@@ -55,48 +67,67 @@ export function MembershipJoinPanel({
   const [joining, setJoining] = useState(false);
 
   // The member's own confirmation, in the rail where Myer puts its green "Congratulations, you are
-  // now a MYER one Member." The sentence itself is the measured one the register protects.
-  if (isMember) {
+  // now a MYER one Member."
+  if (memberLine) {
     return (
       <div className="mt-6 rounded-lg border border-green-200 bg-green-50 p-5">
         <div className="flex items-start gap-3">
           <Crown className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
           <div>
             <p className="font-semibold text-green-900">You&apos;re a member</p>
-            <p className="mt-1 text-sm text-green-800">
-              {memberSavings > 0
-                ? `You're saving $${memberSavings.toFixed(2)} with your membership on this order`
-                : "Member pricing is already applied to this order."}
-            </p>
+            <p className="mt-1 text-sm text-green-800">{memberLine}</p>
           </div>
         </div>
       </div>
     );
   }
 
+  if (!join) return null;
+
+  // Good news, or the plain pitch. `highlight` is decided in the wording module, not here: "is it
+  // free" and "may we promise it to THIS visitor" are different questions, and a signed-out
+  // shopper on Chefs Depot is exactly the case where they come apart.
+  const free = join.highlight;
+
   return (
-    <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-5">
+    <div className={`mt-6 rounded-lg border p-5 ${free ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}>
       <div className="flex items-start gap-3">
-        <Crown className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+        <Crown className={`mt-0.5 h-5 w-5 shrink-0 ${free ? "text-green-600" : "text-amber-600"}`} />
         <div className="min-w-0">
-          <p className="font-semibold text-amber-900">Buying for a commercial kitchen?</p>
-          <p className="mt-1 text-sm text-amber-800">{MEMBERSHIP_JOIN_PITCH}</p>
-          {planPriceLine && (
-            <p className="mt-1 text-sm text-amber-700">{planPriceLine}. Cancel any time.</p>
+          <p className={`font-semibold ${free ? "text-green-900" : "text-amber-900"}`}>{join.headline}</p>
+          {join.detail && (
+            <p className={`mt-1 text-sm ${free ? "text-green-800" : "text-amber-800"}`}>{join.detail}</p>
+          )}
+          {/* What the membership costs. Suppressed in the FREE state, where the detail sentence
+              above already says what happens when the free months end — two money sentences about
+              one membership, one of them flat and one of them dated, is the contradiction the
+              register refuses. */}
+          {!free && planPriceLine && (
+            <p className="mt-1 text-sm text-amber-700">
+              {planName} — {planPriceLine}. Cancel any time.
+            </p>
           )}
           {/* The old amber banner's "Join now" link to /membership. The tick below is the new way
               IN, but a shopper still has to be able to go and READ what the membership is before
               agreeing to pay for it — dropping the link with the banner would have left the price
-              with nothing behind it. */}
+              with nothing behind it. It points at /membership in every state, never at the
+              subscribe page. */}
           <p className="mt-1 text-sm">
-            <Link href="/membership" className="font-medium text-amber-800 underline hover:no-underline">
+            <Link
+              href="/membership"
+              className={`font-medium underline hover:no-underline ${free ? "text-green-800" : "text-amber-800"}`}
+            >
               What&apos;s included
             </Link>
           </p>
         </div>
       </div>
 
-      <label className="mt-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-white p-3">
+      <label
+        className={`mt-4 flex items-start gap-3 rounded-lg border bg-white p-3 ${
+          free ? "border-green-200" : "border-amber-200"
+        }`}
+      >
         <input
           type="checkbox"
           name={MEMBERSHIP_JOIN_FIELD}
@@ -104,7 +135,10 @@ export function MembershipJoinPanel({
           onChange={(e) => setJoining(e.target.checked)}
           className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 accent-zinc-900"
         />
-        <span className="text-sm font-medium text-zinc-900">Join {planName}</span>
+        {/* The label card ASTb3tCf asks for ("a Join members button on the checkout"), in the
+            placement this card owns — under the Order Summary and under Pay Now. In the free
+            state it says what is actually on the table instead. */}
+        <span className="text-sm font-medium text-zinc-900">{join.cta}</span>
       </label>
 
       {joining && (
@@ -142,14 +176,15 @@ export function MembershipJoinPanel({
           </div>
 
           {/* The money sentence. It is what lets this panel sit beside a Pay Now button. */}
-          <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
-            {MEMBERSHIP_JOIN_NOTHING_CHARGED}
-          </p>
+          <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-600">{MEMBERSHIP_JOIN_NOTHING_CHARGED}</p>
         </div>
       )}
 
+      {/* The "already a member" line. Only for a signed-out shopper: a signed-in one who is
+          reading this panel is demonstrably NOT a member, and telling them otherwise would be
+          false on the screen where they are spending money. */}
       {!isSignedIn && (
-        <p className="mt-3 text-xs text-amber-800">
+        <p className={`mt-3 text-xs ${free ? "text-green-800" : "text-amber-800"}`}>
           Already a member?{" "}
           <Link
             href="/account?next=%2Fcheckout"
@@ -160,6 +195,7 @@ export function MembershipJoinPanel({
           so your member prices apply.
         </p>
       )}
+
     </div>
   );
 }

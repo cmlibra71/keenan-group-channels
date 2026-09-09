@@ -13,6 +13,8 @@
  * module produces has to stay true to that, because it sits beside a Pay Now button.
  */
 
+import { JOIN_PITCH } from "./free-trial-copy";
+
 /** The checkbox's form field. One name, shared by the panel and `placeOrder`. */
 export const MEMBERSHIP_JOIN_FIELD = "join_membership";
 /** The optional birthday's form field. */
@@ -25,6 +27,11 @@ export const MEMBERSHIP_ACTIVATION_TTL_MINUTES = MEMBERSHIP_ACTIVATION_TTL_DAYS 
 /**
  * Tim's own checkout copy for the join pitch, verbatim (card Nyp8bkPm, `05-widget-kit.html`).
  *
+ * ONE literal, re-exported from `free-trial-copy.ts` rather than typed out twice. Card ASTb3tCf
+ * put the same sentence there as `JOIN_PITCH` — it is the headline of three of the four join
+ * states — and two copies of a compliance-sensitive sentence in one repo is one copy too many:
+ * whichever got edited, the other would go on saying the old thing on some screen.
+ *
  * Do NOT replace it with a saving figure. The amber banner this panel grew out of used to read
  * "Members save up to $X on this order", X being the basket times a flat
  * `member_savings_percentage`; that figure was deleted because Tim's model prices a member by
@@ -33,8 +40,7 @@ export const MEMBERSHIP_ACTIVATION_TTL_MINUTES = MEMBERSHIP_ACTIVATION_TTL_DAYS 
  * Consumer Law substantiation challenge. The order-exclusive phrasing is deliberate too:
  * membership reprices from the NEXT order, not this one.
  */
-export const MEMBERSHIP_JOIN_PITCH =
-  "Join the buying group and every line reprices from your next order.";
+export const MEMBERSHIP_JOIN_PITCH = JOIN_PITCH;
 
 /**
  * The one sentence that has to be true beside a Pay Now button: ticking Join does not charge
