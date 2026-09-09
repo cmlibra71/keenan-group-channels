@@ -38,9 +38,20 @@ export async function fileCheckoutSurvey(
     // No recipients by design (see the header). Saying so is what keeps the
     // enquiry's Delivery card honest and its "Resend notification" button off
     // a form that has nowhere to send.
-    await cmsFormSubmissionService
-      .recordNotifyResult(created.submission.id as number, { status: "skipped" })
-      .catch(() => undefined);
+    //
+    // BOTH halves of that card are stamped. The staff email was never going to
+    // be sent (no recipients) and neither was the thank-you (`notifySubmitter`
+    // is false on this form — a shopper mid-abandonment is the last person who
+    // wants "thanks for your message"), so leaving either at the default
+    // "pending" would leave the Delivery card promising mail that is never
+    // coming, on every survey row, for good.
+    const id = created.submission.id as number;
+    await Promise.all([
+      cmsFormSubmissionService
+        .recordNotifyResult(id, { status: "skipped" })
+        .catch(() => undefined),
+      cmsFormSubmissionService.recordAckResult(id, "skipped").catch(() => undefined),
+    ]);
 
     return { stored: true };
   } catch (e) {

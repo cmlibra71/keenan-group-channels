@@ -151,3 +151,20 @@ test("nothing in the pop-up ever delays a navigation", () => {
   assert.ok(!/beforeunload/.test(code), "beforeunload would turn the prompt into a gate");
   assert.ok(!/preventDefault/.test(code), "nothing here may cancel a click or a key");
 });
+
+// ── Neither half of the Delivery card is left promising mail ────────────────
+//
+// Another source guard: the filing module is the only place that knows this
+// form sends nothing. `notify_status` and `ack_status` both default to
+// "pending" on the row, and the enquiry screen renders them verbatim as "Staff
+// email" and "Thank-you". This form has no recipients and `notifySubmitter`
+// false, so an unstamped row would tell customer service, on every survey and
+// for good, that two emails are still on their way. Verified in the portal
+// against a real row (card loDyEE3S).
+
+const filing = readFileSync(new URL("./checkout-survey.ts", import.meta.url), "utf8");
+
+test("a survey row says the staff email AND the thank-you were skipped", () => {
+  assert.match(filing, /recordNotifyResult\([\s\S]*?status: "skipped"/);
+  assert.match(filing, /recordAckResult\([\s\S]*?"skipped"/);
+});
