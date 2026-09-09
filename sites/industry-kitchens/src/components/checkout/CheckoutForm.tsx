@@ -54,9 +54,9 @@ import { useHeaderPanels } from "@/lib/cart-quote-counts";
 import { ga4AddShippingInfo, ga4AddPaymentInfo, rowToGa4Item } from "@/components/analytics/ga4";
 import { BulkyDeliveryChoice } from "@/components/checkout/BulkyDeliveryChoice";
 import { holdsPayment, type DeliveryService } from "@/lib/checkout/bulky-delivery";
+import { CommercialApplianceNotice } from "@/components/checkout/CommercialApplianceNotice";
 import { backorderMessage } from "@keenan/services/backorder";
 import { MembershipJoinPanel } from "@/components/checkout/MembershipJoinPanel";
-import { CommercialApplianceNotice } from "@/components/checkout/CommercialApplianceNotice";
 
 declare global {
   interface Window {
@@ -180,7 +180,13 @@ export function CheckoutForm({
      * Passed through untouched: the checkout and the subscribe page must make the same promise
      * about the same free months.
      */
-    join: { headline: string; detail: string | null; cta: string; highlight: boolean } | null;
+    join: {
+      headline: string;
+      detail: string | null;
+      cta: string;
+      highlight: boolean;
+      namesPrice: boolean;
+    } | null;
   } | null;
   pricesIncludeTax?: boolean;
   customerEmail?: string;

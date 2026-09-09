@@ -180,7 +180,13 @@ export function CheckoutForm({
      * Passed through untouched: the checkout and the subscribe page must make the same promise
      * about the same free months.
      */
-    join: { headline: string; detail: string | null; cta: string; highlight: boolean } | null;
+    join: {
+      headline: string;
+      detail: string | null;
+      cta: string;
+      highlight: boolean;
+      namesPrice: boolean;
+    } | null;
   } | null;
   pricesIncludeTax?: boolean;
   customerEmail?: string;

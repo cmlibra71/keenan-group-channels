@@ -476,7 +476,14 @@ export default async function CheckoutPage() {
   // moment a signed-out shopper could see it.
   const joinCopy = joinOffer
     ? checkoutOfferCopy(joinOffer.view)
-    : { headline: JOIN_PITCH, detail: null, cta: "Join members", highlight: false, linkToPlan: false };
+    : {
+        headline: JOIN_PITCH,
+        detail: null,
+        cta: "Join members",
+        highlight: false,
+        linkToPlan: false,
+        namesPrice: false,
+      };
 
   // The panel's own props: the member's line, or the join offer, never both. The `subtotal > 0`
   // guard is the one BOTH retired banners carried, kept intact — it was never about a savings
@@ -501,6 +508,7 @@ export default async function CheckoutPage() {
                 detail: joinCopy.detail,
                 cta: joinCopy.cta,
                 highlight: joinCopy.highlight,
+                namesPrice: joinCopy.namesPrice,
               },
         }
       : null;

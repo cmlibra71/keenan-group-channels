@@ -56,7 +56,14 @@ export function MembershipJoinPanel({
    * as given: `headline` leads, `detail` is the one sentence under it, `cta` labels the tick, and
    * `highlight` is the only thing that decides whether this panel dresses itself as good news.
    */
-  join: { headline: string; detail: string | null; cta: string; highlight: boolean } | null;
+  join: {
+    headline: string;
+    detail: string | null;
+    cta: string;
+    highlight: boolean;
+    /** The detail sentence already names the monthly price, so the flat price line must not. */
+    namesPrice: boolean;
+  } | null;
   /** "$14.95 per month", off the plan — null when the plan carries no usable price. */
   planPriceLine: string | null;
   planName: string;
@@ -98,11 +105,11 @@ export function MembershipJoinPanel({
           {join.detail && (
             <p className={`mt-1 text-sm ${free ? "text-green-800" : "text-amber-800"}`}>{join.detail}</p>
           )}
-          {/* What the membership costs. Suppressed in the FREE state, where the detail sentence
-              above already says what happens when the free months end — two money sentences about
-              one membership, one of them flat and one of them dated, is the contradiction the
-              register refuses. */}
-          {!free && planPriceLine && (
+          {/* What the membership costs. Suppressed whenever the offer's OWN sentence above already
+              names a monthly price — the free state's rollover line and the "you have already had
+              yours" refusal both do. Two monthly figures for one membership on one screen, one of
+              them dated and one of them not, is the contradiction the register refuses. */}
+          {!join.namesPrice && planPriceLine && (
             <p className="mt-1 text-sm text-amber-700">
               {planName} — {planPriceLine}. Cancel any time.
             </p>
