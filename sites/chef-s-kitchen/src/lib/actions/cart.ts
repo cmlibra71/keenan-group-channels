@@ -1,15 +1,16 @@
 "use server";
 
 import { cache } from "react";
-import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, CHANNEL_ID } from "@/lib/store";
+import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, applyAdvertisedLadderPrices, getMemberLadderLevelId, CHANNEL_ID } from "@/lib/store";
 import { resolveAccountLinePrices, accountLineKey } from "@keenan/services";
 import { getAccountId } from "@/lib/member";
 import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { getCartUuid, setCartUuid } from "@/lib/cart";
 import { brandIdsForProducts } from "@/lib/checkout/free-shipping-brands";
-import { backorderFactsForProducts, backorderFactsForProduct } from "@/lib/cart/backorder-facts";
+import { backorderFactsForProducts, backorderFactsForProduct, type ProductBackorderFacts } from "@/lib/cart/backorder-facts";
 import { availableUnits, canPurchaseQuantity, resolveBackorderPolicy } from "@keenan/services/backorder";
+import { resolvePackSize, resolvePackUnit, snapToPack } from "@keenan/services/pack";
 import { getSession } from "@/lib/auth";
 import { pickBestBulkUnit, layerCartPrice } from "@/lib/pricing/cart-pricing";
 
@@ -106,6 +107,26 @@ async function resolveItemPricing(
     if (variant?.sale_price) catalogSalePrice = variant.sale_price;
   }
 
+  // ── THE ADVERTISED PRICE (card gk23c1VK). On a channel whose buying-group
+  // ladder advertises the Industry Kitchens trade price, the cart's list price
+  // is M — the same figure the product page and the listing card showed. A cart
+  // that re-derived RRP here would charge a price the shopper never saw, which
+  // is the exact failure the "cart lines store their price at ADD time" rule
+  // exists to prevent. No-op on a channel with no ladder switched on.
+  {
+    const [row] = await applyAdvertisedLadderPrices([
+      {
+        id: productId,
+        price: listPrice,
+        ...(variantId ? { variants: [{ id: variantId, price: listPrice }] } : {}),
+      },
+    ]);
+    const advertised =
+      (row as { variants?: Array<{ price?: unknown }> }).variants?.[0]?.price ??
+      (row as { price?: unknown }).price;
+    if (typeof advertised === "string" && parseFloat(advertised) > 0) listPrice = advertised;
+  }
+
   // Channels with member-only cost-plus pricing suppress the shared catalog sale
   // price (it's another channel's public price) AND bulk tiers — list price stays RRP.
   const suppress = await shouldSuppressCatalogSalePrice();
@@ -123,7 +144,27 @@ async function resolveItemPricing(
           const variantResult = variantId ? null : await productVariantService.listForParent(productId, { page: 1, limit: 1, sort: "id", direction: "asc" });
           const pricingVariantId = variantId || (variantResult?.data[0] as { id: number } | undefined)?.id;
           if (pricingVariantId) {
-            const pricing = await getEffectivePrice(pricingVariantId, CHANNEL_ID, contact.customer_group_id, quantity);
+            // The shopper's rung on the buying-group ladder, resolved the same
+            // way every other pricing surface resolves it. Null off-ladder.
+            const ladderLevelId = await getMemberLadderLevelId({
+              accountId,
+              contactId: session.contactId,
+            }).catch(() => null);
+            const pricing = await getEffectivePrice(
+              pricingVariantId,
+              CHANNEL_ID,
+              contact.customer_group_id,
+              quantity,
+              // accountId is deliberately NOT passed. The account's own contract
+              // prices are resolved separately above (`resolveAccountLinePrices`)
+              // and take priority over everything; handing them to the engine here
+              // too would be a second, unannounced pricing path on sf-cart for both
+              // storefronts, which is not what this card is for. The ladder needs
+              // only the rung.
+              null,
+              null,
+              ladderLevelId
+            );
             if (pricing.salePrice) memberSalePrice = pricing.salePrice;
           }
         }
@@ -149,8 +190,12 @@ async function resolveItemPricing(
 const CART_RESTRICTED_ERROR = "This product isn't available to order online — please add it to a quote.";
 const CART_QUANTITY_ERROR = "This product is not available in the requested quantity.";
 
-async function refuseCartQuantity(productId: number, quantity: number): Promise<string | null> {
-  const facts = await backorderFactsForProduct(productId);
+async function refuseCartQuantity(
+  productId: number,
+  quantity: number,
+  known?: ProductBackorderFacts | null
+): Promise<string | null> {
+  const facts = known !== undefined ? known : await backorderFactsForProduct(productId);
   if (!facts) return null; // unknown product: leave it to the pricing lookup below to fail properly
   if (facts.restrictAddToCart) return CART_RESTRICTED_ERROR;
   if (!canPurchaseQuantity(facts, quantity)) return CART_QUANTITY_ERROR;
@@ -170,9 +215,17 @@ export async function addToCart(productId: number, variantId?: number | null, qu
     quantity: number;
   } | null;
 
-  const finalQty = existing ? existing.quantity + Math.max(1, quantity) : Math.max(1, quantity);
+  const wantedQty = existing ? existing.quantity + Math.max(1, quantity) : Math.max(1, quantity);
 
-  const refusal = await refuseCartQuantity(productId, finalQty);
+  const facts = await backorderFactsForProduct(productId);
+  // A product sold by the carton is bought by the carton, wherever the add came from (cards
+  // O108e4jH / zeMPVcA3). The product page already steps in whole packs; this covers the listing
+  // tile, a stale form and a direct call — snapping UP, so a shopper is never handed less than
+  // they asked for. On everything else `snapToPack` returns the quantity untouched.
+  const packSize = resolvePackSize(facts);
+  const finalQty = snapToPack(wantedQty, packSize);
+
+  const refusal = await refuseCartQuantity(productId, finalQty, facts);
   if (refusal) return { error: refusal };
 
   // Price for the FINAL quantity (so crossing a bulk tier re-prices the whole line).
@@ -235,11 +288,17 @@ export async function updateCartItem(itemId: number, quantity: number) {
       return { success: true, cartCount: await countCartItems(cart.id) };
     }
 
+    // Whole packs here too (cards O108e4jH / zeMPVcA3). A quantity of zero or less has already
+    // removed the line above, so a pack product can still be emptied out of the cart; anything
+    // that survives to here is rounded up to a whole pack.
+    const packFacts = await backorderFactsForProduct(item.product_id);
+    const nextQuantity = snapToPack(quantity, resolvePackSize(packFacts));
+
     // Same refusal as the add, so a "+" cannot walk past a limit the add refused (card 7vu2iEEZ).
     // Only an INCREASE is judged: a line already in the basket when staff changed the setting must
     // still be reducible and removable, or the shopper is stuck with a cart they cannot empty.
-    if (quantity > item.quantity) {
-      const refusal = await refuseCartQuantity(item.product_id, quantity);
+    if (nextQuantity > item.quantity) {
+      const refusal = await refuseCartQuantity(item.product_id, nextQuantity, packFacts);
       if (refusal) return { error: refusal };
     }
 
@@ -247,7 +306,7 @@ export async function updateCartItem(itemId: number, quantity: number) {
     // change — fall back to updating just the quantity, matching addToCart.
     let pricing: { listPrice: string; salePrice: string | null } | null = null;
     try {
-      pricing = await resolveItemPricing(item.product_id, item.variant_id, quantity);
+      pricing = await resolveItemPricing(item.product_id, item.variant_id, nextQuantity);
     } catch {
       pricing = null;
     }
@@ -256,8 +315,8 @@ export async function updateCartItem(itemId: number, quantity: number) {
       cart.id,
       itemId,
       pricing
-        ? { quantity, listPrice: pricing.listPrice, salePrice: pricing.salePrice }
-        : { quantity }
+        ? { quantity: nextQuantity, listPrice: pricing.listPrice, salePrice: pricing.salePrice }
+        : { quantity: nextQuantity }
     );
 
     return { success: true, cartCount: await countCartItems(cart.id) };
@@ -370,6 +429,10 @@ const readCart = cache(async () => {
         brand_id: brands.get(i.product_id) ?? null,
         available_units: facts ? availableUnits(facts) : null,
         backorder_policy: facts ? resolveBackorderPolicy(facts.backorderPolicy) : null,
+        // The SELLING UNIT, resolved once here (cards O108e4jH / zeMPVcA3), so the row can step
+        // by a whole pack and say what a pack holds without a second lookup or a second opinion.
+        pack_size: resolvePackSize(facts),
+        pack_unit: resolvePackUnit(facts),
       };
     }),
   };
