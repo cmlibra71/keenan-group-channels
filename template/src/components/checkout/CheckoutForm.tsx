@@ -564,8 +564,15 @@ export function CheckoutForm({
       countryCode: string;
       addressType: string | null;
     }) => {
-      if (address1Ref.current) address1Ref.current.value = place.address1;
-      if (cityRef.current) cityRef.current.value = place.city;
+      // NEVER WRITE AN EMPTY STREET OVER WHAT THE SHOPPER TYPED (card HMtUxvwZ).
+      // Address is a REQUIRED field on the critical path and this assignment used to
+      // be unconditional, so a suggestion that carried no street would have silently
+      // emptied it with Place Order still live. `getPlaceDetails` already refuses a
+      // place with no `route`, so this is the second belt on the same failure rather
+      // than the only one — a lookup that somehow answers with nothing usable leaves
+      // the shopper's own words exactly where they are.
+      if (address1Ref.current && place.address1) address1Ref.current.value = place.address1;
+      if (cityRef.current && place.city) cityRef.current.value = place.city;
       // Card HMtUxvwZ — THE CHECK THE CARD OPENS WITH, made where the address is
       // chosen. Derived from this same Places pick, so no second call and no second
       // Google product; a pick that says nothing leaves it unset and the order reads
