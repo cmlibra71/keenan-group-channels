@@ -8,6 +8,7 @@ import {
   extrasDefinition,
   buyableAddons,
   postsConfiguration,
+  missingAnswerSentence,
 } from "./addon-panel";
 import { readProductAddons } from "@keenan/services/product-addons";
 
@@ -124,4 +125,36 @@ test("a buy control posts the configuration when EITHER half is on screen", () =
   // nothing to answer at all — the control posts nothing, so a listing tile can
   // never read as a deliberate clear-down
   assert.equal(postsConfiguration(false, null), false);
+});
+
+// ── The verb has to fit the control (card kyMjCmAw) ─────────────────────────
+
+test("a missing INSTRUCTION is filled in, not chosen", () => {
+  assert.equal(
+    missingAnswerSentence(readProductAddons(mixed), ["Instructions"], "quote"),
+    "Please fill in Instructions before adding this to your quote."
+  );
+  assert.equal(
+    missingAnswerSentence(readProductAddons(mixed), ["Instructions"], "cart"),
+    "Please fill in Instructions before adding this to your cart."
+  );
+});
+
+test("a missing priced group keeps 0CDcCYmO's own wording, unchanged", () => {
+  assert.equal(
+    missingAnswerSentence(readProductAddons(mixed), ["Feed hopper"], "quote"),
+    "Please choose Feed hopper before adding this to your quote."
+  );
+});
+
+test("both missing names the priced one first, as the actions refuse", () => {
+  assert.equal(
+    missingAnswerSentence(readProductAddons(mixed), ["Instructions", "Feed hopper"], "quote"),
+    "Please choose Feed hopper before adding this to your quote."
+  );
+});
+
+test("nothing missing, nothing said", () => {
+  assert.equal(missingAnswerSentence(readProductAddons(mixed), [], "quote"), null);
+  assert.equal(missingAnswerSentence(null, [""], "quote"), null);
 });

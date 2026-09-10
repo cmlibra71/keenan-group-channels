@@ -13,7 +13,8 @@ import {
   type PurchaseProduct,
 } from "@keenan/services/product-page";
 import { addToCart } from "@/lib/actions/cart";
-import type { AddonSelectionInput } from "@keenan/services/product-addons";
+import type { AddonSelectionInput, ProductAddons } from "@keenan/services/product-addons";
+import { missingAnswerSentence } from "@/lib/product/addon-panel";
 import { addToQuote } from "@/lib/actions/quote";
 import { submitReview } from "@/lib/actions/reviews";
 import { useGst } from "@/lib/gst";
@@ -103,14 +104,20 @@ function ActionsBridge({
   // nothing at all (parity with the old coded button's disabled state, plus an
   // actual explanation).
   const [optionsPrompt, setOptionsPrompt] = React.useState<string | null>(null);
-  const onOptionsRequired = React.useCallback((missing: string[]) => {
-    const names = missing.filter(Boolean);
-    setOptionsPrompt(
-      names.length
-        ? `Please choose ${names.join(" and ")} before adding this to your quote.`
-        : "That combination isn't available — please choose a different configuration."
-    );
-  }, []);
+  // The VERB has to fit the control: you choose a hopper and you fill in an instruction, and
+  // this dialog is what a shopper reads instead of the server's own refusal, so the two must
+  // agree (card kyMjCmAw). `missingAnswerSentence` splits it the same way and in the same order
+  // both buy actions do.
+  const promptAddons = (payload.product as { addons?: ProductAddons | null } | undefined)?.addons;
+  const onOptionsRequired = React.useCallback(
+    (missing: string[]) => {
+      setOptionsPrompt(
+        missingAnswerSentence(promptAddons ?? null, missing, "quote") ??
+          "That combination isn't available — please choose a different configuration."
+      );
+    },
+    [promptAddons]
+  );
   const handlers = useProductPageHandlers({
     productId,
     addToCart: countingAddToCart,
@@ -228,7 +235,10 @@ function ActionsBridge({
             className="w-full max-w-sm rounded-md bg-white p-6 shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="mb-1 text-base font-semibold text-text-primary">Choose an option</p>
+            {/* One heading for every reason this dialog opens. "Choose an option" was written
+                for a variant picker and reads wrong above "Please fill in Instructions" — a
+                heading that argues with its own sentence (card kyMjCmAw). */}
+            <p className="mb-1 text-base font-semibold text-text-primary">One more thing</p>
             <p className="mb-4 text-sm text-text-secondary">{optionsPrompt}</p>
             <button className="btn-primary" type="button" autoFocus onClick={() => setOptionsPrompt(null)}>
               OK

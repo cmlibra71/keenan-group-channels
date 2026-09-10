@@ -110,3 +110,33 @@ export function postsConfiguration(
 ): boolean {
   return addonGroupsOffered || customisationOffered(addons);
 }
+
+/**
+ * THE SENTENCE A BUY CONTROL SAYS WHEN SOMETHING IS UNANSWERED, with the verb that fits the
+ * control — you CHOOSE a hopper and you FILL IN an instruction.
+ *
+ * The node-tree page raises this as its own dialog (`BuilderProductPage.onOptionsRequired`)
+ * rather than letting the server refusal come back, so this has to agree with what the two buy
+ * ACTIONS would have said or the shopper meets two different sentences for one press. It splits
+ * the same way and in the same order they do: the priced groups first, so 0CDcCYmO's wording is
+ * unchanged on every product that carries one, and the free-text groups only when they are all
+ * that is missing.
+ *
+ * Returns null when nothing is missing, so a caller can fall through to its own wording.
+ */
+export function missingAnswerSentence(
+  addons: ProductAddons | null | undefined,
+  missingLabels: readonly string[],
+  destination: "cart" | "quote"
+): string | null {
+  const names = missingLabels.filter(Boolean);
+  if (names.length === 0) return null;
+  const typedLabels = new Set(customisationGroups(addons).map((g) => g.label));
+  const chosen = names.filter((n) => !typedLabels.has(n));
+  const typed = names.filter((n) => typedLabels.has(n));
+  const where = destination === "cart" ? "cart" : "quote";
+  if (chosen.length > 0) {
+    return `Please choose ${chosen.join(" and ")} before adding this to your ${where}.`;
+  }
+  return `Please fill in ${typed.join(" and ")} before adding this to your ${where}.`;
+}
