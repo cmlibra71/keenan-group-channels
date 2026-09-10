@@ -533,8 +533,15 @@ export function CheckoutForm({
     brandFreeShipping: !!brandSpecial,
   });
 
+  // The quoted delivery must be the delivery that is charged, so the summary asks with the same
+  // address classification placeOrder will price against (card Xw9VQmAJ / HMtUxvwZ). Held in a
+  // ref so a change of address re-quotes without putting `addressType` in the callback's deps and
+  // re-firing every postcode effect that depends on its identity.
+  const addressTypeRef = useRef(addressType);
+  addressTypeRef.current = addressType;
+
   const calculateShippingCost = useCallback(
-    async (postcode: string) => {
+    async (postcode: string, addressTypeHint?: string | null) => {
       if (!shippingEnabled || !postcode || postcode.length < 3) {
         setShippingCost(null);
         setShippingError(null);
@@ -554,7 +561,15 @@ export function CheckoutForm({
         const response = await fetch("/api/shipping/calculate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ postcode, subtotal }),
+          body: JSON.stringify({
+            postcode,
+            subtotal,
+            // `addressTypeHint` is passed by the Places handler, which sets the state and quotes
+            // in the same tick — the ref is a render behind at that moment, and quoting on the
+            // PREVIOUS address's classification is exactly the show-does-not-equal-charge fault
+            // this argument exists to stop.
+            address_type: (addressTypeHint ?? addressTypeRef.current) || undefined,
+          }),
         });
         const result = await response.json();
 
@@ -614,7 +629,7 @@ export function CheckoutForm({
       if (place.countryCode) setCountry(place.countryCode);
       // Trigger shipping calculation when address is autocompleted
       if (place.postalCode) {
-        calculateShippingCost(place.postalCode);
+        calculateShippingCost(place.postalCode, place.addressType ?? "");
       }
     },
     [calculateShippingCost]
