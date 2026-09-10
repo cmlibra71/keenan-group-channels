@@ -12,6 +12,7 @@ import { ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { readProductKit } from "@/lib/product-kit";
+import { readProductAddons } from "@keenan/services/product-addons";
 import { ProductTabs } from "@/components/product/ProductTabs";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { BrandWarrantyNotes } from "@/components/product/BrandWarrantyNotes";
@@ -73,7 +74,17 @@ export default async function ProductPage({
     slug: string;
   }[];
 
-  // Fetch member pricing if feature is enabled
+  // Fetch member pricing if feature is enabled.
+  //
+  // NO BUYING-GROUP RUNG IS THREADED HERE, and that is not an omission (card
+  // gk23c1VK). The ladder reaches a product page through `renderProductNodeBranch`,
+  // which this template page does not render at all — it is the pre-node page,
+  // and both live sites diverged from it before this card existed. Their
+  // non-node halves call `getEffectivePrice` with exactly these five arguments
+  // too. A site seeded from this template that later wires up the node branch
+  // still gets the right rung: the engine resolves it itself
+  // (`member.ladderLevelId ?? resolveCdLadderLevelId(...)` in
+  // `src/builder/product-node-branch.tsx`) when the caller passes none.
   let memberPrice: number | null = null;
   let isMember = false;
   let membershipTeaser: { fromPrice: string | null } | null = null;
@@ -267,6 +278,12 @@ export default async function ProductPage({
           // Pricing table here would advertise a price the cart refuses to honour. Do not
           // re-fetch the raw rules on this page. (Card Q9hRTbKO.)
           bulkPricing: product.bulkPricing ?? [],
+          // Paid optional extras (card 0CDcCYmO), read off the same portal-owned metafields bag
+          // the kit below comes from. Without this the legacy renderer's own `<ProductAddons />`
+          // has nothing to draw, its buy controls carry no picks, and the behaviour register's
+          // "on EVERY renderer, not just the node one" would be recording something this page
+          // does not do. The node path reads the same field out of its own payload.
+          addons: readProductAddons(product.metafields),
         }}
         // Grouped / bundle contents (Zoey product types, authored in the portal — they ride
         // products.metafields, which is portal-owned). Null for every other product.

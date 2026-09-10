@@ -33,16 +33,31 @@ export const IMAGE_NOTICE_TEXT =
 /** The design's terracotta. Not a site token: the same panel on both storefronts. */
 export const IMAGE_NOTICE_BG = "#C85735";
 
-export function ProductImageNotice({ show }: { show: boolean }) {
+/**
+ * `text` and `className` exist for the Modular Systems banner (card qGfWAzQx),
+ * which is the SAME panel driven by a different rule — Steve asked for a red
+ * background with white writing, and the site should not carry two looks for
+ * one message. Both default to what 82HgV23q shipped, so a ticked product is
+ * byte-for-byte unchanged: its wording is Tim's, verbatim, and stays so.
+ */
+export function ProductImageNotice({
+  show,
+  text = IMAGE_NOTICE_TEXT,
+  className = "mb-6 w-full",
+}: {
+  show: boolean;
+  text?: string;
+  className?: string;
+}) {
   if (!show) return null;
   return (
-    <div className="mb-6 w-full">
+    <div className={className}>
       <div
         className="w-full rounded-lg px-6 py-4 text-center"
         style={{ backgroundColor: IMAGE_NOTICE_BG }}
       >
         <p className="text-base font-bold uppercase leading-snug tracking-wide text-white sm:text-lg">
-          {IMAGE_NOTICE_TEXT}
+          {text}
         </p>
       </div>
     </div>

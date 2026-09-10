@@ -1,17 +1,30 @@
 "use server";
 
 import { cache } from "react";
-import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, CHANNEL_ID } from "@/lib/store";
+import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, applyAdvertisedLadderPrices, getMemberLadderLevelId, CHANNEL_ID } from "@/lib/store";
 import { resolveAccountLinePrices, accountLineKey } from "@keenan/services";
 import { getAccountId } from "@/lib/member";
 import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { getCartUuid, setCartUuid } from "@/lib/cart";
 import { brandIdsForProducts } from "@/lib/checkout/free-shipping-brands";
-import { backorderFactsForProducts, backorderFactsForProduct } from "@/lib/cart/backorder-facts";
+import { backorderFactsForProducts, backorderFactsForProduct, type ProductBackorderFacts } from "@/lib/cart/backorder-facts";
 import { availableUnits, canPurchaseQuantity, resolveBackorderPolicy } from "@keenan/services/backorder";
+import { resolvePackSize, resolvePackUnit, snapToPack } from "@keenan/services/pack";
 import { getSession } from "@/lib/auth";
 import { pickBestBulkUnit, layerCartPrice } from "@/lib/pricing/cart-pricing";
+import {
+  addonPanelShown,
+  readProductAddons,
+  resolveAddonSelection,
+  addonSelectionKey,
+  readStoredAddons,
+  storedAddonsAsSelection,
+  unansweredAddonGroups,
+  withAddonSurcharge,
+  type AddonSelectionInput,
+  type ResolvedAddon,
+} from "@keenan/services/product-addons";
 
 async function getOrCreateCart() {
   const uuid = await getCartUuid();
@@ -106,6 +119,26 @@ async function resolveItemPricing(
     if (variant?.sale_price) catalogSalePrice = variant.sale_price;
   }
 
+  // ── THE ADVERTISED PRICE (card gk23c1VK). On a channel whose buying-group
+  // ladder advertises the Industry Kitchens trade price, the cart's list price
+  // is M — the same figure the product page and the listing card showed. A cart
+  // that re-derived RRP here would charge a price the shopper never saw, which
+  // is the exact failure the "cart lines store their price at ADD time" rule
+  // exists to prevent. No-op on a channel with no ladder switched on.
+  {
+    const [row] = await applyAdvertisedLadderPrices([
+      {
+        id: productId,
+        price: listPrice,
+        ...(variantId ? { variants: [{ id: variantId, price: listPrice }] } : {}),
+      },
+    ]);
+    const advertised =
+      (row as { variants?: Array<{ price?: unknown }> }).variants?.[0]?.price ??
+      (row as { price?: unknown }).price;
+    if (typeof advertised === "string" && parseFloat(advertised) > 0) listPrice = advertised;
+  }
+
   // Channels with member-only cost-plus pricing suppress the shared catalog sale
   // price (it's another channel's public price) AND bulk tiers — list price stays RRP.
   const suppress = await shouldSuppressCatalogSalePrice();
@@ -123,7 +156,27 @@ async function resolveItemPricing(
           const variantResult = variantId ? null : await productVariantService.listForParent(productId, { page: 1, limit: 1, sort: "id", direction: "asc" });
           const pricingVariantId = variantId || (variantResult?.data[0] as { id: number } | undefined)?.id;
           if (pricingVariantId) {
-            const pricing = await getEffectivePrice(pricingVariantId, CHANNEL_ID, contact.customer_group_id, quantity);
+            // The shopper's rung on the buying-group ladder, resolved the same
+            // way every other pricing surface resolves it. Null off-ladder.
+            const ladderLevelId = await getMemberLadderLevelId({
+              accountId,
+              contactId: session.contactId,
+            }).catch(() => null);
+            const pricing = await getEffectivePrice(
+              pricingVariantId,
+              CHANNEL_ID,
+              contact.customer_group_id,
+              quantity,
+              // accountId is deliberately NOT passed. The account's own contract
+              // prices are resolved separately above (`resolveAccountLinePrices`)
+              // and take priority over everything; handing them to the engine here
+              // too would be a second, unannounced pricing path on sf-cart for both
+              // storefronts, which is not what this card is for. The ladder needs
+              // only the rung.
+              null,
+              null,
+              ladderLevelId
+            );
             if (pricing.salePrice) memberSalePrice = pricing.salePrice;
           }
         }
@@ -139,6 +192,96 @@ async function resolveItemPricing(
 }
 
 /**
+ * The paid extras a shopper ticked, resolved against the PRODUCT'S OWN definition (card
+ * 0CDcCYmO).
+ *
+ * Nothing priced comes from the client: the page posts group/option KEYS and every amount is
+ * read back out of `products.metafields.addons` here. That is the same rule the bundle build
+ * follows (`addToQuote` re-resolves a kit against the product's own contents) and it is what
+ * stops a hand-made request inventing a free extra or a $1 machine.
+ */
+async function resolveAddonsForProduct(
+  productId: number,
+  selection: AddonSelectionInput | null | undefined
+): Promise<ResolvedAddon[]> {
+  if (!selection || Object.keys(selection).length === 0) return [];
+  const product = (await productService.getById(productId)) as { metafields?: unknown } | null;
+  if (!product) return [];
+  return resolveAddonSelection(readProductAddons(product.metafields), selection);
+}
+
+/**
+ * The extras a shopper ticked AND the reason to refuse the add, decided from ONE product read.
+ *
+ * The provider greys the buy button while a required single-choice group is unanswered, but the
+ * Product Brief's rule is that a refusal lives in the action as well ("or a stale form still
+ * writes the order"), which is exactly what `refuseCartQuantity` below does for the two
+ * per-product switches.
+ *
+ * COST, honestly: this is ONE `products` read on every Add to Cart on both storefronts. It
+ * cannot be skipped when nothing is ticked, because that is precisely the case a required group
+ * has to catch — so the read is unconditional and the two halves that need it share it rather
+ * than taking it twice, which is what this function exists for. (An earlier comment here claimed
+ * the read was "only taken when the product actually carries extras"; it never was.)
+ *
+ * A listing TILE posts no selection at all, and the shopper standing on a category page has no
+ * panel to answer with — so that refusal names the product page instead of a control they
+ * cannot see.
+ */
+async function readAddonsForAdd(
+  productId: number,
+  variantId: number | null | undefined,
+  selection: AddonSelectionInput | null | undefined
+): Promise<{ resolved: ResolvedAddon[]; refusal: string | null }> {
+  const product = (await productService.getById(productId)) as
+    | { metafields?: unknown; price?: string | null; sale_price?: string | null; hide_price?: boolean | null }
+    | null;
+  const definition = readProductAddons(product?.metafields);
+  if (!definition) return { resolved: [], refusal: null };
+
+  // WOULD THE PAGE HAVE OFFERED A PANEL? The same predicate the provider draws it with
+  // (`addonPanelShown`), re-made here against the product record because a stale tab or a
+  // hand-posted action must not slip past it in EITHER direction: on a product whose price is
+  // hidden or zero the panel is not on screen, so there is no required group to answer and no
+  // surcharge to charge — refusing over a control the shopper cannot see is the failure
+  // `sf-product-page` forbids, and resolving the picks anyway would charge extras the page
+  // showed as adding nothing.
+  let panelShown = addonPanelShown({
+    addons: definition,
+    hidePrice: product?.hide_price,
+    price: product?.price,
+    salePrice: product?.sale_price,
+  });
+  // A variant product may carry no price of its own; the page reads the ACTIVE variant's.
+  // Only taken in that case, so the ordinary add keeps the one product read it always took.
+  if (!panelShown && product?.hide_price !== true && variantId) {
+    const variant = (await productVariantService.getById(variantId)) as
+      | { price: string | null; sale_price: string | null }
+      | null;
+    panelShown = addonPanelShown({
+      addons: definition,
+      price: variant?.price,
+      salePrice: variant?.sale_price,
+    });
+  }
+  if (!panelShown) return { resolved: [], refusal: null };
+  const posted = selection != null;
+  const missing = unansweredAddonGroups(definition, posted ? selection : {});
+  if (missing.length > 0) {
+    return {
+      resolved: [],
+      refusal: posted
+        ? `Please choose ${missing.join(" and ")} before adding this to your cart.`
+        : `Open this product's page to choose ${missing.join(" and ")} before adding it to your cart.`,
+    };
+  }
+  return {
+    resolved: posted ? resolveAddonSelection(definition, selection) : [],
+    refusal: null,
+  };
+}
+
+/**
  * The two per-product refusals (card 7vu2iEEZ), enforced HERE and not only in the page, because a
  * stale tab or a hand-posted action would otherwise book something staff switched off.
  *
@@ -149,36 +292,106 @@ async function resolveItemPricing(
 const CART_RESTRICTED_ERROR = "This product isn't available to order online — please add it to a quote.";
 const CART_QUANTITY_ERROR = "This product is not available in the requested quantity.";
 
-async function refuseCartQuantity(productId: number, quantity: number): Promise<string | null> {
-  const facts = await backorderFactsForProduct(productId);
+async function refuseCartQuantity(
+  productId: number,
+  quantity: number,
+  known?: ProductBackorderFacts | null
+): Promise<string | null> {
+  const facts = known !== undefined ? known : await backorderFactsForProduct(productId);
   if (!facts) return null; // unknown product: leave it to the pricing lookup below to fail properly
   if (facts.restrictAddToCart) return CART_RESTRICTED_ERROR;
   if (!canPurchaseQuantity(facts, quantity)) return CART_QUANTITY_ERROR;
   return null;
 }
 
-export async function addToCart(productId: number, variantId?: number | null, quantity: number = 1) {
+export async function addToCart(
+  productId: number,
+  variantId?: number | null,
+  quantity: number = 1,
+  /** The paid extras ticked on the product page (card 0CDcCYmO): group key -> option keys.
+   *  Keys only — every price is read back from the product's own definition here. */
+  addons?: AddonSelectionInput
+) {
   // "What we show is what we accept" — a product restricted away from this shopper is not addable,
   // even by poking the action directly (the listing/PDP guards are UX; THIS is the enforcement).
   if (!(await isProductVisibleToViewer(productId))) return { error: RESTRICTED_PRODUCT_ERROR };
 
   const cart = await getOrCreateCart();
 
-  // Check if this product/variant is already in the cart
-  const existing = await cartItemService.findByProductVariant(cart.id, productId, variantId) as {
+  // The picks and the required-group refusal come out of ONE product read (Product Brief §3
+  // refuses in the action, not only in the page; speed on this path is stakeholder-visible).
+  const { resolved: resolvedAddons, refusal: addonRefusal } = await readAddonsForAdd(
+    productId,
+    variantId,
+    addons
+  );
+  if (addonRefusal) return { error: addonRefusal };
+  const selectionKey = addonSelectionKey(resolvedAddons);
+
+  // Is this product/variant WITH THESE EXTRAS already in the cart?
+  //
+  // A configuration is what identifies a line now, not the product alone: two Hallde machines
+  // with different blades are two lines, and adding the same configuration twice is one line
+  // of two. Matching on product+variant alone (which is all `findByProductVariant` can do)
+  // would fold a second configuration into the first and charge the first one's extras twice.
+  type CartLineRow = {
     id: number;
+    product_id: number;
+    variant_id: number | null;
     quantity: number;
-  } | null;
+    modifier_selections?: unknown;
+  };
+  const matchesThisConfiguration = (i: CartLineRow) =>
+    i.product_id === productId &&
+    (i.variant_id ?? null) === (variantId ?? null) &&
+    addonSelectionKey(readStoredAddons(i.modifier_selections)) === selectionKey;
 
-  const finalQty = existing ? existing.quantity + Math.max(1, quantity) : Math.max(1, quantity);
+  // The ordinary add — no extras ticked, which is every product but a handful — takes the
+  // single-row lookup it always took rather than the cart's four-table join. Speed on this path
+  // is stakeholder-visible (Tim, 7 Aug demo) and this action runs on every Add to Cart on both
+  // storefronts. It falls through to the full read the moment the cheap answer could be wrong:
+  // `findByProductVariant` is LIMIT 1 with no ordering, so if the row it happens to return is a
+  // CONFIGURED line, a plain line of the same product may still be sitting behind it.
+  let existing: CartLineRow | undefined;
+  if (selectionKey === "") {
+    const cheap = (await cartItemService.findByProductVariant(
+      cart.id,
+      productId,
+      variantId
+    )) as CartLineRow | null;
+    if (!cheap) existing = undefined;
+    else if (readStoredAddons(cheap.modifier_selections).length === 0) existing = cheap;
+    else {
+      const full = await cartService.getWithItems(cart.id);
+      existing = ((full?.items ?? []) as CartLineRow[]).find(matchesThisConfiguration);
+    }
+  } else {
+    const full = await cartService.getWithItems(cart.id);
+    existing = ((full?.items ?? []) as CartLineRow[]).find(matchesThisConfiguration);
+  }
 
-  const refusal = await refuseCartQuantity(productId, finalQty);
+  const wantedQty = existing ? existing.quantity + Math.max(1, quantity) : Math.max(1, quantity);
+
+  const facts = await backorderFactsForProduct(productId);
+  // A product sold by the carton is bought by the carton, wherever the add came from (cards
+  // O108e4jH / zeMPVcA3). The product page already steps in whole packs; this covers the listing
+  // tile, a stale form and a direct call — snapping UP, so a shopper is never handed less than
+  // they asked for. On everything else `snapToPack` returns the quantity untouched.
+  const packSize = resolvePackSize(facts);
+  const finalQty = snapToPack(wantedQty, packSize);
+
+  const refusal = await refuseCartQuantity(productId, finalQty, facts);
   if (refusal) return { error: refusal };
 
-  // Price for the FINAL quantity (so crossing a bulk tier re-prices the whole line).
+  // Price for the FINAL quantity (so crossing a bulk tier re-prices the whole line), then the
+  // extras on top — a bulk break is a discount off the PRODUCT and must never discount the
+  // accessories with it.
   let pricing: { listPrice: string; salePrice: string | null };
   try {
-    pricing = await resolveItemPricing(productId, variantId, finalQty);
+    pricing = withAddonSurcharge(
+      await resolveItemPricing(productId, variantId, finalQty),
+      resolvedAddons
+    );
   } catch {
     return { error: "Product not found" };
   }
@@ -188,6 +401,12 @@ export async function addToCart(productId: number, variantId?: number | null, qu
       quantity: finalQty,
       listPrice: pricing.listPrice,
       salePrice: pricing.salePrice,
+      // Same guard as `updateCartItem` and the reprice: a line that never carried extras is left
+      // alone, because `modifier_selections` also holds the variant-modifier OBJECT the REST API
+      // writes and this card does not own it. Stamping `[]` here on a plain re-add would erase it.
+      ...(readStoredAddons(existing.modifier_selections).length > 0 || resolvedAddons.length > 0
+        ? { modifierSelections: resolvedAddons }
+        : {}),
     });
   } else {
     await cartItemService.createForParent(cart.id, {
@@ -196,6 +415,7 @@ export async function addToCart(productId: number, variantId?: number | null, qu
       quantity: finalQty,
       listPrice: pricing.listPrice,
       salePrice: pricing.salePrice,
+      modifierSelections: resolvedAddons,
     });
   }
 
@@ -227,7 +447,13 @@ export async function updateCartItem(itemId: number, quantity: number) {
     // getWithItems returns snake_case rows — read product_id / variant_id (reading
     // the camelCase keys yielded undefined, so re-pricing threw on every change).
     const item = full?.items.find((i: { id: number }) => i.id === itemId) as
-      | { id: number; product_id: number; variant_id: number | null; quantity: number }
+      | {
+          id: number;
+          product_id: number;
+          variant_id: number | null;
+          quantity: number;
+          modifier_selections?: unknown;
+        }
       | undefined;
 
     // Line already gone (raced with a concurrent remove) — nothing to update.
@@ -235,19 +461,46 @@ export async function updateCartItem(itemId: number, quantity: number) {
       return { success: true, cartCount: await countCartItems(cart.id) };
     }
 
+    // Whole packs here too (cards O108e4jH / zeMPVcA3). A quantity of zero or less has already
+    // removed the line above, so a pack product can still be emptied out of the cart; anything
+    // that survives to here is rounded up to a whole pack.
+    const packFacts = await backorderFactsForProduct(item.product_id);
+    const nextQuantity = snapToPack(quantity, resolvePackSize(packFacts));
+
     // Same refusal as the add, so a "+" cannot walk past a limit the add refused (card 7vu2iEEZ).
     // Only an INCREASE is judged: a line already in the basket when staff changed the setting must
     // still be reducible and removable, or the shopper is stuck with a cart they cannot empty.
-    if (quantity > item.quantity) {
-      const refusal = await refuseCartQuantity(item.product_id, quantity);
+    if (nextQuantity > item.quantity) {
+      const refusal = await refuseCartQuantity(item.product_id, nextQuantity, packFacts);
       if (refusal) return { error: refusal };
     }
 
     // Re-pricing can throw (product lookup); never let it block the quantity
     // change — fall back to updating just the quantity, matching addToCart.
     let pricing: { listPrice: string; salePrice: string | null } | null = null;
+    // The re-resolved picks, which are written back with the price they produced — see below.
+    let lineAddons: ResolvedAddon[] = [];
+    // Whether this line has anything to do with paid extras AT ALL. A line that never carried
+    // any is left alone: `modifier_selections` also holds the variant-modifier OBJECT the REST
+    // API writes, and stamping `[]` over one would destroy a record this card never owned.
+    const storedAddons = readStoredAddons(item.modifier_selections);
     try {
-      pricing = await resolveItemPricing(item.product_id, item.variant_id, quantity);
+      // The line's own extras ride the new quantity too (card 0CDcCYmO). They are RE-RESOLVED
+      // from the product's current definition rather than read off the line, so an extra staff
+      // have re-priced or withdrawn moves here exactly as the catalogue price does — the stored
+      // picks are the record of WHAT was chosen, never of what it costs.
+      //
+      // The quantity that reaches BOTH is `nextQuantity`, the pack-snapped one (cards O108e4jH /
+      // zeMPVcA3): the quantity break the price is read on and the quantity the line is written
+      // with must be the same number, or a pack product prices on 5 and is stored as 6.
+      lineAddons = await resolveAddonsForProduct(
+        item.product_id,
+        storedAddonsAsSelection(storedAddons)
+      );
+      pricing = withAddonSurcharge(
+        await resolveItemPricing(item.product_id, item.variant_id, nextQuantity),
+        lineAddons
+      );
     } catch {
       pricing = null;
     }
@@ -256,8 +509,19 @@ export async function updateCartItem(itemId: number, quantity: number) {
       cart.id,
       itemId,
       pricing
-        ? { quantity, listPrice: pricing.listPrice, salePrice: pricing.salePrice }
-        : { quantity }
+        ? {
+            quantity: nextQuantity,
+            listPrice: pricing.listPrice,
+            salePrice: pricing.salePrice,
+            // The RECORD moves with the money. An extra staff withdrew leaves the price here,
+            // and leaving the stored pick behind would print "+ Slicers: Slicer 4mm" on a cart
+            // row that was not charged for it — and stamp it onto `order_items.product_options`
+            // at checkout, where a rep or the warehouse reads it as a paid accessory.
+            ...(storedAddons.length > 0 || lineAddons.length > 0
+              ? { modifierSelections: lineAddons }
+              : {}),
+          }
+        : { quantity: nextQuantity }
     );
 
     return { success: true, cartCount: await countCartItems(cart.id) };
@@ -301,18 +565,40 @@ export async function repriceCartForSession(): Promise<{ repriced: number }> {
       quantity: number;
       list_price: string | null;
       sale_price: string | null;
+      modifier_selections?: unknown;
     }[];
 
     let repriced = 0;
     for (const item of items) {
       try {
-        const pricing = await resolveItemPricing(item.product_id, item.variant_id, item.quantity);
+        // Signing in re-prices the whole line, extras included (card 0CDcCYmO): the surcharge
+        // is part of what this line is charged, so a re-price that dropped it would show the
+        // shopper one price and charge another — the exact failure this pass exists to stop.
+        const lineAddons = await resolveAddonsForProduct(
+          item.product_id,
+          storedAddonsAsSelection(readStoredAddons(item.modifier_selections))
+        );
+        const pricing = withAddonSurcharge(
+          await resolveItemPricing(item.product_id, item.variant_id, item.quantity),
+          lineAddons
+        );
         const sameList = pricing.listPrice === item.list_price;
         const sameSale = (pricing.salePrice ?? null) === (item.sale_price ?? null);
-        if (sameList && sameSale) continue;
+        // The picks are compared too, not only the two amounts: an extra staff withdrew and one
+        // they re-priced by exactly what another gained both leave the money where it was while
+        // the stored record is now wrong, and that record is what the cart prints and what the
+        // checkout stamps onto the order line.
+        const storedAddons = readStoredAddons(item.modifier_selections);
+        const sameAddons = addonSelectionKey(lineAddons) === addonSelectionKey(storedAddons);
+        if (sameList && sameSale && sameAddons) continue;
         await cartItemService.updateForParent(cart.id, item.id, {
           listPrice: pricing.listPrice,
           salePrice: pricing.salePrice,
+          // Left alone on a line that never carried extras — the column also holds the
+          // variant-modifier object the REST API writes, which is not ours to overwrite.
+          ...(storedAddons.length > 0 || lineAddons.length > 0
+            ? { modifierSelections: lineAddons }
+            : {}),
         });
         repriced++;
       } catch (e) {
@@ -370,6 +656,10 @@ const readCart = cache(async () => {
         brand_id: brands.get(i.product_id) ?? null,
         available_units: facts ? availableUnits(facts) : null,
         backorder_policy: facts ? resolveBackorderPolicy(facts.backorderPolicy) : null,
+        // The SELLING UNIT, resolved once here (cards O108e4jH / zeMPVcA3), so the row can step
+        // by a whole pack and say what a pack holds without a second lookup or a second opinion.
+        pack_size: resolvePackSize(facts),
+        pack_unit: resolvePackUnit(facts),
       };
     }),
   };

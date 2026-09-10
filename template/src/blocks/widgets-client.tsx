@@ -15,6 +15,7 @@ import { AddToQuoteButton } from "@/components/product/AddToQuoteButton";
 import { OptionSelector } from "@/components/product/OptionSelector";
 import { Price } from "@/components/ui/Price";
 import { useProductPurchaseOptional } from "@/components/product/ProductPurchaseProvider";
+import { packPrice } from "@keenan/services/pack";
 
 export type WidgetComponent = FC<{ attrs: Record<string, unknown>; ctx?: RenderContext }>;
 
@@ -39,6 +40,28 @@ export const ProductGalleryWidget: WidgetComponent = () => {
     />
   );
 };
+
+/**
+ * What one purchase actually hands the customer, when the product is sold by the carton (cards
+ * O108e4jH / zeMPVcA3). Zoey's own IK page states both halves — "Carton contains 12 Pcs" beside
+ * the quantity, and twelve pieces priced into the subtotal — so this says both rather than
+ * leaving a shopper to multiply a per-piece price by a number that is not on the screen.
+ *
+ * `unitPrice` is the price the panel above it is ALREADY showing, so the two cannot disagree.
+ */
+function PackLine({ unitPrice }: { unitPrice: number }) {
+  const purchase = useProductPurchaseOptional();
+  if (!purchase) return null;
+  const { packSize, packNote, packUnit } = purchase;
+  if (packSize <= 1 || !packNote || unitPrice <= 0) return null;
+  return (
+    <p className="mt-2 text-sm text-zinc-600">
+      <span className="font-semibold text-zinc-900">{packNote}</span>
+      {" \u00b7 "}
+      <Price amount={packPrice(unitPrice, packSize)} gst /> per {packUnit.toLowerCase()}
+    </p>
+  );
+}
 
 export const PriceWidget: WidgetComponent = () => {
   const purchase = useProductPurchaseOptional();
@@ -83,12 +106,19 @@ export const PriceWidget: WidgetComponent = () => {
           )}
         </div>
       )}
+      <PackLine
+        unitPrice={
+          isMember && memberPrice != null && memberPrice < (displaySalePrice ?? displayPrice)
+            ? memberPrice
+            : (displaySalePrice ?? displayPrice)
+        }
+      />
       {!isMember && membershipTeaser && displayPrice > 0 && (
         <Link
           href="/membership"
           className="mt-3 block rounded-lg border border-emerald-200 bg-emerald-50 p-3 hover:bg-emerald-100 transition-colors"
         >
-          <p className="text-sm font-semibold text-emerald-800">Members save 10&ndash;25% off retail</p>
+          <p className="text-sm font-semibold text-emerald-800">Members buy at a different price tier</p>
           <p className="text-xs text-emerald-600 mt-1">
             Plus prize draw entries, exclusive partner discounts &amp; priority support
           </p>
@@ -104,7 +134,10 @@ export const PriceWidget: WidgetComponent = () => {
 export const BulkPricingWidget: WidgetComponent = () => {
   const purchase = useProductPurchaseOptional();
   if (!purchase) return null;
-  const { product, displayPrice } = purchase;
+  // The product's OWN price, without any paid extras the shopper has ticked (card
+  // 0CDcCYmO). A quantity break is a discount off the MACHINE, so working a percent tier
+  // off a price that already carries $480 of blades would quietly discount the blades too.
+  const { product, displayBasePrice: displayPrice } = purchase;
   if (product.bulkPricing.length === 0 || displayPrice <= 0) return null;
   return (
     <div className="mt-4">
@@ -169,11 +202,14 @@ export const AddToCartWidget: WidgetComponent = () => {
   const {
     product,
     displayPrice,
+    quantity,
     cartVariantId,
     purchaseBlockedByStock,
     restrictAddToCart,
     purchasingDisabled,
     allOptionsSelected,
+    selectedAddons,
+    addonGroupsOffered,
   } = purchase;
   // A product staff switched off for cart, or set to refuse out-of-stock buys, shows NO button at
   // all rather than a greyed one — there is no availability wording left on this site to explain a
@@ -188,6 +224,16 @@ export const AddToCartWidget: WidgetComponent = () => {
     <AddToCartButton
       productId={product.id}
       variantId={cartVariantId}
+      // This fork has no quantity control, so the provider's quantity IS the buy: 1 normally, and
+      // one whole pack on a product sold by the carton (cards O108e4jH / zeMPVcA3).
+      quantity={quantity}
+      // The ticked extras travel with the click (card 0CDcCYmO) — their price is already in
+      // the displayed price, and the server re-resolves every amount from the product itself.
+      // Posted only where the panel was actually OFFERED, exactly as the quote control below is:
+      // this renderer builds its provider payload BY HAND and passes no `addons`, so it shows no
+      // extras panel — and handing it `{}` would answer a required group the shopper was never
+      // asked, refusing the add with "Please choose X" on a page carrying no such control.
+      addons={addonGroupsOffered ? selectedAddons : undefined}
       disabled={purchasingDisabled || !allOptionsSelected}
     />
   );
@@ -196,15 +242,31 @@ export const AddToCartWidget: WidgetComponent = () => {
 export const AddToQuoteWidget: WidgetComponent = () => {
   const purchase = useProductPurchaseOptional();
   if (!purchase) return <NoProvider name="add_to_quote" />;
-  const { product, cartVariantId, useGroupedMode, allOptionsSelected, restrictAddToQuote } =
-    purchase;
+  const {
+    product,
+    cartVariantId,
+    useGroupedMode,
+    allOptionsSelected,
+    restrictAddToQuote,
+    selectedAddons,
+    addonGroupsUnanswered,
+    addonGroupsOffered,
+  } = purchase;
   // Zoey "Restrict Add to Quote" — the button simply is not offered for this product (7vu2iEEZ).
   if (restrictAddToQuote) return null;
   return (
     <AddToQuoteButton
       productId={product.id}
       variantId={cartVariantId}
-      disabled={useGroupedMode && !allOptionsSelected}
+      // Card 0CDcCYmO. This renderer is the fallback both sites fall back to when
+      // `node_product_template_enabled` is switched off, so the ticked extras travel with THIS
+      // button too — a quote path that silently dropped them hands the rep a bare machine. A
+      // required group greys the button here as it does on the coded buy box, and the action
+      // refuses it again server-side. A selection is posted only where the panel was actually
+      // OFFERED: this renderer builds its provider input by hand and does not pass `addons`, and
+      // an empty object would read as a deliberate clear-down of a configuration made elsewhere.
+      addons={addonGroupsOffered ? selectedAddons : undefined}
+      disabled={(useGroupedMode && !allOptionsSelected) || addonGroupsUnanswered.length > 0}
     />
   );
 };

@@ -13,6 +13,7 @@ import {
   type PurchaseProduct,
 } from "@keenan/services/product-page";
 import { addToCart } from "@/lib/actions/cart";
+import type { AddonSelectionInput } from "@keenan/services/product-addons";
 import { addToQuote } from "@/lib/actions/quote";
 import { submitReview } from "@/lib/actions/reviews";
 import { useGst } from "@/lib/gst";
@@ -21,7 +22,7 @@ import { useCartQuoteCounts, useHeaderPanels } from "@/lib/cart-quote-counts";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { BuilderTree, type NativeComponents } from "@keenan/services/builder-react";
 import { BuilderActionsProvider } from "@keenan/services/builder-react";
-import { useFormHandlers } from "./use-form-handlers";
+import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 import { productNatives } from "./product-natives";
 
 // ============================================================================
@@ -62,8 +63,15 @@ function ActionsBridge({
   const { setCartCount, setQuoteCount } = useCartQuoteCounts();
   const { open } = useHeaderPanels();
   const countingAddToCart = React.useCallback(
-    async (pid: number, variantId: number | null, quantity: number) => {
-      const res = await addToCart(pid, variantId, quantity);
+    async (
+      pid: number,
+      variantId: number | null,
+      quantity: number,
+      // The shopper's ticked extras (card 0CDcCYmO). Keys only — every price is read
+      // back from the product's own definition inside the action.
+      addons?: AddonSelectionInput
+    ) => {
+      const res = await addToCart(pid, variantId, quantity, addons);
       if (res && "cartCount" in res && typeof res.cartCount === "number") {
         setCartCount(res.cartCount);
         open("cart");
@@ -73,8 +81,15 @@ function ActionsBridge({
     [setCartCount, open]
   );
   const countingAddToQuote = React.useCallback(
-    async (pid: number, variantId: number | null) => {
-      const res = await addToQuote(pid, variantId);
+    async (
+      pid: number,
+      variantId: number | null,
+      // The shopper's ticked extras (card 0CDcCYmO). A quote line is priced by a rep, so
+      // these move no money here — they ride the line as the record of what was asked for,
+      // the same way a bundle build does.
+      addons?: AddonSelectionInput
+    ) => {
+      const res = await addToQuote(pid, variantId, null, addons);
       if (res && "quoteCount" in res && typeof res.quoteCount === "number") {
         setQuoteCount(res.quoteCount);
         open("quote");
@@ -150,6 +165,10 @@ function ActionsBridge({
   // goBack drives the exploded back-to-products master's click Action — mirrors
   // the old BackButton native (history-back with a /products fallback).
   const formHandlers = useFormHandlers();
+  // A form success panel shows its form's authored confirmation message when
+  // one is set (card XBOxpQmd). Identity-returning when the page carries no
+  // form, which is almost every page.
+  const confirmed = useFormConfirmations(tree, components);
   const actionHandlers = React.useMemo(
     () => ({
       ...handlers,
@@ -187,12 +206,12 @@ function ActionsBridge({
   return (
     <BuilderActionsProvider handlers={actionHandlers} navigate={(to) => router.push(to)}>
       <BuilderTree
-        tree={tree}
+        tree={confirmed.tree}
         payload={livePayload}
         namedStyles={namedStyles}
         jsFunctions={jsFunctions}
         callResults={callResults}
-        components={components}
+        components={confirmed.components}
         nativeComponents={nativeComponents}
         linkComponent={Link as unknown as React.ComponentType<Record<string, unknown>>}
         imageComponent={BuilderImage}

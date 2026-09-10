@@ -16,6 +16,7 @@ import { getMembershipContext, copy } from "@/blocks/home-blocks";
 import type { HomeNativeData } from "./BuilderHomePage";
 import type { GridProduct } from "@/components/product/ProductGridClient";
 import type { HomeSectionsInput } from "@keenan/services/builder";
+import { DEFAULT_SEO_FAQS } from "@/components/home/seo-faq-defaults";
 
 // ============================================================================
 // SERVER data assembly for the node homepage. Fetches ONLY the sections the
@@ -217,7 +218,14 @@ export async function loadHomeNativeData(
     featured: featuredProducts as unknown as Record<string, unknown>[],
     clearance: clearanceProducts as unknown as Record<string, unknown>[],
     membership: membership?.plan ? ({ ...membership.plan, planPrice: membership.planPrice } as Record<string, unknown>) : null,
-    faq: (seoFaq as { faqs?: Record<string, unknown>[] } | null)?.faqs ?? null,
+    // The site's OWN default, never null: a null here reaches
+    // `DEFAULT_HOME_FAQS` inside @keenan/services, which still answers "Members
+    // pay wholesale, cost-plus pricing ... typically 10–25% below retail" — the
+    // retired claim, in the answer Google indexes as FAQ structured data. See
+    // `components/home/seo-faq-defaults.ts`.
+    faq:
+      ((seoFaq as { faqs?: Record<string, unknown>[] } | null)?.faqs ??
+        (DEFAULT_SEO_FAQS as unknown as Record<string, unknown>[])),
     // Slices the interactive masters bind (hero-side-panel / membership-value-
     // strip / draw-spotlight) — labels composed by composeHomePagePayload.
     prize:
