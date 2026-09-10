@@ -41,7 +41,7 @@ import { TabsShell } from "@/components/product/TabsShell";
 import { WIDGETS } from "@/blocks/widgets";
 import { TemplateRenderer } from "@/blocks/TemplateRenderer";
 import { effectiveSubBlocks } from "@/blocks/BlockRenderer";
-import { parseKtl, evaluateKtl, evaluateConditions, sanitizeConditions } from "@keenan/services";
+import { parseKtl, evaluateKtl, evaluateConditions, sanitizeConditions, readProductAddons } from "@keenan/services";
 
 type BlockProps = { props: Record<string, unknown>; ctx?: RenderContext };
 
@@ -185,6 +185,12 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
   // Analytics enrichment (GA4/Klaviyo add_to_cart): leaf category.
   const buyboxCrumbs = await crumbsFor(product, extras);
 
+  // ONE read, handed to the shared purchase provider below. The provider is what draws
+  // the extras panel, holds the shopper's typed instruction and hands both back to
+  // whichever buy control is pressed, so a renderer that leaves this out greys Add to
+  // Cart with nothing beside it to fill in (`sf-product-page`, 7vu2iEEZ x CXnP1lrL).
+  const productAddons = readProductAddons(product.metafields);
+
   return (
     <div className={CONTAINER}>
       <ProductPageClient
@@ -213,6 +219,9 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
           // @keenan/services, card Q9hRTbKO). Kept local as well, because a Bulk Pricing
           // table the cart refuses to charge is the defect this page must never show.
           bulkPricing: suppressCatalogPricing ? [] : (product.bulkPricing ?? []),
+          // Authored customisation groups — priced extras and free-text questions
+          // (cards 0CDcCYmO + kyMjCmAw). Null for every product that carries none.
+          addons: productAddons,
         }}
         memberPrice={memberPrice}
         memberPriceMap={memberPriceMap}
@@ -518,6 +527,13 @@ async function ProductOverviewBlock({ props, ctx }: BlockProps) {
     // @keenan/services, card Q9hRTbKO). Kept local as well, because a Bulk Pricing
     // table the cart refuses to charge is the defect this page must never show.
     bulkPricing: suppressCatalogPricing ? [] : (product.bulkPricing ?? []),
+    // Authored customisation groups — priced extras and free-text questions
+    // (cards 0CDcCYmO + kyMjCmAw). This is the WIDGET renderer: the groups reach the
+    // shared provider here, `ProductInstructionsWidget` renders the panel off it, and
+    // the three buy widgets hand `selectedAddons` back to the button. Leaving this
+    // out is not a missing panel, it is a question that is never asked and a bare
+    // line arriving at the rep. Null for every product that carries none.
+    addons: readProductAddons(product.metafields),
   };
 
   const def = BLOCK_REGISTRY.product_overview;

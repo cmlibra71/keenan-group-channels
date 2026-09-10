@@ -31,6 +31,7 @@ import {
   activeBrandFreeShippingSpecials,
   brandIdsForProducts,
 } from "@/lib/checkout/free-shipping-brands";
+import { orderSummaryImagesForProducts } from "@/lib/checkout/order-summary-images";
 import { matchBrandSpecial } from "@/lib/checkout/free-shipping-brands-policy";
 import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-policy";
 import { resolvePaymentAvailability } from "@/lib/checkout/payment-availability";
@@ -40,6 +41,7 @@ import {
   financeOfferForCart,
   isFinancePaymentMethod,
 } from "@/lib/checkout/finance";
+import { addressTypeFromContactBook } from "@keenan/services/residential";
 import { financeApplicationForm } from "@/lib/checkout/finance-form";
 import { CheckoutForm } from "@/components/checkout/CheckoutForm";
 import { StartedCheckoutTracker } from "@/components/analytics/StartedCheckoutTracker";
@@ -264,7 +266,7 @@ export default async function CheckoutPage() {
   // Load saved addresses for the logged-in contact (identity unification —
   // listForContact also covers legacy customer-keyed rows via the migration's
   // contact_id backfill).
-  let savedAddresses: { id: number; firstName: string; lastName: string; address1: string; address2?: string; city: string; stateOrProvince: string; postalCode: string; countryCode: string; phone?: string | null; isDefaultBilling: boolean }[] = [];
+  let savedAddresses: { id: number; firstName: string; lastName: string; address1: string; address2?: string; city: string; stateOrProvince: string; postalCode: string; countryCode: string; phone?: string | null; isDefaultBilling: boolean; addressType?: string }[] = [];
   if (session) {
     try {
       const rows = await customerAddressService.listForContact(session.contactId);
@@ -282,6 +284,21 @@ export default async function CheckoutPage() {
         // even though CheckoutForm submits it as a hidden field.
         phone: (a.phone ?? null) as string | null,
         isDefaultBilling: !!(a.is_default_billing ?? a.isDefaultBilling),
+        // The saved address's own residential/commercial classification (cards HMtUxvwZ,
+        // Xw9VQmAJ). Selecting a saved address used to post no `address_type` at all, so the
+        // order lost the stamp and an address-triggered freight attribute quoted in the summary
+        // was never charged.
+        //
+        // QUARANTINED, and this is load-bearing: `customer_addresses.address_type` is
+        // `DEFAULT 'residential'` and reads residential on all 15,518 production rows with no
+        // other value anywhere — it is the column default, not fifteen thousand customers living
+        // in houses. Honouring it raw would charge a Residential surcharge to every shopper with
+        // a saved address the moment a number is typed into that attribute. Only an explicit
+        // `commercial` survives, exactly as the portal's own address reader does
+        // (`addressTypeFromContactBook`); "" then means nobody has classified it, and an
+        // address-triggered attribute fires nothing rather than guessing. A freshly TYPED
+        // address is unaffected — its classification comes from the shopper's own Places pick.
+        addressType: addressTypeFromContactBook(a.address_type ?? a.addressType) ?? "",
       }));
     } catch {
       // No saved addresses
@@ -514,6 +531,23 @@ export default async function CheckoutPage() {
         }
       : null;
 
+  // The picture on every Order Summary line (card qjV98YEK). ONE batched read, and a
+  // never-throw one: a photograph is the most disposable thing on this page, so a lookup
+  // failure leaves the summary reading exactly as it did before rather than costing the
+  // shopper their checkout. Same primary-image precedence as the listing tile the shopper
+  // clicked, so the two screens show the same photograph of the same product.
+  const summaryImages = await orderSummaryImagesForProducts(
+    (cart.items as Array<{ product_id: number }>).map((i) => i.product_id)
+  );
+  // Typed off CheckoutForm's own prop rather than a hand-copied shape, so a line field
+  // added there cannot be silently dropped on the way through here.
+  const summaryItems = (
+    cart.items as Parameters<typeof CheckoutForm>[0]["items"] & Array<{ product_id?: number }>
+  ).map((i) => ({
+    ...i,
+    image_url: summaryImages.get(Number(i.product_id)) ?? null,
+  }));
+
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
       <StartedCheckoutTracker
@@ -524,7 +558,7 @@ export default async function CheckoutPage() {
       <h1 className="page-title mb-8">Checkout</h1>
 
       <CheckoutForm
-        items={cart.items}
+        items={summaryItems}
         subtotal={subtotal}
         gstAmount={gstAmount}
         isMember={isMember}

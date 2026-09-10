@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  optionSummary,
   paymentMethodLabel,
   paymentStatusLabel,
   orderStatusChipClass,
@@ -1188,4 +1189,45 @@ test("no term anywhere means NO number — never a made-up 30", () => {
   assert.equal(resolveNetTermsDays(undefined, undefined, undefined), null);
   // 0 on accounts.net_terms_days means "not set", not "due immediately".
   assert.equal(resolveNetTermsDays(0, 0, 0), null);
+});
+
+// ── product_options: TWO shapes, and nothing that is not a scalar ────────────
+
+test("optionSummary reads the Zoey ARRAY shape", () => {
+  assert.equal(
+    optionSummary([
+      { display_name: "Colour", display_value: "Stainless" },
+      { name: "Hand", value: "Left" },
+    ]),
+    "Colour: Stainless · Hand: Left"
+  );
+  // Every one of the 73,439 imported lines is an empty array.
+  assert.equal(optionSummary([]), "");
+});
+
+test("optionSummary reads the OBJECT shape our own checkout writes", () => {
+  assert.equal(
+    optionSummary({ Instructions: "1200mm bench, sink on the left" }),
+    "Instructions: 1200mm bench, sink on the left"
+  );
+});
+
+test("A NESTED VALUE IS SHOWN AS NOTHING, NEVER AS [object Object]", () => {
+  // `order_items.product_options` is jsonb with no shape validation on the way in
+  // (POST /api/v1/commerce/orders/[id]/items accepts any object), and this page is
+  // the CUSTOMER's own order. The portal's reader refuses the same value; two
+  // readers of one column must not disagree.
+  assert.equal(optionSummary({ Instructions: { text: "1200mm bench" } }), "");
+  assert.equal(optionSummary({ Instructions: ["a", "b"] }), "");
+  assert.equal(optionSummary([{ display_name: "X", display_value: { a: 1 } }]), "");
+  // A scalar beside a nested one still prints.
+  assert.equal(optionSummary({ Bad: { a: 1 }, Hand: "Left" }), "Hand: Left");
+  // Numbers and booleans are scalars we are willing to print.
+  assert.equal(optionSummary({ Shelves: 3, Castors: true }), "Shelves: 3 · Castors: true");
+});
+
+test("optionSummary shows nothing for a shape it cannot read at all", () => {
+  assert.equal(optionSummary(null), "");
+  assert.equal(optionSummary("Instructions"), "");
+  assert.equal(optionSummary(undefined), "");
 });

@@ -27,6 +27,9 @@ import { SilverChefPanel } from "@/components/product/SilverChefPanel";
 import { ProductImageNotice } from "@/components/product/ProductImageNotice";
 import { ProductResidentialNotice } from "@/components/product/ProductResidentialNotice";
 import { ProductPackNote } from "@/components/product/ProductPackNote";
+import { ProductInstructionsPanel } from "@/components/product/ProductInstructionsPanel";
+import { buyAreaSuppressed } from "@/lib/product-customisation";
+import { useProductPurchase } from "@keenan/services/product-page";
 import { MODULAR_NOTICE_TEXT, slugIsModularSystems } from "@/builder/modular-notice";
 import { CdMemberPricingPanel } from "@/components/product/CdMemberPricingPanel";
 import type { CdMembershipData } from "@/lib/pricing/cd-member-pricing";
@@ -65,6 +68,18 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // member/contract price — and an authored tree cannot call the finance
     // calculator. It renders nothing for a product with no price.
     "silverchef-panel": () => <SilverChefPanel />,
+    // The free-text customisation groups — the "Instructions" box on Custom Stainless
+    // Steel (card kyMjCmAw). SEALED for the same reason the kit block is: it holds the
+    // customer's answer and that answer has to travel with whichever buy button is
+    // pressed, which an authored tree cannot do. It renders nothing for a product with
+    // no text groups, so the node is safe in front of every product page.
+    //
+    // Its own native rather than a control inside `product-addons` above: the two draw
+    // groups out of the SAME `metafields.addons` bag, split by control in
+    // `lib/product/addon-panel.ts`, because a free-text box drawn by the priced-extras
+    // panel came out as an empty radio list labelled "Choose one" that nothing could
+    // satisfy (`sf-product-page`, 7vu2iEEZ x CXnP1lrL).
+    "product-instructions": () => <ProductInstructionsNative />,
     // Chefs Depot's three prices (RRP / Mates Rates / this shopper's member price)
     // and the spend-more-save-more ladder (card Nyp8bkPm). Sealed rather than
     // authored because the figures follow the LIVE purchase state — which variant
@@ -113,4 +128,38 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
       />
     ),
   };
+}
+
+/**
+ * The panel bound to the SHARED purchase provider.
+ *
+ * The typed answer lives in `selectedAddons` beside the ticked extras, which is
+ * what makes it travel with Add to Cart AND Add to Quote without either button
+ * knowing it exists (register rule 7bmpuqei, `sf-product-page`).
+ *
+ * `missingLabels` is the provider's own list of required groups still unanswered,
+ * shown only once the shopper has pressed a buy button — the bridge raises the
+ * prompt and this marks the field that is waiting, so the refusal is never a
+ * greyed control with nothing beside it.
+ */
+function ProductInstructionsNative() {
+  const purchase = useProductPurchase();
+  // 7vu2iEEZ on `sf-product-page`: a product with BOTH buy controls restricted
+  // renders no buy area at all — no control, no wording. A required box above
+  // nothing to press is the one shape this page may not take, so the panel goes
+  // with the buttons.
+  if (buyAreaSuppressed(purchase.restrictAddToCart, purchase.restrictAddToQuote)) return null;
+  const groups = purchase.product.addons?.groups ?? [];
+  return (
+    <ProductInstructionsPanel
+      groups={groups}
+      values={purchase.addonText}
+      onChange={purchase.setAddonText}
+      // No inline error on this renderer: the node-tree page answers a press on an
+      // unanswered required group with the shared "Choose an option" dialog, which
+      // NAMES the field. Two refusals for one press would be one too many; the
+      // field's own asterisk and "Required" line explain it before the press.
+      missingLabels={[]}
+    />
+  );
 }

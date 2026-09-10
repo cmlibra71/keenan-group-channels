@@ -73,6 +73,12 @@ test("returned money reads as Refunded", () => {
   assert.equal(customerOrderStage("refund_in_progress"), "Refunded");
 });
 
+test("a PART refund does not tell the customer their order is refunded", () => {
+  // Portal card 5xC6MBPu: the rest of the order is still coming, so the customer reads the
+  // ordinary working word. Only the whole-order twin above says Refunded.
+  assert.equal(customerOrderStage("partial_refund_in_progress"), "Being prepared");
+});
+
 // ── the containment guarantee ────────────────────────────────────────────────
 
 test("EVERY mapped status resolves to one of the eight permitted words", () => {
@@ -125,6 +131,7 @@ test("the portal's full order-status key set is covered by name, not by fallback
     "pending",
     "closed",
     "refund_in_progress",
+    "partial_refund_in_progress",
     "deposit_paid",
     "processing",
     "complete",
