@@ -794,7 +794,7 @@ export async function acceptQuote(quoteId: number) {
   }
 
   // Everything that happens after an acceptance — the rep's email with the quote
-  // PDF, the customer's confirmation, and the two freight gates that decide
+  // PDF, the customer's confirmation, and the freight gate that decides
   // whether this becomes an order (card 9XRQmaiz) — is ONE place, and that place
   // is in the portal: it draws the PDF and the order from the portal's own quote
   // money view, and a second copy of that arithmetic here would be a second
@@ -809,19 +809,23 @@ export async function acceptQuote(quoteId: number) {
   // Without the flag they would get a second email about the same event, and a
   // person gets ONE email per order (Product Brief).
   //
-  // `suppressConversion` matters MORE. On THIS path the customer has just been
-  // emailed a pro-forma whose button is "Pay this quote" and which points back
-  // at this page. `converted_to_order` is a terminal pay state here
-  // (`quote-payable.ts`, card 0Wy0xHuq: accepting without paying leaves the
-  // money owed and the pro-forma exists to be paid), and neither storefront has
-  // an order-payment page. So converting the quote in the same request that
-  // emailed that button would hide the button and leave the customer with no way
-  // to pay at all. The order on this path is raised by the PAYMENT (`payQuote`),
-  // which is Tim's "accepting goes straight to payment" — the freight gates are
-  // still evaluated and the rep is still told where it stands.
+  // ACCEPTING HERE CONVERTS, like every other acceptance path (card isl1uwjR,
+  // Tim 2026-09-08: "If freight has been allocated to a quote, the customer
+  // should be allowed to convert the quote to an order inside their account area
+  // on the frontend or via their link").
+  //
+  // It deliberately did NOT, until now. `converted_to_order` is a terminal pay
+  // state here (`quote-payable.ts`, card 0Wy0xHuq), so converting used to hide
+  // the "Pay this quote" button on the pro-forma this request has just emailed,
+  // and there was nowhere else to pay — the order was therefore raised by the
+  // PAYMENT instead (`payQuote`). What changed is that a converted order now
+  // carries its own customer-facing way to pay: the Pay-by-card control on
+  // `/account/orders/[id]` (card Sh03niVC), linked from the quote page here, from
+  // the acknowledgement page and from the emailed `/q/<uuid>` link. `payQuote` is
+  // untouched and still raises the order for a customer who pays without
+  // accepting first.
   const followUpRan = await runPortalAcceptanceFollowUp(q.uuid, {
     customerAlreadyNotified: true,
-    suppressConversion: true,
   });
   // The follow-up is the ONE sender of the acceptance email, and `markAccepted`
   // was told to stay quiet on that basis. If the portal could not be reached —

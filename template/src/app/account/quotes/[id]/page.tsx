@@ -78,6 +78,13 @@ interface QuoteDetail {
   uuid: string;
   status: string | null;
   channel_id: number;
+  /**
+   * The order this quote became, when it became one. Rendered as the customer's
+   * way to the order that now carries their balance (card isl1uwjR) — a quote in
+   * `converted_to_order` has no Pay control of its own (`quote-payable.ts`), and
+   * before that card it never reached this state from here at all.
+   */
+  converted_order_id: number | null;
   contact_id: number | null;
   quote_number: string | null;
   /** The name the customer gave the request when they sent it (card 9tbz3sBF). */
@@ -678,6 +685,35 @@ export default async function QuoteDetailPage({
         acceptState={acceptState}
         requestState={requestState}
       />
+
+      {/* THE ORDER THIS QUOTE BECAME, and where its balance is paid
+          (card isl1uwjR, Tim 2026-09-08: a quote carrying its freight converts
+          from the account area). `converted_to_order` is a terminal pay state on
+          the quote (`quote-payable.ts`), so the panel below draws nothing — the
+          money has moved to the order, and this is the way to it. Cancelling the
+          order releases the quote out of this status, so a link is never drawn to
+          a cancelled one. Whether the order page can actually take a card is that
+          page's own decision (card Sh03niVC): Chefs Depot offers it, Industry
+          Kitchens' copy of `pay-balance-site.tsx` still answers "not offered" and
+          the customer reads the bank details beside the balance instead. */}
+      {status === "converted_to_order" && quote.converted_order_id ? (
+        <div className="mt-6">
+          <h2 className="text-sm font-semibold text-zinc-900 mb-1">Your order</h2>
+          <p className="text-sm text-zinc-600">
+            This quote is now an order. Anything still owing on it, and how to pay it, is on the
+            order.
+          </p>
+          {/* Plain utilities, not a site button class: `.btn-primary` is defined
+              in Chefs Depot's stylesheet and not in Industry Kitchens', and this
+              page is not one of the byte-identical shared files. */}
+          <Link
+            href={`/account/orders/${quote.converted_order_id}`}
+            className="mt-3 inline-flex items-center justify-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+          >
+            View and pay your order
+          </Link>
+        </div>
+      ) : null}
 
       {/* Pay this quote — inside the logged-in account area, per Steve. The
           panel renders even while pricing is being prepared: the Pay button
