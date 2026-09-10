@@ -61,22 +61,14 @@ export function customisationOffered(addons: ProductAddons | null | undefined): 
 }
 
 /**
- * The definition a BUY is enforced against, server-side.
+ * The definition a BUY is enforced against, server-side and in the provider.
  *
- * Priced groups only when their panel was on screen (0CDcCYmO's rule, unchanged); free-text
- * groups always. Author order is preserved, because `resolveAddonSelection` returns answers in
- * the author's order and two shoppers who configure the same product must produce the same line.
- * Null when there is nothing to enforce, which is the shape `resolveAddonSelection` and
- * `unansweredAddonGroups` both take for "this product asks nothing".
+ * Re-exported from `@keenan/services/product-addons` rather than re-implemented: the storefront,
+ * the shared purchase provider and both buy ACTIONS have to agree about this by construction, and
+ * this file is the place a storefront author looks for the split. Priced groups only when their
+ * panel is on screen; free-text groups always. See the services module for why.
  */
-export function buyableAddons(
-  addons: ProductAddons | null | undefined,
-  pricedPanelShown: boolean
-): ProductAddons | null {
-  if (!addons) return null;
-  const groups = addons.groups.filter((g) => g.control === "text" || pricedPanelShown);
-  return groups.length > 0 ? { groups } : null;
-}
+export { buyableAddons } from "@keenan/services/product-addons";
 
 /**
  * The same two halves in the `ProductAddons | null` shape `resolveAddonSelection` and
