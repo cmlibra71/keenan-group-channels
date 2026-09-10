@@ -778,21 +778,6 @@ export async function acceptQuote(quoteId: number) {
       console.error("[acceptQuote] approval flag not stamped (non-fatal):", e);
     }
   }
-  // Accepting WITHOUT paying sends the customer their pro-forma (Steve, card
-  // 0Wy0xHuq: "when they accept without paying, they get sent a Quote to
-  // Pro-Forma"). Paying instead goes through payQuote, which raises the real
-  // order — so no pro-forma is sent on that path. Best-effort: a mail failure
-  // must never undo an acceptance the customer has already made.
-  try {
-    const { sendQuoteProForma } = await import("@/lib/quotes/pro-forma-email");
-    await sendQuoteProForma(
-      { ...q, id: quoteId } as Record<string, unknown> & { id: number },
-      (q.email as string | null) ?? session.email ?? null
-    );
-  } catch (e) {
-    console.error("[acceptQuote] pro-forma email failed (non-fatal):", e);
-  }
-
   // Everything that happens after an acceptance — the rep's email with the quote
   // PDF, the customer's confirmation, and the freight gate that decides
   // whether this becomes an order (card 9XRQmaiz) — is ONE place, and that place
@@ -824,7 +809,7 @@ export async function acceptQuote(quoteId: number) {
   // the acknowledgement page and from the emailed `/q/<uuid>` link. `payQuote` is
   // untouched and still raises the order for a customer who pays without
   // accepting first.
-  const followUpRan = await runPortalAcceptanceFollowUp(q.uuid, {
+  const followUp = await runPortalAcceptanceFollowUp(q.uuid, {
     customerAlreadyNotified: true,
   });
   // The follow-up is the ONE sender of the acceptance email, and `markAccepted`
@@ -832,7 +817,37 @@ export async function acceptQuote(quoteId: number) {
   // most plausibly a deploy that put this build out ahead of the portal's — the
   // acceptance would otherwise go completely unannounced, which is the one
   // outcome worse than a duplicate. Fall back to the older per-site alert.
-  if (!followUpRan) await sendFallbackAcceptanceAlert(quoteId, q, requiresAdminApproval);
+  if (!followUp.ran) await sendFallbackAcceptanceAlert(quoteId, q, requiresAdminApproval);
+
+  // Accepting WITHOUT paying sends the customer their pro-forma (Steve, card
+  // 0Wy0xHuq: "when they accept without paying, they get sent a Quote to
+  // Pro-Forma"). Paying instead goes through payQuote, which raises the real
+  // order — so no pro-forma is sent on that path. Best-effort: a mail failure
+  // must never undo an acceptance the customer has already made.
+  //
+  // IT IS SENT AFTER THE FOLLOW-UP, NOT BEFORE (card isl1uwjR). It used to go
+  // first, which was harmless while this path deliberately did not convert. Now
+  // it does, and `converted_to_order` is a terminal pay state on the quote page
+  // (`quote-payable.ts`), so a pro-forma composed BEFORE the conversion would be
+  // the only email this acceptance sends and would point its button at a quote
+  // page whose Pay control the very same request has just retired. Sending it
+  // afterwards lets it name the order and link to somewhere that can take the
+  // money. Total latency is unchanged — both were already awaited.
+  //
+  // `customerAlreadyNotified` above still tells the truth: this path commits to
+  // writing to the customer itself, so the portal must not send a second
+  // confirmation. The exposure if this send fails is exactly what it was before
+  // the reorder — the customer gets no mail — and it is logged either way.
+  try {
+    const { sendQuoteProForma } = await import("@/lib/quotes/pro-forma-email");
+    await sendQuoteProForma(
+      { ...q, id: quoteId } as Record<string, unknown> & { id: number },
+      (q.email as string | null) ?? session.email ?? null,
+      { convertedOrderId: followUp.orderId }
+    );
+  } catch (e) {
+    console.error("[acceptQuote] pro-forma email failed (non-fatal):", e);
+  }
 
   revalidatePath(`/account/quotes/${quoteId}`);
   revalidatePath("/account/quotes");
@@ -1195,6 +1210,14 @@ export async function postQuoteMessage(quoteId: number, body: string): Promise<Q
   return { success: true };
 }
 
+/** What the portal's acceptance follow-up did, as far as this caller needs it. */
+interface PortalFollowUpResult {
+  /** The portal actually ran the follow-up. False means fall back to the old alert. */
+  ran: boolean;
+  /** The order the follow-up raised, or null when it converted nothing. */
+  orderId: number | null;
+}
+
 /**
  * Ask the portal to run the acceptance follow-up for a quote we have just
  * accepted (card 9XRQmaiz). The quote's own uuid is the credential — the same
@@ -1204,7 +1227,9 @@ export async function postQuoteMessage(quoteId: number, body: string): Promise<Q
  *
  * Never throws and never blocks: the acceptance itself has already succeeded.
  * Returns whether the portal actually ran it, so the caller can fall back to the
- * older alert rather than leave an acceptance unannounced.
+ * older alert rather than leave an acceptance unannounced, AND the id of the
+ * order it raised, so the customer's pro-forma can point at somewhere that can
+ * actually take their money (card isl1uwjR).
  *
  * NOTE ON RATE LIMITING: this is a server-to-server call, so every storefront
  * acceptance shares ONE source IP against the portal's `quote_link_action`
@@ -1215,8 +1240,8 @@ export async function postQuoteMessage(quoteId: number, body: string): Promise<Q
 async function runPortalAcceptanceFollowUp(
   uuid: string | null | undefined,
   options: { customerAlreadyNotified?: boolean; suppressConversion?: boolean } = {}
-): Promise<boolean> {
-  if (!uuid) return false;
+): Promise<PortalFollowUpResult> {
+  if (!uuid) return { ran: false, orderId: null };
   const base = (process.env.PORTAL_BASE_URL || "https://keenan-group.com.au").replace(/\/$/, "");
   try {
     const res = await fetch(`${base}/api/q/${encodeURIComponent(uuid)}/accepted-followup`, {
@@ -1230,12 +1255,19 @@ async function runPortalAcceptanceFollowUp(
     });
     if (!res.ok) {
       console.error(`[acceptQuote] portal follow-up returned ${res.status} for quote ${uuid}`);
-      return false;
+      return { ran: false, orderId: null };
     }
-    return true;
+    // The order the follow-up raised, when it raised one (card isl1uwjR). Read
+    // defensively: a portal one release back does not send the field, which
+    // reads as "nothing converted" and keeps the old quote wording — the safe
+    // way round, because the pro-forma then points at a page that still works.
+    const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+    const raw = body?.order_id;
+    const orderId = typeof raw === "number" && Number.isFinite(raw) && raw > 0 ? raw : null;
+    return { ran: true, orderId };
   } catch (error) {
     console.error("[acceptQuote] portal follow-up failed (non-fatal):", error);
-    return false;
+    return { ran: false, orderId: null };
   }
 }
 
