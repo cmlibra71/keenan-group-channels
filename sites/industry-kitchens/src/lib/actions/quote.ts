@@ -28,6 +28,12 @@ import {
   unansweredAddonGroups,
   type AddonSelectionInput,
 } from "@keenan/services/product-addons";
+import {
+  buyableAddons,
+  customisationDefinition,
+  extrasDefinition,
+} from "@/lib/product/addon-panel";
+import { customisationRefusal } from "@/lib/product-customisation";
 import { slidingWindowAllow } from "@/lib/rate-limit";
 import { resolveCustomerRequestState } from "@keenan/services";
 import { decideQuoteLineWrite } from "@/lib/quotes/addon-line-write";
@@ -202,14 +208,25 @@ export async function addToQuote(
       salePrice: priceVariant?.sale_price,
     });
   }
-  const addonDefinition = addonPanelOffered ? rawAddonDefinition : null;
+  // PRICED groups only exist for this buy when their panel was on screen; FREE-TEXT groups
+  // always do (card kyMjCmAw — a typed answer carries no money, and Custom Stainless Steel is
+  // quote-only at $0, exactly the shape `addonPanelShown` refuses). One named predicate, shared
+  // with both panels, both buttons and `addToCart`, so no two of them can disagree.
+  const addonDefinition = buyableAddons(rawAddonDefinition, addonPanelOffered);
   const resolvedAddons = addonsPosted ? resolveAddonSelection(addonDefinition, addons) : [];
   // A required single-choice group is a question about the MACHINE, not about the cart, so it
   // is asked on this button too — and asked HERE rather than only in the page, because a stale
   // tab or a hand-posted action would otherwise quote a configuration nobody answered. From a
   // TILE the shopper cannot answer it where they are standing, so that message sends them to the
   // page carrying the panel instead of naming a control they cannot see.
-  const unansweredGroups = unansweredAddonGroups(addonDefinition, addonsPosted ? addons : {});
+  //
+  // The two kinds are refused SEPARATELY because the sentence has to fit the control: you
+  // CHOOSE a hopper and you FILL IN an instruction, and both sentences reach a customer.
+  // Priced first, so 0CDcCYmO's own wording is unchanged on every product that carries one.
+  const unansweredGroups = unansweredAddonGroups(
+    extrasDefinition(rawAddonDefinition, addonPanelOffered),
+    addonsPosted ? addons : {}
+  );
   if (unansweredGroups.length > 0) {
     return {
       error: addonsPosted
@@ -217,6 +234,12 @@ export async function addToQuote(
         : `Open this product's page to choose ${unansweredGroups.join(" and ")} before adding it to a quote.`,
     };
   }
+  const typedRefusal = customisationRefusal(
+    customisationDefinition(rawAddonDefinition),
+    addonsPosted ? addons : undefined,
+    "quote"
+  );
+  if (typedRefusal) return { error: typedRefusal };
   const addonNote = describeAddonSelection(resolvedAddons);
   if (resolvedAddons.length > 0) {
     lineAttributes = { ...(lineAttributes ?? {}), addon_selection: resolvedAddons };

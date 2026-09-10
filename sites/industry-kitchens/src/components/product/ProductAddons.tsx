@@ -208,16 +208,20 @@ export function ProductAddons() {
   /**
    * IS THIS PANEL ON SCREEN? Read from the provider, never re-derived here.
    *
-   * `addonGroupsOffered` IS the predicate (`@keenan/services/product-addons`
-   * `addonPanelShown`): the product carries groups, its price is not hidden and it is not
-   * zero. It is the SAME flag the buy controls use to decide whether to post a selection and
-   * whether a required group may grey them, so the panel and the buttons cannot disagree.
-   * Re-testing `hidePrice` and the amounts here is what let them: a required group went on
-   * greying "Add to Quote, request pricing" on a $0 quote-only product whose panel this
-   * component had already declined to draw — a dead control with nothing explaining it, which
-   * is the screen `sf-product-page` forbids (7vu2iEEZ x CXnP1lrL).
+   * `extrasPanelShown` IS the predicate (`@keenan/services/product-addons` `addonPanelShown`):
+   * the product carries groups, its price is not hidden and it is not zero. Re-testing
+   * `hidePrice` and the amounts here is what once let the panel and the buy controls disagree —
+   * a required group went on greying "Add to Quote, request pricing" on a $0 quote-only product
+   * whose panel this component had already declined to draw, a dead control with nothing
+   * explaining it, which is the screen `sf-product-page` forbids (7vu2iEEZ x CXnP1lrL).
+   *
+   * NOT `addonGroupsOffered`, which is the WIDER question — "is there anything at all on this
+   * page to configure" — and answers yes for a free-text Instructions box on a quote-only
+   * product (card kyMjCmAw). Reading that one here drew "+ $245.00" tick boxes beside a
+   * "Contact For Price" panel on a $0 machine, republishing a total the page may not publish.
+   * Two questions, two flags.
    */
-  if (!addons || !purchase.addonGroupsOffered) return null;
+  if (!addons || !purchase.extrasPanelShown) return null;
 
   // WHICH groups are ours — declared in `lib/product/addon-panel.ts`, not filtered inline, so
   // whoever adds a control type has to say which panel owns it. A `text` group is kyMjCmAw's

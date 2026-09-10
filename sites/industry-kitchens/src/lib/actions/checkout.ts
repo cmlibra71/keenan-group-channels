@@ -568,9 +568,18 @@ export async function placeOrder(
   // is charged, no card is taken, and our team quotes it and collects payment afterwards.
   const heldForSpecialised = holdsPayment(deliveryServiceType);
 
+  // Residential vs commercial for THIS delivery (card HMtUxvwZ), derived by the details lookup
+  // from the shopper's own Places pick and posted as a hidden field. It is the SAME value that is
+  // stamped on the order's shipping address below and that raises the commercial-only flag, so
+  // address-triggered freight attributes read it too rather than inventing a second source of
+  // truth. Nothing picked, or a pick that said nothing, reads as unclassified and fires nothing.
+  const shippingAddressType = normaliseAddressType(formData.get("address_type"));
+
   // Shipping calculation. The rate card states EX-GST figures and GST is added on top of
   // them — a $30 flat rate is $33 inc (Tim, card twwZMnMY). Never back GST out of the rate.
   let shippingRateExTax = 0;
+  /** Staff-only breakdown of what the delivery figure is made of (card Xw9VQmAJ). */
+  let freightAttributeBreakdown: unknown[] = [];
   const checkoutSettings = await getCheckoutSettings();
   const isMember = !!(session && await getActiveSubscriptionForContact(session.contactId));
 
@@ -616,17 +625,27 @@ export async function placeOrder(
       const shippingResult = await calculateShipping(postalCode, subtotalExTax, {
         weightKg: cartFreight?.weight_kg ?? null,
         itemCount: cartFreight?.item_count ?? null,
-        // The BULKY ARM (card NuBmIxuL). Only a CURBSIDE bulky order reaches here — a
-        // specialised one is held above at $0 for a human quote — and a bulky item still needs
-        // a tail lift to reach the kerb, so the zone's bulky surcharge applies. Same read the
-        // checkout page priced its summary from, so show equals charge.
-        hasBulkyItems: bulkyProducts.length > 0,
+        // FREIGHT ATTRIBUTES (card Xw9VQmAJ — the author-defined replacement for the single
+        // bulky boolean). Read from the PRODUCTS in this cart, the same read that decides the
+        // bulky choice above, never from the submitted form. Only a CURBSIDE bulky order
+        // reaches here — a specialised one is held above at $0 for a human quote — and a bulky
+        // item still needs a tail lift to reach the kerb, so its surcharge applies. Same read
+        // the checkout page priced its summary from, so show equals charge.
+        attributes: cartFreight?.attributes ?? null,
+        // Address-triggered attributes (Residential) read the classification stored on the
+        // SAVED address. An address nobody has classified fires nothing — guessing charges money.
+        addressType: shippingAddressType,
         // A weight-rated zone must not price a cart where some lines have no catalogue
         // weight — the weighed lines alone would land it in a cheap tier.
         weightIncomplete: cartFreight ? cartFreight.has_unweighed_lines : true,
       });
       if (shippingResult.success) {
         shippingRateExTax = shippingResult.cost;
+        // The staff-only working behind the number (card Xw9VQmAJ). The CUSTOMER sees one
+        // Delivery total here, on the confirmation, in the email, on the invoice and on their
+        // own order page — nothing they read names or itemises a surcharge. This bag is read
+        // only by the portal's order screen.
+        freightAttributeBreakdown = shippingResult.freight_attributes ?? [];
       } else if (shippingResult.rate_card_name) {
         // A rate card IS configured for this channel but this address doesn't
         // price against it (unknown postcode, or somewhere we don't deliver).
@@ -902,6 +921,11 @@ export async function placeOrder(
   // so the confirmation page / invoice email show the customer's real terms.
   const orderMetafields: Record<string, unknown> = {};
   if (isTestMode) orderMetafields.test_mode = true;
+  // How the delivery figure was arrived at, for the portal's order screen (card Xw9VQmAJ).
+  // Staff-only: `orders.metafields` is a back-office bag and reaches no customer surface.
+  if (freightAttributeBreakdown.length) {
+    orderMetafields.freight_attributes = freightAttributeBreakdown;
+  }
   if (effectivePaymentMethod === "net_terms" && netTerms) orderMetafields.net_terms_days = netTerms.netTermsDays;
   // Stamp the cart uuid on card orders so a retry/double-submit can find and reuse
   // the existing awaiting_payment order instead of creating a duplicate (see below).
@@ -1251,7 +1275,7 @@ export async function placeOrder(
       // exactly how every order behaves today. It refuses NOTHING: it is what lets the
       // order screen print RESIDENTIAL ADDRESS and raise the commercial-only flag on an
       // order raised here, which is the highest-volume way an order is created at all.
-      address_type: normaliseAddressType(formData.get("address_type")),
+      address_type: shippingAddressType,
       shipping_method: heldForSpecialised
         ? "Specialised delivery — to be quoted"
         : deliveryServiceType === "curbside"
