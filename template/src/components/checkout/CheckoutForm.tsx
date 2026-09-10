@@ -54,7 +54,9 @@ import { useHeaderPanels } from "@/lib/cart-quote-counts";
 import { ga4AddShippingInfo, ga4AddPaymentInfo, rowToGa4Item } from "@/components/analytics/ga4";
 import { BulkyDeliveryChoice } from "@/components/checkout/BulkyDeliveryChoice";
 import { holdsPayment, type DeliveryService } from "@/lib/checkout/bulky-delivery";
+import { CommercialApplianceNotice } from "@/components/checkout/CommercialApplianceNotice";
 import { backorderMessage } from "@keenan/services/backorder";
+import { MembershipJoinPanel } from "@/components/checkout/MembershipJoinPanel";
 
 declare global {
   interface Window {
@@ -146,17 +148,46 @@ export function CheckoutForm({
   brandSpecial = null,
   shippingEnabled = false,
   bulkyProductNames = [],
+  commercialProductNames = [],
   stripePublishableKey,
   testMode = false,
   testModeCardUnavailable = false,
   finance = null,
   savedCards = [],
   savedCardsUnavailable = false,
+  membership = null,
 }: {
   items: CartItem[];
   subtotal: number;
   gstAmount: number;
   isMember?: boolean;
+  /**
+   * The membership panel in the Order Summary rail (card pktBo874). Null on a storefront that
+   * does not sell a membership, which is how Industry Kitchens draws nothing at all.
+   */
+  membership?: {
+    planName: string;
+    /** "$14.95 per month", off the plan — null when it carries no usable price. */
+    priceLine: string | null;
+    /**
+     * The MEMBER's own line, already written by `memberStateLine` (card ASTb3tCf). Non-null
+     * exactly when this shopper is a member. The saving inside it is the MEASURED figure — list
+     * value minus what is charged — and there is deliberately no estimated one (card Nyp8bkPm).
+     */
+    memberLine: string | null;
+    /**
+     * The join offer in card ASTb3tCf's own words (`checkoutOfferCopy`), or null for a member.
+     * Passed through untouched: the checkout and the subscribe page must make the same promise
+     * about the same free months.
+     */
+    join: {
+      headline: string;
+      detail: string | null;
+      cta: string;
+      highlight: boolean;
+      namesPrice: boolean;
+    } | null;
+  } | null;
   pricesIncludeTax?: boolean;
   customerEmail?: string;
   /** Is there a session? Guests are offered the sign-in / create-account drawer,
@@ -185,6 +216,10 @@ export function CheckoutForm({
   /** Names of the cart's bulky products (card Wxjp8wpg). Non-empty ⇒ the shopper must choose
    *  curbside vs specialised delivery before this order can be placed. */
   bulkyProductNames?: string[];
+  /** Names of the cart's commercial-only products (card HMtUxvwZ). Non-empty ⇒ the
+   *  commercial-appliance note is shown once when the page opens. It refuses nothing,
+   *  so — unlike every filter on this form — it has no counterpart in `placeOrder`. */
+  commercialProductNames?: string[];
   stripePublishableKey?: string;
   /**
    * True ONLY while this browser holds an ephemeral test checkout session (a
@@ -473,6 +508,13 @@ export function CheckoutForm({
   const [country, setCountry] = useState<string>(() => countries[0]?.code || "AU");
   const [stateValue, setStateValue] = useState("");
   const [postalCodeValue, setPostalCodeValue] = useState("");
+  /**
+   * Residential vs commercial for THIS delivery (card HMtUxvwZ), derived from the
+   * shopper's Places pick and posted as a hidden field. "" means the pick said nothing
+   * we trust, and the order then reads commercial like every order does today. Never a
+   * refusal and never shown to the shopper — it is a signal for a rep on the order.
+   */
+  const [addressType, setAddressType] = useState("");
   const isAu = country === "AU";
 
   // Shipping calculation state. `shippingCost` holds the rate card's own figure, which is
@@ -543,9 +585,28 @@ export function CheckoutForm({
   );
 
   const handlePlaceSelect = useCallback(
-    (place: { address1: string; city: string; state: string; postalCode: string; countryCode: string }) => {
-      if (address1Ref.current) address1Ref.current.value = place.address1;
-      if (cityRef.current) cityRef.current.value = place.city;
+    (place: {
+      address1: string;
+      city: string;
+      state: string;
+      postalCode: string;
+      countryCode: string;
+      addressType: string | null;
+    }) => {
+      // NEVER WRITE AN EMPTY STREET OVER WHAT THE SHOPPER TYPED (card HMtUxvwZ).
+      // Address is a REQUIRED field on the critical path and this assignment used to
+      // be unconditional, so a suggestion that carried no street would have silently
+      // emptied it with Place Order still live. `getPlaceDetails` already refuses a
+      // place with no `route`, so this is the second belt on the same failure rather
+      // than the only one — a lookup that somehow answers with nothing usable leaves
+      // the shopper's own words exactly where they are.
+      if (address1Ref.current && place.address1) address1Ref.current.value = place.address1;
+      if (cityRef.current && place.city) cityRef.current.value = place.city;
+      // Card HMtUxvwZ — THE CHECK THE CARD OPENS WITH, made where the address is
+      // chosen. Derived from this same Places pick, so no second call and no second
+      // Google product; a pick that says nothing leaves it unset and the order reads
+      // commercial, exactly as every order does today.
+      setAddressType(place.addressType ?? "");
       // Places returns "VIC" or "Victoria" — normalise so the dropdown matches.
       setStateValue(normaliseAuState(place.state) ?? place.state);
       setPostalCodeValue(place.postalCode);
@@ -783,6 +844,10 @@ export function CheckoutForm({
   const summaryError = cardRefused ? cardError || state?.error : state?.error || cardError;
 
   return (
+    <>
+    {/* Card HMtUxvwZ — the commercial-appliance note, in the card's own words. Shown on
+        arrival, dismissible, and it never disables Place Order. */}
+    <CommercialApplianceNotice productNames={commercialProductNames} />
     <form
       action={formAction}
       onSubmit={(event) => {
@@ -968,6 +1033,13 @@ export function CheckoutForm({
                 </div>
                 <div className="col-span-2 relative">
                   <label className="block text-sm font-medium text-zinc-700">Address</label>
+                  {/* Card HMtUxvwZ: typing over the address by hand drops the
+                      derived delivery type. Whatever the last suggestion said no
+                      longer describes what is in the box, and posting the type of
+                      an abandoned address would print RESIDENTIAL ADDRESS about
+                      somewhere the order is not going. Google filling this box
+                      writes `.value` directly and fires no React change, so a real
+                      pick is not caught here. */}
                   <input
                     ref={address1Ref}
                     type="text"
@@ -975,6 +1047,7 @@ export function CheckoutForm({
                     required
                     autoComplete="off"
                     defaultValue={prefill?.address1 ?? ""}
+                    onChange={() => setAddressType("")}
                     className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
                   />
                   {googlePlacesEnabled && (
@@ -983,6 +1056,8 @@ export function CheckoutForm({
                       onSelect={handlePlaceSelect}
                     />
                   )}
+                  {/* Card HMtUxvwZ — see `addressType`. */}
+                  <input type="hidden" name="address_type" value={addressType} />
                 </div>
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-zinc-700">
@@ -1067,6 +1142,9 @@ export function CheckoutForm({
                         : e.target.value;
                       setPostalCodeValue(next);
                       handlePostcodeChange(next);
+                      // A hand-typed postcode moves the delivery off the picked
+                      // place — see the address line above (card HMtUxvwZ).
+                      setAddressType("");
                     }}
                     className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
                   />
@@ -1450,7 +1528,11 @@ export function CheckoutForm({
 
         {/* Order Summary */}
         <div className="lg:col-span-2">
-          <div className="border border-zinc-200 rounded-lg p-6 sticky top-24">
+          {/* `sticky` moved OFF the summary card and onto this wrapper so the membership panel
+              below travels with it — the empty rail space is exactly where Tim's screenshot puts
+              the join (card pktBo874). */}
+          <div className="sticky top-24">
+          <div className="border border-zinc-200 rounded-lg p-6">
             <h2 className="text-lg font-semibold text-zinc-900 mb-4">Order Summary</h2>
 
             <div className="divide-y divide-zinc-100">
@@ -1596,8 +1678,21 @@ export function CheckoutForm({
               </p>
             )}
           </div>
+
+          {membership && (
+            <MembershipJoinPanel
+              memberLine={membership.memberLine}
+              join={membership.join}
+              planPriceLine={membership.priceLine}
+              planName={membership.planName}
+              isSignedIn={isSignedIn}
+              contactEmail={email}
+            />
+          )}
+          </div>
         </div>
       </div>
     </form>
+    </>
   );
 }
