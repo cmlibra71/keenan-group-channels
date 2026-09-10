@@ -5,6 +5,7 @@ import {
   checkoutOfferCopy,
   memberStateLine,
   subscribeOfferCopy,
+  type FreeTrialView,
 } from "./free-trial-copy";
 
 test("a free period renames the button, exactly as the card asks", () => {
@@ -244,4 +245,34 @@ test("no sentence anywhere reintroduces the retired savings estimate", () => {
   }
   const member = memberStateLine({ savingsLabel: "$5.00", membershipNumber: "M-000001" });
   assert.doesNotMatch(member, /save up to/i);
+});
+
+// `namesPrice` is the panel's ONE test for whether it may also print the plan's flat
+// "$14.95 per month" line (card pktBo874 folded the banner into the Order Summary rail, so both
+// sentences now sit in one box). Its contract: true exactly when `detail` itself quotes a monthly
+// price. If a future state's detail starts or stops naming a price, this flag moves with it —
+// nothing downstream re-reads `view.kind`.
+test("namesPrice is true exactly when the detail sentence quotes a monthly price", () => {
+  const cases: Array<[FreeTrialView, boolean]> = [
+    [{ kind: "free", identified: true, periodLabel: "3 months", endsLabel: "12 December 2026", priceLabel: "$14.95", pending: false }, true],
+    [{ kind: "free", identified: true, periodLabel: "3 months", endsLabel: null, priceLabel: "$14.95", pending: true }, true],
+    [{ kind: "free", identified: false, periodLabel: "3 months", endsLabel: null, priceLabel: "$14.95", pending: false }, true],
+    // No price to quote: the rollover sentence falls back to a date, so the flat price line is the
+    // only place the shopper can read what it costs and must NOT be suppressed.
+    [{ kind: "free", identified: true, periodLabel: "3 months", endsLabel: "12 December 2026", priceLabel: null, pending: false }, false],
+    [{ kind: "earn", identified: true, periodLabel: "3 months", shortfallLabel: "$240.00", thresholdLabel: "$1,000.00" }, false],
+    [{ kind: "used", identified: true, periodLabel: "3 months", usedOnLabel: "4 March 2026", priceLabel: "$14.95" }, true],
+    [{ kind: "used", identified: true, periodLabel: "3 months", usedOnLabel: "4 March 2026", priceLabel: null }, false],
+    [{ kind: "paid", identified: true }, false],
+  ];
+  for (const [view, expected] of cases) {
+    const copy = checkoutOfferCopy(view);
+    assert.equal(copy.namesPrice, expected, JSON.stringify(view));
+    // The flag has to agree with the sentence it describes, or the panel hides the wrong line.
+    if (copy.detail) {
+      assert.equal(/\$\d/.test(copy.detail) && /a month/.test(copy.detail), expected, copy.detail);
+    } else {
+      assert.equal(expected, false);
+    }
+  }
 });
