@@ -253,6 +253,7 @@
     "lib/pricing/cd-member-pricing.ts",
     "lib/product/addon-panel.test.ts",
     "lib/product/addon-panel.ts",
+    "lib/product/addon-route-wiring.test.ts",
     "lib/promo-tag-wiring.test.ts",
     "lib/quote.ts",
     "lib/quotes/acknowledgement-url.test.ts",
