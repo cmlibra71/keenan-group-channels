@@ -1,5 +1,6 @@
 import { resolveAccountLinePrices, accountLineKey } from "@keenan/services";
 import {
+  addonSelectionKey,
   readProductAddons,
   readStoredAddons,
   resolveAddonSelection,
@@ -67,24 +68,40 @@ export async function applyAccountPricesToCart(cartId: number, lines: CartLine[]
   for (const line of lines) {
     const record = prices.get(accountLineKey({ productId: line.product_id, variantId: line.variant_id }));
     if (!record) continue;
+    // Only read the product back for a line that actually carries extras — this runs on every
+    // order for every account-priced line, and the overwhelming majority carry none.
+    const resolvedAddons = await resolveLineAddons(line);
+    const storedAddons = readStoredAddons(line.modifier_selections);
+    // DID THE EXTRAS THEMSELVES MOVE? An extra staff withdrew drops out of the re-resolve above,
+    // so the PRICE stops carrying it — but the line's stored bag still lists it, and that bag is
+    // what `order-draft.ts` stamps onto `order_items.product_options` and what it subtracts
+    // `addonSurchargeExTax` by for the below-cost sentry. The record has to move with the money
+    // or the order says the customer bought something they were not charged for.
+    const addonsMoved =
+      storedAddons.length > 0 &&
+      addonSelectionKey(resolvedAddons) !== addonSelectionKey(storedAddons);
     const next = decideAccountPriceWrite({
       record,
-      // Only read the product back for a line that actually carries extras — this runs on every
-      // order for every account-priced line, and the overwhelming majority carry none.
-      resolvedAddons: await resolveLineAddons(line),
+      resolvedAddons,
       currentListPrice: line.list_price,
       currentSalePrice: line.sale_price,
     });
-    if (!next.changed) continue;
-    line.list_price = next.listPrice;
-    line.sale_price = next.salePrice;
+    if (!next.changed && !addonsMoved) continue;
+    if (next.changed) {
+      line.list_price = next.listPrice;
+      line.sale_price = next.salePrice;
+    }
+    if (addonsMoved) line.modifier_selections = resolvedAddons;
     try {
       await cartItemService.updateForParent(cartId, line.id, {
-        listPrice: next.listPrice,
-        salePrice: next.salePrice,
+        ...(next.changed ? { listPrice: next.listPrice, salePrice: next.salePrice } : {}),
+        // Only when this line actually has extras and they moved — the column also holds the
+        // variant-modifier object the REST API writes, which is not ours to stamp.
+        ...(addonsMoved ? { modifierSelections: resolvedAddons } : {}),
       });
     } catch (e) {
-      // Non-fatal: the in-memory line (what we charge) is already correct.
+      // Non-fatal: the in-memory line (what we charge, and what the order is built from) is
+      // already correct.
       console.error("[account-prices] failed to persist account price on cart item:", e);
     }
   }

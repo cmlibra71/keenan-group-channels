@@ -355,6 +355,12 @@ export async function placeOrder(
       // The re-resolved picks per line id, so the persist below writes the RECORD with the
       // money it produced — a withdrawn extra must not survive on the line it no longer bills.
       const addonsAfterReprice = new Map<number, ResolvedAddon[]>();
+      // What the line carried BEFORE this pass. Held because the re-resolve writes the new bag
+      // onto the line in memory (the order is built from that copy), so the "did they move?"
+      // test below would otherwise be comparing the new bag with itself and never persist.
+      const addonsBeforeReprice = new Map<number, unknown>(
+        fullCart.items.map((i) => [i.id, i.modifier_selections])
+      );
       for (const item of fullCart.items) {
         if (item.sale_price && item.list_price) {
           const oldPrice = item.sale_price;
@@ -381,6 +387,16 @@ export async function placeOrder(
               // just changed.
               const lineAddons = await resolveLineAddons(item.product_id, item.modifier_selections);
               addonsAfterReprice.set(item.id, lineAddons);
+              // …AND ON THE LINE IN MEMORY, not only in the price. `buildLineItems` below reads
+              // `item.modifier_selections`, and `order-draft.ts` stamps it onto
+              // `order_items.product_options` and subtracts `addonSurchargeExTax` from the line
+              // for the below-cost sentry. Leaving the stale bag there put an extra staff had
+              // WITHDRAWN onto the customer's order — the exact thing this re-resolve exists to
+              // stop — and made the sentry over-subtract. The write-back to the cart row happens
+              // in the persist loop below; this is the copy the ORDER is built from.
+              if (readStoredAddons(item.modifier_selections).length > 0) {
+                item.modifier_selections = lineAddons;
+              }
               const surcharge = addonSurcharge(lineAddons);
               item.sale_price = pricing.salePrice
                 ? (Number(pricing.salePrice) + surcharge).toFixed(2)
@@ -401,7 +417,7 @@ export async function placeOrder(
         for (const item of repriced) {
           try {
             const nextAddons = addonsAfterReprice.get(item.id);
-            const storedAddons = readStoredAddons(item.modifier_selections);
+            const storedAddons = readStoredAddons(addonsBeforeReprice.get(item.id));
             const addonsMoved =
               nextAddons != null &&
               addonSelectionKey(nextAddons) !== addonSelectionKey(storedAddons);

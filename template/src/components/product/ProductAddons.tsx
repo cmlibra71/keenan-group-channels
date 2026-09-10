@@ -37,6 +37,7 @@
 import { useProductPurchase } from "@keenan/services/product-page";
 import type { ProductAddonGroup } from "@keenan/services/product-addons";
 import { Price } from "@/components/ui/Price";
+import { extrasPanelGroups } from "@/lib/product/addon-panel";
 import { useGst, adjustForGst } from "@/lib/gst";
 
 /** "245.00" ex GST, or "269.50" once the storewide toggle says inclusive.
@@ -204,16 +205,25 @@ export function ProductAddons() {
   const purchase = useProductPurchase();
   const addons = purchase.product.addons ?? null;
 
-  // Nothing to offer.
-  if (!addons || addons.groups.length === 0) return null;
-  // A product with no price of its own — or one staff set to Hide Price — sells by
-  // quote, and the provider adds no surcharge in either case (it would republish a
-  // suppressed price, or turn a quote-only machine into a cart line priced at its
-  // accessories). Showing priced tick boxes that move no total would be a control
-  // that does nothing, so the panel goes with the price.
-  if (purchase.hidePrice || (purchase.displayBaseSalePrice ?? purchase.displayBasePrice) <= 0) {
-    return null;
-  }
+  /**
+   * IS THIS PANEL ON SCREEN? Read from the provider, never re-derived here.
+   *
+   * `addonGroupsOffered` IS the predicate (`@keenan/services/product-addons`
+   * `addonPanelShown`): the product carries groups, its price is not hidden and it is not
+   * zero. It is the SAME flag the buy controls use to decide whether to post a selection and
+   * whether a required group may grey them, so the panel and the buttons cannot disagree.
+   * Re-testing `hidePrice` and the amounts here is what let them: a required group went on
+   * greying "Add to Quote, request pricing" on a $0 quote-only product whose panel this
+   * component had already declined to draw — a dead control with nothing explaining it, which
+   * is the screen `sf-product-page` forbids (7vu2iEEZ x CXnP1lrL).
+   */
+  if (!addons || !purchase.addonGroupsOffered) return null;
+
+  // WHICH groups are ours — declared in `lib/product/addon-panel.ts`, not filtered inline, so
+  // whoever adds a control type has to say which panel owns it. A `text` group is kyMjCmAw's
+  // free-text customisation box, sharing this bag but not this control.
+  const groups = extrasPanelGroups(addons);
+  if (groups.length === 0) return null;
 
   return (
     <div className="mt-5 rounded-[12px] border border-border bg-surface-primary px-4 py-3">
@@ -222,7 +232,7 @@ export function ProductAddons() {
         Tick what you need — the price updates as you go.
       </p>
 
-      {addons.groups.map((group) => (
+      {groups.map((group) => (
         <AddonGroup
           key={group.key}
           group={group}

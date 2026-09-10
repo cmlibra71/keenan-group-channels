@@ -14,6 +14,7 @@ import { resolvePackSize, resolvePackUnit, snapToPack } from "@keenan/services/p
 import { getSession } from "@/lib/auth";
 import { pickBestBulkUnit, layerCartPrice } from "@/lib/pricing/cart-pricing";
 import {
+  addonPanelShown,
   readProductAddons,
   resolveAddonSelection,
   addonSelectionKey,
@@ -229,11 +230,41 @@ async function resolveAddonsForProduct(
  */
 async function readAddonsForAdd(
   productId: number,
+  variantId: number | null | undefined,
   selection: AddonSelectionInput | null | undefined
 ): Promise<{ resolved: ResolvedAddon[]; refusal: string | null }> {
-  const product = (await productService.getById(productId)) as { metafields?: unknown } | null;
+  const product = (await productService.getById(productId)) as
+    | { metafields?: unknown; price?: string | null; sale_price?: string | null; hide_price?: boolean | null }
+    | null;
   const definition = readProductAddons(product?.metafields);
   if (!definition) return { resolved: [], refusal: null };
+
+  // WOULD THE PAGE HAVE OFFERED A PANEL? The same predicate the provider draws it with
+  // (`addonPanelShown`), re-made here against the product record because a stale tab or a
+  // hand-posted action must not slip past it in EITHER direction: on a product whose price is
+  // hidden or zero the panel is not on screen, so there is no required group to answer and no
+  // surcharge to charge — refusing over a control the shopper cannot see is the failure
+  // `sf-product-page` forbids, and resolving the picks anyway would charge extras the page
+  // showed as adding nothing.
+  let panelShown = addonPanelShown({
+    addons: definition,
+    hidePrice: product?.hide_price,
+    price: product?.price,
+    salePrice: product?.sale_price,
+  });
+  // A variant product may carry no price of its own; the page reads the ACTIVE variant's.
+  // Only taken in that case, so the ordinary add keeps the one product read it always took.
+  if (!panelShown && product?.hide_price !== true && variantId) {
+    const variant = (await productVariantService.getById(variantId)) as
+      | { price: string | null; sale_price: string | null }
+      | null;
+    panelShown = addonPanelShown({
+      addons: definition,
+      price: variant?.price,
+      salePrice: variant?.sale_price,
+    });
+  }
+  if (!panelShown) return { resolved: [], refusal: null };
   const posted = selection != null;
   const missing = unansweredAddonGroups(definition, posted ? selection : {});
   if (missing.length > 0) {
@@ -291,6 +322,7 @@ export async function addToCart(
   // refuses in the action, not only in the page; speed on this path is stakeholder-visible).
   const { resolved: resolvedAddons, refusal: addonRefusal } = await readAddonsForAdd(
     productId,
+    variantId,
     addons
   );
   if (addonRefusal) return { error: addonRefusal };

@@ -21,6 +21,7 @@ import {
   type KitChoice,
 } from "@/lib/product-kit";
 import {
+  addonPanelShown,
   readProductAddons,
   resolveAddonSelection,
   describeAddonSelection,
@@ -118,6 +119,7 @@ export async function addToQuote(
     price: string;
     sale_price: string | null;
     metafields?: unknown;
+    hide_price?: boolean | null;
     restrict_add_to_quote?: boolean | null;
     sell_pack_size?: number | null;
     sell_pack_unit?: string | null;
@@ -177,7 +179,30 @@ export async function addToQuote(
   // anywhere to say "keep my blades". This is the same `undefined`-vs-empty distinction the
   // portal's own `product-type-actions.ts` draws.
   const addonsPosted = addons != null;
-  const addonDefinition = readProductAddons(product.metafields);
+  const rawAddonDefinition = readProductAddons(product.metafields);
+  // WOULD THE PAGE HAVE OFFERED A PANEL? The same predicate the provider draws it with
+  // (`addonPanelShown`), re-made here against the product record. A product whose price is
+  // hidden or zero sells by quote and shows no panel, so it has no required group to answer:
+  // asking for one would grey — and then refuse over — the only buy control such a product has,
+  // with nothing on screen naming it (`sf-product-page`, 7vu2iEEZ x CXnP1lrL). A variant
+  // product may carry no price of its own, so the active variant's is checked in that one case.
+  let addonPanelOffered = addonPanelShown({
+    addons: rawAddonDefinition,
+    hidePrice: product.hide_price,
+    price: product.price,
+    salePrice: product.sale_price,
+  });
+  if (!addonPanelOffered && product.hide_price !== true && variantId && rawAddonDefinition) {
+    const priceVariant = (await productVariantService.getById(variantId)) as
+      | { price: string | null; sale_price: string | null }
+      | null;
+    addonPanelOffered = addonPanelShown({
+      addons: rawAddonDefinition,
+      price: priceVariant?.price,
+      salePrice: priceVariant?.sale_price,
+    });
+  }
+  const addonDefinition = addonPanelOffered ? rawAddonDefinition : null;
   const resolvedAddons = addonsPosted ? resolveAddonSelection(addonDefinition, addons) : [];
   // A required single-choice group is a question about the MACHINE, not about the cart, so it
   // is asked on this button too — and asked HERE rather than only in the page, because a stale
