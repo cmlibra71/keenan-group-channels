@@ -25,10 +25,13 @@
 //     navigation. Leaving is exactly as fast with the pop-up open as without.
 //   * The X closes it, Escape closes it, and answering closes it. Whatever is
 //     answered by then is filed; nothing is ever demanded.
-//   * It NEVER arms on a submitted checkout — one `submit` anywhere on the page
-//     turns it off for good (see `mayArmSurvey`). Somebody who has just paid is
-//     never asked why they did not, and an answer picked BEFORE they pressed Pay
-//     is never filed afterwards either (see `file`).
+//   * It NEVER arms on a submitted checkout — the checkout form announcing that
+//     a press got past its own guards turns it off for good (see
+//     `mayArmSurvey` and `CHECKOUT_SUBMITTED_EVENT`). Somebody who has just paid
+//     is never asked why they did not, and an answer picked BEFORE they pressed
+//     Pay is never filed afterwards either (see `file`). A press the checkout
+//     REFUSED is not a submit and leaves the survey armed, which is the whole
+//     point: that shopper is still here and still has a reason.
 //   * An answer goes out as a BEACON, not as a server action, because the
 //     shopper this survey is for is one whose page is going away — and a browser
 //     cancels an ordinary fetch with the document.
@@ -47,6 +50,7 @@ import {
   CHECKOUT_SURVEY_THANKS,
 } from "@keenan/services/checkout-survey";
 import {
+  CHECKOUT_SUBMITTED_EVENT,
   EMPTY_SURVEY_DRAFT,
   EXIT_SURVEY_FRAME_GUTTER_PX,
   EXIT_SURVEY_OTHER_MAX_LENGTH,
@@ -160,10 +164,18 @@ export function CheckoutExitSurvey() {
       hiddenAt = 0;
     };
 
-    // One submit anywhere on this page and the survey is off for good: Place
-    // Order posts through the checkout form, and a card payment confirms from
-    // the same submit. Capture phase, so it is seen before React's handlers.
-    const onSubmit = () => {
+    // The checkout SAYING an order is being placed turns the survey off for
+    // good — not any old `submit` event on the page. A press of Place Order
+    // that the checkout itself refuses (a blank or half-typed card, card
+    // TT3DGpsE) fires a submit, places no order and leaves the shopper right
+    // here: watching raw submits silenced the questionnaire for the rest of the
+    // session for exactly the people whose answer is "Issues processing
+    // payment" or "Technical issues with the site". `defaultPrevented` cannot
+    // separate the two, because React calls `preventDefault()` on every submit
+    // of a form with a function `action`. CheckoutForm dispatches this once a
+    // press is past its own guards, which still covers a card confirmation —
+    // that goes through the same form.
+    const onSubmitted = () => {
       submitted.current = true;
       armed.current = false;
       // And take it off the screen if it is already there. `armed` only stops
@@ -187,11 +199,11 @@ export function CheckoutExitSurvey() {
 
     document.addEventListener("mouseout", onMouseOut);
     document.addEventListener("visibilitychange", onVisibility);
-    document.addEventListener("submit", onSubmit, true);
+    document.addEventListener(CHECKOUT_SUBMITTED_EVENT, onSubmitted);
     return () => {
       document.removeEventListener("mouseout", onMouseOut);
       document.removeEventListener("visibilitychange", onVisibility);
-      document.removeEventListener("submit", onSubmit, true);
+      document.removeEventListener(CHECKOUT_SUBMITTED_EVENT, onSubmitted);
     };
   }, []);
 
@@ -261,9 +273,10 @@ export function CheckoutExitSurvey() {
       {/* No backdrop, and `pointer-events-none` on the frame so the checkout
           behind it stays clickable everywhere the card itself is not. */}
       <div
-        // z-[120] clears the sticky site header (z-[100]) and its mega menu
-        // (z-[110]) — under either of them the question and the close button hide
-        // behind the header on a laptop screen — but stays UNDER the mobile
+        // z-[120] clears the sticky site header (z-50 on Industry Kitchens and
+        // the template, z-[100] on Chefs Depot) and its mega menu (z-[110]) —
+        // under either of them the question and the close button hide behind the
+        // header on a laptop screen — but stays UNDER the mobile
         // navigation drawer (z-[200]), which is a screen the shopper opened on
         // purpose and must not be covered.
         // Bottom-LEFT from `sm` up, never bottom-right: the Order Summary is the

@@ -205,11 +205,51 @@ test("pressing Pay takes an already-open pop-up off the screen", () => {
   // in front of — or behind — Stripe's card confirmation, which is the same
   // "never on a shopper who has just bought" rule seen from the other side.
   // Closing here files nothing: `file()` refuses once `submitted` is set.
-  const handler = component.slice(component.indexOf("const onSubmit = () => {"));
+  const handler = component.slice(component.indexOf("const onSubmitted = () => {"));
   const body = handler.slice(0, handler.indexOf("};"));
   assert.match(body, /submitted\.current = true;/);
   assert.match(body, /armed\.current = false;/);
   assert.match(body, /setOpen\(false\);/);
+});
+
+test("a press the checkout REFUSED is not a submit, so the survey stays armed", () => {
+  // TT3DGpsE refuses a blank or half-typed card in the browser, before
+  // `placeOrder` is called: the shopper places no order and is left on the
+  // checkout. Watching raw `submit` events took the questionnaire away from
+  // them for the rest of the session — silencing precisely the people whose
+  // answer is "Issues processing payment" or "Technical issues with the site" —
+  // and `defaultPrevented` cannot separate that from a real submit, because
+  // React calls `preventDefault()` on every submit of a form with a function
+  // `action`. So the FORM says when a press got past its guards, and that is
+  // the only thing the survey listens for.
+  assert.ok(
+    !/addEventListener\("submit"/.test(component),
+    "the survey must not listen for raw submit events"
+  );
+  assert.match(component, /addEventListener\(CHECKOUT_SUBMITTED_EVENT, onSubmitted\)/);
+
+  const form = readFileSync(
+    new URL("../../components/checkout/CheckoutForm.tsx", import.meta.url),
+    "utf8"
+  );
+  const onSubmit = form.slice(form.indexOf("onSubmit={(event) => {"));
+  const guard = onSubmit.slice(0, onSubmit.indexOf("announceCheckoutSubmitted()"));
+  assert.ok(guard, "CheckoutForm must announce a real submit");
+  assert.match(
+    guard,
+    /if \(cardSubmitBlocked\) \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?return;[\s\S]*?\}/,
+    "the card refusal must return BEFORE the announcement"
+  );
+});
+
+test("the survey endpoint refuses a body that is not one of ours", () => {
+  const route = readFileSync(
+    new URL("../../app/api/checkout-survey/route.ts", import.meta.url),
+    "utf8"
+  );
+  assert.match(route, /content-length/);
+  assert.match(route, /EXIT_SURVEY_MAX_BODY_BYTES/);
+  assert.ok(!/await request\.json\(\)/.test(route), "the body is read as text and bounded first");
 });
 
 // ── The Delivery card says what actually happened ───────────────────────────

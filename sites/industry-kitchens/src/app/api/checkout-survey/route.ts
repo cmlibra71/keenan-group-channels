@@ -25,7 +25,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { slidingWindowAllow } from "@/lib/rate-limit";
 import { fileCheckoutSurvey } from "@/lib/checkout/checkout-survey";
-import { hasSurveyAnswer, surveyAnswers } from "@/lib/checkout/exit-survey";
+import {
+  EXIT_SURVEY_MAX_BODY_BYTES,
+  hasSurveyAnswer,
+  surveyAnswers,
+} from "@/lib/checkout/exit-survey";
 
 const NO_CONTENT = () => new NextResponse(null, { status: 204 });
 
@@ -39,9 +43,18 @@ export async function POST(request: NextRequest) {
   )
     return NO_CONTENT();
 
+  // A survey answer is three short strings and a 500-character box. Anything
+  // bigger is not one of ours, so it is refused on the declared length before
+  // the body is read, and again on what actually arrived (a beacon always sets
+  // content-length; a hand-rolled POST need not). The rate limiter above is
+  // what bounds the cost of a stream that lies about both.
+  if (Number(h.get("content-length") ?? 0) > EXIT_SURVEY_MAX_BODY_BYTES) return NO_CONTENT();
+
   let draft: Record<string, unknown> = {};
   try {
-    draft = (await request.json()) as Record<string, unknown>;
+    const raw = await request.text();
+    if (raw.length > EXIT_SURVEY_MAX_BODY_BYTES) return NO_CONTENT();
+    draft = JSON.parse(raw) as Record<string, unknown>;
   } catch {
     return NO_CONTENT();
   }

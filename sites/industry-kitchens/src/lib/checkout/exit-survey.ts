@@ -88,13 +88,51 @@ export function returnedFromLeaving(hiddenForMs: number): boolean {
 }
 
 /**
+ * The checkout telling the page that an order really is being PLACED.
+ *
+ * The survey used to watch for any `submit` event on the document in the
+ * capture phase, which looked robust and was not: a press of Place Order that
+ * the checkout REFUSES still fires a submit. A blank or half-typed card is
+ * refused in the browser before `placeOrder` is ever called (card TT3DGpsE),
+ * and `defaultPrevented` cannot tell the two apart — React calls
+ * `preventDefault()` itself on every submit of a form with a function `action`.
+ * So a shopper whose card would not go through placed no order, was left on the
+ * checkout, and had the survey silenced for the rest of the session — silencing
+ * exactly the people whose answer is "Issues processing payment" or "Technical
+ * issues with the site".
+ *
+ * The checkout form therefore SAYS when a press got past its own guards, and
+ * that is the only thing the survey listens for. There is one form on this page
+ * and this is dispatched from its `onSubmit`, so it still covers a card
+ * confirmation, which submits through the same form.
+ */
+export const CHECKOUT_SUBMITTED_EVENT = "kg:checkout-submitted";
+
+/** Announce it. Never allowed to throw: nothing here may cost an order. */
+export function announceCheckoutSubmitted(): void {
+  try {
+    document.dispatchEvent(new Event(CHECKOUT_SUBMITTED_EVENT));
+  } catch {
+    /* A page with no document, or a browser refusing the constructor. The
+       survey merely stays armed; the order is unaffected. */
+  }
+}
+
+/** The biggest body the survey endpoint will look at. Three short answers and
+ *  a 500-character free-text box; anything larger is not one of ours. */
+export const EXIT_SURVEY_MAX_BODY_BYTES = 4096;
+
+/**
  * Whether the pop-up may be armed at all.
  *
- * `submitted` is the load-bearing one: once Place Order has been pressed the
- * shopper is buying, or is inside Stripe's card confirmation, and the survey is
- * off for good — a completed checkout must never be asked why it was abandoned.
- * It stays off even if the order is refused, because "never on a completed
- * checkout" is worth more than a second chance at a survey.
+ * `submitted` is the load-bearing one: once a press of Place Order has got past
+ * the checkout's own guards the shopper is buying, or is inside Stripe's card
+ * confirmation, and the survey is off for good — a completed checkout must never
+ * be asked why it was abandoned. It stays off even if the ORDER is then refused
+ * (by the server, by the bank), because "never on a checkout that was really
+ * submitted" is worth more than a second chance at a survey. A press the page
+ * itself refused before `placeOrder` — a half-typed card — is NOT a submit and
+ * does not set this: see `CHECKOUT_SUBMITTED_EVENT`.
  */
 export function mayArmSurvey(state: {
   hasItems: boolean;
