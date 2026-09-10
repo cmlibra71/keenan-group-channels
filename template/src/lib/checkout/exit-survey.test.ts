@@ -199,6 +199,19 @@ test("nothing is ever filed against a checkout that was submitted", () => {
   assert.match(filing, /if \(submitted\.current\) return;/);
 });
 
+test("pressing Pay takes an already-open pop-up off the screen", () => {
+  // `armed` only stops it OPENING. A shopper who had the questionnaire up,
+  // changed their mind and pressed Pay would otherwise be left with it sitting
+  // in front of — or behind — Stripe's card confirmation, which is the same
+  // "never on a shopper who has just bought" rule seen from the other side.
+  // Closing here files nothing: `file()` refuses once `submitted` is set.
+  const handler = component.slice(component.indexOf("const onSubmit = () => {"));
+  const body = handler.slice(0, handler.indexOf("};"));
+  assert.match(body, /submitted\.current = true;/);
+  assert.match(body, /armed\.current = false;/);
+  assert.match(body, /setOpen\(false\);/);
+});
+
 // ── The Delivery card says what actually happened ───────────────────────────
 //
 // Another source guard, on the filing module. `notify_status` and `ack_status`

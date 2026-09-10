@@ -166,6 +166,13 @@ export function CheckoutExitSurvey() {
     const onSubmit = () => {
       submitted.current = true;
       armed.current = false;
+      // And take it off the screen if it is already there. `armed` only stops
+      // it OPENING; a shopper who had the pop-up up, changed their mind and
+      // pressed Pay would otherwise be left with an abandonment questionnaire
+      // sitting in front of (or behind) Stripe's card confirmation. Closing
+      // here files nothing — `file()` refuses once `submitted` is set, which is
+      // the rule that a reason is never filed against an order that was placed.
+      setOpen(false);
       // Stamped here as well as when the pop-up is shown: a card taking the
       // REDIRECT form of 3-D Secure leaves the site and comes back to
       // /checkout as a fresh page load, where `submitted` starts false again.
