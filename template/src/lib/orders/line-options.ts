@@ -32,22 +32,35 @@ export function optionSummary(raw: unknown): string {
     for (const entry of raw) {
       if (!entry || typeof entry !== "object") continue;
       const o = entry as Record<string, unknown>;
-      const name = String(o.display_name ?? o.name ?? "").trim();
-      const value = String(o.display_value ?? o.value ?? "").trim();
+      const name = optionScalar(o.display_name ?? o.name);
+      const value = optionScalar(o.display_value ?? o.value);
       if (!value) continue;
       parts.push(name ? `${name}: ${value}` : value);
     }
   } else if (raw && typeof raw === "object") {
     for (const [name, value] of Object.entries(raw as Record<string, unknown>)) {
-      // Only plain scalars: a nested bag has no wording we could print, and String({}) is
-      // "[object Object]" on a customer's own order page.
-      if (typeof value !== "string" && typeof value !== "number") continue;
-      const text = String(value).trim();
+      const text = optionScalar(value);
       if (!text) continue;
       const label = name.trim();
       parts.push(label ? `${label}: ${text}` : text);
     }
   }
 
-  return parts.join(" · ");
+  return parts.join(" \u00b7 ");
+}
+
+/**
+ * A value this page is willing to PRINT. Anything else is a shape we do not know.
+ *
+ * The column is jsonb with no shape validation on the way in — `POST
+ * /api/v1/commerce/orders/[id]/items` accepts any `product_options` object — so a nested
+ * value is a REACHABLE input, and `String({})` renders "Instructions: [object Object]" on a
+ * customer's own order page. It is refused here, in the ARRAY branch as well as the OBJECT
+ * one: `String(o.display_value)` in the array branch was the way this reader and the portal's
+ * came to disagree about one column.
+ */
+function optionScalar(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return "";
 }

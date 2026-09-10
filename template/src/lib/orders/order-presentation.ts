@@ -844,41 +844,14 @@ export function netTermsMessage(days: number | null, invoiceNumber?: string | nu
  * column is jsonb with no shape validation on the way in — `POST
  * /api/v1/commerce/orders/[id]/items` accepts any object — so a nested value would
  * otherwise reach a customer as "Instructions: [object Object]". The portal's
- * reader (`src/lib/orders/line-options.ts`) already refuses to print one, and two
- * readers of one column must not disagree about what it says.
+ * reader (portal `src/lib/orders/line-options.ts`) already refuses to print one, and two
+ * readers of one column must not disagree about what it says — which is why this is a
+ * RE-EXPORT of the storefront's own `./line-options` rather than a second copy. Both
+ * modules had one, they guarded the array branch differently, and the page imported the
+ * weaker of the two.
  *
  * Reading only the ARRAY meant a customer who typed "1200mm bench, sink on the
  * left" into the Instructions box could not see it back on their own order — the
  * one screen where they would check we got it right.
  */
-export function optionSummary(raw: unknown): string {
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    return Object.entries(raw as Record<string, unknown>)
-      .map(([name, value]) => {
-        const text = optionScalar(value);
-        if (!text) return "";
-        return name ? `${name}: ${text}` : text;
-      })
-      .filter(Boolean)
-      .join(" · ");
-  }
-  if (!Array.isArray(raw)) return "";
-  return raw
-    .map((entry) => {
-      if (!entry || typeof entry !== "object") return "";
-      const o = entry as Record<string, unknown>;
-      const name = optionScalar(o.display_name ?? o.name);
-      const value = optionScalar(o.display_value ?? o.value);
-      if (!value) return "";
-      return name ? `${name}: ${value}` : value;
-    })
-    .filter(Boolean)
-    .join(" · ");
-}
-
-/** A value this page is willing to PRINT. Anything else is a shape we do not know. */
-function optionScalar(value: unknown): string {
-  if (typeof value === "string") return value.trim();
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  return "";
-}
+export { optionSummary } from "./line-options";
