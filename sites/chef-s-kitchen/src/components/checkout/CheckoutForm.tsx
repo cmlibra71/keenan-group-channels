@@ -4,6 +4,7 @@ import { useActionState, useState, useRef, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation";
 import { placeOrder, confirmStripePayment } from "@/lib/actions/checkout";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
+import { announceCheckoutSubmitted } from "@/lib/checkout/exit-survey";
 import {
   brandFreeShippingMessage,
   type MatchedBrandSpecial,
@@ -868,6 +869,12 @@ export function CheckoutForm({
         // would put it in the dependency list, re-firing a confirmation the
         // TT3DGpsE guard exists to run exactly once.
         submittedSavedCardRef.current = activeSavedCard?.id ?? null;
+        // Past every guard this form has, so an order really is being placed.
+        // The exit survey listens for exactly this and nothing else (card
+        // loDyEE3S): a press refused above is not a submit, and silencing the
+        // questionnaire on it would silence the shoppers whose answer is
+        // "Issues processing payment".
+        announceCheckoutSubmitted();
         fireShippingInfo(shippingCost);
         firePaymentInfo(selectedPaymentMethod);
       }}

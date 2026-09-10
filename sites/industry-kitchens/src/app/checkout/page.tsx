@@ -43,6 +43,7 @@ import {
 import { financeApplicationForm } from "@/lib/checkout/finance-form";
 import { CheckoutForm } from "@/components/checkout/CheckoutForm";
 import { StartedCheckoutTracker } from "@/components/analytics/StartedCheckoutTracker";
+import { CheckoutExitSurvey } from "@/components/checkout/CheckoutExitSurvey";
 
 export const metadata = {
   title: "Checkout",
@@ -551,6 +552,14 @@ export default async function CheckoutPage() {
         testModeCardUnavailable={cardUnavailableInTestSession}
         finance={financeMethodsEnabled ? financeOffer : null}
       />
+      {/* The abandon-intent questionnaire (card loDyEE3S, Tim: "as per Myer").
+          Mounted only here, and only past the empty-cart redirect above, so it
+          can never appear on the confirmation page or on an empty basket. It is
+          a prompt, never a gate — see the component. LAST on the page on
+          purpose: while it is open it reserves flow height below the checkout,
+          so the Order Summary that ends this page can always be scrolled clear
+          of the card. */}
+      <CheckoutExitSurvey />
     </div>
   );
 }

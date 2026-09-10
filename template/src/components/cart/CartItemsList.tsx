@@ -41,6 +41,13 @@ export type CartItemRow = {
   /** deny | allow_silent | allow_notify — only allow_notify says anything to the shopper. */
   backorder_policy?: string | null;
   /**
+   * The paid extras this line was configured with (card 0CDcCYmO), as stored on
+   * `cart_items.modifier_selections`. Their price is already INSIDE the line's unit price —
+   * this is the record of what was chosen, so the shopper can see what they are paying the
+   * difference for. Absent on every line that has none.
+   */
+  modifier_selections?: unknown;
+  /**
    * The SELLING UNIT, resolved server-side in `readCart` (cards O108e4jH / zeMPVcA3). A product
    * sold by the carton steps a whole carton at a time here and says what a carton holds — the
    * quantity in this row is always PIECES, which is what the money is priced in.
@@ -48,6 +55,21 @@ export type CartItemRow = {
   pack_size?: number | null;
   pack_unit?: string | null;
 };
+
+/** The picked extras on a cart line, read defensively — the column is jsonb. */
+function lineAddonLabels(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((raw) => {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+      const r = raw as Record<string, unknown>;
+      const label = typeof r.optionLabel === "string" ? r.optionLabel : null;
+      if (!label) return null;
+      const group = typeof r.groupLabel === "string" ? r.groupLabel : null;
+      return group ? `${group}: ${label}` : label;
+    })
+    .filter((l): l is string => l !== null);
+}
 
 export function CartItemsList({
   items,
@@ -162,6 +184,8 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
     });
   }
 
+  const addonLabels = lineAddonLabels(item.modifier_selections);
+
   return (
     <div className={`py-4 flex items-center gap-4 ${isPending ? "opacity-50" : ""}`}>
       <div className="flex-1 min-w-0">
@@ -177,6 +201,18 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
         <p className="text-xs text-zinc-400 mt-0.5">
           SKU: {item.variant_sku || item.product_sku || "N/A"}
         </p>
+        {/* What this line was configured with. The extras' price is already in the unit
+            price below, so this is the only place the shopper can see WHY two of the same
+            machine cost different amounts. (Card 0CDcCYmO.) */}
+        {addonLabels.length > 0 && (
+          <ul className="mt-1 space-y-0.5">
+            {addonLabels.map((label) => (
+              <li key={label} className="text-xs text-zinc-600">
+                + {label}
+              </li>
+            ))}
+          </ul>
+        )}
         <p className="text-sm text-zinc-600 mt-1"><Price amount={unitPrice} /> each</p>
         {packNote && (
           <p className="text-xs text-zinc-600 mt-0.5">
