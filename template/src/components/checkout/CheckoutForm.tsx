@@ -4,6 +4,7 @@ import { useActionState, useState, useRef, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation";
 import { placeOrder, confirmStripePayment } from "@/lib/actions/checkout";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
+import { announceCheckoutSubmitted } from "@/lib/checkout/exit-survey";
 import {
   brandFreeShippingMessage,
   type MatchedBrandSpecial,
@@ -56,7 +57,11 @@ import { useHeaderPanels } from "@/lib/cart-quote-counts";
 import { ga4AddShippingInfo, ga4AddPaymentInfo, rowToGa4Item } from "@/components/analytics/ga4";
 import { BulkyDeliveryChoice } from "@/components/checkout/BulkyDeliveryChoice";
 import { holdsPayment, type DeliveryService } from "@/lib/checkout/bulky-delivery";
+import { CommercialApplianceNotice } from "@/components/checkout/CommercialApplianceNotice";
 import { backorderMessage } from "@keenan/services/backorder";
+import { MembershipJoinPanel } from "@/components/checkout/MembershipJoinPanel";
+// The client-safe SUBPATH again, never the barrel — see the note above.
+import { readStoredAddons, describeAddonSelection } from "@keenan/services/product-addons";
 
 declare global {
   interface Window {
@@ -97,6 +102,14 @@ type CartItem = {
    * which draws the placeholder rather than a broken box.
    */
   image_url?: string | null;
+  /**
+   * What the shopper configured on the product page, as stored on
+   * `cart_items.modifier_selections` (cards 0CDcCYmO + kyMjCmAw). Printed on the
+   * summary row because two lines of the SAME product can now differ only by what
+   * was typed into them — without it, the last screen before paying shows two
+   * identical rows and the shopper cannot check their own order.
+   */
+  modifier_selections?: unknown;
 };
 
 type Country = {
@@ -132,6 +145,9 @@ type SavedAddress = {
   countryCode: string;
   phone?: string | null;
   isDefaultBilling: boolean;
+  /** `customer_addresses.address_type` — "residential" | "commercial" | "" (never classified).
+   *  Cards HMtUxvwZ, Xw9VQmAJ: this is what an address-triggered freight attribute fires on. */
+  addressType?: string;
 };
 
 export function CheckoutForm({
@@ -154,17 +170,46 @@ export function CheckoutForm({
   brandSpecial = null,
   shippingEnabled = false,
   bulkyProductNames = [],
+  commercialProductNames = [],
   stripePublishableKey,
   testMode = false,
   testModeCardUnavailable = false,
   finance = null,
   savedCards = [],
   savedCardsUnavailable = false,
+  membership = null,
 }: {
   items: CartItem[];
   subtotal: number;
   gstAmount: number;
   isMember?: boolean;
+  /**
+   * The membership panel in the Order Summary rail (card pktBo874). Null on a storefront that
+   * does not sell a membership, which is how Industry Kitchens draws nothing at all.
+   */
+  membership?: {
+    planName: string;
+    /** "$14.95 per month", off the plan — null when it carries no usable price. */
+    priceLine: string | null;
+    /**
+     * The MEMBER's own line, already written by `memberStateLine` (card ASTb3tCf). Non-null
+     * exactly when this shopper is a member. The saving inside it is the MEASURED figure — list
+     * value minus what is charged — and there is deliberately no estimated one (card Nyp8bkPm).
+     */
+    memberLine: string | null;
+    /**
+     * The join offer in card ASTb3tCf's own words (`checkoutOfferCopy`), or null for a member.
+     * Passed through untouched: the checkout and the subscribe page must make the same promise
+     * about the same free months.
+     */
+    join: {
+      headline: string;
+      detail: string | null;
+      cta: string;
+      highlight: boolean;
+      namesPrice: boolean;
+    } | null;
+  } | null;
   pricesIncludeTax?: boolean;
   customerEmail?: string;
   /** Is there a session? Guests are offered the sign-in / create-account drawer,
@@ -193,6 +238,10 @@ export function CheckoutForm({
   /** Names of the cart's bulky products (card Wxjp8wpg). Non-empty ⇒ the shopper must choose
    *  curbside vs specialised delivery before this order can be placed. */
   bulkyProductNames?: string[];
+  /** Names of the cart's commercial-only products (card HMtUxvwZ). Non-empty ⇒ the
+   *  commercial-appliance note is shown once when the page opens. It refuses nothing,
+   *  so — unlike every filter on this form — it has no counterpart in `placeOrder`. */
+  commercialProductNames?: string[];
   stripePublishableKey?: string;
   /**
    * True ONLY while this browser holds an ephemeral test checkout session (a
@@ -481,6 +530,13 @@ export function CheckoutForm({
   const [country, setCountry] = useState<string>(() => countries[0]?.code || "AU");
   const [stateValue, setStateValue] = useState("");
   const [postalCodeValue, setPostalCodeValue] = useState("");
+  /**
+   * Residential vs commercial for THIS delivery (card HMtUxvwZ), derived from the
+   * shopper's Places pick and posted as a hidden field. "" means the pick said nothing
+   * we trust, and the order then reads commercial like every order does today. Never a
+   * refusal and never shown to the shopper — it is a signal for a rep on the order.
+   */
+  const [addressType, setAddressType] = useState("");
   const isAu = country === "AU";
 
   // Shipping calculation state. `shippingCost` holds the rate card's own figure, which is
@@ -498,8 +554,15 @@ export function CheckoutForm({
     brandFreeShipping: !!brandSpecial,
   });
 
+  // The quoted delivery must be the delivery that is charged, so the summary asks with the same
+  // address classification placeOrder will price against (card Xw9VQmAJ / HMtUxvwZ). Held in a
+  // ref so a change of address re-quotes without putting the classification in the callback's
+  // deps and re-firing every postcode effect that depends on its identity. Filled in below,
+  // once the selected saved address is known.
+  const addressTypeRef = useRef("");
+
   const calculateShippingCost = useCallback(
-    async (postcode: string) => {
+    async (postcode: string, addressTypeHint?: string | null) => {
       if (!shippingEnabled || !postcode || postcode.length < 3) {
         setShippingCost(null);
         setShippingError(null);
@@ -519,7 +582,15 @@ export function CheckoutForm({
         const response = await fetch("/api/shipping/calculate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ postcode, subtotal }),
+          body: JSON.stringify({
+            postcode,
+            subtotal,
+            // `addressTypeHint` is passed by the Places handler, which sets the state and quotes
+            // in the same tick — the ref is a render behind at that moment, and quoting on the
+            // PREVIOUS address's classification is exactly the show-does-not-equal-charge fault
+            // this argument exists to stop.
+            address_type: (addressTypeHint ?? addressTypeRef.current) || undefined,
+          }),
         });
         const result = await response.json();
 
@@ -551,16 +622,35 @@ export function CheckoutForm({
   );
 
   const handlePlaceSelect = useCallback(
-    (place: { address1: string; city: string; state: string; postalCode: string; countryCode: string }) => {
-      if (address1Ref.current) address1Ref.current.value = place.address1;
-      if (cityRef.current) cityRef.current.value = place.city;
+    (place: {
+      address1: string;
+      city: string;
+      state: string;
+      postalCode: string;
+      countryCode: string;
+      addressType: string | null;
+    }) => {
+      // NEVER WRITE AN EMPTY STREET OVER WHAT THE SHOPPER TYPED (card HMtUxvwZ).
+      // Address is a REQUIRED field on the critical path and this assignment used to
+      // be unconditional, so a suggestion that carried no street would have silently
+      // emptied it with Place Order still live. `getPlaceDetails` already refuses a
+      // place with no `route`, so this is the second belt on the same failure rather
+      // than the only one — a lookup that somehow answers with nothing usable leaves
+      // the shopper's own words exactly where they are.
+      if (address1Ref.current && place.address1) address1Ref.current.value = place.address1;
+      if (cityRef.current && place.city) cityRef.current.value = place.city;
+      // Card HMtUxvwZ — THE CHECK THE CARD OPENS WITH, made where the address is
+      // chosen. Derived from this same Places pick, so no second call and no second
+      // Google product; a pick that says nothing leaves it unset and the order reads
+      // commercial, exactly as every order does today.
+      setAddressType(place.addressType ?? "");
       // Places returns "VIC" or "Victoria" — normalise so the dropdown matches.
       setStateValue(normaliseAuState(place.state) ?? place.state);
       setPostalCodeValue(place.postalCode);
       if (place.countryCode) setCountry(place.countryCode);
       // Trigger shipping calculation when address is autocompleted
       if (place.postalCode) {
-        calculateShippingCost(place.postalCode);
+        calculateShippingCost(place.postalCode, place.addressType ?? "");
       }
     },
     [calculateShippingCost]
@@ -577,6 +667,16 @@ export function CheckoutForm({
   const showAddressForm =
     savedAddresses.length === 0 || selectedAddressId === "new" || needsCorrection;
   const prefill = needsCorrection ? selectedAddress : undefined;
+
+  // THE residential/commercial classification for the address this order is actually going to
+  // (cards HMtUxvwZ, Xw9VQmAJ). A saved address carries its own `address_type` from
+  // `customer_addresses`; a freshly typed one carries what the Places pick said. One value feeds
+  // three things — the hidden field placeOrder prices and stamps, and the summary's own quote —
+  // so the shopper can never be shown a delivery figure that a different classification produced.
+  // Switching from a typed address back to a saved one therefore re-quotes on the SAVED one.
+  const effectiveAddressType =
+    selectedAddress && !showAddressForm ? selectedAddress.addressType ?? "" : addressType;
+  addressTypeRef.current = effectiveAddressType;
 
   // On the EMPTY new-address form (not the correction path, which is seeded from
   // the saved address instead) fall back to the contact's own name and phone.
@@ -791,6 +891,10 @@ export function CheckoutForm({
   const summaryError = cardRefused ? cardError || state?.error : state?.error || cardError;
 
   return (
+    <>
+    {/* Card HMtUxvwZ — the commercial-appliance note, in the card's own words. Shown on
+        arrival, dismissible, and it never disables Place Order. */}
+    <CommercialApplianceNotice productNames={commercialProductNames} />
     <form
       action={formAction}
       onSubmit={(event) => {
@@ -811,6 +915,12 @@ export function CheckoutForm({
         // would put it in the dependency list, re-firing a confirmation the
         // TT3DGpsE guard exists to run exactly once.
         submittedSavedCardRef.current = activeSavedCard?.id ?? null;
+        // Past every guard this form has, so an order really is being placed.
+        // The exit survey listens for exactly this and nothing else (card
+        // loDyEE3S): a press refused above is not a submit, and silencing the
+        // questionnaire on it would silence the shoppers whose answer is
+        // "Issues processing payment".
+        announceCheckoutSubmitted();
         fireShippingInfo(shippingCost);
         firePaymentInfo(selectedPaymentMethod);
       }}
@@ -976,6 +1086,13 @@ export function CheckoutForm({
                 </div>
                 <div className="col-span-2 relative">
                   <label className="block text-sm font-medium text-zinc-700">Address</label>
+                  {/* Card HMtUxvwZ: typing over the address by hand drops the
+                      derived delivery type. Whatever the last suggestion said no
+                      longer describes what is in the box, and posting the type of
+                      an abandoned address would print RESIDENTIAL ADDRESS about
+                      somewhere the order is not going. Google filling this box
+                      writes `.value` directly and fires no React change, so a real
+                      pick is not caught here. */}
                   <input
                     ref={address1Ref}
                     type="text"
@@ -983,6 +1100,7 @@ export function CheckoutForm({
                     required
                     autoComplete="off"
                     defaultValue={prefill?.address1 ?? ""}
+                    onChange={() => setAddressType("")}
                     className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
                   />
                   {googlePlacesEnabled && (
@@ -991,6 +1109,8 @@ export function CheckoutForm({
                       onSelect={handlePlaceSelect}
                     />
                   )}
+                  {/* Card HMtUxvwZ — see `effectiveAddressType`. */}
+                  <input type="hidden" name="address_type" value={effectiveAddressType} />
                 </div>
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-zinc-700">
@@ -1075,6 +1195,9 @@ export function CheckoutForm({
                         : e.target.value;
                       setPostalCodeValue(next);
                       handlePostcodeChange(next);
+                      // A hand-typed postcode moves the delivery off the picked
+                      // place — see the address line above (card HMtUxvwZ).
+                      setAddressType("");
                     }}
                     className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
                   />
@@ -1140,6 +1263,10 @@ export function CheckoutForm({
                 <input type="hidden" name="postalCode" value={selectedAddress.postalCode} />
                 <input type="hidden" name="country" value={selectedAddress.countryCode} />
                 <input type="hidden" name="phone" value={selectedAddress.phone || ""} />
+                {/* The saved address's OWN classification (cards HMtUxvwZ, Xw9VQmAJ). Without
+                    it a saved address posted nothing, so the order lost the residential stamp
+                    and an address-triggered surcharge quoted in the summary was never charged. */}
+                <input type="hidden" name="address_type" value={effectiveAddressType} />
               </>
             )}
 
@@ -1458,7 +1585,11 @@ export function CheckoutForm({
 
         {/* Order Summary */}
         <div className="lg:col-span-2">
-          <div className="border border-zinc-200 rounded-lg p-6 sticky top-24">
+          {/* `sticky` moved OFF the summary card and onto this wrapper so the membership panel
+              below travels with it — the empty rail space is exactly where Tim's screenshot puts
+              the join (card pktBo874). */}
+          <div className="sticky top-24">
+          <div className="border border-zinc-200 rounded-lg p-6">
             <h2 className="text-lg font-semibold text-zinc-900 mb-4">Order Summary</h2>
 
             <div className="divide-y divide-zinc-100">
@@ -1476,6 +1607,12 @@ export function CheckoutForm({
                     backorderPolicy: item.backorder_policy ?? null,
                   },
                   item.quantity
+                );
+                // What was ticked or typed on this line, in the shopper's own words.
+                // NO MONEY in it — `describeAddonSelection` guarantees that, and it
+                // matters here because the row prints a GST-aware figure beside it.
+                const configuration = describeAddonSelection(
+                  readStoredAddons(item.modifier_selections)
                 );
                 return (
                   <div key={i} className="py-2 text-sm">
@@ -1503,6 +1640,12 @@ export function CheckoutForm({
                           </div>
                         )}
                       </div>
+                      {/* Everything the line SAYS stays in one column beside the picture, at
+                          full width: the name and price row, the add-on configuration, and
+                          the back-order note. The image column may never displace that note —
+                          with card CXnP1lrL having removed every other availability string,
+                          it is the only explanation of a back order a shopper gets anywhere
+                          (card 7vu2iEEZ, Tim 2026-08-11). */}
                       <div className="min-w-0 flex-1">
                         <div className="flex justify-between gap-2">
                           <span className="text-zinc-600">
@@ -1510,6 +1653,11 @@ export function CheckoutForm({
                           </span>
                           <Price amount={price * item.quantity} className="font-medium" />
                         </div>
+                        {configuration && (
+                          <p className="mt-0.5 whitespace-pre-line text-xs text-zinc-500">
+                            {configuration}
+                          </p>
+                        )}
                         {backorderNote && (
                           <p className="mt-1.5 rounded border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs text-sky-800">
                             {backorderNote}
@@ -1631,8 +1779,21 @@ export function CheckoutForm({
               </p>
             )}
           </div>
+
+          {membership && (
+            <MembershipJoinPanel
+              memberLine={membership.memberLine}
+              join={membership.join}
+              planPriceLine={membership.priceLine}
+              planName={membership.planName}
+              isSignedIn={isSignedIn}
+              contactEmail={email}
+            />
+          )}
+          </div>
         </div>
       </div>
     </form>
+    </>
   );
 }

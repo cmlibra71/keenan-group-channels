@@ -8,6 +8,7 @@ import {
   getSubscriptionPlans,
   getActiveSubscriptionForContact,
   getMemberSince,
+  getMembershipNumber,
   getFeatureFlag,
   subscriptionService,
   drawEntryService,
@@ -29,10 +30,13 @@ export default async function MembershipPage() {
   const session = await getSession();
   if (!session) redirect(signInRedirect("/account/membership"));
 
-  const [plans, activeSub, memberSince] = await Promise.all([
+  const [plans, activeSub, memberSince, membershipNo] = await Promise.all([
     getSubscriptionPlans(),
     getActiveSubscriptionForContact(session.contactId),
     getMemberSince(session.contactId),
+    // The member's own number (card ASTb3tCf, item 5). Derived from the same earliest
+    // subscription "Member since" is read from, so the two can never disagree.
+    getMembershipNumber(session.contactId),
   ]);
   // Melbourne, always — see member-date.ts.
   const memberSinceLabel = formatMemberSince(memberSince);
@@ -105,6 +109,12 @@ export default async function MembershipPage() {
                 {isPastDue ? "Past Due" : isCancelling ? "Cancelling" : "Active"}
               </dd>
             </div>
+            {membershipNo && (
+              <div>
+                <dt className="text-steel-500">Membership number</dt>
+                <dd className="font-medium text-ink-900">{membershipNo}</dd>
+              </div>
+            )}
             {memberSinceLabel && (
               <div>
                 <dt className="text-steel-500">Member since</dt>

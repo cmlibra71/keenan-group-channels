@@ -831,3 +831,27 @@ export function netTermsMessage(days: number | null, invoiceNumber?: string | nu
   const invoice = invoiceNumber ? ` (${invoiceNumber})` : "";
   return `${opening} An invoice${invoice} will be issued for it — no action is required here.`;
 }
+
+/**
+ * ONE line's `product_options`, rendered for the customer's own order page.
+ *
+ * TWO SHAPES, both real. Every one of the 73,439 Zoey-imported lines stores a
+ * BigCommerce-style ARRAY of `{display_name, display_value}` (all empty); a line
+ * configured on our own storefront stores the `{group label: answer}` OBJECT that
+ * `addonsAsOrderOptions` writes (cards 0CDcCYmO + kyMjCmAw). Both are read here.
+ *
+ * A value that is not a SCALAR is printed as nothing rather than as noise. The
+ * column is jsonb with no shape validation on the way in — `POST
+ * /api/v1/commerce/orders/[id]/items` accepts any object — so a nested value would
+ * otherwise reach a customer as "Instructions: [object Object]". The portal's
+ * reader (portal `src/lib/orders/line-options.ts`) already refuses to print one, and two
+ * readers of one column must not disagree about what it says — which is why this is a
+ * RE-EXPORT of the storefront's own `./line-options` rather than a second copy. Both
+ * modules had one, they guarded the array branch differently, and the page imported the
+ * weaker of the two.
+ *
+ * Reading only the ARRAY meant a customer who typed "1200mm bench, sink on the
+ * left" into the Instructions box could not see it back on their own order — the
+ * one screen where they would check we got it right.
+ */
+export { optionSummary } from "./line-options";

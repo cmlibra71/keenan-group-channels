@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Check, Gift, ShoppingBag } from "lucide-react";
 import { getSession } from "@/lib/auth";
-import { getActiveSubscriptionForContact, getFeatureFlag } from "@/lib/store";
+import { contactService, getActiveSubscriptionForContact, getFeatureFlag } from "@/lib/store";
 
 export const metadata = {
   title: "Welcome to Membership",
@@ -18,6 +18,14 @@ export default async function MembershipWelcomePage() {
   const drawsEnabled = await getFeatureFlag("draws_enabled");
   const partnerOffersEnabled = await getFeatureFlag("partner_offers_enabled");
 
+  // Tim's storyboard screenshot 11 ("All Set page") greets the new member by name. Best-effort:
+  // a member we cannot name reads the same sentence without one rather than "undefined, you're
+  // all set!" or a blank line where the heading should be.
+  const contact = (await contactService
+    .getById(session.contactId)
+    .catch(() => null)) as { first_name?: string | null } | null;
+  const firstName = (contact?.first_name ?? "").trim();
+
   return (
     <div className="mx-auto max-w-2xl px-4 sm:px-6 lg:px-8 py-8 text-center">
       <div className="mb-6">
@@ -25,7 +33,7 @@ export default async function MembershipWelcomePage() {
           <Check className="h-8 w-8 text-green-600" />
         </div>
         <h1 className="text-3xl font-bold text-zinc-900 mb-3">
-          Welcome to Membership!
+          {firstName ? `${firstName}, you're all set!` : "You're all set!"}
         </h1>
         <p className="text-zinc-600 text-lg">
           Your membership is now active. Here&apos;s what you&apos;ve unlocked:

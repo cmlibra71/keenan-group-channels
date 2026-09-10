@@ -22,6 +22,9 @@ import { Price } from "@/components/ui/Price";
 import { PriceBlock } from "@/components/ui/PriceBlock";
 import { useProductPurchaseOptional } from "@/components/product/ProductPurchaseProvider";
 import { packPrice } from "@keenan/services/pack";
+import { postsConfiguration } from "@/lib/product/addon-panel";
+import { ProductInstructionsPanel } from "@/components/product/ProductInstructionsPanel";
+import { buyAreaSuppressed } from "@/lib/product-customisation";
 
 export type WidgetComponent = FC<{ attrs: Record<string, unknown>; ctx?: RenderContext }>;
 
@@ -133,7 +136,10 @@ export const PriceWidget: WidgetComponent = ({ attrs }) => {
 export const BulkPricingWidget: WidgetComponent = () => {
   const purchase = useProductPurchaseOptional();
   if (!purchase) return null;
-  const { product, displayPrice } = purchase;
+  // The product's OWN price, without any paid extras the shopper has ticked (card
+  // 0CDcCYmO). A quantity break is a discount off the MACHINE, so working a percent tier
+  // off a price that already carries $480 of blades would quietly discount the blades too.
+  const { product, displayBasePrice: displayPrice } = purchase;
   if (product.bulkPricing.length === 0 || displayPrice <= 0) return null;
   return (
     <div className="mt-4">
@@ -227,6 +233,35 @@ export const QuantityWidget: WidgetComponent = () => {
   );
 };
 
+/**
+ * The free-text customisation panel as a v2 widget (card kyMjCmAw).
+ *
+ * Registered so this renderer can show the same field the node-tree page places
+ * automatically. It must exist: the provider knows about required customisation
+ * groups and `allOptionsSelected` goes false while one is unanswered — a renderer
+ * with no panel to fill in would grey the buy button with nothing beside it, which
+ * `sf-product-page` forbids outright.
+ *
+ * Its own widget rather than a control inside `ProductAddonsWidget`, for the reason
+ * `lib/product/addon-panel.ts` records: drawn by the priced-extras panel a free-text
+ * box came out as an empty radio list labelled "Choose one" that nothing could satisfy.
+ */
+export const ProductInstructionsWidget: WidgetComponent = () => {
+  const purchase = useProductPurchaseOptional();
+  if (!purchase) return <NoProvider name="product_instructions" />;
+  // 7vu2iEEZ on `sf-product-page`: a product with BOTH buy controls restricted
+  // renders no buy area at all — no control, no wording. Both buy widgets return
+  // null on it, so the field would be a required box with nothing to press.
+  if (buyAreaSuppressed(purchase.restrictAddToCart, purchase.restrictAddToQuote)) return null;
+  return (
+    <ProductInstructionsPanel
+      groups={purchase.product.addons?.groups ?? []}
+      values={purchase.addonText}
+      onChange={purchase.setAddonText}
+    />
+  );
+};
+
 export const AddToCartWidget: WidgetComponent = ({ attrs }) => {
   const purchase = useProductPurchaseOptional();
   if (!purchase) return <NoProvider name="add_to_cart" />;
@@ -250,6 +285,15 @@ export const AddToCartWidget: WidgetComponent = ({ attrs }) => {
   return (
     <AddToCartButton
       productId={product.id}
+      // The ticked extras travel with the click (card 0CDcCYmO) — their price is already in
+      // the displayed price, and the server re-resolves every amount from the product itself.
+      // Posted only where the panel was actually OFFERED, exactly as the quote control below is:
+      // this renderer builds its provider payload BY HAND and passes no `addons`, so it shows no
+      // extras panel — and handing it `{}` would answer a required group the shopper was never
+      // asked, refusing the add with "Please choose X" on a page carrying no such control.
+      addons={postsConfiguration(purchase.addonGroupsOffered, purchase.product.addons)
+        ? purchase.selectedAddons
+        : undefined}
       variantId={cartVariantId}
       quantity={quantity}
       size={attrs.size === "sm" ? "sm" : undefined}
@@ -268,6 +312,9 @@ export const AddToQuoteWidget: WidgetComponent = ({ attrs }) => {
     useGroupedMode,
     allOptionsSelected,
     restrictAddToQuote,
+    selectedAddons,
+    addonGroupsUnanswered,
+    addonGroupsOffered,
   } = purchase;
   // Zoey "Restrict Add to Quote" — the button simply is not offered for this product (7vu2iEEZ).
   if (restrictAddToQuote) return null;
@@ -276,7 +323,15 @@ export const AddToQuoteWidget: WidgetComponent = ({ attrs }) => {
       productId={product.id}
       variantId={cartVariantId}
       size={attrs.size === "sm" ? "sm" : undefined}
-      disabled={useGroupedMode && !allOptionsSelected}
+      // Card 0CDcCYmO. This renderer is the fallback both sites fall back to when
+      // `node_product_template_enabled` is switched off, so the ticked extras travel with THIS
+      // button too — a quote path that silently dropped them hands the rep a bare machine. A
+      // required group greys the button here as it does on the coded buy box, and the action
+      // refuses it again server-side. A selection is posted only where the panel was actually
+      // OFFERED: this renderer builds its provider input by hand and does not pass `addons`, and
+      // an empty object would read as a deliberate clear-down of a configuration made elsewhere.
+      addons={postsConfiguration(addonGroupsOffered, product.addons) ? selectedAddons : undefined}
+      disabled={(useGroupedMode && !allOptionsSelected) || addonGroupsUnanswered.length > 0}
       label={
         str(attrs.label) ||
         (displayPrice <= 0 ? "Add to Quote — request pricing" : undefined)
@@ -356,6 +411,14 @@ export const MobileBuyBarWidget: WidgetComponent = () => {
         productId={product.id}
         variantId={cartVariantId}
         quantity={quantity}
+        // The mobile bar buys the same configuration the panel above it shows — the ticked
+        // extras are already in the price beside this button (card 0CDcCYmO). Posted only where
+        // that panel was actually OFFERED: this renderer builds its provider payload by hand and
+        // passes no `addons`, and `{}` would read as an answer to a question never asked, refusing
+        // the add over a required group with no control on screen to satisfy it.
+        addons={postsConfiguration(purchase.addonGroupsOffered, purchase.product.addons)
+        ? purchase.selectedAddons
+        : undefined}
         size="sm"
         disabled={purchasingDisabled || !allOptionsSelected}
       />

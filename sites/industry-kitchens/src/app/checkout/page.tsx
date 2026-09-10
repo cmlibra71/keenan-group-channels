@@ -1,13 +1,20 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Crown, ArrowRight } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getMembershipNumber, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
+import { resolveFreeTrialOffer } from "@/lib/membership/free-trial";
+import {
+  checkoutOfferCopy,
+  JOIN_PITCH,
+  memberStateLine,
+  type FreeTrialView,
+} from "@/lib/membership/free-trial-copy";
+import { planPriceLine } from "@/lib/membership/checkout-join";
 import { getContactPermissions } from "@/lib/role-permissions";
 import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import {
   summariseLinesFreight,
+  listResidentialRestrictedProductNames,
   listSavedCardsForContact,
   RENDER_PATH_TIMEOUT_MS,
   type SavedCard,
@@ -34,9 +41,11 @@ import {
   financeOfferForCart,
   isFinancePaymentMethod,
 } from "@/lib/checkout/finance";
+import { addressTypeFromContactBook } from "@keenan/services/residential";
 import { financeApplicationForm } from "@/lib/checkout/finance-form";
 import { CheckoutForm } from "@/components/checkout/CheckoutForm";
 import { StartedCheckoutTracker } from "@/components/analytics/StartedCheckoutTracker";
+import { CheckoutExitSurvey } from "@/components/checkout/CheckoutExitSurvey";
 
 export const metadata = {
   title: "Checkout",
@@ -257,7 +266,7 @@ export default async function CheckoutPage() {
   // Load saved addresses for the logged-in contact (identity unification —
   // listForContact also covers legacy customer-keyed rows via the migration's
   // contact_id backfill).
-  let savedAddresses: { id: number; firstName: string; lastName: string; address1: string; address2?: string; city: string; stateOrProvince: string; postalCode: string; countryCode: string; phone?: string | null; isDefaultBilling: boolean }[] = [];
+  let savedAddresses: { id: number; firstName: string; lastName: string; address1: string; address2?: string; city: string; stateOrProvince: string; postalCode: string; countryCode: string; phone?: string | null; isDefaultBilling: boolean; addressType?: string }[] = [];
   if (session) {
     try {
       const rows = await customerAddressService.listForContact(session.contactId);
@@ -275,6 +284,21 @@ export default async function CheckoutPage() {
         // even though CheckoutForm submits it as a hidden field.
         phone: (a.phone ?? null) as string | null,
         isDefaultBilling: !!(a.is_default_billing ?? a.isDefaultBilling),
+        // The saved address's own residential/commercial classification (cards HMtUxvwZ,
+        // Xw9VQmAJ). Selecting a saved address used to post no `address_type` at all, so the
+        // order lost the stamp and an address-triggered freight attribute quoted in the summary
+        // was never charged.
+        //
+        // QUARANTINED, and this is load-bearing: `customer_addresses.address_type` is
+        // `DEFAULT 'residential'` and reads residential on all 15,518 production rows with no
+        // other value anywhere — it is the column default, not fifteen thousand customers living
+        // in houses. Honouring it raw would charge a Residential surcharge to every shopper with
+        // a saved address the moment a number is typed into that attribute. Only an explicit
+        // `commercial` survives, exactly as the portal's own address reader does
+        // (`addressTypeFromContactBook`); "" then means nobody has classified it, and an
+        // address-triggered attribute fires nothing rather than guessing. A freshly TYPED
+        // address is unaffected — its classification comes from the shopper's own Places pick.
+        addressType: addressTypeFromContactBook(a.address_type ?? a.addressType) ?? "",
       }));
     } catch {
       // No saved addresses
@@ -364,6 +388,14 @@ export default async function CheckoutPage() {
     .then((f) => f.bulky.map((p) => p.name))
     .catch(() => [] as string[]);
 
+  // Commercial-only items in this cart (card HMtUxvwZ). Non-empty ⇒ CheckoutForm shows the
+  // commercial-appliance note once, in the card's own words. It refuses nothing, so unlike
+  // the bulky read above it has no counterpart in placeOrder; a failed lookup simply means
+  // no note, never a blocked checkout.
+  const commercialProductNames = await listResidentialRestrictedProductNames(
+    (cart.items as Array<{ product_id: number }>).map((i) => Number(i.product_id))
+  ).catch(() => [] as string[]);
+
   // Check if shipping rate calculation is available
   let shippingEnabled = false;
   try {
@@ -371,10 +403,36 @@ export default async function CheckoutPage() {
     shippingEnabled = !!activeCard;
   } catch {}
 
-  // Check membership status for checkout banners
+  // MEMBERSHIP AT THE CHECKOUT — one panel, in the Order Summary rail.
+  //
+  // Card pktBo874 moves it there: Tim's "Membership Real Estate" screenshot is this very page with
+  // a large empty area under the Order Summary card, and Myer's checkout is his stated reference
+  // for what belongs in it. The two thin banners that used to run across the top of this page are
+  // gone with it, so ONE place on this screen talks about membership and no shopper meets the same
+  // offer twice.
+  //
+  // Everything the panel SAYS about the free months is still card ASTb3tCf's, unchanged:
+  // `checkoutOfferCopy` decides all four join states and `memberStateLine` the member's own line,
+  // and the panel renders what they return rather than writing a second set of sentences about the
+  // same money. The panel links to `/membership` and never to the payment page, in every state —
+  // which is stricter than that card's free-link rule and satisfies it by construction: its way in
+  // is the join tick, which charges nothing and grants nothing, and `createSubscription` re-decides
+  // the free period server-side when the card is finally handed over.
   let showMemberBanner = false;
   let isMember = false;
   let memberSavings = 0;
+  // The MEMBER's own state (card ASTb3tCf, item 4: "the checkout shows the shopper's
+  // current membership state"). Their number, so the line is about THEIR membership and
+  // not memberships in general.
+  let memberNumber: string | null = null;
+  // The free months on offer, if any (card ASTb3tCf). Null keeps the panel on Tim's
+  // plain join pitch, which is what every shopper saw before this rule existed.
+  let joinOffer: { view: FreeTrialView; planSlug: string | null } | null = null;
+  // What the panel calls the plan and what it says the plan costs (card pktBo874), read off the
+  // SAME plan row the offer is about — so the tick box and the offer can never be about two
+  // different memberships.
+  let joinPlanName = "Membership";
+  let joinPlanPriceLine: string | null = null;
 
   const subscriptionsEnabled = await getFeatureFlag("subscriptions_enabled");
   if (subscriptionsEnabled) {
@@ -382,7 +440,7 @@ export default async function CheckoutPage() {
       const activeSub = await getActiveSubscriptionForContact(session.contactId);
       isMember = !!activeSub;
     }
-    if (isMember) {
+    if (isMember && session) {
       // Member savings flow through item salePrice (cart.discountAmount stays
       // 0): the saving is full list value minus what's actually charged.
       const listValue = (cart.items as { list_price: string | null; quantity: number }[]).reduce(
@@ -390,13 +448,88 @@ export default async function CheckoutPage() {
         0
       );
       memberSavings = Math.max(0, Math.round((listValue - subtotal) * 100) / 100);
-    } else {
+      memberNumber = await getMembershipNumber(session.contactId).catch(() => null);
+    } else if (!isMember) {
       const plans = await getSubscriptionPlans();
-      if (plans.length > 0) {
+      // The plan the offer is about, chosen rather than assumed. Chefs Depot carries
+      // exactly ONE membership plan (register: membership-overview), so this is plans[0]
+      // today — but if a second one is ever added, the free-period offer and the link
+      // under it must both be about the plan that actually HAS a free period, not
+      // whichever happens to sort first.
+      const offerPlan = plans.find((p) => Number(p.trial_period_days) > 0) ?? plans[0] ?? null;
+      if (offerPlan) {
         showMemberBanner = true;
+        joinPlanName = String(offerPlan.name || "Membership");
+        joinPlanPriceLine = planPriceLine(
+          offerPlan.price as string | number | null,
+          offerPlan.billing_interval as string | null
+        );
+        // The free-membership offer, decided against THIS basket. The basket is
+        // GST-inclusive here because the threshold is (Product Brief §3: a figure a
+        // customer recognises), and because the order this basket becomes carries
+        // freight on top — so a basket that clears the threshold always becomes an
+        // order that clears it. The offer can under-promise, never over-promise.
+        const basketIncTax = pricesIncludeTax
+          ? subtotal
+          : Math.round((subtotal + gstAmount) * 100) / 100;
+        const offer = await resolveFreeTrialOffer({
+          contactId: session?.contactId ?? null,
+          trialDays: Number(offerPlan.trial_period_days) || 0,
+          planPrice: offerPlan.price,
+          basketIncTax,
+          // Handed in, not re-read: `checkoutSettings` above is the same
+          // `getCheckoutSettings()` call, and that read is not cached.
+          thresholdIncTax: checkoutSettings.freeMembershipThresholdIncTax,
+        }).catch(() => null);
+        joinOffer = offer
+          ? { view: offer.view, planSlug: (offerPlan.slug as string | null) ?? null }
+          : null;
       }
     }
   }
+
+  // What the panel says, how loudly, and the member's own line — all decided in the shared
+  // wording modules, not re-derived from `view.kind` here. Three trees render this panel and
+  // "is it free" stopped being the same question as "may we promise it to THIS visitor" the
+  // moment a signed-out shopper could see it.
+  const joinCopy = joinOffer
+    ? checkoutOfferCopy(joinOffer.view)
+    : {
+        headline: JOIN_PITCH,
+        detail: null,
+        cta: "Join members",
+        highlight: false,
+        linkToPlan: false,
+        namesPrice: false,
+      };
+
+  // The panel's own props: the member's line, or the join offer, never both. The `subtotal > 0`
+  // guard is the one BOTH retired banners carried, kept intact — it was never about a savings
+  // figure, it was about there being a basket, and neither "member pricing is applied to this
+  // order" nor a join pitch means anything over an empty one. `membership` stays null on a
+  // storefront that sells no membership, which is how Industry Kitchens draws nothing at all.
+  const membership =
+    subtotal > 0 && (isMember || showMemberBanner)
+      ? {
+          planName: joinPlanName,
+          priceLine: joinPlanPriceLine,
+          memberLine: isMember
+            ? memberStateLine({
+                savingsLabel: memberSavings > 0 ? `$${memberSavings.toFixed(2)}` : null,
+                membershipNumber: memberNumber,
+              })
+            : null,
+          join: isMember
+            ? null
+            : {
+                headline: joinCopy.headline,
+                detail: joinCopy.detail,
+                cta: joinCopy.cta,
+                highlight: joinCopy.highlight,
+                namesPrice: joinCopy.namesPrice,
+              },
+        }
+      : null;
 
   // The picture on every Order Summary line (card qjV98YEK). ONE batched read, and a
   // never-throw one: a photograph is the most disposable thing on this page, so a lookup
@@ -424,42 +557,12 @@ export default async function CheckoutPage() {
       />
       <h1 className="text-3xl font-bold text-zinc-900 mb-8">Checkout</h1>
 
-      {isMember && memberSavings > 0 && (
-        <div className="mb-6 flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-          <Crown className="h-4 w-4 text-green-600 shrink-0" />
-          <span className="text-sm text-green-800">
-            You&apos;re saving ${memberSavings.toFixed(2)} with your membership on this order
-          </span>
-        </div>
-      )}
-
-      {/* The join pitch, in Tim's words (card Nyp8bkPm; his widget kit's cart
-          upsell). It used to print "Members save up to $X on this order", X being
-          the basket times a flat 15% held in `member_savings_percentage` — a
-          figure with no measured basis, retired across the site. The `> 0` guard
-          it carried is kept, moved onto the BASKET, so an empty cart still gets
-          no pitch. */}
-      {showMemberBanner && subtotal > 0 && (
-        <div className="mb-6 flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-          <div className="flex items-center gap-2 text-sm text-amber-800">
-            <Crown className="h-4 w-4 text-amber-600 shrink-0" />
-            Join the buying group and every line reprices from your next order.
-          </div>
-          <Link
-            href="/membership"
-            className="inline-flex items-center gap-1 text-sm font-semibold text-amber-700 hover:text-amber-800 shrink-0"
-          >
-            Join now
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-      )}
-
       <CheckoutForm
         items={summaryItems}
         subtotal={subtotal}
         gstAmount={gstAmount}
         isMember={isMember}
+        membership={membership}
         pricesIncludeTax={pricesIncludeTax}
         customerEmail={session?.email}
         isSignedIn={!!session}
@@ -475,6 +578,7 @@ export default async function CheckoutPage() {
         brandSpecial={brandSpecial}
         shippingEnabled={shippingEnabled}
         bulkyProductNames={bulkyProductNames}
+        commercialProductNames={commercialProductNames}
         stripePublishableKey={stripePublishableKey}
         savedCards={savedCards}
         savedCardsUnavailable={savedCardsUnavailable}
@@ -482,6 +586,14 @@ export default async function CheckoutPage() {
         testModeCardUnavailable={cardUnavailableInTestSession}
         finance={financeMethodsEnabled ? financeOffer : null}
       />
+      {/* The abandon-intent questionnaire (card loDyEE3S, Tim: "as per Myer").
+          Mounted only here, and only past the empty-cart redirect above, so it
+          can never appear on the confirmation page or on an empty basket. It is
+          a prompt, never a gate — see the component. LAST on the page on
+          purpose: while it is open it reserves flow height below the checkout,
+          so the Order Summary that ends this page can always be scrolled clear
+          of the card. */}
+      <CheckoutExitSurvey />
     </div>
   );
 }
