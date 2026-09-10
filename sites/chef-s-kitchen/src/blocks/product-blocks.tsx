@@ -185,7 +185,10 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
   // Analytics enrichment (GA4/Klaviyo add_to_cart): leaf category.
   const buyboxCrumbs = await crumbsFor(product, extras);
 
-  // Read ONCE — it feeds two props below and they must not disagree.
+  // ONE read, handed to the shared purchase provider below. The provider is what draws
+  // the extras panel, holds the shopper's typed instruction and hands both back to
+  // whichever buy control is pressed, so a renderer that leaves this out greys Add to
+  // Cart with nothing beside it to fill in (`sf-product-page`, 7vu2iEEZ x CXnP1lrL).
   const productAddons = readProductAddons(product.metafields);
 
   return (
@@ -220,14 +223,6 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
           // (cards 0CDcCYmO + kyMjCmAw). Null for every product that carries none.
           addons: productAddons,
         }}
-        // AND the same groups as the PANEL prop. Both are needed and they are not the
-        // same wiring: the one above goes into the shared purchase provider, whose
-        // `allOptionsSelected` greys Add to Cart while a required box is empty; this
-        // one is what makes `ProductDetail` RENDER the box. Passing only the first
-        // greys the buy button with nothing beside it to fill in, which
-        // `sf-product-page` forbids outright (7vu2iEEZ + CXnP1lrL). The legacy route
-        // (`app/products/[slug]/page.tsx`) passes this one and not the other.
-        addons={productAddons}
         memberPrice={memberPrice}
         memberPriceMap={memberPriceMap}
         isMember={isMember ?? false}

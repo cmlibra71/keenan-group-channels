@@ -16,6 +16,7 @@ import { MODULAR_NOTICE_TEXT, slugIsModularSystems } from "@/builder/modular-not
 import { usableBrandLogo } from "@/lib/brand-logo-url";
 import { CdMemberPricingPanel } from "@/components/product/CdMemberPricingPanel";
 import type { CdMembershipData } from "@/lib/pricing/cd-member-pricing";
+import { ProductAddons } from "@/components/product/ProductAddons";
 
 // ============================================================================
 // Industry Kitchens' sealed product-page leaves.
@@ -95,10 +96,6 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // no text groups, so the node is safe in front of every product page.
     "product-instructions": () => <ProductInstructionsNative />,
     "silverchef-panel": () => <SilverChefPanel />,
-    // "Images are for illustrative purposes only" (card 82HgV23q). Sealed rather than
-    // authored because the supplied panel colour is not a token on either site, and a
-    // colour class invented in a STORED tree has no rule in the deployed stylesheet.
-    // Renders null unless this product carries the tick.
     // Chefs Depot's three prices (RRP / Mates Rates / this shopper's member price)
     // and the spend-more-save-more ladder (card Nyp8bkPm). Sealed rather than
     // authored because the figures follow the LIVE purchase state — which variant
@@ -109,6 +106,15 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     "cd-member-pricing": () => (
       <CdMemberPricingPanel data={(data.cdMembership ?? null) as CdMembershipData | null} />
     ),
+    // Paid add-on extras (card 0CDcCYmO). Sealed because the shopper's picks ARE live
+    // purchase state — they move the headline price, the weekly finance figure and what
+    // Add to Cart sends — and an authored tree can hold neither state nor money. Renders
+    // nothing for a product with no extras, so the node is safe on every product page.
+    "product-addons": () => <ProductAddons />,
+    // "Images are for illustrative purposes only" (card 82HgV23q). Sealed rather than
+    // authored because the supplied panel colour is not a token on either site, and a
+    // colour class invented in a STORED tree has no rule in the deployed stylesheet.
+    // Renders null unless this product carries the tick.
     "product-image-notice": () => (
       <ProductImageNotice show={product.imageIsIllustrative === true} />
     ),

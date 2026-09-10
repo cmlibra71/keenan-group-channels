@@ -22,6 +22,7 @@
 // ============================================================================
 
 import type { ProductAddonGroup } from "@keenan/services/product-addons";
+import { customisationGroups } from "@/lib/product/addon-panel";
 
 export function ProductInstructionsPanel({
   groups,
@@ -36,7 +37,9 @@ export function ProductInstructionsPanel({
   onChange: (groupKey: string, value: string) => void;
   missingLabels?: string[];
 }) {
-  const textGroups = groups.filter((g) => g.control === "text");
+  // The split lives in ONE place (`lib/product/addon-panel.ts`) so this panel and the
+  // priced-extras panel cannot both claim a control, or both disown one.
+  const textGroups = customisationGroups({ groups });
   if (textGroups.length === 0) return null;
 
   return (

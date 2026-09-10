@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import BuilderImage from "./builder-image";
 import type { NodeTree, ProductPagePayload } from "@keenan/services/builder";
-import type { AddonSelectionInput } from "@keenan/services/product-addons";
 import {
   ProductPurchaseProvider,
   useProductPurchase,
@@ -14,6 +13,7 @@ import {
   type PurchaseProduct,
 } from "@keenan/services/product-page";
 import { addToCart } from "@/lib/actions/cart";
+import type { AddonSelectionInput } from "@keenan/services/product-addons";
 import { addToQuote } from "@/lib/actions/quote";
 import { submitReview } from "@/lib/actions/reviews";
 import { useGst } from "@/lib/gst";
@@ -67,6 +67,8 @@ function ActionsBridge({
       pid: number,
       variantId: number | null,
       quantity: number,
+      // The shopper's ticked extras (card 0CDcCYmO). Keys only — every price is read
+      // back from the product's own definition inside the action.
       addons?: AddonSelectionInput
     ) => {
       const res = await addToCart(pid, variantId, quantity, addons);
@@ -79,7 +81,14 @@ function ActionsBridge({
     [setCartCount, open]
   );
   const countingAddToQuote = React.useCallback(
-    async (pid: number, variantId: number | null, addons?: AddonSelectionInput) => {
+    async (
+      pid: number,
+      variantId: number | null,
+      // The shopper's ticked extras (card 0CDcCYmO). A quote line is priced by a rep, so
+      // these move no money here — they ride the line as the record of what was asked for,
+      // the same way a bundle build does.
+      addons?: AddonSelectionInput
+    ) => {
       const res = await addToQuote(pid, variantId, null, addons);
       if (res && "quoteCount" in res && typeof res.quoteCount === "number") {
         setQuoteCount(res.quoteCount);
@@ -94,36 +103,14 @@ function ActionsBridge({
   // nothing at all (parity with the old coded button's disabled state, plus an
   // actual explanation).
   const [optionsPrompt, setOptionsPrompt] = React.useState<string | null>(null);
-  // A free-text group is FILLED IN, not chosen (card kyMjCmAw), and the Custom
-  // Stainless Steel page's only required answer is one of those — "Please choose
-  // Instructions" would send the shopper hunting for a picker that does not exist.
-  // The labels arrive with no type attached, so they are matched back to the
-  // product's own groups here, where the definition is to hand.
-  const textGroupLabels = React.useMemo(
-    () =>
-      new Set(
-        (purchase.product.addons?.groups ?? [])
-          .filter((g) => g.control === "text")
-          .map((g) => g.label)
-      ),
-    [purchase.product.addons]
-  );
-  const onOptionsRequired = React.useCallback(
-    (missing: string[]) => {
-      const names = missing.filter(Boolean);
-      if (!names.length) {
-        setOptionsPrompt("That combination isn't available — please choose a different configuration.");
-        return;
-      }
-      const verb = names.every((n) => textGroupLabels.has(n))
-        ? "fill in"
-        : names.some((n) => textGroupLabels.has(n))
-          ? "complete"
-          : "choose";
-      setOptionsPrompt(`Please ${verb} ${names.join(" and ")} before adding this to your quote.`);
-    },
-    [textGroupLabels]
-  );
+  const onOptionsRequired = React.useCallback((missing: string[]) => {
+    const names = missing.filter(Boolean);
+    setOptionsPrompt(
+      names.length
+        ? `Please choose ${names.join(" and ")} before adding this to your quote.`
+        : "That combination isn't available — please choose a different configuration."
+    );
+  }, []);
   const handlers = useProductPageHandlers({
     productId,
     addToCart: countingAddToCart,
@@ -241,9 +228,7 @@ function ActionsBridge({
             className="w-full max-w-sm rounded-md bg-white p-6 shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="mb-1 text-base font-semibold text-text-primary">
-              {optionsPrompt?.startsWith("Please fill in") ? "One more thing" : "Choose an option"}
-            </p>
+            <p className="mb-1 text-base font-semibold text-text-primary">Choose an option</p>
             <p className="mb-4 text-sm text-text-secondary">{optionsPrompt}</p>
             <button className="btn-primary" type="button" autoFocus onClick={() => setOptionsPrompt(null)}>
               OK

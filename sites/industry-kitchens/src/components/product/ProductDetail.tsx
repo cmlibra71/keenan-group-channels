@@ -10,39 +10,23 @@
 import { useState } from "react";
 import Link from "next/link";
 import { AddToCartButton } from "./AddToCartButton";
+import { ProductAddons } from "./ProductAddons";
 import { AddToQuoteButton } from "./AddToQuoteButton";
 import { OptionSelector } from "./OptionSelector";
 import { Price } from "@/components/ui/Price";
 import { GstToggle } from "@/components/layout/GstToggle";
 import { useProductPurchase } from "./ProductPurchaseProvider";
 import { ProductKitBlock } from "./ProductKitBlock";
-import { defaultKitSelection, toKitChoices, type ProductKit } from "@/lib/product-kit";
 import { ProductInstructionsPanel } from "./ProductInstructionsPanel";
 import { buyAreaSuppressed } from "@/lib/product-customisation";
-import {
-  unansweredAddonGroups,
-  type AddonSelectionInput,
-  type ProductAddons,
-} from "@keenan/services/product-addons";
+import { postsConfiguration } from "@/lib/product/addon-panel";
+import { defaultKitSelection, toKitChoices, type ProductKit } from "@/lib/product-kit";
 
 /**
  * `kit` is present only for the two Zoey kit types (grouped / bundle). Every other caller — the
  * CMS v2 widgets, the builder natives — renders this exactly as before by simply not passing one.
  */
-export function ProductDetail({
-  kit,
-  addons,
-}: {
-  kit?: ProductKit | null;
-  /**
-   * The product's authored customisation groups (cards 0CDcCYmO + kyMjCmAw). This
-   * renderer holds the shopper's answers in its OWN state rather than the purchase
-   * provider, because two of the three site forks still run a local provider that
-   * predates extras — the panel component is shared, so the field the customer sees
-   * is identical either way (the same arrangement `ProductKitBlock` has).
-   */
-  addons?: ProductAddons | null;
-} = {}) {
+export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
   const {
     product,
     isMember,
@@ -61,6 +45,12 @@ export function ProductDetail({
     purchasingDisabled,
     allOptionsSelected,
     cartVariantId,
+    selectedAddons,
+    addonText,
+    setAddonText,
+    addonGroupsUnanswered,
+    addonGroupsOffered,
+    displayBasePrice,
   } = useProductPurchase();
 
   const { id: productId, options, optionValues, bulkPricing } = product;
@@ -71,22 +61,16 @@ export function ProductDetail({
   const [kitSelection, setKitSelection] = useState<Record<string, number>>(() =>
     kit?.kind === "bundle" ? defaultKitSelection(kit.groups) : {}
   );
-  // Free-text customisation (card kyMjCmAw). `addonText` is what the shopper has
-  // typed; `addonSelection` is the same thing in the shape both server actions take.
-  const [addonText, setAddonText] = useState<Record<string, string>>({});
-  const [instructionsPrompted, setInstructionsPrompted] = useState(false);
-  const addonSelection: AddonSelectionInput = Object.fromEntries(
-    Object.entries(addonText).map(([key, value]) => [key, value === "" ? [] : [value]])
-  );
-  const addonsUnanswered = unansweredAddonGroups(addons ?? null, addonSelection);
-  /** Pressed a buy button with a required box empty: mark the field rather than
-   *  greying the button, because this page carries no other wording that could
-   *  explain a dead control (`sf-product-page`, CXnP1lrL). */
-  const instructionsGuard = () => {
-    if (addonsUnanswered.length === 0) return true;
-    setInstructionsPrompted(true);
-    return false;
-  };
+  // Free-text customisation (card kyMjCmAw) rides the SAME provider state the ticked extras
+  // do — `setAddonText` writes into `selectedAddons`, so one bag reaches whichever buy button
+  // is pressed and no renderer has to know which control produced an answer.
+  //
+  // WHETHER A BUY POSTS THAT BAG is `addonGroupsOffered` for the priced extras, whose panel
+  // hides itself with the price (0CDcCYmO), OR `customisationOffered` for the free-text groups,
+  // whose panel does NOT: a text answer carries no money, and the product this card exists for
+  // — Custom Stainless Steel — is quote-only at $0. Gating the instruction on the priced panel's
+  // rule would have made the box unreachable on the one product that needs it.
+  const buyPostsConfiguration = postsConfiguration(addonGroupsOffered, product.addons);
   const isBundle = kit?.kind === "bundle";
   const kitReady = !isBundle || kit.groups.every((g) => kitSelection[g.name] != null);
 
@@ -150,7 +134,7 @@ export function ProductDetail({
       )}
 
       {/* Bulk Pricing Tiers */}
-      {bulkPricing.length > 0 && displayPrice > 0 && (
+      {bulkPricing.length > 0 && displayBasePrice > 0 && (
         <div className="mt-4">
           <h3 className="text-sm font-semibold text-zinc-700 mb-2">Bulk Pricing</h3>
           <div className="rounded-lg border border-zinc-200 overflow-hidden">
@@ -165,7 +149,9 @@ export function ProductDetail({
                 {bulkPricing.map((rule) => {
                   const amount = parseFloat(rule.amount);
                   const tierPrice = rule.type === "percent"
-                    ? displayPrice * (1 - amount / 100)
+                    // The MACHINE's price, never one carrying the shopper's ticked extras: a
+                    // quantity break discounts the product, not the accessories (card 0CDcCYmO).
+                    ? displayBasePrice * (1 - amount / 100)
                     : amount;
                   return (
                     <tr key={rule.id} className="text-zinc-700">
@@ -214,19 +200,30 @@ export function ProductDetail({
         />
       )}
 
-      {/* Free-text customisation — Zoey puts it directly above Qty and the buy
-          buttons on the Custom Stainless Steel page (card kyMjCmAw). */}
-      {/* 7vu2iEEZ on `sf-product-page`: a product with BOTH buy controls restricted
-          renders no buy area at all — no control, no wording — so a required box
-          above nothing to press goes with the buttons. */}
-      {addons && !buyAreaSuppressed(restrictAddToCart, restrictAddToQuote) && (
+      {/* Paid extras (card 0CDcCYmO) — above the buy buttons, because ticking one changes
+          what Add to Cart will charge. Renders nothing for a product with none. */}
+      {/* Free-text customisation — Zoey puts it directly above the buy row on the Custom
+          Stainless Steel page (card kyMjCmAw), and it sits ABOVE the priced extras here for
+          the reason the node placer chain records: a priced control keeps the place next to
+          the button whose charge it changes. Hand-ordered to match the node tree so the two
+          renderers cannot disagree.
+
+          7vu2iEEZ on `sf-product-page`: a product with BOTH buy controls restricted renders no
+          buy area at all — no control, no wording — so a required box above nothing to press
+          goes with the buttons. */}
+      {!buyAreaSuppressed(restrictAddToCart, restrictAddToQuote) && (
         <ProductInstructionsPanel
-          groups={addons.groups}
+          groups={product.addons?.groups ?? []}
           values={addonText}
-          onChange={(groupKey, value) => setAddonText((prev) => ({ ...prev, [groupKey]: value }))}
-          missingLabels={instructionsPrompted ? addonsUnanswered : []}
+          onChange={setAddonText}
+          // No inline error here, exactly as the node native decides it: the press is
+          // answered in words by the action, and the field's own asterisk and "Required"
+          // line explain it before the press.
+          missingLabels={[]}
         />
       )}
+
+      <ProductAddons />
 
       {/* Add to Cart / Quote */}
       <div className="mt-8 space-y-3">
@@ -240,24 +237,33 @@ export function ProductDetail({
         {displayPrice > 0 && !isBundle && !hidePrice && !restrictAddToCart && !purchaseBlockedByStock && (
           <AddToCartButton
             productId={productId}
+            // Card 0CDcCYmO — this renderer is the fallback if the product design is switched
+            // off, so it carries the ticked extras too; dropping them would charge the bare
+            // product price for a configuration the shopper priced on screen. Posted only where
+            // the panel was actually OFFERED, exactly as the quote control is: `{}` from a
+            // renderer with no panel answers a required group the shopper was never asked.
+            addons={buyPostsConfiguration ? selectedAddons : undefined}
             variantId={cartVariantId}
             productName={product.name}
             sku={product.sku}
             price={displaySalePrice ?? displayPrice}
             disabled={purchasingDisabled || !allOptionsSelected}
-            addons={addons ? addonSelection : undefined}
-            guard={instructionsGuard}
           />
         )}
         {!restrictAddToQuote && (
           <AddToQuoteButton
             productId={productId}
             variantId={cartVariantId}
-            disabled={(useGroupedMode && !allOptionsSelected) || !kitReady}
+            // A required extras group greys this button too (it folds into `allOptionsSelected`),
+            // and the group carries its own "Choose one" so the reason is on screen.
+            disabled={(useGroupedMode && !allOptionsSelected) || !kitReady || addonGroupsUnanswered.length > 0}
             kitChoices={isBundle ? toKitChoices(kitSelection) : null}
+            // Card 0CDcCYmO. The extras panel sits above BOTH buttons: pressing this one keeps
+            // the configuration, so the rep prices what the customer was actually looking at.
+            // Posted only where the panel was OFFERED — an empty object is a deliberate
+            // clear-down, `undefined` leaves the line's configuration alone.
+            addons={buyPostsConfiguration ? selectedAddons : undefined}
             label={isBundle ? "Add to Quote — request pricing" : undefined}
-            addons={addons ? addonSelection : undefined}
-            guard={instructionsGuard}
           />
         )}
       </div>

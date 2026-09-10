@@ -11,7 +11,7 @@ import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { renderProductNodeBranch } from "@/builder/product-node-branch";
 import { readProductKit } from "@/lib/product-kit";
-import { readProductAddons } from "@keenan/services";
+import { readProductAddons } from "@keenan/services/product-addons";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 import {
   ProductBuyBox,
@@ -269,6 +269,15 @@ export default async function ProductPage({
         // @keenan/services, card Q9hRTbKO). Kept local as well, because a Bulk Pricing
         // table the cart refuses to charge is the defect this page must never show.
         bulkPricing: suppressCatalogPricing ? [] : (product.bulkPricing ?? []),
+        // Paid optional extras (card 0CDcCYmO / KvLJOAON), read off the same portal-owned
+        // metafields bag `kit` below comes from. Without this the legacy renderer's own
+        // `<ProductAddons />` has nothing to draw and its buy controls carry no picks — and
+        // because `node_product_template_enabled` is a one-click operator setting on
+        // Storefront -> Pages (card BNtsJACK), leaving it out would mean Chefs Depot loses
+        // every extras panel the moment that switch is turned off while Industry Kitchens
+        // keeps its own. Two storefronts must never read the same product differently.
+        // The node path reads the same field out of its own payload.
+        addons: readProductAddons(product.metafields),
       },
       memberPrice,
       memberPriceMap,
@@ -281,9 +290,6 @@ export default async function ProductPage({
       // Grouped / bundle contents (Zoey product types, authored in the portal — they ride
       // products.metafields, which is portal-owned). Null for every other product.
       kit: readProductKit(product.metafields),
-      // Authored customisation groups — priced extras and free-text questions
-      // (cards 0CDcCYmO + kyMjCmAw). Null for every product that carries none.
-      addons: readProductAddons(product.metafields),
     },
     links: {
       brandRow:

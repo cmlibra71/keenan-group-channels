@@ -21,19 +21,22 @@ import {
   type KitChoice,
 } from "@/lib/product-kit";
 import {
+  addonPanelShown,
   readProductAddons,
   resolveAddonSelection,
   describeAddonSelection,
+  unansweredAddonGroups,
   type AddonSelectionInput,
-} from "@keenan/services";
+} from "@keenan/services/product-addons";
 import {
-  customisationRefusal,
-  storefrontOwnsLineComment,
-  priorStorefrontNote,
-  quoteLineReconfigured,
-} from "@/lib/product-customisation";
+  buyableAddons,
+  customisationDefinition,
+  extrasDefinition,
+} from "@/lib/product/addon-panel";
+import { customisationRefusal } from "@/lib/product-customisation";
 import { slidingWindowAllow } from "@/lib/rate-limit";
 import { resolveCustomerRequestState } from "@keenan/services";
+import { decideQuoteLineWrite } from "@/lib/quotes/addon-line-write";
 import {
   quoteHidesPrices,
   resolveQuoteAcceptState,
@@ -103,11 +106,13 @@ export async function addToQuote(
   variantId?: number | null,
   kitChoices?: KitChoice[] | null,
   /**
-   * What the shopper configured on the page: ticked extras and typed answers, in
-   * one bag (cards 0CDcCYmO + kyMjCmAw). Re-resolved SERVER-SIDE against this
-   * product's own definition below, so a hand-made request can neither invent a
-   * choice nor slip past a required one. Undefined means "this renderer offered
-   * no panel" — leave whatever the line already carries alone.
+   * The paid extras ticked on the product page (card 0CDcCYmO): group key -> option keys.
+   *
+   * KEYS ONLY — every label and price is read back from the product's own definition here,
+   * exactly as the cart does it, so a hand-made request can neither invent an extra nor
+   * price one. They do NOT move this line's money: a quote line is priced by a rep, and
+   * `addToQuote` deliberately applies no member or quantity tier either. What they do is
+   * travel, so the rep can see the configuration the customer was looking at.
    */
   addons?: AddonSelectionInput | null
 ) {
@@ -120,6 +125,7 @@ export async function addToQuote(
     price: string;
     sale_price: string | null;
     metafields?: unknown;
+    hide_price?: boolean | null;
     restrict_add_to_quote?: boolean | null;
     sell_pack_size?: number | null;
     sell_pack_unit?: string | null;
@@ -162,52 +168,82 @@ export async function addToQuote(
     lineNotes = describeKitContents(kit);
   }
 
-  // ── Customisation the shopper configured on the page ──────────────────────
-  // Same re-resolution the kit build gets, and for the same reason: the client
-  // states what was ticked or typed, never what it costs or whether it exists.
-  // A `text` answer resolves at $0.00, so nothing here moves the line's money —
-  // it is a record of what the customer asked for, which the rep prices on review.
-  const productAddons = readProductAddons(product.metafields);
-
-  // THE REQUIRED-ANSWER CHECK RUNS WHETHER OR NOT A PANEL WAS OFFERED, and that is
-  // load-bearing rather than defensive. A listing TILE, a related-products rail and
-  // the authored `product-card` master all call this action with no `addons`
-  // argument at all — the live Chefs Depot product page ships an `add-to-quote`
-  // master whose only argument is the product id — and they are a live path to a
-  // quote-only product like Custom Stainless Steel. Skipping the check when the
-  // argument is absent meant the tile's button did not offer-and-get-refused: it
-  // SUCCEEDED, silently, and the rep received exactly the bare line this card
-  // exists to prevent. 7vu2iEEZ's rule for these surfaces is the one that governs
-  // it — "a tile still offers the button, and clicking it returns a plain refusal"
-  // (`sf-catalog-browse`, `sf-product-page`) — so the refusal is made HERE, in
-  // words, and the tile keeps its button.
-  const refusal = customisationRefusal(productAddons, addons, "quote");
-  if (refusal) return { error: refusal };
-
-  // `undefined` means "this renderer offered no panel", which is NOT the same as
-  // "the shopper cleared the box": the configuration the line already carries is
-  // left exactly where it is.
-  const resolvedAddons = addons === undefined ? null : resolveAddonSelection(productAddons, addons);
-  let clearedAddons = false;
-  if (resolvedAddons && resolvedAddons.length > 0) {
-    // MERGED into the bag, never over it: `quote_items.attributes` has other
-    // owners (see docs/behaviour/quotes.md > quote-editor).
+  // ── Paid add-on extras (card 0CDcCYmO) ────────────────────────────────────────────────────
+  // The extras panel sits above BOTH buy buttons and tells the shopper the price updates as
+  // they tick, so pressing Add to Quote must not throw the configuration away: the rep would
+  // receive a bare machine and never learn which blades were wanted. The picks travel exactly
+  // as a BUNDLE build does — re-resolved here against the product's own definition, recorded on
+  // the line and written into the line note the quote editor already prints — and they move NO
+  // money, because a quote line is priced by a rep on review (the same reason member and
+  // quantity tiers are left off above).
+  // DID THE CALLER RENDER THE EXTRAS PANEL? `undefined` / `null` means it did not — a listing
+  // TILE's Add to Quote posts no selection at all (`master-leaves.tsx`, and the related-product
+  // rail through the node bridge). An empty OBJECT means the panel WAS on screen and the shopper
+  // ticked nothing, which is a deliberate clear-down. Collapsing the two turned a tile click on a
+  // product the customer had already configured into a silent wipe: the quantity did not go up,
+  // the picks were nulled and the line's comment was erased, and from a tile there is no control
+  // anywhere to say "keep my blades". This is the same `undefined`-vs-empty distinction the
+  // portal's own `product-type-actions.ts` draws.
+  const addonsPosted = addons != null;
+  const rawAddonDefinition = readProductAddons(product.metafields);
+  // WOULD THE PAGE HAVE OFFERED A PANEL? The same predicate the provider draws it with
+  // (`addonPanelShown`), re-made here against the product record. A product whose price is
+  // hidden or zero sells by quote and shows no panel, so it has no required group to answer:
+  // asking for one would grey — and then refuse over — the only buy control such a product has,
+  // with nothing on screen naming it (`sf-product-page`, 7vu2iEEZ x CXnP1lrL). A variant
+  // product may carry no price of its own, so the active variant's is checked in that one case.
+  let addonPanelOffered = addonPanelShown({
+    addons: rawAddonDefinition,
+    hidePrice: product.hide_price,
+    price: product.price,
+    salePrice: product.sale_price,
+  });
+  if (!addonPanelOffered && product.hide_price !== true && variantId && rawAddonDefinition) {
+    const priceVariant = (await productVariantService.getById(variantId)) as
+      | { price: string | null; sale_price: string | null }
+      | null;
+    addonPanelOffered = addonPanelShown({
+      addons: rawAddonDefinition,
+      price: priceVariant?.price,
+      salePrice: priceVariant?.sale_price,
+    });
+  }
+  // PRICED groups only exist for this buy when their panel was on screen; FREE-TEXT groups
+  // always do (card kyMjCmAw — a typed answer carries no money, and Custom Stainless Steel is
+  // quote-only at $0, exactly the shape `addonPanelShown` refuses). One named predicate, shared
+  // with both panels, both buttons and `addToCart`, so no two of them can disagree.
+  const addonDefinition = buyableAddons(rawAddonDefinition, addonPanelOffered);
+  const resolvedAddons = addonsPosted ? resolveAddonSelection(addonDefinition, addons) : [];
+  // A required single-choice group is a question about the MACHINE, not about the cart, so it
+  // is asked on this button too — and asked HERE rather than only in the page, because a stale
+  // tab or a hand-posted action would otherwise quote a configuration nobody answered. From a
+  // TILE the shopper cannot answer it where they are standing, so that message sends them to the
+  // page carrying the panel instead of naming a control they cannot see.
+  //
+  // The two kinds are refused SEPARATELY because the sentence has to fit the control: you
+  // CHOOSE a hopper and you FILL IN an instruction, and both sentences reach a customer.
+  // Priced first, so 0CDcCYmO's own wording is unchanged on every product that carries one.
+  const unansweredGroups = unansweredAddonGroups(
+    extrasDefinition(rawAddonDefinition, addonPanelOffered),
+    addonsPosted ? addons : {}
+  );
+  if (unansweredGroups.length > 0) {
+    return {
+      error: addonsPosted
+        ? `Please choose ${unansweredGroups.join(" and ")} before adding this to a quote.`
+        : `Open this product's page to choose ${unansweredGroups.join(" and ")} before adding it to a quote.`,
+    };
+  }
+  const typedRefusal = customisationRefusal(
+    customisationDefinition(rawAddonDefinition),
+    addonsPosted ? addons : undefined,
+    "quote"
+  );
+  if (typedRefusal) return { error: typedRefusal };
+  const addonNote = describeAddonSelection(resolvedAddons);
+  if (resolvedAddons.length > 0) {
     lineAttributes = { ...(lineAttributes ?? {}), addon_selection: resolvedAddons };
-    const addonNote = describeAddonSelection(resolvedAddons);
-    // NO MONEY in this note — it prints to the CUSTOMER on /q/<uuid>, outside
-    // the hide-prices gate. `describeAddonSelection` is what guarantees that.
     lineNotes = [lineNotes, addonNote].filter(Boolean).join("\n") || null;
-  } else if (resolvedAddons && productAddons) {
-    // A deliberate clear-down: the panel WAS offered, this product HAS a panel, and
-    // it came back empty — the shopper emptied an optional box and pressed the
-    // button again. The line's configuration goes with it, and BOTH halves of that
-    // have to happen or the line ends up self-contradictory: the stored
-    // `addon_selection` is DELETED below rather than merely not re-written (a merge
-    // would have left the rep a blank Comment beside a structured bag still naming
-    // the old answer), and the press counts as a re-configure rather than a second
-    // unit (or clearing the box would have silently doubled the quantity).
-    clearedAddons = true;
-    lineAttributes = lineAttributes ?? {};
   }
 
   let listPrice = product.price;
@@ -264,89 +300,59 @@ export async function addToQuote(
     id: number;
     quantity: number;
     customer_notes?: string | null;
-    attributes?: Record<string, unknown> | null;
+    attributes?: unknown;
   } | null;
 
   if (existing) {
-    // ── WHOSE COMMENT IS IT? ───────────────────────────────────────────────────
-    // 7bmpuqei's rule on `quote-editor`: the storefront writes the line's Comment
-    // only when the line has none, or when what is on it is the note the storefront
-    // itself wrote last time — a comment a REP typed is never overwritten, because
-    // it is customer-visible on the quote link. This product is exactly the
-    // workflow that rule exists for: the customer describes a fabrication, the rep
-    // annotates and prices it, and the customer then re-presses Add to Quote.
-    // `addon_note` is the ownership marker, holding the exact string we last wrote.
-    // Lines written before it existed have none, so a line the STOREFRONT
-    // configured (it carries `addon_selection` or a `kit_kind`) is still read as
-    // ours; anything else is treated as a rep's and left alone.
-    const priorAttributes = existing.attributes ?? {};
-    const commentIsOurs = storefrontOwnsLineComment(existing.customer_notes, priorAttributes);
-    const priorNote = priorStorefrontNote(existing.customer_notes, priorAttributes);
-
-    // A quote may hold only ONE line per product+variant, so re-configuring a bundle REPLACES the
-    // captured configuration on the line the customer already has (and does not stack a second
-    // quantity onto a different build). Everything else keeps counting up as before.
-    //
-    // A re-typed INSTRUCTION is the same event (card kyMjCmAw): a shopper who changes "1200mm
-    // bench" to "800mm bench" and presses the button again is correcting the request, not
-    // ordering a second bench — stacking would leave the rep one line, quantity 2, and only the
-    // newer set of measurements. A custom fabrication is not a countable stock item.
-    // A CLEAR-DOWN counts as a re-configure too: a shopper who empties the box and
-    // presses the button again is withdrawing the request, not ordering a second one.
-    // "Did the configuration change" is measured against the note WE last wrote, not
-    // against whatever is on the line now — a rep having typed over the Comment must
-    // not turn a correction into a second unit.
-    //
-    // WHETHER THERE WAS ANYTHING TO WITHDRAW is a fact about the LINE, not about
-    // the request. `clearedAddons` says only that this press answered nothing on a
-    // product that asks something — which is also what an ordinary second press on
-    // an OPTIONAL field looks like — so the clear-down has to be confirmed against
-    // the configuration the line actually carries, or "never answered" reads as
-    // "the shopper withdrew their answer" and the quantity silently stops moving.
-    // The judgement itself is a pure, unit-tested function so both directions can
-    // be held still: see `quoteLineReconfigured`.
-    const priorSelection = priorAttributes.addon_selection;
-    const lineWasConfigured = Array.isArray(priorSelection)
-      ? priorSelection.length > 0
-      : priorSelection != null;
-    const reconfigured = quoteLineReconfigured({
-      isBundle: kit?.kind === "bundle",
-      answeredCount: resolvedAddons?.length ?? 0,
-      clearedPanel: clearedAddons,
-      lineWasConfigured,
-      note: lineNotes,
-      priorNote,
+    // A quote may hold only ONE line per product+variant, so re-configuring a line REPLACES the
+    // captured configuration on the one the customer already has (and does not stack a second
+    // quantity onto a different build). That now covers the paid extras as well as a bundle
+    // build: ticking different blades and pressing the button again is a re-configuration, not
+    // a second machine. Everything else keeps counting up as before.
+    const existingAttributes =
+      existing.attributes && typeof existing.attributes === "object" && !Array.isArray(existing.attributes)
+        ? (existing.attributes as Record<string, unknown>)
+        : {};
+    const hadAddons = Array.isArray(existingAttributes.addon_selection)
+      ? (existingAttributes.addon_selection as unknown[]).length > 0
+      : false;
+    // What this second press MEANS for the line already there — one more of these, or a
+    // re-configuration of it — and whether this action is allowed to touch the line's
+    // customer-visible comment. Both decisions are pure and unit-tested in
+    // `lib/quotes/addon-line-write.ts`, which carries the reasoning: a listing TILE posts no
+    // selection and must not be read as a clear-down, and a comment a rep typed is never
+    // overwritten (quotes.md, card 7bmpuqei).
+    const { incrementsQuantity, clearsAddons, writesNote } = decideQuoteLineWrite({
+      addonsPosted,
+      hadAddons,
+      resolvedAddonCount: resolvedAddons.length,
+      isBundleBuild: kit?.kind === "bundle",
+      lineNotes,
+      existingNote: existing.customer_notes ?? null,
+      ownedNote:
+        typeof existingAttributes.storefront_note === "string"
+          ? existingAttributes.storefront_note
+          : null,
     });
-    // MERGED into the bag, never over it. `quote_items.attributes` is replaced
-    // WHOLESALE on write and has several owners — a rep's `indent` tick, a
-    // `custom_line` marker, `zoey_item_id` on 62,351 ingested rows — so a
-    // wholesale write here takes a rep's indent tick off a quote the customer is
-    // already reading (docs/behaviour/quotes.md > quote-editor). The ONE key a
-    // clear-down removes is its own: a merge alone cannot delete, so the stale
-    // answer would have survived the Comment that explained it.
-    let nextAttributes: Record<string, unknown> | null = null;
-    if (lineAttributes) {
-      nextAttributes = { ...priorAttributes, ...lineAttributes };
-      if (clearedAddons) delete nextAttributes.addon_selection;
-      // The marker records what we WROTE. Skipping the write leaves the previous
-      // marker exactly where it is, so the rep keeps ownership on the next press too.
-      if (commentIsOurs) {
-        if (lineNotes) nextAttributes.addon_note = lineNotes;
-        else delete nextAttributes.addon_note;
-      }
-    }
+
+    const attributeChanges: Record<string, unknown> = { ...(lineAttributes ?? {}) };
+    if (clearsAddons) attributeChanges.addon_selection = null;
+    if (writesNote) attributeChanges.storefront_note = lineNotes;
+
     await quoteItemService.updateForParent(quote.id, existing.id, {
-      quantity: reconfigured
-        ? existing.quantity
-        : snapToPack(existing.quantity + packSize, packSize),
-      ...(nextAttributes
-        ? {
-            attributes: nextAttributes,
-            // The structured record ALWAYS updates — the rep can still see what the
-            // customer last asked for. Only the customer-visible sentence is held back.
-            ...(commentIsOurs ? { customerNotes: lineNotes } : {}),
-          }
+      // A plain re-add counts UP by a whole pack and lands on a whole pack (cards O108e4jH /
+      // zeMPVcA3); a re-configuration replaces the picks and leaves the quantity alone.
+      // `incrementsQuantity` is the generalised form of main's `reconfigured` — it covers a
+      // bundle rebuild AND a change of paid extras (card 0CDcCYmO).
+      quantity: incrementsQuantity
+        ? snapToPack(existing.quantity + packSize, packSize)
+        : existing.quantity,
+      // MERGED into the existing bag, never over it: `attributes` has other owners
+      // (quotes.md `quote-editor`), and a bundle re-configuration used to replace it whole.
+      ...(Object.keys(attributeChanges).length > 0
+        ? { attributes: { ...existingAttributes, ...attributeChanges } }
         : {}),
+      ...(writesNote ? { customerNotes: lineNotes } : {}),
     });
   } else {
     await quoteItemService.createForParent(quote.id, {
@@ -362,13 +368,14 @@ export async function addToQuote(
       // frozen at the price it was added at for life (card laFQveZT). Say it out
       // loud here; the service will not guess it for us.
       priceSource: "customer",
-      // A brand-new line has no comment to protect, so the note goes on and the
-      // ownership marker goes with it (see the update branch above).
-      ...(lineAttributes
+      // The storefront stamps the note it just wrote as its own, so a later re-configuration
+      // can tell its own words from a rep's (see the update branch above).
+      ...(lineAttributes || lineNotes
         ? {
-            attributes: lineNotes
-              ? { ...lineAttributes, addon_note: lineNotes }
-              : lineAttributes,
+            attributes: {
+              ...(lineAttributes ?? {}),
+              ...(lineNotes ? { storefront_note: lineNotes } : {}),
+            },
             customerNotes: lineNotes,
           }
         : {}),

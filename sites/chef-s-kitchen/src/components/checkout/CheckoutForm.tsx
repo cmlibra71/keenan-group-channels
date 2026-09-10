@@ -4,6 +4,7 @@ import { useActionState, useState, useRef, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation";
 import { placeOrder, confirmStripePayment } from "@/lib/actions/checkout";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
+import { announceCheckoutSubmitted } from "@/lib/checkout/exit-survey";
 import {
   brandFreeShippingMessage,
   type MatchedBrandSpecial,
@@ -36,6 +37,7 @@ import {
 } from "@/lib/checkout/card-entry";
 import { Price } from "@/components/ui/Price";
 import { backorderMessage } from "@keenan/services/backorder";
+import { MembershipJoinPanel } from "@/components/checkout/MembershipJoinPanel";
 // The client-safe SUBPATH again, never the barrel — see the note above.
 import { readStoredAddons, describeAddonSelection } from "@keenan/services/product-addons";
 import { gstSplit } from "@keenan/services/calc";
@@ -164,11 +166,39 @@ export function CheckoutForm({
   finance = null,
   savedCards = [],
   savedCardsUnavailable = false,
+  membership = null,
 }: {
   items: CartItem[];
   subtotal: number;
   gstAmount: number;
   isMember?: boolean;
+  /**
+   * The membership panel in the Order Summary rail (card pktBo874). Null on a storefront that
+   * does not sell a membership, which is how Industry Kitchens draws nothing at all.
+   */
+  membership?: {
+    planName: string;
+    /** "$14.95 per month", off the plan — null when it carries no usable price. */
+    priceLine: string | null;
+    /**
+     * The MEMBER's own line, already written by `memberStateLine` (card ASTb3tCf). Non-null
+     * exactly when this shopper is a member. The saving inside it is the MEASURED figure — list
+     * value minus what is charged — and there is deliberately no estimated one (card Nyp8bkPm).
+     */
+    memberLine: string | null;
+    /**
+     * The join offer in card ASTb3tCf's own words (`checkoutOfferCopy`), or null for a member.
+     * Passed through untouched: the checkout and the subscribe page must make the same promise
+     * about the same free months.
+     */
+    join: {
+      headline: string;
+      detail: string | null;
+      cta: string;
+      highlight: boolean;
+      namesPrice: boolean;
+    } | null;
+  } | null;
   pricesIncludeTax?: boolean;
   customerEmail?: string;
   /** Is there a session? Guests are offered the sign-in / create-account drawer,
@@ -849,6 +879,12 @@ export function CheckoutForm({
         // would put it in the dependency list, re-firing a confirmation the
         // TT3DGpsE guard exists to run exactly once.
         submittedSavedCardRef.current = activeSavedCard?.id ?? null;
+        // Past every guard this form has, so an order really is being placed.
+        // The exit survey listens for exactly this and nothing else (card
+        // loDyEE3S): a press refused above is not a submit, and silencing the
+        // questionnaire on it would silence the shoppers whose answer is
+        // "Issues processing payment".
+        announceCheckoutSubmitted();
         fireShippingInfo(shippingCost);
         firePaymentInfo(selectedPaymentMethod);
       }}
@@ -1509,7 +1545,11 @@ export function CheckoutForm({
 
         {/* Order Summary */}
         <div className="lg:col-span-2">
-          <div className="border border-steel-200 rounded-lg p-6 sticky top-24">
+          {/* `sticky` moved OFF the summary card and onto this wrapper so the membership panel
+              below travels with it — the empty rail space is exactly where Tim's screenshot puts
+              the join (card pktBo874). */}
+          <div className="sticky top-24">
+          <div className="border border-steel-200 rounded-lg p-6">
             <h2 className="text-lg font-semibold text-ink-900 mb-4">Order Summary</h2>
 
             <div className="divide-y divide-steel-100">
@@ -1665,6 +1705,18 @@ export function CheckoutForm({
                   : "Enter a delivery postcode to calculate shipping."}
               </p>
             )}
+          </div>
+
+          {membership && (
+            <MembershipJoinPanel
+              memberLine={membership.memberLine}
+              join={membership.join}
+              planPriceLine={membership.priceLine}
+              planName={membership.planName}
+              isSignedIn={isSignedIn}
+              contactEmail={email}
+            />
+          )}
           </div>
         </div>
       </div>

@@ -1,6 +1,4 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Crown, ArrowRight } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
 import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getMembershipNumber, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
@@ -11,6 +9,7 @@ import {
   memberStateLine,
   type FreeTrialView,
 } from "@/lib/membership/free-trial-copy";
+import { planPriceLine } from "@/lib/membership/checkout-join";
 import { getContactPermissions } from "@/lib/role-permissions";
 import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import {
@@ -44,6 +43,7 @@ import {
 import { financeApplicationForm } from "@/lib/checkout/finance-form";
 import { CheckoutForm } from "@/components/checkout/CheckoutForm";
 import { StartedCheckoutTracker } from "@/components/analytics/StartedCheckoutTracker";
+import { CheckoutExitSurvey } from "@/components/checkout/CheckoutExitSurvey";
 
 export const metadata = {
   title: "Checkout",
@@ -386,7 +386,21 @@ export default async function CheckoutPage() {
     shippingEnabled = !!activeCard;
   } catch {}
 
-  // Check membership status for checkout banners
+  // MEMBERSHIP AT THE CHECKOUT — one panel, in the Order Summary rail.
+  //
+  // Card pktBo874 moves it there: Tim's "Membership Real Estate" screenshot is this very page with
+  // a large empty area under the Order Summary card, and Myer's checkout is his stated reference
+  // for what belongs in it. The two thin banners that used to run across the top of this page are
+  // gone with it, so ONE place on this screen talks about membership and no shopper meets the same
+  // offer twice.
+  //
+  // Everything the panel SAYS about the free months is still card ASTb3tCf's, unchanged:
+  // `checkoutOfferCopy` decides all four join states and `memberStateLine` the member's own line,
+  // and the panel renders what they return rather than writing a second set of sentences about the
+  // same money. The panel links to `/membership` and never to the payment page, in every state —
+  // which is stricter than that card's free-link rule and satisfies it by construction: its way in
+  // is the join tick, which charges nothing and grants nothing, and `createSubscription` re-decides
+  // the free period server-side when the card is finally handed over.
   let showMemberBanner = false;
   let isMember = false;
   let memberSavings = 0;
@@ -394,9 +408,14 @@ export default async function CheckoutPage() {
   // current membership state"). Their number, so the line is about THEIR membership and
   // not memberships in general.
   let memberNumber: string | null = null;
-  // The free months on offer, if any (card ASTb3tCf). Null keeps the banner on Tim's
+  // The free months on offer, if any (card ASTb3tCf). Null keeps the panel on Tim's
   // plain join pitch, which is what every shopper saw before this rule existed.
   let joinOffer: { view: FreeTrialView; planSlug: string | null } | null = null;
+  // What the panel calls the plan and what it says the plan costs (card pktBo874), read off the
+  // SAME plan row the offer is about — so the tick box and the offer can never be about two
+  // different memberships.
+  let joinPlanName = "Membership";
+  let joinPlanPriceLine: string | null = null;
 
   const subscriptionsEnabled = await getFeatureFlag("subscriptions_enabled");
   if (subscriptionsEnabled) {
@@ -423,6 +442,11 @@ export default async function CheckoutPage() {
       const offerPlan = plans.find((p) => Number(p.trial_period_days) > 0) ?? plans[0] ?? null;
       if (offerPlan) {
         showMemberBanner = true;
+        joinPlanName = String(offerPlan.name || "Membership");
+        joinPlanPriceLine = planPriceLine(
+          offerPlan.price as string | number | null,
+          offerPlan.billing_interval as string | null
+        );
         // The free-membership offer, decided against THIS basket. The basket is
         // GST-inclusive here because the threshold is (Product Brief §3: a figure a
         // customer recognises), and because the order this basket becomes carries
@@ -447,18 +471,48 @@ export default async function CheckoutPage() {
     }
   }
 
-  // What the join banner says, how loudly, and where its button goes — all decided in
-  // the shared wording module, not re-derived from `view.kind` here. Three trees render
-  // this banner and "is it free" stopped being the same question as "may we promise it
-  // to THIS visitor" the moment a signed-out shopper could see it.
+  // What the panel says, how loudly, and the member's own line — all decided in the shared
+  // wording modules, not re-derived from `view.kind` here. Three trees render this panel and
+  // "is it free" stopped being the same question as "may we promise it to THIS visitor" the
+  // moment a signed-out shopper could see it.
   const joinCopy = joinOffer
     ? checkoutOfferCopy(joinOffer.view)
-    : { headline: JOIN_PITCH, detail: null, cta: "Join members", highlight: false, linkToPlan: false };
-  const joinHref =
-    joinCopy.linkToPlan && joinOffer?.planSlug
-      ? `/account/membership/subscribe/${joinOffer.planSlug}`
-      : "/membership";
-  const joinIsFree = joinCopy.highlight;
+    : {
+        headline: JOIN_PITCH,
+        detail: null,
+        cta: "Join members",
+        highlight: false,
+        linkToPlan: false,
+        namesPrice: false,
+      };
+
+  // The panel's own props: the member's line, or the join offer, never both. The `subtotal > 0`
+  // guard is the one BOTH retired banners carried, kept intact — it was never about a savings
+  // figure, it was about there being a basket, and neither "member pricing is applied to this
+  // order" nor a join pitch means anything over an empty one. `membership` stays null on a
+  // storefront that sells no membership, which is how Industry Kitchens draws nothing at all.
+  const membership =
+    subtotal > 0 && (isMember || showMemberBanner)
+      ? {
+          planName: joinPlanName,
+          priceLine: joinPlanPriceLine,
+          memberLine: isMember
+            ? memberStateLine({
+                savingsLabel: memberSavings > 0 ? `$${memberSavings.toFixed(2)}` : null,
+                membershipNumber: memberNumber,
+              })
+            : null,
+          join: isMember
+            ? null
+            : {
+                headline: joinCopy.headline,
+                detail: joinCopy.detail,
+                cta: joinCopy.cta,
+                highlight: joinCopy.highlight,
+                namesPrice: joinCopy.namesPrice,
+              },
+        }
+      : null;
 
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
@@ -469,84 +523,12 @@ export default async function CheckoutPage() {
       />
       <h1 className="text-3xl font-bold text-zinc-900 mb-8">Checkout</h1>
 
-      {/* THE MEMBER'S OWN STATE (card ASTb3tCf, item 4). It used to render only when
-          the measured saving was above zero — and that saving is list value minus what
-          is charged, so a basket whose lines carry no `list_price` produced nothing and
-          a paying member read no acknowledgement of their membership at all on the one
-          screen where they are spending money. The MEASURED sentence is unchanged in
-          substance (card Nyp8bkPm keeps it, and it must never become a percentage); all
-          that changed is that a member with no measurable saving now gets a line too.
-          The `subtotal > 0` guard is the SAME one the join banner keeps: it was never
-          about the savings figure, it was about there being a basket, and "member
-          pricing is applied to this order" over an empty one would be nonsense. */}
-      {isMember && subtotal > 0 && (
-        <div className="mb-6 flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-          <Crown className="h-4 w-4 text-green-600 shrink-0" />
-          <span className="text-sm text-green-800">
-            {memberStateLine({
-              savingsLabel: memberSavings > 0 ? `$${memberSavings.toFixed(2)}` : null,
-              membershipNumber: memberNumber,
-            })}
-          </span>
-        </div>
-      )}
-
-      {/* The join pitch, in Tim's words (card Nyp8bkPm; his widget kit's cart
-          upsell). It used to print "Members save up to $X on this order", X being
-          the basket times a flat 15% held in `member_savings_percentage` — a
-          figure with no measured basis, retired across the site. The `> 0` guard
-          it carried is kept, moved onto the BASKET, so an empty cart still gets
-          no pitch.
-
-          Card ASTb3tCf adds what the offer IS. Where this basket earns the free
-          months the button stops saying "Join members" and says
-          "Free membership — 3 months"; where the shopper has already had their
-          free months it says so, naming the date they ran, rather than letting
-          them find the charge on a statement. The wording is shared with the
-          subscribe page (`lib/membership/free-trial-copy.ts`) so the promise made
-          here is the promise honoured there. That module also decides whether the
-          button may point straight at the plan: it may not while the order that earns
-          the free months has yet to be placed, and it may not for a visitor we cannot
-          identify, who has to sign in before anything can be granted to them. Nothing
-          here reintroduces the retired savings estimate. */}
-      {showMemberBanner && subtotal > 0 && (
-        <div
-          className={`mb-6 flex flex-col gap-2 rounded-lg border px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${
-            joinIsFree ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"
-          }`}
-        >
-          <div className="flex items-start gap-2">
-            <Crown
-              className={`h-4 w-4 shrink-0 mt-0.5 ${joinIsFree ? "text-green-600" : "text-amber-600"}`}
-            />
-            <div className={`text-sm ${joinIsFree ? "text-green-800" : "text-amber-800"}`}>
-              <span className={joinIsFree ? "font-semibold" : undefined}>{joinCopy.headline}</span>
-              {joinCopy.detail && (
-                <span className={`block ${joinIsFree ? "text-green-700" : "text-amber-700"}`}>
-                  {joinCopy.detail}
-                </span>
-              )}
-            </div>
-          </div>
-          <Link
-            href={joinHref}
-            className={`inline-flex items-center gap-1 text-sm font-semibold shrink-0 ${
-              joinIsFree
-                ? "text-green-700 hover:text-green-800"
-                : "text-amber-700 hover:text-amber-800"
-            }`}
-          >
-            {joinCopy.cta}
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-      )}
-
       <CheckoutForm
         items={cart.items}
         subtotal={subtotal}
         gstAmount={gstAmount}
         isMember={isMember}
+        membership={membership}
         pricesIncludeTax={pricesIncludeTax}
         customerEmail={session?.email}
         isSignedIn={!!session}
@@ -570,6 +552,14 @@ export default async function CheckoutPage() {
         testModeCardUnavailable={cardUnavailableInTestSession}
         finance={financeMethodsEnabled ? financeOffer : null}
       />
+      {/* The abandon-intent questionnaire (card loDyEE3S, Tim: "as per Myer").
+          Mounted only here, and only past the empty-cart redirect above, so it
+          can never appear on the confirmation page or on an empty basket. It is
+          a prompt, never a gate — see the component. LAST on the page on
+          purpose: while it is open it reserves flow height below the checkout,
+          so the Order Summary that ends this page can always be scrolled clear
+          of the card. */}
+      <CheckoutExitSurvey />
     </div>
   );
 }

@@ -27,9 +27,6 @@ import {
   paymentPosition,
   visibleTransaction,
   isNetTermsMethod,
-  // ONE reader for `product_options`, shared with the portal's rule that a value it
-  // cannot render as a scalar is shown as nothing (cards 0CDcCYmO + kyMjCmAw).
-  optionSummary,
 } from "@/lib/orders/order-presentation";
 import { orderDocumentName } from "@/lib/orders/order-document-name";
 import {
@@ -37,6 +34,7 @@ import {
   invoicePrintUrl,
   offersInvoiceDocument,
 } from "@/lib/orders/invoice-document-url";
+import { optionSummary } from "@/lib/orders/line-options";
 import { customerOrderStage } from "@/lib/orders/order-status-label";
 import { readCustomerOrderNotes } from "@/lib/orders/customer-order-notes";
 import { EYEBROW_CLASS, PAGE_TITLE_CLASS, PANEL_TITLE_CLASS } from "@/lib/orders/order-page-styles";

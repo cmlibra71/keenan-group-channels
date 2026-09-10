@@ -9,6 +9,7 @@ import {
   withLineCosts,
   withBackorderedQuantities,
   memberSavings,
+  forOrderInsert,
   type CartLineInput,
 } from "./order-draft.ts";
 
@@ -297,54 +298,86 @@ test("withBackorderedQuantities leaves a line whose product it could not read al
   assert.equal(withBackorderedQuantities(lines, new Map())[0].backorderedQuantity, undefined);
 });
 
-// ── The configuration a line was bought as (cards 0CDcCYmO + kyMjCmAw) ───────
+// ── Paid add-on extras on an order line (card 0CDcCYmO) ─────────────────────────────────────
 
-const configuredLine: CartLineInput = {
-  product_id: 8820,
-  variant_id: null,
-  product_name: "Custom Stainless Steel",
-  product_sku: "Custom-Stainless-Steel",
-  quantity: 1,
-  list_price: "1000",
-  sale_price: null,
-  modifier_selections: [
-    {
-      groupKey: "instructions",
-      groupLabel: "Instructions",
-      optionKey: "text",
-      optionLabel: "1200mm bench, sink on the left",
-      price: "0.00",
-      url: null,
-    },
-  ],
-};
+const withExtras = (over: Partial<CartLineInput> = {}): CartLineInput =>
+  line({
+    product_id: 9,
+    product_sku: "RG-100",
+    list_price: "768.00",
+    sale_price: "768.00",
+    modifier_selections: [
+      {
+        groupKey: "slicers",
+        groupLabel: "Slicers",
+        optionKey: "s4",
+        optionLabel: "Slicer 4mm",
+        price: "245.00",
+        url: "/products/hallde-slicer-4mm",
+      },
+      {
+        groupKey: "feeder",
+        groupLabel: "Feed hopper",
+        optionKey: "large",
+        optionLabel: "Large hopper",
+        price: "480.00",
+        url: null,
+      },
+    ],
+    ...over,
+  });
 
-test("buildLineItems carries the typed instruction onto the order line", () => {
-  const { lineItems } = buildLineItems([configuredLine], false);
+test("the picks ride onto the order line, one entry per group, with NO money", () => {
+  // This bag prints to the CUSTOMER on /account/orders/[id], one line above a
+  // GST-INCLUSIVE unit price and line total. An ex-GST figure in the text put two of
+  // our own numbers on one row on different tax bases (Product Brief §3).
+  const { lineItems } = buildLineItems([withExtras()], false);
   assert.deepEqual(lineItems[0].productOptions, {
-    Instructions: "1200mm bench, sink on the left",
+    Slicers: "Slicer 4mm",
+    "Feed hopper": "Large hopper",
   });
 });
 
-test("the instruction moves no money — the line totals are the bare price", () => {
-  const withText = buildLineItems([configuredLine], false);
-  const withoutText = buildLineItems([{ ...configuredLine, modifier_selections: [] }], false);
-  assert.equal(withText.subtotal.exTax, withoutText.subtotal.exTax);
-  assert.equal(withText.lineItems[0].totalIncTax, withoutText.lineItems[0].totalIncTax);
-});
-
-test("a line with no configuration carries NO product_options key at all", () => {
-  // Never `{}`: an empty object would rewrite 73,439 historic lines' shape for
-  // nothing, and the portal renders the key's presence.
-  const { lineItems } = buildLineItems([{ ...configuredLine, modifier_selections: undefined }], false);
+test("a line with no extras carries NO product_options key at all — never {}", () => {
+  // An order placed before this shipped must be indistinguishable from one with none.
+  const { lineItems } = buildLineItems([line({})], false);
   assert.equal("productOptions" in lineItems[0], false);
+  assert.equal("addonSurchargeExTax" in lineItems[0], false);
 });
 
-test("the configuration survives the cost and back-order passes", () => {
-  const { lineItems } = buildLineItems([configuredLine], false);
-  const costed = withLineCosts(lineItems, new Map([["8820:0", 600]]));
-  const stamped = withBackorderedQuantities(costed, new Map());
-  assert.deepEqual(stamped[0].productOptions, {
-    Instructions: "1200mm bench, sink on the left",
+test("the below-cost sentry compares the MACHINE's price with the MACHINE's cost", () => {
+  // $43 machine sold under its $50 cost, with $725 of blades on it. Comparing the charged
+  // $768 against $50 would let it walk straight past the sentry.
+  const { lineItems } = buildLineItems(
+    [withExtras({ list_price: "768.00", sale_price: "768.00" })],
+    false
+  );
+  const flagged = findBelowCostLines(lineItems, new Map([["9:0", 50]]));
+  assert.deepEqual(flagged.map((f) => f.sku), ["RG-100"]);
+  // The reported figure is the machine's own price, beside the machine's cost.
+  assert.equal(flagged[0].unitExTax, 43);
+  assert.equal(flagged[0].cost, 50);
+});
+
+test("extras never DRAG a healthy machine below cost, and never invent a warning", () => {
+  const { lineItems } = buildLineItems(
+    [withExtras({ list_price: "768.00", sale_price: "768.00" })],
+    false
+  );
+  assert.deepEqual(findBelowCostLines(lineItems, new Map([["9:0", 40]])), []);
+});
+
+test("the draft-only surcharge never reaches the insert", () => {
+  // `order_items` has no such column; Drizzle would drop it silently, which is not a thing
+  // this file should lean on.
+  const { lineItems } = buildLineItems([withExtras()], false);
+  const rows = forOrderInsert(lineItems);
+  assert.equal("addonSurchargeExTax" in rows[0], false);
+  assert.deepEqual(rows[0].productOptions, {
+    Slicers: "Slicer 4mm",
+    "Feed hopper": "Large hopper",
   });
+  // Everything else survives untouched.
+  assert.equal(rows[0].sku, "RG-100");
+  assert.equal(rows[0].quantity, 1);
 });

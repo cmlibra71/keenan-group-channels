@@ -20,7 +20,6 @@ export function AddToCartButton({
   brandName,
   categoryName,
   addons,
-  guard,
 }: {
   productId: number;
   variantId?: number | null;
@@ -34,30 +33,16 @@ export function AddToCartButton({
   sku?: string | null;
   brandName?: string;
   categoryName?: string;
-  /** What the shopper configured on this page — ticked extras and typed answers
-   *  (cards 0CDcCYmO + kyMjCmAw). Undefined on a listing tile, which offers no panel. */
-  addons?: AddonSelectionInput | null;
-  /** Run before the add; return false to stop it. The buy row uses it to mark a
-   *  required field the shopper has left empty rather than grey the button out —
-   *  a dead control with nothing beside it is what `sf-product-page` forbids. */
-  guard?: () => boolean;
+  /** Paid extras the shopper ticked (card 0CDcCYmO), group key -> option keys. Keys only:
+   *  the server re-reads every price from the product's own definition. */
+  addons?: AddonSelectionInput;
 }) {
   const [isPending, startTransition] = useTransition();
-  // A REFUSED ADD SAYS SO. Both actions answer `{ error }` for things a tile
-  // cannot know about — a product restricted away from online ordering, a
-  // back-order policy of "deny", and now a required customisation the shopper has
-  // not answered (cards 7vu2iEEZ, kyMjCmAw). The register's rule for those
-  // surfaces is that the tile keeps its button and clicking it returns a PLAIN
-  // REFUSAL (`sf-catalog-browse`), and 7bmpuqei's is that a CTA is never a button
-  // that silently does nothing — this component used to drop the message on the
-  // floor, so both read as a dead control. Shown under the button, cleared on the
-  // next press.
   const [refusal, setRefusal] = useState<string | null>(null);
   const { setCartCount } = useCartQuoteCounts();
   const { open } = useHeaderPanels();
 
   function handleClick() {
-    if (guard && !guard()) return;
     setRefusal(null);
     startTransition(async () => {
       const res = await addToCart(productId, variantId, quantity ?? 1, addons);
@@ -65,9 +50,11 @@ export function AddToCartButton({
       // (no-op on the provider-less /render/* surface). The same success branch
       // pops the cart panel out showing what was just added; a failed add
       // returns `{ error }` and leaves it closed.
+      // A REFUSED ADD SAYS SO, and is not reported as a completed one.
+      // `sf-product-page` / `sf-catalog-browse` [7bmpuqei, 7vu2iEEZ]: a control that
+      // silently does nothing is the shape those rules forbid — and a refusal sent to
+      // GA4 and Klaviyo as an `add_to_cart` corrupts every funnel that reads them.
       if (res && "error" in res && typeof res.error === "string") {
-        // Nothing was added, so nothing is reported to the analytics below either —
-        // a refused add used to be sent to GA4 and Klaviyo as a completed one.
         setRefusal(res.error);
         return;
       }

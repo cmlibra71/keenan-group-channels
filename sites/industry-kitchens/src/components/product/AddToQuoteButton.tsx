@@ -11,9 +11,8 @@ export function AddToQuoteButton({
   variantId,
   disabled,
   kitChoices,
-  label,
   addons,
-  guard,
+  label,
 }: {
   productId: number;
   variantId?: number | null;
@@ -21,35 +20,29 @@ export function AddToQuoteButton({
   /** BUNDLE products: the customer's pick per choice group, sent through with the request so a
    *  rep prices the configuration they actually asked for (card 7bmpuqei). */
   kitChoices?: KitChoice[] | null;
+  /** Paid extras the shopper ticked (card 0CDcCYmO), group key -> option keys. The panel sits
+   *  above BOTH buy buttons, so this button carries them too: a rep who receives a bare machine
+   *  never learns which accessories the customer was looking at. Keys only — every label and
+   *  price is re-read from the product's own definition in the action, and they move no money. */
+  addons?: AddonSelectionInput;
   label?: string;
-  /** What the shopper configured on this page — ticked extras and typed answers
-   *  (cards 0CDcCYmO + kyMjCmAw). Undefined on a listing tile, which offers no panel. */
-  addons?: AddonSelectionInput | null;
-  /** Run before the add; return false to stop it. See AddToCartButton. */
-  guard?: () => boolean;
 }) {
   const [isPending, startTransition] = useTransition();
-  // A REFUSED ADD SAYS SO. Both actions answer `{ error }` for things a tile
-  // cannot know about — a product restricted away from online ordering, a
-  // back-order policy of "deny", and now a required customisation the shopper has
-  // not answered (cards 7vu2iEEZ, kyMjCmAw). The register's rule for those
-  // surfaces is that the tile keeps its button and clicking it returns a PLAIN
-  // REFUSAL (`sf-catalog-browse`), and 7bmpuqei's is that a CTA is never a button
-  // that silently does nothing — this component used to drop the message on the
-  // floor, so both read as a dead control. Shown under the button, cleared on the
-  // next press.
   const [refusal, setRefusal] = useState<string | null>(null);
   const { setQuoteCount } = useCartQuoteCounts();
   const { open } = useHeaderPanels();
 
   function handleClick() {
-    if (guard && !guard()) return;
     setRefusal(null);
     startTransition(async () => {
-      const res = await addToQuote(productId, variantId, kitChoices ?? null, addons);
+      const res = await addToQuote(productId, variantId, kitChoices ?? null, addons ?? null);
       // Fresh count from the action → badge updates without a route re-render,
       // and the quote panel pops out showing what was just added. A failed add
       // returns `{ error }`, so it stays closed.
+      // A REFUSED ADD SAYS SO — same rule as the cart button beside it
+      // (`sf-product-page` / `sf-catalog-browse`, 7bmpuqei x 7vu2iEEZ). This is the
+      // press that carries the required-answer refusal on a quote-only product, so
+      // dropping it would leave the shopper a button that does nothing at all.
       if (res && "error" in res && typeof res.error === "string") {
         setRefusal(res.error);
         return;

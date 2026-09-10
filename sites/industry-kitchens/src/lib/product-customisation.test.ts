@@ -1,13 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import {
-  customisationRefusal,
-  storefrontOwnsLineComment,
-  priorStorefrontNote,
-  quoteLineReconfigured,
-  buyAreaSuppressed,
-} from "./product-customisation";
+import { customisationRefusal, buyAreaSuppressed } from "./product-customisation";
 import type { ProductAddons } from "@keenan/services/product-addons";
 
 const required: ProductAddons = {
@@ -73,11 +67,13 @@ test("a caller that offered no panel is refused too, and told where the field is
     customisationRefusal(required, undefined, "cart"),
     "Please open the product page and fill in Instructions before adding this to your cart."
   );
-  // null is an explicit "the panel was offered and answered nothing", not an
-  // absent argument, so it keeps the on-page wording.
+  // `null` is "no panel" too, and deliberately so: both buy actions read
+  // `addons != null` as "a panel posted something", exactly as the portal's
+  // `product-type-actions.ts` reads `undefined`, so a null selection has never
+  // been on screen either.
   assert.equal(
     customisationRefusal(required, null, "quote"),
-    "Please fill in Instructions before adding this to your quote."
+    "Please open the product page and fill in Instructions before adding this to your quote."
   );
 });
 
@@ -95,142 +91,6 @@ test("every unanswered field is named, in the author's order", () => {
 });
 
 // ── Whose comment is it? (7bmpuqei's rule on `quote-editor`) ─────────────────
-
-test("an empty comment is always the storefront's to write", () => {
-  assert.equal(storefrontOwnsLineComment(null, null), true);
-  assert.equal(storefrontOwnsLineComment("", { addon_selection: [] }), true);
-  assert.equal(storefrontOwnsLineComment("   ", null), true);
-});
-
-test("the note the storefront wrote last time is its own to replace", () => {
-  const attrs = { addon_note: "Instructions: 1200mm bench", addon_selection: [{}] };
-  assert.equal(storefrontOwnsLineComment("Instructions: 1200mm bench", attrs), true);
-});
-
-test("A COMMENT A REP TYPED IS NEVER OVERWRITTEN", () => {
-  // The workflow this product exists for: the customer describes a fabrication,
-  // the rep annotates and prices it, the customer presses Add to Quote again.
-  const attrs = { addon_note: "Instructions: 1200mm bench", addon_selection: [{}] };
-  assert.equal(
-    storefrontOwnsLineComment("Quoted at $2,400 — 2mm 304, Tim to confirm splashback", attrs),
-    false
-  );
-});
-
-test("a line with no marker is ours only if the STOREFRONT configured it", () => {
-  // Every line written before the marker existed. A kit or addon line is one we
-  // wrote; a plain line carrying a comment is a rep's.
-  assert.equal(storefrontOwnsLineComment("Bundle: 1 x Fryer", { kit_kind: "bundle" }), true);
-  assert.equal(storefrontOwnsLineComment("Instructions: 800mm", { addon_selection: [{}] }), true);
-  assert.equal(storefrontOwnsLineComment("Rep: chase Tim on freight", { indent: true }), false);
-  assert.equal(storefrontOwnsLineComment("Rep: chase Tim on freight", null), false);
-});
-
-test("'did the configuration change' is measured against OUR note, not the rep's", () => {
-  const attrs = { addon_note: "Instructions: 1200mm bench", addon_selection: [{}] };
-  // A rep has taken the Comment. Re-pressing with the SAME instruction must still
-  // read as unchanged, or the correction would be counted as a second unit.
-  assert.equal(priorStorefrontNote("Quoted at $2,400", attrs), "Instructions: 1200mm bench");
-  // No marker: fall back to the comment on the line, exactly as before.
-  assert.equal(priorStorefrontNote("Instructions: 800mm", null), "Instructions: 800mm");
-  assert.equal(priorStorefrontNote(null, null), "");
-});
-
-// ── Re-configure, or a second one? (`addToQuote`'s quantity decision) ────────
-
-/** The ordinary press: a product with groups, an answer typed, nothing on the line yet. */
-const press = (over: Partial<Parameters<typeof quoteLineReconfigured>[0]> = {}) =>
-  quoteLineReconfigured({
-    isBundle: false,
-    answeredCount: 1,
-    clearedPanel: false,
-    lineWasConfigured: false,
-    note: "Instructions: 1200mm bench",
-    priorNote: "Instructions: 1200mm bench",
-    ...over,
-  });
-
-// THE REGRESSION THIS FUNCTION EXISTS FOR. An author may untick Required, so a
-// product carrying a customisation group can be added with the box empty. The
-// second such press resolved nothing, wrote no note, and was read as a
-// clear-down against a line that had never been configured — the quantity stayed
-// at 1, the panel re-opened, the count did not move, and nothing said why.
-test("NEVER CONFIGURED + nothing answered = a second unit, not a withdrawal", () => {
-  assert.equal(
-    quoteLineReconfigured({
-      isBundle: false,
-      answeredCount: 0,
-      clearedPanel: true,
-      lineWasConfigured: false,
-      note: null,
-      priorNote: "",
-    }),
-    false
-  );
-  // The worse variant: a REP has typed over the Comment, so the prior note differs
-  // on every press. The customer must still be able to raise the quantity.
-  assert.equal(
-    quoteLineReconfigured({
-      isBundle: false,
-      answeredCount: 0,
-      clearedPanel: true,
-      lineWasConfigured: false,
-      note: null,
-      priorNote: "Rep: chase Tim on freight",
-    }),
-    false
-  );
-});
-
-test("CLEARED FROM CONFIGURED still holds the quantity", () => {
-  // The shopper emptied an optional box on a line that carried an instruction:
-  // a withdrawal, not a second bench. No note comparison is involved.
-  assert.equal(
-    quoteLineReconfigured({
-      isBundle: false,
-      answeredCount: 0,
-      clearedPanel: true,
-      lineWasConfigured: true,
-      note: null,
-      priorNote: "Instructions: 1200mm bench",
-    }),
-    true
-  );
-  // Even where our note is somehow gone, the clear-down stands on the LINE's
-  // configuration rather than on the text.
-  assert.equal(
-    quoteLineReconfigured({
-      isBundle: false,
-      answeredCount: 0,
-      clearedPanel: true,
-      lineWasConfigured: true,
-      note: null,
-      priorNote: null,
-    }),
-    true
-  );
-});
-
-test("a CORRECTED instruction is a re-configure; the same one is a second unit", () => {
-  assert.equal(press({ note: "Instructions: 800mm bench" }), true);
-  assert.equal(press(), false);
-});
-
-test("an absent note and an empty note are the same note", () => {
-  // `null !== ""` is what made the original expression fire on a press that
-  // changed nothing.
-  assert.equal(press({ answeredCount: 0, note: null, priorNote: "" }), false);
-  assert.equal(press({ answeredCount: 0, note: "", priorNote: null }), false);
-});
-
-test("a bundle press is judged on its choices, answered or not", () => {
-  assert.equal(press({ isBundle: true, answeredCount: 0, note: "Bundle: 1 x Fryer" }), true);
-  assert.equal(
-    press({ isBundle: true, answeredCount: 0, note: "Bundle: 1 x Fryer", priorNote: "Bundle: 1 x Fryer" }),
-    false
-  );
-});
-
 // ── Is there a buy area to fill the field in for? (7vu2iEEZ) ────────────────
 
 test("only BOTH buy controls restricted suppresses the panel", () => {

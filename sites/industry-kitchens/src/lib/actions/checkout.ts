@@ -1,13 +1,22 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { cartService, cartItemService, orderService, orderItemService, orderShippingAddressService, CHANNEL_ID, getEffectivePrice, productVariantService, channelSettingsService, getCheckoutSettings, paymentService, couponService } from "@/lib/store";
+import { cartService, cartItemService, orderService, orderItemService, orderShippingAddressService, CHANNEL_ID, getEffectivePrice, productVariantService, productService, channelSettingsService, getCheckoutSettings, paymentService, couponService } from "@/lib/store";
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { hasTestCheckoutSession } from "@/lib/checkout/test-session";
 import { sendOrderConfirmationEmail, sendOrderStaffNotificationEmail, resolveOrderNotificationRecipients, excludePurchaser, resolveOrderBusinessName, resolveEmailBranding, wantsStripeTestMode, productImageService, summariseLinesFreight, syncOrderHandlingFlags, snapshotOrderLadderPricing, siteAccessProfileService, loadOrderContactForOrder, ensureContactStripeCustomerForGateway, listSavedCardsForContact, type EmailLineItem } from "@keenan/services";
-import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, type BelowCostLine } from "@/lib/checkout/order-draft";
+import {
+  addonSurcharge,
+  addonSelectionKey,
+  readProductAddons,
+  readStoredAddons,
+  resolveAddonSelection,
+  storedAddonsAsSelection,
+  type ResolvedAddon,
+} from "@keenan/services/product-addons";
+import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, forOrderInsert, type BelowCostLine } from "@/lib/checkout/order-draft";
 import { backorderFactsForProducts } from "@/lib/cart/backorder-facts";
 import { canPurchaseQuantity } from "@keenan/services/backorder";
 import { normaliseAddressType } from "@keenan/services/residential";
@@ -30,6 +39,13 @@ import { normaliseAuState, isValidAuPostcode } from "@/lib/checkout/au-address";
 import { normaliseCustomerReference } from "@/lib/checkout/customer-reference";
 import { createGuestContactForCheckout } from "@/lib/checkout/guest-contact";
 import { setLastOrder } from "@/lib/checkout/last-order";
+import {
+  MEMBERSHIP_DOB_FIELD,
+  MEMBERSHIP_JOIN_FIELD,
+  membershipJoinIntent,
+  wantsMembershipJoin,
+} from "@/lib/membership/checkout-join";
+import { captureMembershipJoin } from "@/lib/membership/join-capture";
 import { canViewOrderConfirmation } from "@/lib/checkout/confirmation-access";
 import { siteBaseUrl } from "@/lib/seo";
 import { canTakeCardPayment, type ConfirmBillingDetails } from "@/lib/payments/stripe-gateways";
@@ -126,6 +142,27 @@ type PlaceOrderResult = {
     savedCardId?: string | null;
   };
 };
+
+/**
+ * A cart line's paid extras, re-resolved against the PRODUCT'S CURRENT definition (card
+ * 0CDcCYmO) — the same rule `lib/actions/cart.ts` follows on every other re-price. The stored
+ * bag is the record of WHAT was chosen; the product is the record of what it costs.
+ */
+async function resolveLineAddons(
+  productId: number,
+  storedModifierSelections: unknown
+): Promise<ResolvedAddon[]> {
+  const stored = readStoredAddons(storedModifierSelections);
+  if (stored.length === 0) return [];
+  try {
+    const product = (await productService.getById(productId)) as { metafields?: unknown } | null;
+    return resolveAddonSelection(readProductAddons(product?.metafields), storedAddonsAsSelection(stored));
+  } catch (e) {
+    // Never block a checkout on this lookup: the line keeps the extras it was configured with.
+    console.error("[placeOrder] addon re-resolve failed (non-fatal):", e);
+    return stored;
+  }
+}
 
 export async function placeOrder(
   _prev: PlaceOrderResult | null,
@@ -322,6 +359,15 @@ export async function placeOrder(
       const suppressCatalogSale = await shouldSuppressCatalogSalePrice();
       let pricesChanged = false;
       const repriced: typeof fullCart.items = [];
+      // The re-resolved picks per line id, so the persist below writes the RECORD with the
+      // money it produced — a withdrawn extra must not survive on the line it no longer bills.
+      const addonsAfterReprice = new Map<number, ResolvedAddon[]>();
+      // What the line carried BEFORE this pass. Held because the re-resolve writes the new bag
+      // onto the line in memory (the order is built from that copy), so the "did they move?"
+      // test below would otherwise be comparing the new bag with itself and never persist.
+      const addonsBeforeReprice = new Map<number, unknown>(
+        fullCart.items.map((i) => [i.id, i.modifier_selections])
+      );
       for (const item of fullCart.items) {
         if (item.sale_price && item.list_price) {
           const oldPrice = item.sale_price;
@@ -334,7 +380,34 @@ export async function placeOrder(
             const pricingVariantId = variantId || (await productVariantService.listForParent(item.product_id, { page: 1, limit: 1, sort: "id", direction: "asc" }))?.data[0]?.id;
             if (pricingVariantId) {
               const pricing = await getEffectivePrice(pricingVariantId as number, CHANNEL_ID, null);
-              item.sale_price = pricing.salePrice || null;
+              // The line's paid extras stay ON the recomputed price (card 0CDcCYmO). The
+              // membership expiring changes what the MACHINE costs, not what its accessories
+              // cost, and `getEffectivePrice` knows nothing about them — dropping them here
+              // would charge for a configuration at the bare product's price. (The other
+              // branch needs no such fix: clearing sale_price falls back to list_price, which
+              // already carries the surcharge.)
+              //
+              // RE-RESOLVED against the product, never read off the line: this is a re-price,
+              // and `sf-cart`'s rule is that every re-price re-reads the extras from the
+              // product's current definition — otherwise an extra staff withdrew is still
+              // charged here, on the one path where the shopper is being told their prices
+              // just changed.
+              const lineAddons = await resolveLineAddons(item.product_id, item.modifier_selections);
+              addonsAfterReprice.set(item.id, lineAddons);
+              // …AND ON THE LINE IN MEMORY, not only in the price. `buildLineItems` below reads
+              // `item.modifier_selections`, and `order-draft.ts` stamps it onto
+              // `order_items.product_options` and subtracts `addonSurchargeExTax` from the line
+              // for the below-cost sentry. Leaving the stale bag there put an extra staff had
+              // WITHDRAWN onto the customer's order — the exact thing this re-resolve exists to
+              // stop — and made the sentry over-subtract. The write-back to the cart row happens
+              // in the persist loop below; this is the copy the ORDER is built from.
+              if (readStoredAddons(item.modifier_selections).length > 0) {
+                item.modifier_selections = lineAddons;
+              }
+              const surcharge = addonSurcharge(lineAddons);
+              item.sale_price = pricing.salePrice
+                ? (Number(pricing.salePrice) + surcharge).toFixed(2)
+                : null;
             }
           }
           if (item.sale_price !== oldPrice) {
@@ -350,7 +423,17 @@ export async function placeOrder(
         // the same "prices updated" wall forever.
         for (const item of repriced) {
           try {
-            await cartItemService.updateForParent(cartWithItems.id, item.id, { salePrice: item.sale_price });
+            const nextAddons = addonsAfterReprice.get(item.id);
+            const storedAddons = readStoredAddons(addonsBeforeReprice.get(item.id));
+            const addonsMoved =
+              nextAddons != null &&
+              addonSelectionKey(nextAddons) !== addonSelectionKey(storedAddons);
+            await cartItemService.updateForParent(cartWithItems.id, item.id, {
+              salePrice: item.sale_price,
+              // Only when this line actually has extras and they moved — the column also holds
+              // the variant-modifier object the REST API writes, which is not ours to stamp.
+              ...(addonsMoved ? { modifierSelections: nextAddons } : {}),
+            });
           } catch (e) {
             console.error("[placeOrder] failed to persist re-priced cart item (non-fatal):", e);
           }
@@ -981,7 +1064,7 @@ export async function placeOrder(
 
   // Create order items (line items precomputed by buildLineItems above)
   try {
-    await orderItemService.createManyForParent(order.id, lineItems);
+    await orderItemService.createManyForParent(order.id, forOrderInsert(lineItems));
   } catch (err) {
     // Compensate so we never leave an order with no line items. The delete can itself fail
     // (e.g. a DB blip mid-checkout) — don't swallow it: retry once, and if it still fails,
@@ -1064,17 +1147,52 @@ export async function placeOrder(
       weeklyAmount: weeklyAmountForMethod(effectivePaymentMethod, financeOffer) ?? 0,
       testMode: isTestMode,
     });
+    // Written back into `orderMetafields` itself, not just into this one UPDATE: the membership
+    // join below stamps the same column from the same object, and a second `{ ...orderMetafields }`
+    // spread built from a stale copy would silently drop whichever stamp ran first.
+    orderMetafields.finance_application_uuid = filed.submissionUuid;
+    orderMetafields.finance_application_notified = filed.notified;
+    if (filed.error) orderMetafields.finance_application_error = filed.error;
     try {
-      await orderService.update(order.id, {
-        metafields: {
-          ...orderMetafields,
-          finance_application_uuid: filed.submissionUuid,
-          finance_application_notified: filed.notified,
-          ...(filed.error ? { finance_application_error: filed.error } : {}),
-        },
-      });
+      await orderService.update(order.id, { metafields: { ...orderMetafields } });
     } catch (e) {
       console.error("[placeOrder] finance application not stamped on the order (non-fatal):", e);
+    }
+  }
+
+  // Ticking "Join Chefs Depot Member" in the Order Summary rail (card pktBo874).
+  //
+  // NOTHING IS CHARGED HERE, and the panel says so above the tick. This records the join against
+  // the person and emails them an activation link; the membership itself is confirmed with a card
+  // on the subscribe page, so no subscription row exists until somebody has actually paid for one.
+  //
+  // Runs for EVERY payment method — it sits before the Stripe early-return for the same reason the
+  // below-cost alert does — and is entirely best-effort: a join that cannot be captured is stamped
+  // on the order and never mentioned to the shopper, because losing an order over a membership
+  // opt-in would be far worse than losing the opt-in.
+  const joinIntent = membershipJoinIntent({
+    joinTicked: wantsMembershipJoin(formData.get(MEMBERSHIP_JOIN_FIELD)),
+    email,
+    firstName,
+    lastName,
+    phone,
+    dateOfBirth: formData.get(MEMBERSHIP_DOB_FIELD) as string | null,
+  });
+  if (joinIntent) {
+    const joined = await captureMembershipJoin(joinIntent, {
+      id: order.id,
+      number: order.order_number,
+    });
+    orderMetafields.membership_join = {
+      requested: true,
+      contact_id: joined.contactId,
+      activation_emailed: joined.emailed,
+      ...(joined.reason ? { error: joined.reason } : {}),
+    };
+    try {
+      await orderService.update(order.id, { metafields: { ...orderMetafields } });
+    } catch (e) {
+      console.error("[placeOrder] membership join not stamped on the order (non-fatal):", e);
     }
   }
 

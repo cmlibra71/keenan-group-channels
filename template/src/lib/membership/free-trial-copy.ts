@@ -78,6 +78,15 @@ export interface OfferCopy {
    * sign in, place the qualifying order, or simply is not being offered anything.
    */
   linkToPlan: boolean;
+  /**
+   * True when `detail` already names the monthly price, so the surface rendering it must
+   * NOT also print the plan's flat "$14.95 per month" line. Decided here for the same
+   * reason `highlight` is: the caller would have to re-read `view.kind` and the price
+   * label to work it out, and the register's rule for this surface is one set of
+   * sentences about one lot of money. Two monthly figures for one membership on one
+   * screen — one of them dated and one of them not — is the failure it names.
+   */
+  namesPrice: boolean;
 }
 
 /**
@@ -95,6 +104,7 @@ export function checkoutOfferCopy(view: FreeTrialView): OfferCopy {
           cta: "Join members",
           highlight: false,
           linkToPlan: false,
+          namesPrice: !!view.priceLabel,
         };
       }
       // The HEADLINE says what is true of this shopper; the BUTTON is the one the card
@@ -113,6 +123,7 @@ export function checkoutOfferCopy(view: FreeTrialView): OfferCopy {
         // Sending them to pay while the order that earns the free months does not exist
         // yet lands them on a page that correctly refuses those months.
         linkToPlan: !view.pending,
+        namesPrice: !!view.priceLabel,
       };
     case "earn":
       return {
@@ -123,6 +134,8 @@ export function checkoutOfferCopy(view: FreeTrialView): OfferCopy {
         cta: "Join members",
         highlight: false,
         linkToPlan: false,
+        // The shortfall sentence names an amount to SPEND, never a monthly price.
+        namesPrice: false,
       };
     case "used":
       return {
@@ -131,6 +144,7 @@ export function checkoutOfferCopy(view: FreeTrialView): OfferCopy {
         cta: "Join members",
         highlight: false,
         linkToPlan: false,
+        namesPrice: !!view.priceLabel,
       };
     default:
       return {
@@ -139,6 +153,8 @@ export function checkoutOfferCopy(view: FreeTrialView): OfferCopy {
         cta: "Join members",
         highlight: false,
         linkToPlan: false,
+        // No detail at all, so the plan's own price line is the only money sentence there is.
+        namesPrice: false,
       };
   }
 }

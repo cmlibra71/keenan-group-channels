@@ -12,7 +12,7 @@ import { ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { readProductKit } from "@/lib/product-kit";
-import { readProductAddons } from "@keenan/services";
+import { readProductAddons } from "@keenan/services/product-addons";
 import { ProductTabs } from "@/components/product/ProductTabs";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { BrandWarrantyNotes } from "@/components/product/BrandWarrantyNotes";
@@ -278,11 +278,16 @@ export default async function ProductPage({
           // Pricing table here would advertise a price the cart refuses to honour. Do not
           // re-fetch the raw rules on this page. (Card Q9hRTbKO.)
           bulkPricing: product.bulkPricing ?? [],
+          // Paid optional extras (card 0CDcCYmO), read off the same portal-owned metafields bag
+          // the kit below comes from. Without this the legacy renderer's own `<ProductAddons />`
+          // has nothing to draw, its buy controls carry no picks, and the behaviour register's
+          // "on EVERY renderer, not just the node one" would be recording something this page
+          // does not do. The node path reads the same field out of its own payload.
+          addons: readProductAddons(product.metafields),
         }}
         // Grouped / bundle contents (Zoey product types, authored in the portal — they ride
         // products.metafields, which is portal-owned). Null for every other product.
         kit={readProductKit(product.metafields)}
-        addons={readProductAddons(product.metafields)}
         memberPrice={memberPrice}
         memberPriceMap={memberPriceMap}
         isMember={isMember}
