@@ -57,6 +57,12 @@ const ORDER_STAGE_BY_STATUS: Record<string, OrderStage> = {
   // unpaid order lands since the portal's status lifecycle (Trello XJo20XmX).
   // Both mean the same thing to a customer: we have the order, nothing has
   // started, and nothing has been paid — so neither may read "Being prepared".
+  //
+  // That rule is about the SHOPPER'S own money and it still holds in full. Since
+  // card MHHjnZ0c a SilverChef or Skope Funding order carries `net_terms_account`
+  // instead of `pending_payment` — an INTERNAL change, for the staff pill and the
+  // net-terms bucket — and the override below keeps such an order reading "Placed"
+  // here, so nothing the customer reads moved. See FINANCE_PAYMENT_METHODS.
   pending: "Placed",
   pending_payment: "Placed",
 
@@ -124,10 +130,53 @@ const ORDER_STAGE_BY_STATUS: Record<string, OrderStage> = {
  */
 const FALLBACK_STAGE: OrderStage = "Being prepared";
 
-/** The one and only wording a customer sees for `orders.status`. */
-export function customerOrderStage(status: string | null | undefined): OrderStage {
+/**
+ * Payment-method ids that mean an equipment-finance company is funding the
+ * purchase: SilverChef and Skope Funding (card VAjaPj0t). Spelled out rather than
+ * imported so this module stays pure and dependency-free; `@keenan/services`
+ * `FINANCE_METHOD_IDS` and `lib/checkout/order-draft.ts` are the same pair.
+ */
+const FINANCE_PAYMENT_METHODS: ReadonlySet<string> = new Set(["silverchef", "finance"]);
+
+/**
+ * A finance order is a net-terms order INTERNALLY, and only internally.
+ *
+ * Card MHHjnZ0c gives SilverChef and Skope Funding orders Zoey's
+ * `net_terms_account` status so staff see them in the net-terms bucket wearing the
+ * net-terms pill. That status ordinarily reads "Being prepared" to a customer,
+ * because a net-terms account HAS credit and the goods are worked on at once.
+ *
+ * A finance order is not that. The customer has applied and nobody has approved,
+ * paid or picked anything yet, so telling them we are "Being prepared" the instant
+ * they submit would be untrue — and the Product Brief's settled invariant (§3
+ * "Statuses & wording") is that an unpaid order reads "Placed", never "Being
+ * prepared". The card that moved the status is explicitly an internal-status and
+ * internal-pill change, so the wording stays exactly where it was: this pair reads
+ * "Placed" until a real event (payment, fulfilment, dispatch) moves the order on,
+ * which is precisely what the shopper saw before the card.
+ */
+function isFinancePlacedButUnstarted(
+  statusKey: string,
+  paymentMethod: string | null | undefined
+): boolean {
+  if (statusKey !== "net_terms_account") return false;
+  return FINANCE_PAYMENT_METHODS.has((paymentMethod ?? "").trim().toLowerCase());
+}
+
+/**
+ * The one and only wording a customer sees for `orders.status`.
+ *
+ * `paymentMethod` is `orders.payment_method` and is optional: pass it wherever the
+ * caller has the column, so a finance order keeps reading "Placed" (above). Every
+ * return is still a member of ORDER_STAGES, whether it is passed or not.
+ */
+export function customerOrderStage(
+  status: string | null | undefined,
+  paymentMethod?: string | null
+): OrderStage {
   const key = (status ?? "").trim().toLowerCase();
   if (!key) return FALLBACK_STAGE;
+  if (isFinancePlacedButUnstarted(key, paymentMethod)) return "Placed";
   return ORDER_STAGE_BY_STATUS[key] ?? FALLBACK_STAGE;
 }
 
