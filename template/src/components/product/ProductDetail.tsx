@@ -18,6 +18,9 @@ import { GstToggle } from "@/components/layout/GstToggle";
 import { useProductPurchase } from "./ProductPurchaseProvider";
 import { ProductKitBlock } from "./ProductKitBlock";
 import { defaultKitSelection, toKitChoices, type ProductKit } from "@/lib/product-kit";
+import { ProductInstructionsPanel } from "./ProductInstructionsPanel";
+import { buyAreaSuppressed } from "@/lib/product-customisation";
+import { postsConfiguration } from "@/lib/product/addon-panel";
 
 /**
  * `kit` is present only for the two Zoey kit types (grouped / bundle). Every other caller — the
@@ -43,6 +46,8 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
     allOptionsSelected,
     cartVariantId,
     selectedAddons,
+    addonText,
+    setAddonText,
     addonGroupsUnanswered,
     addonGroupsOffered,
     displayBasePrice,
@@ -56,6 +61,16 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
   const [kitSelection, setKitSelection] = useState<Record<string, number>>(() =>
     kit?.kind === "bundle" ? defaultKitSelection(kit.groups) : {}
   );
+  // Free-text customisation (card kyMjCmAw) rides the SAME provider state the ticked
+  // extras do — `setAddonText` writes into `selectedAddons`, so one bag reaches whichever
+  // buy button is pressed and no renderer has to know which control produced an answer.
+  //
+  // WHETHER A BUY POSTS THAT BAG is `addonGroupsOffered` for the priced extras, whose panel
+  // hides itself with the price (0CDcCYmO), OR `customisationOffered` for the free-text
+  // groups, whose panel does NOT: a text answer carries no money, and the product this card
+  // exists for — Custom Stainless Steel — is quote-only at $0. Gating the instruction on the
+  // priced panel's rule would have made the box unreachable on the one product that needs it.
+  const buyPostsConfiguration = postsConfiguration(addonGroupsOffered, product.addons);
   const isBundle = kit?.kind === "bundle";
   const kitReady = !isBundle || kit.groups.every((g) => kitSelection[g.name] != null);
 
@@ -185,7 +200,27 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
         />
       )}
 
-      {/* Paid extras (card 0CDcCYmO) — above the buy buttons, because ticking one changes
+      {/* Free-text customisation — Zoey puts it directly above the buy row on the Custom
+          Stainless Steel page (card kyMjCmAw), and it sits ABOVE the priced extras here for
+          the reason the node placer chain records: a priced control keeps the place next to
+          the button whose charge it changes. This hand-ordering is what keeps this fallback
+          renderer and the node tree from disagreeing. */}
+      {/* 7vu2iEEZ on `sf-product-page`: a product with BOTH buy controls restricted
+          renders no buy area at all — no control, no wording — so a required box
+          above nothing to press goes with the buttons. */}
+      {!buyAreaSuppressed(restrictAddToCart, restrictAddToQuote) && (
+        <ProductInstructionsPanel
+          groups={product.addons?.groups ?? []}
+          values={addonText}
+          onChange={setAddonText}
+          // No inline error here, exactly as the node native decides it: the press is
+          // answered in words by the action, and the field's own asterisk and "Required"
+          // line explain it before the press. Two refusals for one press is one too many.
+          missingLabels={[]}
+        />
+      )}
+
+      {/* Paid extras (card 0CDcCYmO) — nearest the buy buttons, because ticking one changes
           what Add to Cart will charge. Renders nothing for a product with none. */}
       <ProductAddons />
 
@@ -211,7 +246,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
             // Posted only where the panel was actually OFFERED, exactly as the quote control
             // below is: `{}` from a renderer with no panel answers a required group the shopper
             // was never asked, and the add is refused over a control that is not on screen.
-            addons={addonGroupsOffered ? selectedAddons : undefined}
+            addons={buyPostsConfiguration ? selectedAddons : undefined}
             disabled={purchasingDisabled || !allOptionsSelected}
           />
         )}
@@ -227,7 +262,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
             // the configuration, so the rep prices what the customer was actually looking at.
             // Posted only where the panel was OFFERED — an empty object is a deliberate
             // clear-down, `undefined` leaves the line's configuration alone.
-            addons={addonGroupsOffered ? selectedAddons : undefined}
+            addons={buyPostsConfiguration ? selectedAddons : undefined}
             label={isBundle ? "Add to Quote — request pricing" : undefined}
           />
         )}

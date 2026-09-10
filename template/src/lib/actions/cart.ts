@@ -25,6 +25,12 @@ import {
   type AddonSelectionInput,
   type ResolvedAddon,
 } from "@keenan/services/product-addons";
+import {
+  buyableAddons,
+  customisationDefinition,
+  extrasDefinition,
+} from "@/lib/product/addon-panel";
+import { customisationRefusal } from "@/lib/product-customisation";
 
 async function getOrCreateCart() {
   const uuid = await getCartUuid();
@@ -264,9 +270,21 @@ async function readAddonsForAdd(
       salePrice: variant?.sale_price,
     });
   }
-  if (!panelShown) return { resolved: [], refusal: null };
+  // PRICED groups drop out with their panel; FREE-TEXT groups do NOT (card kyMjCmAw). The
+  // price rule above exists to stop a surcharge republishing a suppressed price or pricing a
+  // quote-only machine at its accessories — a typed answer carries no money at all, so neither
+  // reason reaches it, and gating it here would make the Instructions box unreachable on the
+  // one product it was built for.
+  const buyable = buyableAddons(definition, panelShown);
+  if (!buyable) return { resolved: [], refusal: null };
   const posted = selection != null;
-  const missing = unansweredAddonGroups(definition, posted ? selection : {});
+  // Refused SEPARATELY by kind, because the sentence has to fit the control: you CHOOSE a
+  // hopper and you FILL IN an instruction, and both sentences reach a customer. Priced first,
+  // so 0CDcCYmO's own wording is unchanged on every product that carries one.
+  const missing = unansweredAddonGroups(
+    extrasDefinition(definition, panelShown),
+    posted ? selection : {}
+  );
   if (missing.length > 0) {
     return {
       resolved: [],
@@ -275,8 +293,14 @@ async function readAddonsForAdd(
         : `Open this product's page to choose ${missing.join(" and ")} before adding it to your cart.`,
     };
   }
+  const typedRefusal = customisationRefusal(
+    customisationDefinition(definition),
+    posted ? selection : undefined,
+    "cart"
+  );
+  if (typedRefusal) return { resolved: [], refusal: typedRefusal };
   return {
-    resolved: posted ? resolveAddonSelection(definition, selection) : [],
+    resolved: posted ? resolveAddonSelection(buyable, selection) : [],
     refusal: null,
   };
 }
