@@ -35,6 +35,8 @@ import {
   cardEntryMessage,
   shouldConfirmStripeResult,
 } from "@/lib/checkout/card-entry";
+import Image from "next/image";
+import { Package } from "lucide-react";
 import { Price } from "@/components/ui/Price";
 import { gstSplit } from "@keenan/services/calc";
 import { AddressAutocomplete } from "@/components/checkout/AddressAutocomplete";
@@ -94,6 +96,12 @@ type CartItem = {
   /** Back-order facts carried by readCart (card 7vu2iEEZ). See CartItemsList for why. */
   available_units?: number | null;
   backorder_policy?: string | null;
+  /**
+   * The product's primary photograph, resolved on the server and already checked
+   * against what `/api/image` may fetch (card qjV98YEK). `null` = no usable picture,
+   * which draws the placeholder rather than a broken box.
+   */
+  image_url?: string | null;
   /**
    * What the shopper configured on the product page, as stored on
    * `cart_items.modifier_selections` (cards 0CDcCYmO + kyMjCmAw). Printed on the
@@ -1608,22 +1616,55 @@ export function CheckoutForm({
                 );
                 return (
                   <div key={i} className="py-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-zinc-600">
-                        {item.product_name} &times; {item.quantity}
-                      </span>
-                      <Price amount={price * item.quantity} className="font-medium" />
+                    <div className="flex gap-3">
+                      {/* The product photograph (card qjV98YEK). Decorative: the product
+                          name sits right beside it, so an alt text would only make a
+                          screen reader read the same line twice. A product with no usable
+                          picture keeps the line's shape with the same placeholder the
+                          listing tiles use. */}
+                      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded border border-zinc-200 bg-white">
+                        {item.image_url ? (
+                          <Image
+                            src={item.image_url}
+                            alt=""
+                            fill
+                            sizes="48px"
+                            /* Contained, never cropped: these are catalogue photographs on
+                               white, and `object-cover` on a 48px square cuts the ends off a
+                               bench or a rangehood. */
+                            className="object-contain p-1"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-zinc-300">
+                            <Package className="h-5 w-5" />
+                          </div>
+                        )}
+                      </div>
+                      {/* Everything the line SAYS stays in one column beside the picture, at
+                          full width: the name and price row, the add-on configuration, and
+                          the back-order note. The image column may never displace that note —
+                          with card CXnP1lrL having removed every other availability string,
+                          it is the only explanation of a back order a shopper gets anywhere
+                          (card 7vu2iEEZ, Tim 2026-08-11). */}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex justify-between gap-2">
+                          <span className="text-zinc-600">
+                            {item.product_name} &times; {item.quantity}
+                          </span>
+                          <Price amount={price * item.quantity} className="font-medium" />
+                        </div>
+                        {configuration && (
+                          <p className="mt-0.5 whitespace-pre-line text-xs text-zinc-500">
+                            {configuration}
+                          </p>
+                        )}
+                        {backorderNote && (
+                          <p className="mt-1.5 rounded border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs text-sky-800">
+                            {backorderNote}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    {configuration && (
-                      <p className="mt-0.5 whitespace-pre-line text-xs text-zinc-500">
-                        {configuration}
-                      </p>
-                    )}
-                    {backorderNote && (
-                      <p className="mt-1.5 rounded border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs text-sky-800">
-                        {backorderNote}
-                      </p>
-                    )}
                   </div>
                 );
               })}

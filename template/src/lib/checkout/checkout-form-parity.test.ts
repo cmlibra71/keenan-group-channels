@@ -37,13 +37,32 @@ const REQUIRED: Array<{ file: string; needles: string[] }> = [
       'name="address_type" value={effectiveAddressType}',
       // A Places pick quotes on ITS OWN classification, not the render-behind ref.
       'calculateShippingCost(place.postalCode, place.addressType ?? "")',
+      // Every Order Summary line carries its product photograph (card qjV98YEK): the prop the
+      // page fills, the branch that draws it, the placeholder a product with no usable picture
+      // falls back to, and the containment that stops a 48px square cropping a bench in half.
+      // Design tokens are deliberately NOT pinned — those are exactly what these two files are
+      // allowed to diverge on.
+      "image_url?: string | null;",
+      "{item.image_url ? (",
+      '<Package className="h-5 w-5" />',
+      'className="object-contain p-1"',
     ],
   },
   {
     file: "src/app/checkout/page.tsx",
-    // A saved address carries its own classification through to the form — QUARANTINED, because
-    // `customer_addresses.address_type` is DEFAULT 'residential' on all 15,518 production rows.
-    needles: ['addressType: addressTypeFromContactBook(a.address_type ?? a.addressType) ?? "",'],
+    needles: [
+      // A saved address carries its own classification through to the form — QUARANTINED, because
+      // `customer_addresses.address_type` is DEFAULT 'residential' on all 15,518 production rows.
+      'addressType: addressTypeFromContactBook(a.address_type ?? a.addressType) ?? "",',
+      // The Order Summary photographs are resolved server-side in ONE batched, never-throw read
+      // and handed to the form on the line (card qjV98YEK). A site left on `items={cart.items}`
+      // still compiles and still passes every other test, and Dockerfile.site would ship that
+      // site a summary with no pictures while template's looked right.
+      'import { orderSummaryImagesForProducts } from "@/lib/checkout/order-summary-images";',
+      "const summaryImages = await orderSummaryImagesForProducts(",
+      "image_url: summaryImages.get(Number(i.product_id)) ?? null,",
+      "items={summaryItems}",
+    ],
   },
 ];
 
@@ -61,6 +80,35 @@ for (const { file, needles } of REQUIRED) {
     });
   }
 }
+
+test("the Order Summary photograph never displaces what the line SAYS", () => {
+  // Card qjV98YEK put the picture in its own column. Everything the line says — the name and
+  // price row, the add-on configuration (card kyMjCmAw) and the back-order note — has to stay
+  // together in the TEXT column beside it, at full paragraph width. That note is the only
+  // explanation of a back order a shopper gets anywhere now that card CXnP1lrL removed every
+  // other availability string (card 7vu2iEEZ, Tim 2026-08-11), so a re-layout that pushes it
+  // out of the column, or drops it to make room for the thumbnail, is the failure this pins.
+  for (const tree of TREES) {
+    const src = readFileSync(join(ROOT, tree, "src/components/checkout/CheckoutForm.tsx"), "utf8");
+    const image = src.indexOf("{item.image_url ? (");
+    assert.ok(image > 0, `${tree}: the Order Summary line no longer renders a product photograph`);
+
+    const textColumn = src.indexOf("min-w-0 flex-1", image);
+    assert.ok(
+      textColumn > image,
+      `${tree}: the picture is not followed by a text column — the summary line has been re-laid out`
+    );
+
+    for (const inside of ["{configuration && (", "{backorderNote && (", "<Price amount="]) {
+      const at = src.indexOf(inside, textColumn);
+      assert.ok(
+        at > textColumn,
+        `${tree}: ${inside} no longer sits inside the Order Summary's text column.\n` +
+          "The image column may never displace the price, the configuration or the back-order note."
+      );
+    }
+  }
+});
 
 test("both site copies post an address_type on the SAVED-address path too", () => {
   // Selecting a saved address used to post no `address_type` at all, which lost the residential
