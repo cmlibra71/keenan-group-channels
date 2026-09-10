@@ -127,6 +127,9 @@ type SavedAddress = {
   countryCode: string;
   phone?: string | null;
   isDefaultBilling: boolean;
+  /** `customer_addresses.address_type` — "residential" | "commercial" | "" (never classified).
+   *  Cards HMtUxvwZ, Xw9VQmAJ: this is what an address-triggered freight attribute fires on. */
+  addressType?: string;
 };
 
 export function CheckoutForm({
@@ -535,10 +538,10 @@ export function CheckoutForm({
 
   // The quoted delivery must be the delivery that is charged, so the summary asks with the same
   // address classification placeOrder will price against (card Xw9VQmAJ / HMtUxvwZ). Held in a
-  // ref so a change of address re-quotes without putting `addressType` in the callback's deps and
-  // re-firing every postcode effect that depends on its identity.
-  const addressTypeRef = useRef(addressType);
-  addressTypeRef.current = addressType;
+  // ref so a change of address re-quotes without putting the classification in the callback's
+  // deps and re-firing every postcode effect that depends on its identity. Filled in below,
+  // once the selected saved address is known.
+  const addressTypeRef = useRef("");
 
   const calculateShippingCost = useCallback(
     async (postcode: string, addressTypeHint?: string | null) => {
@@ -646,6 +649,16 @@ export function CheckoutForm({
   const showAddressForm =
     savedAddresses.length === 0 || selectedAddressId === "new" || needsCorrection;
   const prefill = needsCorrection ? selectedAddress : undefined;
+
+  // THE residential/commercial classification for the address this order is actually going to
+  // (cards HMtUxvwZ, Xw9VQmAJ). A saved address carries its own `address_type` from
+  // `customer_addresses`; a freshly typed one carries what the Places pick said. One value feeds
+  // three things — the hidden field placeOrder prices and stamps, and the summary's own quote —
+  // so the shopper can never be shown a delivery figure that a different classification produced.
+  // Switching from a typed address back to a saved one therefore re-quotes on the SAVED one.
+  const effectiveAddressType =
+    selectedAddress && !showAddressForm ? selectedAddress.addressType ?? "" : addressType;
+  addressTypeRef.current = effectiveAddressType;
 
   // On the EMPTY new-address form (not the correction path, which is seeded from
   // the saved address instead) fall back to the contact's own name and phone.
@@ -1078,8 +1091,8 @@ export function CheckoutForm({
                       onSelect={handlePlaceSelect}
                     />
                   )}
-                  {/* Card HMtUxvwZ — see `addressType`. */}
-                  <input type="hidden" name="address_type" value={addressType} />
+                  {/* Card HMtUxvwZ — see `effectiveAddressType`. */}
+                  <input type="hidden" name="address_type" value={effectiveAddressType} />
                 </div>
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-zinc-700">
@@ -1232,6 +1245,10 @@ export function CheckoutForm({
                 <input type="hidden" name="postalCode" value={selectedAddress.postalCode} />
                 <input type="hidden" name="country" value={selectedAddress.countryCode} />
                 <input type="hidden" name="phone" value={selectedAddress.phone || ""} />
+                {/* The saved address's OWN classification (cards HMtUxvwZ, Xw9VQmAJ). Without
+                    it a saved address posted nothing, so the order lost the residential stamp
+                    and an address-triggered surcharge quoted in the summary was never charged. */}
+                <input type="hidden" name="address_type" value={effectiveAddressType} />
               </>
             )}
 

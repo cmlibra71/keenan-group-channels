@@ -40,6 +40,7 @@ import {
   financeOfferForCart,
   isFinancePaymentMethod,
 } from "@/lib/checkout/finance";
+import { addressTypeFromContactBook } from "@keenan/services/residential";
 import { financeApplicationForm } from "@/lib/checkout/finance-form";
 import { CheckoutForm } from "@/components/checkout/CheckoutForm";
 import { StartedCheckoutTracker } from "@/components/analytics/StartedCheckoutTracker";
@@ -264,7 +265,7 @@ export default async function CheckoutPage() {
   // Load saved addresses for the logged-in contact (identity unification —
   // listForContact also covers legacy customer-keyed rows via the migration's
   // contact_id backfill).
-  let savedAddresses: { id: number; firstName: string; lastName: string; address1: string; address2?: string; city: string; stateOrProvince: string; postalCode: string; countryCode: string; phone?: string | null; isDefaultBilling: boolean }[] = [];
+  let savedAddresses: { id: number; firstName: string; lastName: string; address1: string; address2?: string; city: string; stateOrProvince: string; postalCode: string; countryCode: string; phone?: string | null; isDefaultBilling: boolean; addressType?: string }[] = [];
   if (session) {
     try {
       const rows = await customerAddressService.listForContact(session.contactId);
@@ -282,6 +283,21 @@ export default async function CheckoutPage() {
         // even though CheckoutForm submits it as a hidden field.
         phone: (a.phone ?? null) as string | null,
         isDefaultBilling: !!(a.is_default_billing ?? a.isDefaultBilling),
+        // The saved address's own residential/commercial classification (cards HMtUxvwZ,
+        // Xw9VQmAJ). Selecting a saved address used to post no `address_type` at all, so the
+        // order lost the stamp and an address-triggered freight attribute quoted in the summary
+        // was never charged.
+        //
+        // QUARANTINED, and this is load-bearing: `customer_addresses.address_type` is
+        // `DEFAULT 'residential'` and reads residential on all 15,518 production rows with no
+        // other value anywhere — it is the column default, not fifteen thousand customers living
+        // in houses. Honouring it raw would charge a Residential surcharge to every shopper with
+        // a saved address the moment a number is typed into that attribute. Only an explicit
+        // `commercial` survives, exactly as the portal's own address reader does
+        // (`addressTypeFromContactBook`); "" then means nobody has classified it, and an
+        // address-triggered attribute fires nothing rather than guessing. A freshly TYPED
+        // address is unaffected — its classification comes from the shopper's own Places pick.
+        addressType: addressTypeFromContactBook(a.address_type ?? a.addressType) ?? "",
       }));
     } catch {
       // No saved addresses

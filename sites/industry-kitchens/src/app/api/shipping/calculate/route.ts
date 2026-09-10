@@ -24,6 +24,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // `address_type` is the ONE thing the body may say about the shipment, and it is the same
+    // Places-derived hint the form posts to placeOrder and that gets stamped on the order — so
+    // the summary and the charge read one value (card Xw9VQmAJ / HMtUxvwZ). Anything else, or
+    // nothing, reads as unclassified and fires no address-triggered attribute.
+    const addressType =
+      body.address_type === "residential" || body.address_type === "commercial"
+        ? (body.address_type as string)
+        : null;
+
     // A zone can be rated by weight or item count as well as by dollars (BigCommerce table
     // rates, card Wxjp8wpg). The measures come from the shopper's OWN cart on the server —
     // never from the request body — so a quoted price can't be talked down by a crafted post.
@@ -32,7 +41,13 @@ export async function POST(request: NextRequest) {
           weightKg: number | null;
           itemCount: number | null;
           weightIncomplete: boolean;
-          hasBulkyItems: boolean;
+          attributes: Array<{
+            code: string;
+            lines: number;
+            units: number;
+            override_value?: number | null;
+          }>;
+          addressType: string | null;
         }
       | undefined;
     try {
@@ -52,26 +67,38 @@ export async function POST(request: NextRequest) {
           weightKg: summary.weight_kg,
           itemCount: summary.item_count,
           weightIncomplete: summary.has_unweighed_lines,
-          // The BULKY ARM (card NuBmIxuL): a cart holding a product ticked bulky is quoted the
-          // zone's rate PLUS that zone's bulky surcharge — the tail-lift premium the tiers do
-          // not carry. Read from the cart's own products, like every other measure here, so a
-          // crafted post cannot price a bratt pan as an ordinary parcel.
-          hasBulkyItems: summary.bulky.length > 0,
+          // The FREIGHT ATTRIBUTES this cart meets (card Xw9VQmAJ — the author-defined
+          // replacement for the single bulky boolean): the zone's rate PLUS whatever surcharges
+          // these goods carry. Read from the cart's own products, like every other measure
+          // here, so a crafted post cannot price a bratt pan as an ordinary parcel.
+          attributes: summary.attributes,
+          addressType,
         };
       }
     } catch {
       // No cart / lookup failure — an order-value zone (all of them today) doesn't need it.
     }
 
-    const result = await calculateShipping(postcode, subtotal, measures);
+    const result = await calculateShipping(
+      postcode,
+      subtotal,
+      // No cart on the server (a fresh session, or a lookup failure) still passes the address
+      // type: an always/address attribute is about the DELIVERY, not the goods.
+      measures ?? { weightKg: null, itemCount: null, weightIncomplete: true, addressType }
+    );
     // `cost` is the rate card's own figure, which is EX GST (Tim, card twwZMnMY): a $30 flat
     // rate is $33 to pay. Both bases are named in the response so no caller has to guess —
     // reading the raw rate as inc-GST is exactly the defect this card fixed, and it under-charged
     // every Chefs Depot delivery by 10%. The split comes from the shared `gstSplit`, never a
     // hand-written `* 1.1` (services CONTEXT D4).
     const split = gstSplit(result.cost ?? 0, false);
+    // The freight-attribute breakdown is STAFF-ONLY (card Xw9VQmAJ, Chris 2026-09-10: the
+    // customer only ever sees a freight TOTAL). This route answers a shopper's browser, so the
+    // named surcharges are stripped out here rather than relied upon not to be rendered.
+    const { freight_attributes: _staffOnly, ...customerSafe } = result;
+    void _staffOnly;
     return NextResponse.json({
-      ...result,
+      ...customerSafe,
       cost_ex_tax: split.exTax,
       cost_tax: split.tax,
       cost_inc_tax: split.incTax,
