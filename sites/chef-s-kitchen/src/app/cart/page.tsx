@@ -85,7 +85,7 @@ export default async function CartPage() {
             ? {
                 planPrice,
                 billingInterval,
-                ladderOn: Boolean(ladder?.enabled) && (ladder?.levels.length ?? 0) > 1,
+                ladderOn: Boolean(ladder?.enabled),
               }
             : null
         }

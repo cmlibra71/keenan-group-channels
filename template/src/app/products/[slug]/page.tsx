@@ -82,8 +82,8 @@ export default async function ProductPage({
   // and both live sites diverged from it before this card existed. Their
   // non-node halves call `getEffectivePrice` with exactly these five arguments
   // too. A site seeded from this template that later wires up the node branch
-  // still gets the right rung: the engine resolves it itself
-  // (`member.ladderLevelId ?? resolveCdLadderLevelId(...)` in
+  // still gets the right share: the engine resolves it itself
+  // (`member.ladderShare ?? resolveCdLadderShare(...)` in
   // `src/builder/product-node-branch.tsx`) when the caller passes none.
   let memberPrice: number | null = null;
   let isMember = false;

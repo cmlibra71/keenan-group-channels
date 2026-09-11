@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Check, Gift, ShoppingBag } from "lucide-react";
 import { getSession } from "@/lib/auth";
-import { contactService, getActiveSubscriptionForContact, getFeatureFlag } from "@/lib/store";
+import { contactService, getActiveSubscriptionForContact, getFeatureFlag, getLadderConfig } from "@/lib/store";
+import { welcomePricingTile } from "@/lib/membership/welcome-copy";
 import { getMembershipProfile } from "@/lib/membership";
 
 export const metadata = {
@@ -22,6 +23,10 @@ export default async function MembershipWelcomePage() {
 
   const drawsEnabled = await getFeatureFlag("draws_enabled");
   const partnerOffersEnabled = await getFeatureFlag("partner_offers_enabled");
+  // The member-pricing tile follows the channel's own member price scale switch (card
+  // gk23c1VK): copy and engine turn on together, and neither state may publish a saving
+  // percentage — see `lib/membership/welcome-copy.ts`. A failed read under-claims (OFF).
+  const pricingTile = welcomePricingTile((await getLadderConfig().catch(() => null))?.enabled === true);
 
   // Tim's storyboard screenshot 11 ("All Set page") greets the new member by name. Best-effort:
   // a member we cannot name reads the same sentence without one rather than "undefined, you're
@@ -49,8 +54,8 @@ export default async function MembershipWelcomePage() {
         <div className="border border-border p-4 flex items-start gap-3">
           <ShoppingBag className="h-5 w-5 text-accent mt-0.5 shrink-0" />
           <div>
-            <p className="font-medium text-text-primary">Member-Exclusive Pricing</p>
-            <p className="text-sm text-text-secondary">Save up to 25% on products across the store.</p>
+            <p className="font-medium text-text-primary">{pricingTile.title}</p>
+            <p className="text-sm text-text-secondary">{pricingTile.body}</p>
           </div>
         </div>
 

@@ -37,7 +37,7 @@ import { isStaffOnlyDraft } from "@/lib/quotes/draft-visibility";
 import { stripStaffOnlyFields } from "@/lib/quotes/staff-only-fields";
 import { quoteGstTotals, isMoneyRow } from "@/lib/quotes/quote-gst";
 import { resolveQuoteGstRate } from "@/lib/quotes/quote-gst-rate";
-import { readQuoteRepriceDeltasForChannel } from "@/lib/quotes/reprice-deltas";
+import { readQuoteRepriceDeltasForChannel, repriceQuoteForCustomer } from "@/lib/quotes/reprice-deltas";
 import { QuoteRepriceNotice } from "@/components/quote/QuoteRepriceNotice";
 import { quoteStatusLabel } from "@/lib/quotes/quote-status-label";
 import {
@@ -145,8 +145,10 @@ export const metadata = {
 
 export default async function QuoteDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   // Read the id first — purely syntactic, so it discloses nothing ahead of the
   // session guard, and the guard needs it to send the customer back here.
@@ -186,6 +188,19 @@ export default async function QuoteDetailPage({
       perms.isB2B && perms.accountId !== null && perms.can("view_company_quotes");
     const memberIds = canSeeAccountQuotes ? await getAccountContactIds(perms.accountId!) : [];
     if (!raw.contact_id || !memberIds.includes(raw.contact_id)) notFound();
+  }
+
+  // CHEFS DEPOT MEMBER PRICING — "no price hold: a quote reprices on view" (card
+  // gk23c1VK). Only once the viewer is known to be allowed to see the quote, so a
+  // stranger's guess at an id can move nothing. When the reprice moves a line's
+  // money the page is re-read from the top, so every figure below — the lines,
+  // the totals, the Pay panel and the per-line movement notice — describes the
+  // repriced quote. `rp=1` stops a second pass ever looping. A no-op (one cached
+  // settings read) unless this channel runs the scale, and only ever on a live
+  // quote_available quote.
+  const alreadyRepriced = (await searchParams)?.rp === "1";
+  if (!alreadyRepriced && (await repriceQuoteForCustomer(raw.id)) > 0) {
+    redirect(`/account/quotes/${quoteId}?rp=1`);
   }
 
   const status = raw.status || "quote_pending";

@@ -49,6 +49,8 @@ import {
 } from "@/lib/quotes/customer-editable";
 import { isStaffOnlyDraft, withoutStaffOnlyDrafts } from "@/lib/quotes/draft-visibility";
 import { acceptanceAcknowledgementUrl } from "@/lib/quotes/acknowledgement-url";
+import { repriceQuoteForCustomer } from "@/lib/quotes/reprice-deltas";
+import { QUOTE_REPRICED_ON_ACCEPT_MESSAGE } from "@keenan/services/member-ladder";
 import { accountAcceptanceHoldsConversion } from "@/lib/quotes/pro-forma-pay-call";
 import { getContactPermissions } from "@/lib/role-permissions";
 import { mayFileAddressInBook } from "@/lib/account/address-authority";
@@ -759,13 +761,25 @@ export async function acceptQuote(quoteId: number) {
   }
   const requiresAdminApproval = perms.isB2B && perms.can("convert_quotes_to_order_require_approval");
 
+  // CHEFS DEPOT MEMBER PRICING — "a quote reprices on view and on acceptance,
+  // with the per-line delta surfaced BEFORE acceptance" (card gk23c1VK). If
+  // accepting would move a line's money, the customer has not seen the price
+  // they would be held to: refuse, and the page re-reads with the per-line
+  // change on screen. The same rule, and the same sentence, as the emailed
+  // link's accept route in the portal. A no-op unless this channel runs the scale.
+  if ((await repriceQuoteForCustomer(quoteId)) > 0) {
+    return { error: QUOTE_REPRICED_ON_ACCEPT_MESSAGE, repriced: true };
+  }
+
   // Lifecycle method, NOT a bare status update: stamps accepted_at and writes
   // the quote.accepted audit row. The generic update() fired no side effects,
   // which is why acceptances used to be invisible to staff.
   // `suppressStaffAlert`: the portal follow-up called below is the one sender of
   // the acceptance email. Without it the service sends its own older alert too
   // and every configured inbox gets two.
-  await quoteService.markAccepted(quoteId, { requiresAdminApproval, suppressStaffAlert: true });
+  // `alreadyRepriced`: the reprice for acceptance ran just above; a second pass
+  // inside markAccepted would only write the same snapshot twice.
+  await quoteService.markAccepted(quoteId, { requiresAdminApproval, suppressStaffAlert: true, alreadyRepriced: true });
 
   // Flag the acceptance so staff know this contact's conversions need sign-off
   // before the quote becomes an order. Best-effort — never fail the acceptance.

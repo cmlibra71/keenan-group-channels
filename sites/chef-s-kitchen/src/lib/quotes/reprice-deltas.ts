@@ -1,5 +1,6 @@
 import {
   hasMemberLadderSetting,
+  quoteService,
   readQuoteRepriceDeltas,
   type QuoteDeltaSummary,
 } from "@keenan/services";
@@ -7,10 +8,31 @@ import {
 export type { QuoteDeltaSummary };
 
 /**
- * Buying-group repricing on the SIGNED-IN quote page (card gk23c1VK, blueprint §9.3 / AC 19).
+ * "NO PRICE HOLD — a quote reprices on view and on acceptance" (card gk23c1VK,
+ * Tim's locked 11 Sep 2026 model, master document §5), for the SIGNED-IN quote
+ * page and the storefront's own Accept.
  *
- * A Chefs Depot quote reprices against live trade data and the account's
- * current buying-group level, so a line's price can move between the day the
+ * Returns how many lines' money the reprice moved. A no-op — one memoised
+ * settings read — unless this channel runs the Chefs Depot member price scale,
+ * and even then only a live `quote_available` quote is touched
+ * (`QuoteService.repriceForCustomer`, the same entry point the portal's
+ * `/q/<uuid>` and its accept route call). Never throws: a failed reprice leaves
+ * the quote as it was.
+ */
+export async function repriceQuoteForCustomer(quoteId: number): Promise<number> {
+  if (!Number.isFinite(quoteId)) return 0;
+  const result = await quoteService.repriceForCustomer(quoteId).catch((err: unknown) => {
+    console.error("[member-pricing] reprice failed", err);
+    return { linesRepriced: 0 };
+  });
+  return result.linesRepriced;
+}
+
+/**
+ * Member-pricing repricing on the SIGNED-IN quote page (card gk23c1VK).
+ *
+ * A Chefs Depot quote reprices against live trade data and the member's current
+ * position on the price scale, so a line's price can move between the day the
  * quote was sent and the day it is accepted. The buyer is told about that
  * movement BEFORE they accept, line by line.
  *
