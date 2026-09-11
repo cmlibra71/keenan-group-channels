@@ -6,6 +6,7 @@ import {
   getComponents,
   getDraftComponents,
   getChannelSetting,
+  getLadderConfig,
 } from "@/lib/store";
 import { CHANNEL_ID } from "@/lib/channel";
 import { loadJsSandbox, computeCallResults, guardBuyControls, guardBuyControlsInComponents } from "@keenan/services/builder";
@@ -22,7 +23,8 @@ import { withModularNoticeNode } from "@/builder/modular-notice";
 import { withUpsellBlock } from "@/builder/upsell-node";
 import { attachBrandLogos } from "@/lib/brand-logo-fallback";
 import { withCdMemberPricingNode } from "@/builder/cd-member-pricing-node";
-import { buildCdMembershipData, resolveCdLadderLevelId } from "@/lib/pricing/cd-member-pricing.server";
+import { withMemberScaleLabelsInTree } from "@/builder/member-scale-labels";
+import { buildCdMembershipData, resolveCdLadderShare } from "@/lib/pricing/cd-member-pricing.server";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 
 // ============================================================================
@@ -55,8 +57,8 @@ export interface ProductMemberContext {
   /** Non-members get a savings PERCENTAGE for the join teaser — never a price. */
   teaserCustomerGroupId: number | null;
   accountId: number | null;
-  /** The buying-group rung this shopper prices at (card gk23c1VK); null off-ladder. */
-  ladderLevelId?: string | null;
+  /** The member's share on the Chefs Depot price scale (card gk23c1VK); null off-scale. */
+  ladderShare?: number | null;
 }
 
 export interface ProductNodeBranchArgs {
@@ -95,13 +97,14 @@ export async function renderProductNodeBranch({
   // this because its flag has been on since the template shipped.
   if (!forceNodes && !draft && !(await getFeatureFlag("node_product_template_enabled"))) return null;
 
-  // The buying-group rung, resolved ONCE and handed to BOTH the pricing call
-  // below and the membership panel further down. The engine prices what the buy
-  // box charges from it; the panel labels that figure with it. Split them and a
-  // Level 4 member is charged at Level 1 with "Level 4" printed beside it.
-  const ladderLevelId =
-    member.ladderLevelId ??
-    (await resolveCdLadderLevelId({
+  // The member's position on the Chefs Depot price scale, resolved ONCE and
+  // handed to BOTH the pricing call below and the membership panel further
+  // down. The engine prices what the buy box charges from it; the panel labels
+  // that figure with it. Split them and the panel reports one position while the
+  // buy box charges another.
+  const ladderShare =
+    member.ladderShare ??
+    (await resolveCdLadderShare({
       isMember: member.isMember,
       accountId: member.accountId,
     }).catch(() => null));
@@ -113,7 +116,7 @@ export async function renderProductNodeBranch({
       loggedIn: member.loggedIn,
       planPrice: member.planPrice,
       teaserCustomerGroupId: member.teaserCustomerGroupId,
-      ladderLevelId,
+      ladderShare,
     },
     // Per-account contract prices override every layer; the payload's product +
     // related cards and its variant pricing are all resolved with the account
@@ -214,6 +217,15 @@ export async function renderProductNodeBranch({
   // sealed panel, whose styling compiles with the build and therefore cannot
   // render unstyled. It is a no-op on every tree that does not carry the
   // half-finished banner, which today is every template except Chefs Depot's.
+  // The member price scale's WORDING (card gk23c1VK): while this channel's scale
+  // is ON, a static "RRP" beside the Mates Rate headline reads "Standard price"
+  // and a member saving loses its percentage — on the stored template as well as
+  // on the component masters (`lib/store.ts` does those). A no-op while the
+  // scale is off, which is every channel until one is switched on.
+  const scaleOn = (await getLadderConfig().catch(() => null))?.enabled === true;
+  const scaleWording = <T extends typeof SEED_PRODUCT_TREE>(tree: T): T =>
+    scaleOn ? withMemberScaleLabelsInTree(tree) : tree;
+
   const nodeTree = guardBuyControls(
     withCdMemberPricingNode(
       withUpsellBlock(
@@ -235,7 +247,7 @@ export async function renderProductNodeBranch({
             withProductInstructionsNode(
               withPackNoteNode(
                 withModularNoticeNode(
-                  withImageNoticeNode(withSilverChefNode(storedTree ?? SEED_PRODUCT_TREE))
+                  withImageNoticeNode(withSilverChefNode(scaleWording(storedTree ?? SEED_PRODUCT_TREE)))
                 )
               )
             )
@@ -255,11 +267,12 @@ export async function renderProductNodeBranch({
     loggedIn: member.loggedIn,
     accountId: member.accountId,
     planPrice: member.planPrice,
-    ladderLevelId,
+    ladderShare,
     // No RRP is passed: the panel reads the page's OWN headline base amount for
     // the active variant off the purchase provider, so a product-level price can
     // never sit beside per-variant ladder figures (card Nyp8bkPm, review fix).
     product: {
+      id: payload.product.id,
       variants: payload.product.variants ?? [],
     },
   }).catch(() => null);

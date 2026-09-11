@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { cookies, headers } from "next/headers";
 import { Fraunces, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
-import { getSiteConfig, getFeatureFlag, getFooterConfig, getGa4MeasurementId } from "@/lib/store";
+import { getSiteConfig, getFeatureFlag, getFooterConfig, getGa4MeasurementId, getLadderConfig } from "@/lib/store";
 import { getPublishedTokenVars } from "@/lib/design-tokens";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { Header } from "@/components/layout/Header";
@@ -9,6 +9,7 @@ import { Footer } from "@/components/layout/Footer";
 import { ScrollReset } from "@/components/layout/ScrollReset";
 import { GstProvider } from "@/lib/gst";
 import { FinanceRatesProvider } from "@/lib/finance/finance-rates-context";
+import { MemberScaleProvider } from "@/lib/member-scale-context";
 import { financeRatesForChannel } from "@/lib/finance/finance-rates";
 import { CartQuoteCountsProvider } from "@/lib/cart-quote-counts";
 import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
@@ -68,21 +69,27 @@ export default async function RootLayout({
   // the design system behave identically — just no Header/Footer/GTM.
   const isCmsRender = (await headers()).get("x-cms-render") === "1";
   if (isCmsRender) {
-    const [pricesIncludeTax, cookieStore, financeRates] = await Promise.all([
+    const [pricesIncludeTax, cookieStore, financeRates, ladder] = await Promise.all([
       getFeatureFlag("prices_include_tax"),
       cookies(),
       // This storefront's weekly-rent rates (card 6GBlDtwf). Mounted in BOTH
       // layout branches because the SilverChef panel is a sealed client native
       // inside authored trees, which the portal renders through /render/* too.
       financeRatesForChannel(),
+      // The member price scale's switch (card gk23c1VK) — decides price WORDS
+      // ("Standard price", not "RRP") in client components; see member-scale-context.
+      getLadderConfig().catch(() => null),
     ]);
+    const scaleOn = ladder?.enabled === true;
     const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
     return (
       <html lang="en" className={`${fraunces.variable} ${plexSans.variable} ${plexMono.variable}`}>
         <body className="min-h-screen bg-surface-primary text-text-body antialiased">
           <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
             <FinanceRatesProvider rates={financeRates}>
+              <MemberScaleProvider on={scaleOn}>
                 <CartQuoteCountsProvider>{children}</CartQuoteCountsProvider>
+              </MemberScaleProvider>
             </FinanceRatesProvider>
           </GstProvider>
         </body>
@@ -90,7 +97,7 @@ export default async function RootLayout({
     );
   }
 
-  const [{ site, channel }, subscriptionsEnabled, pricesIncludeTax, footerConfig, cookieStore, tokenVars, ga4MeasurementId, financeRates] = await Promise.all([
+  const [{ site, channel }, subscriptionsEnabled, pricesIncludeTax, footerConfig, cookieStore, tokenVars, ga4MeasurementId, financeRates, ladder] = await Promise.all([
     getSiteConfig(),
     getFeatureFlag("subscriptions_enabled"),
     getFeatureFlag("prices_include_tax"),
@@ -101,7 +108,10 @@ export default async function RootLayout({
     // This storefront's weekly-rent rates (card 6GBlDtwf), resolved once per
     // request and read by the product page's SilverChef panel.
     financeRatesForChannel(),
+    // The member price scale's switch (card gk23c1VK) — see member-scale-context.
+    getLadderConfig().catch(() => null),
   ]);
+  const scaleOn = ladder?.enabled === true;
   const storeName = site?.siteName || channel?.name || "Store";
   const logoUrl = site?.logoUrl || null;
   const logoAlt = site?.logoAlt || null;
@@ -141,12 +151,14 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         </noscript>
         <GstProvider initialInclusive={gstInclusive} pricesIncludeTax={pricesIncludeTax}>
           <FinanceRatesProvider rates={financeRates}>
-            <CartQuoteCountsProvider>
-              <Header storeName={storeName} logoUrl={logoUrl} logoAlt={logoAlt} />
-              <ScrollReset />
-              <main className="flex-1">{children}</main>
-              <Footer storeName={storeName} subscriptionsEnabled={subscriptionsEnabled} config={footerConfig} />
-            </CartQuoteCountsProvider>
+            <MemberScaleProvider on={scaleOn}>
+              <CartQuoteCountsProvider>
+                <Header storeName={storeName} logoUrl={logoUrl} logoAlt={logoAlt} />
+                <ScrollReset />
+                <main className="flex-1">{children}</main>
+                <Footer storeName={storeName} subscriptionsEnabled={subscriptionsEnabled} config={footerConfig} />
+              </CartQuoteCountsProvider>
+            </MemberScaleProvider>
           </FinanceRatesProvider>
         </GstProvider>
         {/* GA4 gtag — direct, alongside GTM. Both share window.dataLayer (standard

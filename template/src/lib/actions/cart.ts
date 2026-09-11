@@ -1,7 +1,7 @@
 "use server";
 
 import { cache } from "react";
-import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, applyAdvertisedLadderPrices, getMemberLadderLevelId, CHANNEL_ID } from "@/lib/store";
+import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, applyAdvertisedLadderPrices, getMemberLadderShare, boundPricesToMemberScale, getLadderConfig, CHANNEL_ID } from "@/lib/store";
 import { resolveAccountLinePrices, accountLineKey } from "@keenan/services";
 import { getAccountId } from "@/lib/member";
 import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
@@ -99,6 +99,32 @@ async function resolveItemPricing(
   variantId: number | null | undefined,
   quantity: number
 ): Promise<{ listPrice: string; salePrice: string | null }> {
+  const layered = await layerItemPricing(productId, variantId, quantity);
+  // THE MEMBER PRICE SCALE'S BAND (card gk23c1VK). Whatever layer won — the
+  // account's contract price included, which returns before any engine call —
+  // a scale-priced line is held inside [Wholesale x 1.01, standard price]:
+  // "no price, promotion or override ever goes below W x 1.01", "a customer-group
+  // or contract price below W does not lower the floor", and nothing exceeds M.
+  // A no-op (one cached settings read) with the scale off, which is every
+  // channel until one is switched on.
+  if ((await getLadderConfig().catch(() => null))?.enabled !== true) return layered;
+  const bandVariantId = variantId ?? (await defaultVariantId(productId));
+  return boundPricesToMemberScale(bandVariantId, layered).catch(() => layered);
+}
+
+/** The variant a variant-less line prices from: the product's lowest-id variant. */
+async function defaultVariantId(productId: number): Promise<number | null> {
+  const first = await productVariantService
+    .listForParent(productId, { page: 1, limit: 1, sort: "id", direction: "asc" })
+    .catch(() => null);
+  return (first?.data[0] as { id: number } | undefined)?.id ?? null;
+}
+
+async function layerItemPricing(
+  productId: number,
+  variantId: number | null | undefined,
+  quantity: number
+): Promise<{ listPrice: string; salePrice: string | null }> {
   const product = (await productService.getById(productId)) as { price: string; sale_price: string | null } | null;
   if (!product) throw new Error("Product not found");
 
@@ -162,9 +188,9 @@ async function resolveItemPricing(
           const variantResult = variantId ? null : await productVariantService.listForParent(productId, { page: 1, limit: 1, sort: "id", direction: "asc" });
           const pricingVariantId = variantId || (variantResult?.data[0] as { id: number } | undefined)?.id;
           if (pricingVariantId) {
-            // The shopper's rung on the buying-group ladder, resolved the same
-            // way every other pricing surface resolves it. Null off-ladder.
-            const ladderLevelId = await getMemberLadderLevelId({
+            // The member's position on the Chefs Depot price scale, resolved the
+            // same way every other pricing surface resolves it. Null off-scale.
+            const ladderShare = await getMemberLadderShare({
               accountId,
               contactId: session.contactId,
             }).catch(() => null);
@@ -177,11 +203,11 @@ async function resolveItemPricing(
               // prices are resolved separately above (`resolveAccountLinePrices`)
               // and take priority over everything; handing them to the engine here
               // too would be a second, unannounced pricing path on sf-cart for both
-              // storefronts, which is not what this card is for. The ladder needs
-              // only the rung.
+              // storefronts, which is not what this card is for. The scale needs
+              // only the member's share.
               null,
               null,
-              ladderLevelId
+              ladderShare
             );
             if (pricing.salePrice) memberSalePrice = pricing.salePrice;
           }

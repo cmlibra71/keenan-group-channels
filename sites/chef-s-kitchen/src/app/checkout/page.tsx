@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getMembershipNumber, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getMembershipNumber, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, getLadderConfig, CHANNEL_ID } from "@/lib/store";
 import { resolveFreeTrialOffer } from "@/lib/membership/free-trial";
 import {
   checkoutOfferCopy,
-  JOIN_PITCH,
+  joinPitch,
   memberStateLine,
   type FreeTrialView,
 } from "@/lib/membership/free-trial-copy";
@@ -492,10 +492,13 @@ export default async function CheckoutPage() {
   // wording modules, not re-derived from `view.kind` here. Three trees render this panel and
   // "is it free" stopped being the same question as "may we promise it to THIS visitor" the
   // moment a signed-out shopper could see it.
+  // The pitch follows this channel's pricing: the member price scale's wording
+  // only where the scale is switched on (card gk23c1VK — copy and engine together).
+  const scaleOn = (await getLadderConfig().catch(() => null))?.enabled === true;
   const joinCopy = joinOffer
-    ? checkoutOfferCopy(joinOffer.view)
+    ? checkoutOfferCopy(joinOffer.view, { scaleOn })
     : {
-        headline: JOIN_PITCH,
+        headline: joinPitch(scaleOn),
         detail: null,
         cta: "Join members",
         highlight: false,

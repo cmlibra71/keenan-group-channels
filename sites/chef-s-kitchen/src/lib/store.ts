@@ -1,6 +1,7 @@
 import { unstable_cache } from "next/cache";
 import type { NodeTree } from "@keenan/services/builder";
 import { withPromoTagInComponents } from "@/builder/promo-tag-node";
+import { withMemberScaleLabels } from "@/builder/member-scale-labels";
 import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
 import { initCommerceDb, createChannelStore, getCommerceClient, blogService } from "@keenan/services";
 import {
@@ -118,14 +119,16 @@ export const {
   getMemberPriceMap,
   getMemberSavingsPctMap,
   applyAccountPricesToProducts,
-  // The Chefs Depot buying-group ladder (cards gk23c1VK / Nyp8bkPm). These are
-  // no-ops on a channel with no ladder in `channel_settings`, which is every
-  // channel until one is written.
+  // The Chefs Depot member price scale (cards gk23c1VK / Nyp8bkPm). These are
+  // no-ops on a channel with the scale switched off in `channel_settings`, which
+  // is every channel until one is written.
   applyAdvertisedLadderPrices,
-  getMemberLadderLevelId,
+  getMemberLadderShare,
   getLadderConfig,
   getLadderVariantPrices,
+  getMemberPricingExclusion,
   getMemberTrailingSpend,
+  boundPricesToMemberScale,
   getUpcomingDraws,
   getPartnerOffers,
   getFeatureFlag,
@@ -184,11 +187,23 @@ const withMasterTransforms = (components: ComponentMap): ComponentMap =>
     PROMO_TAG_LABEL
   ) as ComponentMap;
 
+/**
+ * The member price scale's WORDING on the stored price masters (card gk23c1VK):
+ * while this channel's scale is ON, "RRP" beside a Mates Rate headline becomes
+ * "Standard price" and a member saving loses its percentage. A no-op — the same
+ * map back — while it is off, which is every channel until one is switched on.
+ * See `builder/member-scale-labels.ts`.
+ */
+const withScaleWording = async (components: ComponentMap): Promise<ComponentMap> => {
+  const scaleOn = (await _store.getLadderConfig().catch(() => null))?.enabled === true;
+  return withMemberScaleLabels(components as Record<string, NodeTree>, scaleOn) as ComponentMap;
+};
+
 export const getComponents = async (): Promise<ComponentMap> =>
-  withMasterTransforms(await _store.getComponents());
+  withScaleWording(withMasterTransforms(await _store.getComponents()));
 
 export const getDraftComponents = async (): Promise<ComponentMap> =>
-  withMasterTransforms((await _store.getDraftComponents()) as ComponentMap);
+  withScaleWording(withMasterTransforms((await _store.getDraftComponents()) as ComponentMap));
 
 export type { MegaMenuNode, MegaMenuFeatured, ContentPage } from "@keenan/services";
 

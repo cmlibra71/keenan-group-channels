@@ -49,6 +49,8 @@ import {
 } from "@/lib/quotes/customer-editable";
 import { isStaffOnlyDraft, withoutStaffOnlyDrafts } from "@/lib/quotes/draft-visibility";
 import { acceptanceAcknowledgementUrl } from "@/lib/quotes/acknowledgement-url";
+import { repriceQuoteForCustomer } from "@/lib/quotes/reprice-deltas";
+import { QUOTE_REPRICED_ON_ACCEPT_MESSAGE } from "@keenan/services/member-ladder";
 import { getContactPermissions } from "@/lib/role-permissions";
 import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import { isProductVisibleToViewer, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
@@ -757,6 +759,16 @@ export async function acceptQuote(quoteId: number) {
     };
   }
   const requiresAdminApproval = perms.isB2B && perms.can("convert_quotes_to_order_require_approval");
+
+  // CHEFS DEPOT MEMBER PRICING — "a quote reprices on view and on acceptance,
+  // with the per-line delta surfaced BEFORE acceptance" (card gk23c1VK). If
+  // accepting would move a line's money, the customer has not seen the price
+  // they would be held to: refuse, and the page re-reads with the per-line
+  // change on screen. The same rule, and the same sentence, as the emailed
+  // link's accept route in the portal. A no-op unless this channel runs the scale.
+  if ((await repriceQuoteForCustomer(quoteId)) > 0) {
+    return { error: QUOTE_REPRICED_ON_ACCEPT_MESSAGE, repriced: true };
+  }
 
   // Lifecycle method, NOT a bare status update: stamps accepted_at and writes
   // the quote.accepted audit row. The generic update() fired no side effects,

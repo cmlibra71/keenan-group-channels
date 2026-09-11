@@ -173,7 +173,7 @@ export default async function ProductPage({
         planPrice: null,
         teaserCustomerGroupId: null,
         accountId: memberCtx?.accountId ?? null,
-        ladderLevelId: memberCtx?.ladderLevelId ?? null,
+        ladderShare: memberCtx?.ladderShare ?? null,
       },
       viewedProduct: {
         id: product.id,

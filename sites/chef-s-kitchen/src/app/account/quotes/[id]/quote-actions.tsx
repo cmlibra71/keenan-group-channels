@@ -33,6 +33,12 @@ export function QuoteActions({
       quoteId?: number;
       /** Set by acceptQuote: the portal's acceptance acknowledgement page. */
       acknowledgementUrl?: string | null;
+      /**
+       * Set by acceptQuote when accepting repriced the quote and a line's money
+       * moved (Chefs Depot member pricing, card gk23c1VK): the page is re-read so
+       * the per-line change is on screen before the customer accepts again.
+       */
+      repriced?: boolean;
     }>,
     okText: string,
     goTo?: (r: { quoteId?: number }) => string,
@@ -42,6 +48,7 @@ export function QuoteActions({
       const r = await fn();
       if (r?.error) {
         setMsg({ kind: "err", text: r.error });
+        if (r.repriced) router.refresh();
       } else {
         setMsg({ kind: "ok", text: okText });
         // Card 87IkgD2H (Tim, 2026-08-19): accepting takes the customer to a real

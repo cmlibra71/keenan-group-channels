@@ -5,6 +5,7 @@ import { Star } from "lucide-react";
 import { useGst, adjustForGst } from "@/lib/gst";
 import { GstToggle } from "@/components/layout/GstToggle";
 import { derivePriceDisplay } from "./price-display";
+import { useMemberScaleOn } from "@/lib/member-scale-context";
 
 /**
  * Design-system pricing block — the single component that renders the trade
@@ -72,6 +73,16 @@ export function PriceBlock({
   const fmtRound = (n: number) => `$${Math.round(adj(n)).toLocaleString("en-AU")}`;
   const gstLabel = inclusive ? "inc GST" : "ex GST";
 
+  // Chefs Depot member price scale (card gk23c1VK): the prop, OR the channel's
+  // own switch from the root layout — so a caller that never threads it still
+  // reads the truth. It changes WORDS only: under the scale the headline is the
+  // Mates Rate, our standard price, never an "RRP", and no member saving carries
+  // a percentage ("no percentage saving may be published until the spread is
+  // measured"). Off — every channel today — this file renders exactly as before.
+  const channelScaleOn = useMemberScaleOn();
+  const scaleOn = ladderOn || channelScaleOn;
+  const priceWord = scaleOn ? "Standard price" : "RRP";
+
   const d = derivePriceDisplay({ rrp, memberPrice, isMember, accountPricing, memberSavingsPct });
   if (d.hidden) return null;
 
@@ -86,7 +97,7 @@ export function PriceBlock({
         </span>
         <span className="text-xs font-semibold text-steel-500">{gstLabel}</span>
         {d.showRrpLabel && (
-          <span className="text-xs font-semibold uppercase tracking-wide text-steel-400">RRP</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-steel-400">{priceWord}</span>
         )}
         {d.showMemberBadge && size === "pdp" && (
           <span className="badge-member ml-1">
@@ -102,12 +113,13 @@ export function PriceBlock({
       {/* Struck RRP — only when something beats it */}
       {d.showStruckRrp && (
         <p className={`mt-1 text-steel-500 ${size === "card" ? "text-xs" : "text-[13px]"}`}>
-          RRP <s className="text-steel-400">{fmt(rrp)}</s>
+          {priceWord} <s className="text-steel-400">{fmt(rrp)}</s>
           {size === "pdp" && d.savings > 0 && (
             <>
               {" · "}
               <b className="text-member-text">
-                You save {fmtRound(d.savings)} ({d.savingsPct}%)
+                You save {fmtRound(d.savings)}
+                {scaleOn ? null : ` (${d.savingsPct}%)`}
               </b>
             </>
           )}
@@ -131,7 +143,8 @@ export function PriceBlock({
       {d.savings > 0 && size === "card" && (
         <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-member-text">
           <Star className="h-3 w-3 fill-current" />
-          Member saves {fmtRound(d.savings)} ({d.savingsPct}%)
+          Member saves {fmtRound(d.savings)}
+          {scaleOn ? null : ` (${d.savingsPct}%)`}
         </p>
       )}
 
@@ -162,14 +175,20 @@ export function PriceBlock({
       {d.showJoin && size === "pdp" && (
         <div className="mt-3.5 flex items-center justify-between gap-3 rounded-btn bg-member-bg px-3.5 py-[11px] text-[12.5px] text-member-text">
           <span>
-            <b>You&rsquo;re seeing our standard price.</b>{" "}
-            {ladderOn ? (
+            {scaleOn ? (
+              // Under the scale a new member pays the standard price at $0 of
+              // spend, so "Members buy this line lower" would be false — Tim's
+              // directional claim is what is true (the same words the product
+              // page's member panel uses when it has no figures to show).
               <>
-                Members buy this line lower &mdash; and almost 40,000 others &mdash; lower again as
-                their twelve-month spend grows.
+                <b>Members Spend More, Save More.</b> Member pricing moves with your rolling
+                twelve-month spend, across almost 40,000 items.
               </>
             ) : (
-              <>Members buy this line lower &mdash; and almost 40,000 others.</>
+              <>
+                <b>You&rsquo;re seeing our standard price.</b> Members buy this line lower &mdash; and
+                almost 40,000 others.
+              </>
             )}
           </span>
           <Link href="/membership" className="btn-gold btn-sm shrink-0">
@@ -179,7 +198,7 @@ export function PriceBlock({
       )}
 
       {/* Card-sized teaser: one quiet line, no CTA button */}
-      {d.showJoin && size === "card" && d.teaserPct > 0 && (
+      {d.showJoin && size === "card" && d.teaserPct > 0 && !scaleOn && (
         <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-member-text">
           <Star className="h-3 w-3 fill-current" />
           Members save up to {d.teaserPct}%

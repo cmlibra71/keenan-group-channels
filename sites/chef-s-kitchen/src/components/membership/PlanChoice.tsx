@@ -121,7 +121,7 @@ export function PlanChoice({
       </p>
       <p className="mt-2 text-xs leading-relaxed text-text-secondary">
         {ladderOn
-          ? "You always get the better price. Where a clearance or Partner Special is sharper than your level, you get that instead."
+          ? "You always get the better price. Where a clearance or Partner Special is sharper than your member price, you get that instead. Every dollar still counts toward your spend."
           : "You always get the better price. Where a clearance or Partner Special is sharper than your member price, you get that instead."}
       </p>
       {note && <p className="mt-2 text-xs leading-relaxed text-text-secondary">{note}</p>}

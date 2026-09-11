@@ -21,6 +21,23 @@
 export const JOIN_PITCH = "Join the buying group and every line reprices from your next order.";
 
 /**
+ * The join pitch while the Chefs Depot MEMBER PRICE SCALE is switched on (card
+ * gk23c1VK, Tim's locked 11 Sep 2026 model). {@link JOIN_PITCH} is true of the
+ * cost-plus member pricing that runs today, but under the scale a new member
+ * pays the standard price at $0 of spend ("there is no price step on joining"),
+ * so "every line reprices from your next order" would be false — and "anything
+ * implying a new member saves on day one" is on Tim's may-not-say list. This
+ * carries his directional claim instead, which is true by construction.
+ */
+export const JOIN_PITCH_SCALE =
+  "Join the buying group — Members Spend More, Save More. Every dollar you spend as a member moves your pricing a little further down.";
+
+/** The pitch for this channel's pricing: copy and engine turn on together. */
+export function joinPitch(scaleOn: boolean): string {
+  return scaleOn ? JOIN_PITCH_SCALE : JOIN_PITCH;
+}
+
+/**
  * Which of the four states a visitor is in, with the labels their sentence needs.
  *
  * `identified` is carried by all four and is the difference between a PROMISE and a
@@ -94,7 +111,8 @@ export interface OfferCopy {
  * button stops saying "Join members" and says what is actually on the table — but only
  * for a shopper we can identify, because only then do we know it is true of THEM.
  */
-export function checkoutOfferCopy(view: FreeTrialView): OfferCopy {
+export function checkoutOfferCopy(view: FreeTrialView, opts: { scaleOn?: boolean } = {}): OfferCopy {
+  const JOIN_PITCH = joinPitch(opts.scaleOn === true);
   switch (view.kind) {
     case "free":
       if (!view.identified) {
