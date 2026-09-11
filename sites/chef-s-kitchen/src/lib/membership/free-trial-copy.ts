@@ -30,7 +30,7 @@ export const JOIN_PITCH = "Join the buying group and every line reprices from yo
  * carries his directional claim instead, which is true by construction.
  */
 export const JOIN_PITCH_SCALE =
-  "Join the buying group — Members Spend More, Save More. Every dollar you spend as a member moves your pricing a little further down.";
+  "Join the buying group and every dollar you spend as a member moves your pricing a little further down.";
 
 /** The pitch for this channel's pricing: copy and engine turn on together. */
 export function joinPitch(scaleOn: boolean): string {

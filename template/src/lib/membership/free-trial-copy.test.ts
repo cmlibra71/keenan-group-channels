@@ -285,11 +285,13 @@ test("with the Chefs Depot member price scale ON the pitch promises no reprice o
   const on = checkoutOfferCopy({ identified: true, kind: "paid" }, { scaleOn: true });
   assert.equal(on.headline, JOIN_PITCH_SCALE);
   assert.doesNotMatch(on.headline, /reprices from your next order/);
-  assert.match(on.headline, /Spend More, Save More/);
+  assert.match(on.headline, /every dollar you spend as a member moves your pricing/);
   // Off (every channel today) keeps Tim's cost-plus sentence exactly.
   assert.equal(checkoutOfferCopy({ identified: true, kind: "paid" }).headline, JOIN_PITCH);
   assert.equal(joinPitch(false), JOIN_PITCH);
   assert.equal(joinPitch(true), JOIN_PITCH_SCALE);
-  // No percentage in either.
-  assert.doesNotMatch(JOIN_PITCH_SCALE, /%/);
+  // It sits beside Pay Now: the same pins the cost-plus sentence carries.
+  assert.doesNotMatch(JOIN_PITCH_SCALE, /[%$]/);
+  assert.doesNotMatch(JOIN_PITCH_SCALE, /\bsave\b/i);
+  assert.doesNotMatch(JOIN_PITCH_SCALE, /this order/i);
 });

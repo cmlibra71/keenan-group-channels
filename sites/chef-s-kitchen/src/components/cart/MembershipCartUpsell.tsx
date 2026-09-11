@@ -45,8 +45,8 @@ export function MembershipCartUpsell({
    * standard price at $0 of spend — "there is no price step on joining" — so a
    * sentence promising a reprice on the next order would be false, and Tim's
    * pack lists "anything implying a new member saves on day one" as something
-   * that may not be said. It carries his directional claim instead, which is
-   * true by construction.
+   * that may not be said. It says what IS true — spend moves the price — with
+   * no saving and no figure, like the checkout's pitch.
    *
    * Defaults to FALSE so a caller that has not read the channel's state cannot
    * publish the scale's wording.
@@ -63,7 +63,7 @@ export function MembershipCartUpsell({
           <h3 className="font-semibold text-ink-900">Buying for a commercial kitchen?</h3>
           <p className="text-sm text-steel-500 mt-1">
             {ladderOn
-              ? "Join the buying group \u2014 Members Spend More, Save More. Every dollar you spend as a member moves your pricing a little further down, reviewed on the first of each month."
+              ? "Join the buying group and every dollar you spend as a member moves your pricing a little further down, reviewed on the first of each month."
               : "Join the buying group and every line reprices from your next order."}
           </p>
         </div>
