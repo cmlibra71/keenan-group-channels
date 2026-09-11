@@ -16,8 +16,8 @@ import { readQuoteDeposit, resolveQuoteDeposit, depositLabel } from "@/lib/quote
 import { PLUS_FREIGHT_NOTICE } from "@/lib/quotes/quote-payable";
 import { quoteFreightStillPending } from "@/lib/quotes/freight-pending";
 import { getCheckoutSettings } from "@/lib/store";
-import { cardPaymentAvailable } from "@/lib/orders/pay-balance";
-import { proFormaPayCall } from "@/lib/quotes/pro-forma-pay-call";
+import { ORDER_CARD_PAYMENT_OFFERED } from "@/lib/orders/pay-balance-site";
+import { proFormaCanPayByCard, proFormaPayCall } from "@/lib/quotes/pro-forma-pay-call";
 
 /**
  * The pro-forma a customer receives when they ACCEPT a quote without paying it.
@@ -43,12 +43,19 @@ import { proFormaPayCall } from "@/lib/quotes/pro-forma-pay-call";
  * card Sh03niVC's Pay-by-card control lives; with no order it is unchanged.
  *
  * THE VERB IS NOT A PROMISE THIS STOREFRONT CANNOT KEEP. "Pay your order" only
- * appears where the channel actually offers cards to customers (`stripe` among
- * `customerPaymentMethods`, the same list checkout and the order page read) —
- * true of Chefs Depot, false of Industry Kitchens, which says "View your order"
- * and pays by invoice. A per-account restriction can still narrow it further on
- * the order page itself; the label is deliberately the channel-level answer,
- * because an email cannot re-decide a payment.
+ * appears where THIS SITE's order page takes a card at all
+ * (`ORDER_CARD_PAYMENT_OFFERED`, exported beside `payBalanceForOrder` by each
+ * site's `pay-balance-site.tsx` — true on Chefs Depot, false on Industry
+ * Kitchens) AND the channel offers cards to customers (`stripe` among
+ * `customerPaymentMethods`, the same list checkout and the order page read).
+ * The channel list alone is not enough: Industry Kitchens' channel HAS stripe
+ * enabled at checkout, yet its order page offers no card payment (the Sh03niVC
+ * gap on `sf-account-orders`), so asking only the channel promised a card
+ * payment IK cannot take. IK says "View your order" and that the invoice follows
+ * by email — the same words its account quote page uses. A per-account
+ * restriction can still narrow it further on the order page itself; the label is
+ * deliberately the site-and-channel answer, because an email cannot re-decide a
+ * payment.
  *
  * It still raises no order and no invoice number of its own: the order is
  * created by the acceptance follow-up, by payQuote, or by staff converting. This
@@ -142,7 +149,10 @@ export async function sendQuoteProForma(
     siteUrl,
     quoteId: quote.id,
     convertedOrderId: orderId,
-    canPayByCard: cardPaymentAvailable((checkout?.customerPaymentMethods ?? []).map((m) => m.id)),
+    canPayByCard: proFormaCanPayByCard({
+      siteOffersOrderCardPayment: ORDER_CARD_PAYMENT_OFFERED,
+      customerPaymentMethodIds: (checkout?.customerPaymentMethods ?? []).map((m) => m.id),
+    }),
   });
   const reference = (quote.quote_number as string) || `#${quote.id}`;
   const subject = `Pro-forma for quote ${reference}`;

@@ -23,12 +23,35 @@ import { resolvePayBalance, type PayBalanceOrderRow } from "./pay-balance-contex
 // offered), which is what Industry Kitchens still uses.
 // ============================================================================
 
+/**
+ * Does THIS storefront take a card payment on an existing ORDER at all? Yes — Chefs Depot wires
+ * card Sh03niVC here. Asked by the customer's pro-forma (`lib/quotes/pro-forma-email.ts`, card
+ * isl1uwjR) so it only says "Pay your order" where the order page it links to has a Pay control;
+ * the default copy (Industry Kitchens) answers false. Kept beside `payBalanceForOrder` so the two
+ * answers change together.
+ */
+export const ORDER_CARD_PAYMENT_OFFERED = true;
+
+/**
+ * The decision alone, without building the control — for a page that only needs to know
+ * whether to say "pay" about an order it links to (the account quote page, card isl1uwjR). The
+ * SAME `resolvePayBalance` the order page and the pay action ask, so the link's verb and the
+ * control behind it cannot disagree.
+ */
+export async function payBalanceDecisionForOrder(
+  order: PayBalanceOrderRow,
+  session: { contactId: number; email: string },
+  opts: { checkoutSettings?: CheckoutSettings } = {}
+): Promise<PayBalanceDecision> {
+  return resolvePayBalance(order, session, opts);
+}
+
 export async function payBalanceForOrder(
   order: PayBalanceOrderRow,
   session: { contactId: number; email: string },
   opts: { checkoutSettings?: CheckoutSettings } = {}
 ): Promise<{ decision: PayBalanceDecision; panel: ReactNode }> {
-  const decision = await resolvePayBalance(order, session, opts);
+  const decision = await payBalanceDecisionForOrder(order, session, opts);
   if (!decision.allowed) return { decision, panel: null };
 
   // The publishable key for the card form, resolved the same way the checkout

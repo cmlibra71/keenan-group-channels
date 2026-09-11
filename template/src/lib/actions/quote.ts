@@ -834,7 +834,19 @@ export async function acceptQuote(quoteId: number) {
   // most plausibly a deploy that put this build out ahead of the portal's — the
   // acceptance would otherwise go completely unannounced, which is the one
   // outcome worse than a duplicate. Fall back to the older per-site alert.
-  if (!followUp.ran) await sendFallbackAcceptanceAlert(quoteId, q, requiresAdminApproval);
+  //
+  // "Could not be reached" is not always "did not run", though: a portal that
+  // converted the quote and then lost its reply on the way back (a dropped
+  // connection, a platform timeout) looks exactly like one that never ran. So
+  // before falling back, look at what the quote now SAYS — the portal's claim on
+  // the acceptance, or the order it raised (`readAcceptanceAfterUnansweredFollowUp`).
+  // Without this, that one case mailed the desk twice AND composed the
+  // pro-forma below as "Pay this quote" on a quote the portal had just made
+  // terminal — a button to a page with no Pay control (card isl1uwjR review).
+  const afterFollowUp = followUp.ran
+    ? { portalRan: true, orderId: followUp.orderId }
+    : await readAcceptanceAfterUnansweredFollowUp(quoteId);
+  if (!afterFollowUp.portalRan) await sendFallbackAcceptanceAlert(quoteId, q, requiresAdminApproval);
 
   // Accepting WITHOUT paying sends the customer their pro-forma (Steve, card
   // 0Wy0xHuq: "when they accept without paying, they get sent a Quote to
@@ -860,7 +872,7 @@ export async function acceptQuote(quoteId: number) {
     await sendQuoteProForma(
       { ...q, id: quoteId } as Record<string, unknown> & { id: number },
       (q.email as string | null) ?? session.email ?? null,
-      { convertedOrderId: followUp.orderId }
+      { convertedOrderId: afterFollowUp.orderId }
     );
   } catch (e) {
     console.error("[acceptQuote] pro-forma email failed (non-fatal):", e);
@@ -1225,6 +1237,37 @@ export async function postQuoteMessage(quoteId: number, body: string): Promise<Q
 
   revalidatePath(`/account/quotes/${quoteId}`);
   return { success: true };
+}
+
+/**
+ * The follow-up call came back with no answer. Did the portal run it anyway?
+ *
+ * Read off the quote itself, after the fact: the follow-up CLAIMS an acceptance
+ * by stamping `attributes.acceptance_notified_at` before it does anything else
+ * (and hands the claim back if it fails), and a conversion leaves the quote at
+ * `converted_to_order` with the order's id. Either one means the portal has it —
+ * so no fallback alert, and the pro-forma names the order when there is one.
+ * Anything unreadable answers "did not run", which is the old behaviour: a
+ * duplicate alert is the lesser harm next to an acceptance nobody hears about.
+ */
+async function readAcceptanceAfterUnansweredFollowUp(
+  quoteId: number
+): Promise<{ portalRan: boolean; orderId: number | null }> {
+  try {
+    const now = (await quoteService.getById(quoteId)) as {
+      status?: string | null;
+      converted_order_id?: number | string | null;
+      attributes?: Record<string, unknown> | null;
+    } | null;
+    const id = Number(now?.converted_order_id);
+    const orderId =
+      now?.status === "converted_to_order" && Number.isInteger(id) && id > 0 ? id : null;
+    const claimed = Boolean(now?.attributes && now.attributes.acceptance_notified_at);
+    return { portalRan: orderId !== null || claimed, orderId };
+  } catch (e) {
+    console.error("[acceptQuote] could not re-read the quote after the follow-up (non-fatal):", e);
+    return { portalRan: false, orderId: null };
+  }
 }
 
 /** What the portal's acceptance follow-up did, as far as this caller needs it. */

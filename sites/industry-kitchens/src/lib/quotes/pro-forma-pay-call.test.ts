@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { accountAcceptanceHoldsConversion, proFormaPayCall } from "./pro-forma-pay-call";
+import { accountAcceptanceHoldsConversion, proFormaCanPayByCard, proFormaPayCall } from "./pro-forma-pay-call";
 
 /**
  * The pro-forma is the ONLY email the storefront account-acceptance path sends,
@@ -99,4 +99,45 @@ test("a held deposit quote gets the unconverted call, so Pay this quote charges 
   const call = proFormaPayCall({ ...CD, convertedOrderId: null, canPayByCard: true });
   assert.equal(call.label, "Pay this quote");
   assert.equal(call.href, "https://chefsdepot.com.au/account/quotes/42");
+});
+
+/**
+ * WHERE THE VERB COMES FROM. The independent review of card isl1uwjR found the
+ * first cut asked only the CHANNEL's method list — and Industry Kitchens' channel
+ * has `stripe` enabled and not staff-only in production (channel_settings
+ * payment_methods, read 2026-09-11), so the IK pro-forma said "Pay your order"
+ * and "Sign in to your account to pay" about an order page with no card control.
+ * The site's own answer is part of the question now.
+ */
+test("the channel offering cards is not enough — the SITE's order page must take one", () => {
+  // Industry Kitchens as production has it: stripe on at checkout, no card control on the order page.
+  assert.equal(
+    proFormaCanPayByCard({ siteOffersOrderCardPayment: false, customerPaymentMethodIds: ["stripe", "bank_transfer"] }),
+    false
+  );
+  // Chefs Depot: both.
+  assert.equal(
+    proFormaCanPayByCard({ siteOffersOrderCardPayment: true, customerPaymentMethodIds: ["stripe", "bank_transfer"] }),
+    true
+  );
+  // A site that could take a card on a channel that has switched cards off.
+  assert.equal(
+    proFormaCanPayByCard({ siteOffersOrderCardPayment: true, customerPaymentMethodIds: ["bank_transfer"] }),
+    false
+  );
+});
+
+test("the Industry Kitchens pro-forma, as production would compose it, promises no card payment", () => {
+  const call = proFormaPayCall({
+    siteUrl: "https://industrykitchens.com.au",
+    quoteId: 42,
+    convertedOrderId: 154722,
+    canPayByCard: proFormaCanPayByCard({
+      siteOffersOrderCardPayment: false,
+      customerPaymentMethodIds: ["stripe", "bank_transfer", "netterm"],
+    }),
+  });
+  assert.equal(call.label, "View your order");
+  assert.doesNotMatch(call.footer, /Sign in to your account to pay/);
+  assert.match(call.footer, /invoice follows by email/);
 });

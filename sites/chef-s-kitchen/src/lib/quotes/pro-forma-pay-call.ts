@@ -26,10 +26,14 @@
 //     `customers.md`). IK's storefront is not launched and its open quotes are
 //     Zoey's today, so no IK customer reaches this email yet — but the build
 //     must be right for the day one does. So the verb is decided, not assumed:
-//     "Pay your order" only where the channel actually offers cards, "View your
-//     order" everywhere else, with the invoice sentence beside it. A promise the
-//     storefront cannot keep is worse than a plain direction — the same rule the
-//     portal's acknowledgement page follows when it can draw no pay control.
+//     "Pay your order" only where THIS SITE's order page takes a card AND the
+//     channel offers cards ({@link proFormaCanPayByCard}), "View your order"
+//     everywhere else, with the invoice sentence beside it. The channel list
+//     alone is NOT the answer: IK's channel has `stripe` enabled at checkout,
+//     and asking only that made the IK pro-forma promise a card payment its
+//     order page cannot take. A promise the storefront cannot keep is worse than
+//     a plain direction — the same rule the portal's acknowledgement page follows
+//     when it can draw no pay control.
 //
 //  3. A DEPOSIT QUOTE DOES NOT CONVERT HERE AT ALL (`accountAcceptanceHoldsConversion`
 //     below). Its pro-forma prints "Deposit due now $X / Balance $Y" (card
@@ -46,6 +50,25 @@
 // ============================================================================
 
 import { readQuoteDeposit } from "./quote-deposit";
+import { cardPaymentAvailable } from "../orders/pay-balance";
+
+/**
+ * May the pro-forma say "Pay your order"? Only where BOTH hold:
+ *  • this SITE's order page takes a card at all — `ORDER_CARD_PAYMENT_OFFERED`
+ *    from the site's own `pay-balance-site.tsx` (Chefs Depot true; the default
+ *    copy, which Industry Kitchens uses, false); and
+ *  • the CHANNEL offers cards to customers — `stripe` among
+ *    `customerPaymentMethods`, the list checkout and the order page read.
+ * Either alone is wrong: the channel answer alone promised Industry Kitchens
+ * customers a card payment (its channel has stripe on at checkout), and the site
+ * answer alone would promise one on a site whose channel had switched cards off.
+ */
+export function proFormaCanPayByCard(input: {
+  siteOffersOrderCardPayment: boolean;
+  customerPaymentMethodIds: readonly string[];
+}): boolean {
+  return input.siteOffersOrderCardPayment === true && cardPaymentAvailable(input.customerPaymentMethodIds);
+}
 
 /**
  * Does accepting THIS quote in the account area hold the conversion back, so
@@ -71,9 +94,8 @@ export interface ProFormaPayCallInput {
   /** The order the acceptance raised, or null when it raised none. */
   convertedOrderId: number | null;
   /**
-   * Does this CHANNEL offer cards to customers — `stripe` among
-   * `customerPaymentMethods`, asked through the shared `cardPaymentAvailable`.
-   * Only consulted when there is an order.
+   * Will the order page this links to take a card — {@link proFormaCanPayByCard},
+   * the site's own answer AND the channel's. Only consulted when there is an order.
    */
   canPayByCard: boolean;
 }
