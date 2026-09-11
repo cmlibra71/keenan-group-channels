@@ -11,7 +11,7 @@ import {
   accountService,
   applyAccountPricesToProducts,
   applyAdvertisedLadderPrices,
-  getMemberLadderLevelId,
+  getMemberLadderShare,
 } from "@/lib/store";
 
 export interface MemberContext {
@@ -44,12 +44,12 @@ export interface MemberContext {
    */
   accountId: number | null;
   /**
-   * The shopper's rung on the Chefs Depot buying-group ladder (card gk23c1VK),
-   * or null when the channel has no ladder switched on. Resolved once per
+   * The member's position on the Chefs Depot price scale (card gk23c1VK), 0..1,
+   * or null when the channel has the scale switched off. Resolved once per
    * request and threaded into every pricing call, so a listing card, the
-   * product page and the cart cannot land on different rungs in one page load.
+   * product page and the cart cannot price one member at two positions.
    */
-  ladderLevelId: string | null;
+  ladderShare: number | null;
 }
 
 /**
@@ -129,18 +129,18 @@ export async function getMemberContext(): Promise<MemberContext> {
     accountId,
   });
 
-  // The ladder rung (card gk23c1VK). Only an ACTIVE MEMBER has one: a non-member
+  // The member's position on the price scale (card gk23c1VK). Only an ACTIVE MEMBER has one: a non-member
   // is priced at the advertised price and never at a level, which is the same
   // rule that keeps a member price off a guest's screen (cd_guest_pricing_gate).
   // Null on a channel with no ladder switched on, i.e. everywhere until one is.
-  const ladderLevelId = resolved.isMember
-    ? await getMemberLadderLevelId({
+  const ladderShare = resolved.isMember
+    ? await getMemberLadderShare({
         accountId,
         contactId: session?.contactId ?? null,
       }).catch(() => null)
     : null;
 
-  return { ...resolved, ladderLevelId };
+  return { ...resolved, ladderShare };
 }
 
 /**
@@ -151,9 +151,9 @@ export async function getListingMemberPrices(
   products: { id: number }[]
 ): Promise<Record<number, number>> {
   if (products.length === 0) return {};
-  const { customerGroupId, accountId, ladderLevelId } = await getMemberContext();
+  const { customerGroupId, accountId, ladderShare } = await getMemberContext();
   if (!customerGroupId && !accountId) return {};
-  return getMemberPriceMap(products.map((p) => p.id), customerGroupId, accountId, ladderLevelId);
+  return getMemberPriceMap(products.map((p) => p.id), customerGroupId, accountId, ladderShare);
 }
 
 export interface ListingPricing {
@@ -178,7 +178,7 @@ export async function getListingPricing(products: { id: number }[]): Promise<Lis
 
   const [memberPriceMap, savingsPctMap] = await Promise.all([
     (ctx.customerGroupId || ctx.accountId) && has
-      ? getMemberPriceMap(ids, ctx.customerGroupId, ctx.accountId, ctx.ladderLevelId)
+      ? getMemberPriceMap(ids, ctx.customerGroupId, ctx.accountId, ctx.ladderShare)
       : Promise.resolve({} as Record<number, number>),
     // Non-members: percentage only, so the cards can still sell membership.
     !ctx.isMember && ctx.teaserCustomerGroupId && has

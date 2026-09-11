@@ -8,7 +8,7 @@ import { quoteDeltaNotice } from "@keenan/services/member-ladder";
  *
  * The storefront twin of the portal's `src/components/quotes/quote-reprice-notice.tsx`.
  * A Chefs Depot quote is an estimate that reprices against live trade data and
- * the account's buying-group level, and `/account/quotes/[id]` is a real
+ * the member's position on the price scale, and `/account/quotes/[id]` is a real
  * acceptance AND payment door — so the buyer must read the same per-line
  * movement here that they read on the emailed `/q/<uuid>` copy. The arithmetic
  * and the sentence both come from `@keenan/services/member-ladder`, so the two
@@ -82,10 +82,9 @@ export function QuoteRepriceNotice({
                 {line.sku && line.name && (
                   <p className="truncate text-xs text-amber-800/80">{line.sku}</p>
                 )}
-                {line.levelChanged && (
+                {line.positionChanged && (
                   <p className="text-xs text-amber-800/80">
-                    Your buying level changed from {line.levelAtIssue ?? "—"} to{" "}
-                    {line.levelNow ?? "—"}
+                    Your member pricing moved at a monthly review
                   </p>
                 )}
               </div>

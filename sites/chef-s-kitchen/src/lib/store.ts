@@ -1,6 +1,7 @@
 import { unstable_cache } from "next/cache";
 import type { NodeTree } from "@keenan/services/builder";
 import { withPromoTagInComponents } from "@/builder/promo-tag-node";
+import { withMemberScaleLabels } from "@/builder/member-scale-labels";
 import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
 import { initCommerceDb, createChannelStore, getCommerceClient, blogService } from "@keenan/services";
 import {
@@ -118,14 +119,16 @@ export const {
   getMemberPriceMap,
   getMemberSavingsPctMap,
   applyAccountPricesToProducts,
-  // The Chefs Depot buying-group ladder (cards gk23c1VK / Nyp8bkPm). These are
-  // no-ops on a channel with no ladder in `channel_settings`, which is every
-  // channel until one is written.
+  // The Chefs Depot member price scale (cards gk23c1VK / Nyp8bkPm). These are
+  // no-ops on a channel with the scale switched off in `channel_settings`, which
+  // is every channel until one is written.
   applyAdvertisedLadderPrices,
-  getMemberLadderLevelId,
+  getMemberLadderShare,
   getLadderConfig,
   getLadderVariantPrices,
+  getMemberPricingExclusion,
   getMemberTrailingSpend,
+  boundPricesToMemberScale,
   getUpcomingDraws,
   getPartnerOffers,
   getFeatureFlag,
@@ -184,11 +187,35 @@ const withMasterTransforms = (components: ComponentMap): ComponentMap =>
     PROMO_TAG_LABEL
   ) as ComponentMap;
 
+/**
+/**
+ * Chefs Depot publishes NO member-saving percentage, with the member price scale
+ * on OR off (card gk23c1VK: "no saving percentage renders anywhere while the
+ * spread is unmeasured"; Tim's pack allows a per-product DOLLAR figure, never a
+ * percentage). The stored price masters' "(N%)" is cut at render time; the
+ * dollars stay. Read by `withScaleWording` below and by `product-node-branch`.
+ */
+export const HIDE_MEMBER_SAVING_PCT = true;
+
+/**
+ * The member price scale's WORDING on the stored price masters (card gk23c1VK):
+ * while this channel's scale is ON, "RRP" beside a Mates Rate headline becomes
+ * "Standard price" and a member saving loses its percentage; with it off, the
+ * percentage still goes where `HIDE_MEMBER_SAVING_PCT` says so, and otherwise
+ * the same map comes back. See `builder/member-scale-labels.ts`.
+ */
+const withScaleWording = async (components: ComponentMap): Promise<ComponentMap> => {
+  const scaleOn = (await _store.getLadderConfig().catch(() => null))?.enabled === true;
+  return withMemberScaleLabels(components as Record<string, NodeTree>, scaleOn, {
+    hideMemberPct: HIDE_MEMBER_SAVING_PCT,
+  }) as ComponentMap;
+};
+
 export const getComponents = async (): Promise<ComponentMap> =>
-  withMasterTransforms(await _store.getComponents());
+  withScaleWording(withMasterTransforms(await _store.getComponents()));
 
 export const getDraftComponents = async (): Promise<ComponentMap> =>
-  withMasterTransforms((await _store.getDraftComponents()) as ComponentMap);
+  withScaleWording(withMasterTransforms((await _store.getDraftComponents()) as ComponentMap));
 
 export type { MegaMenuNode, MegaMenuFeatured, ContentPage } from "@keenan/services";
 

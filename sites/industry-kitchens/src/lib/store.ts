@@ -54,6 +54,7 @@ import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
 import { withBrandLogoFallback, targetsForChannel } from "@/builder/product-card-brand-logo";
 import { withPromoTagInComponents } from "@/builder/promo-tag-node";
+import { withMemberScaleLabels } from "@/builder/member-scale-labels";
 import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
 import type { NodeTree } from "@keenan/services/builder";
 import {
@@ -116,14 +117,16 @@ export const {
   getActiveSubscription,
   getMemberPriceMap,
   applyAccountPricesToProducts,
-  // The Chefs Depot buying-group ladder (cards gk23c1VK / Nyp8bkPm). These are
-  // no-ops on a channel with no ladder in `channel_settings`, which is every
-  // channel until one is written.
+  // The Chefs Depot member price scale (cards gk23c1VK / Nyp8bkPm). These are
+  // no-ops on a channel with the scale switched off in `channel_settings`, which
+  // is every channel until one is written.
   applyAdvertisedLadderPrices,
-  getMemberLadderLevelId,
+  getMemberLadderShare,
   getLadderConfig,
   getLadderVariantPrices,
+  getMemberPricingExclusion,
   getMemberTrailingSpend,
+  boundPricesToMemberScale,
   getUpcomingDraws,
   getPartnerOffers,
   getFeatureFlag,
@@ -179,11 +182,34 @@ const withMasterTransforms = (components: ComponentMap): ComponentMap =>
     PROMO_TAG_LABEL
   ) as ComponentMap;
 
+/**
+/**
+ * Whether this channel cuts member-saving percentages from its stored price
+ * masters even with the member price scale off. Chefs Depot only (card
+ * gk23c1VK); this channel prints its masters as authored. Read by
+ * `withScaleWording` below and by `product-node-branch`.
+ */
+export const HIDE_MEMBER_SAVING_PCT = false;
+
+/**
+ * The member price scale's WORDING on the stored price masters (card gk23c1VK):
+ * while this channel's scale is ON, "RRP" beside a Mates Rate headline becomes
+ * "Standard price" and a member saving loses its percentage; with it off, the
+ * percentage still goes where `HIDE_MEMBER_SAVING_PCT` says so, and otherwise
+ * the same map comes back. See `builder/member-scale-labels.ts`.
+ */
+const withScaleWording = async (components: ComponentMap): Promise<ComponentMap> => {
+  const scaleOn = (await _store.getLadderConfig().catch(() => null))?.enabled === true;
+  return withMemberScaleLabels(components as Record<string, NodeTree>, scaleOn, {
+    hideMemberPct: HIDE_MEMBER_SAVING_PCT,
+  }) as ComponentMap;
+};
+
 export const getComponents = async (): Promise<ComponentMap> =>
-  withMasterTransforms(await _store.getComponents());
+  withScaleWording(withMasterTransforms(await _store.getComponents()));
 
 export const getDraftComponents = async (): Promise<ComponentMap> =>
-  withMasterTransforms((await _store.getDraftComponents()) as ComponentMap);
+  withScaleWording(withMasterTransforms((await _store.getDraftComponents()) as ComponentMap));
 
 // ============================================================================
 // Channel settings (raw accessor)

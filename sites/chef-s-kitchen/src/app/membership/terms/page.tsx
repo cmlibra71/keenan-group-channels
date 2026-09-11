@@ -45,16 +45,24 @@ type Clause = { heading: string; body: Array<string | { strong: string; rest: st
  * renders. The yearly clauses appear only when a yearly plan really is on sale,
  * and reappear by themselves the day one is created.
  *
- * `ladderOn` — the spend ladder ships OFF (`channel_settings.cd_member_ladder`
- * is unwritten on both live channels). With it off a member has NO level, no
- * monthly review runs, and member pricing is a markup applied to our own buying
- * cost rather than a position on a trade price list. Every level, threshold,
- * monthly-review, demotion-grace and rejoin-restoration clause is therefore
- * gated on the channel's ladder actually being switched on, and the off state
- * carries the clause that is true instead. This is the same rule `/membership`
- * runs on: copy and engine turn on together, in one setting.
+ * `ladderOn` — the member price scale ships OFF (`channel_settings.cd_member_ladder`
+ * is unwritten on both live channels). With it off, member pricing is a markup
+ * applied to our own buying cost and no monthly review runs. Every clause about
+ * the scale — the formula's ends, the $50,000 top, spend during paid membership,
+ * the monthly review, the ninety-day hold and one-sixth step, rejoining within
+ * 30 days, exclusions declared on the product page — is gated on the scale
+ * actually being switched on, and the off state carries the clause that is true
+ * instead. Copy and engine turn on together, in one setting.
+ *
+ * The ON clauses are Tim's 11 Sep 2026 terms (`06-membership-terms.html`, the
+ * locked model) with one kind of edit: his text still says "your level" in four
+ * places, a word from the retired seven-level model that describes nothing in
+ * the locked one ("no levels"). Those read "your pricing" here. His numbers,
+ * rules and legal wording are otherwise verbatim — and the terms are still
+ * awaiting the legal review his pack lists as open item 8.
  */
-function buildClauses(hasYearlyPlan: boolean, ladderOn: boolean): Clause[] {
+function buildClauses(hasYearlyPlan: boolean, ladderOn: boolean, topSpend = 50_000): Clause[] {
+  const top = `$${Math.round(topSpend).toLocaleString("en-AU")}`;
   return [
   {
     heading: "Membership and eligibility",
@@ -67,7 +75,7 @@ function buildClauses(hasYearlyPlan: boolean, ladderOn: boolean): Clause[] {
     heading: "Account users and access",
     body: [
       ladderOn
-        ? "Each membership has a primary contact who is responsible for the account. You may nominate additional users — a head chef, venue manager or bookkeeper, for example — and they buy at your account's level."
+        ? "Each membership has a primary contact who is responsible for the account. You may nominate additional users — a head chef, venue manager or bookkeeper, for example — and they buy at your account's pricing."
         : "Each membership has a primary contact who is responsible for the account. You may nominate additional users — a head chef, venue manager or bookkeeper, for example — and they buy at your account's member pricing.",
       "The primary contact is responsible for everything done under the account, including orders placed and information accessed by nominated users, and for removing users who should no longer have access. All activity on the account, including orders placed by nominated users, is visible to the primary contact.",
       ladderOn
@@ -121,7 +129,7 @@ function buildClauses(hasYearlyPlan: boolean, ladderOn: boolean): Clause[] {
     body: ladderOn
       ? [
           "Member pricing is derived from our current trade price list at the moment it is displayed. Chefs Depot does not hold a separate price list. Where the trade price for an item changes, the member price for that item changes with it.",
-          "Your level determines where between the entry and deepest member price your account sits for each item. The distance between those two prices is set per item and differs between products and brands. No fixed percentage discount applies, and none is represented.",
+          `Your trailing spend determines where between the advertised price and the deepest member price your account sits for each item, as a continuous proportion rather than in steps. The deepest member price on any item is set 1% above the Industry Kitchens Wholesale price for that item, and nothing is ever sold below it. You reach it at ${top} of rolling twelve-month spend. The distance between those two prices is set per item and differs between products and brands. No fixed percentage discount applies, and none is represented.`,
           "Prices displayed exclude GST unless stated. Freight, installation and third-party services are quoted separately.",
         ]
       : [
@@ -134,11 +142,11 @@ function buildClauses(hasYearlyPlan: boolean, ladderOn: boolean): Clause[] {
   ...(ladderOn
     ? [
         {
-          heading: "Levels and spend",
+          heading: "Spend and your pricing",
           body: [
-            "Your level is set by your spend on goods over the rolling twelve months ending at the date of calculation, excluding GST, freight, installation and third-party services. Clearance, end-of-line, supplier-funded and Partner Special purchases count toward your spend at the amount actually paid.",
-            "Only spend made during periods for which membership fees have been paid counts toward your level.",
-            "Levels are reviewed on the first of each month. Your level improves at the first review after your spend passes a threshold. Where spend falls below a threshold, your level is unchanged for ninety consecutive days, and any adjustment after that is by one level per review.",
+            "Your price is set by your spend on goods over the rolling twelve months ending at the date of calculation, excluding GST, freight, installation and third-party services. Clearance, end-of-line, supplier-funded and Partner Special purchases count toward your spend at the amount actually paid.",
+            "Only spend made during periods for which membership fees have been paid counts toward your pricing.",
+            "Pricing is reviewed on the first of each month and moves with your trailing spend. Where spend falls, your pricing is unchanged for ninety consecutive days, and any adjustment after that is limited to one sixth of the full range per review.",
             "The order being placed does not count toward the spend used to price it. Refunds and credits reduce spend for the period in which the original purchase falls.",
           ],
         } satisfies Clause,
@@ -148,9 +156,9 @@ function buildClauses(hasYearlyPlan: boolean, ladderOn: boolean): Clause[] {
     heading: "Leaving and rejoining",
     body: ladderOn
       ? [
-          "When a membership ends, your level ends with it, and pricing on the account returns to our standard price.",
-          "If you rejoin within 30 days, your previous level is restored and your spend history carries over.",
-          "If you rejoin more than 30 days after a membership ends, you start again at the first level, and only spend from the new membership counts toward your level.",
+          "When a membership ends, member pricing ends with it, and the account returns to our standard price.",
+          "If you rejoin within 30 days, your previous pricing is restored and your spend history carries over.",
+          "If you rejoin more than 30 days after a membership ends, your spend starts again from zero, and only spend from the new membership counts toward your pricing.",
         ]
       : [
           "When a membership ends, member pricing ends with it, and pricing on the account returns to our standard price.",
@@ -162,7 +170,9 @@ function buildClauses(hasYearlyPlan: boolean, ladderOn: boolean): Clause[] {
     body: [
       "Member pricing does not combine with other offers. Where a clearance, end-of-line, promotional or Partner Special price is lower than your member price, the lower price applies. You receive one or the other, never both.",
       "Partner Specials are limited by available stock and may be withdrawn or changed at any time. Where a Partner Special is supplied by a third party, that supplier's own terms apply to the goods, and we will identify the supplier at the point of offer.",
-      "Indent and special-order lines, freight, installation and third-party services are quoted on their own terms and member pricing does not apply to them. This is identified on the relevant product page.",
+      ladderOn
+        ? "Indent and special-order lines, freight, installation and third-party services are quoted on their own terms and member pricing does not apply to them. Some brands and products are also excluded from member pricing under our agreements with their suppliers, and we may add or remove a brand from that list as those agreements change. All exclusions are identified on the relevant product page, and what you spend on them still counts toward your pricing on everything else."
+        : "Indent and special-order lines, freight, installation and third-party services are quoted on their own terms and member pricing does not apply to them. This is identified on the relevant product page.",
     ],
   },
   {
@@ -175,7 +185,7 @@ function buildClauses(hasYearlyPlan: boolean, ladderOn: boolean): Clause[] {
           : " Our prices move when our suppliers move theirs, and member pricing is calculated at the moment it is displayed.",
       },
       ladderOn
-        ? "A quote is an estimate based on the prices current when it was issued. It is not a fixed-price offer. The prices on it may change before you accept it — because a supplier price has moved, or because your level has changed at a monthly review. We will tell you about any change before an order is accepted."
+        ? "A quote is an estimate based on the prices current when it was issued. It is not a fixed-price offer. The prices on it may change before you accept it — because a supplier price has moved, or because your pricing has changed at a monthly review. We will tell you about any change before an order is accepted."
         : "A quote is an estimate based on the prices current when it was issued. It is not a fixed-price offer. The prices on it may change before you accept it, because a supplier price has moved. We will tell you about any change before an order is accepted.",
       "Once we accept your order, the price for that order is fixed and does not change.",
     ],
@@ -191,7 +201,7 @@ function buildClauses(hasYearlyPlan: boolean, ladderOn: boolean): Clause[] {
     body: [
       "Membership is subject to the rules of the buying group, including these terms, our privacy policy and our operating policies. We may amend those rules at any time, without notice, and the version published on this page applies from the time it is published.",
       ladderOn
-        ? "This includes the level structure, the spend thresholds, the number of levels, the benefits of membership, and the availability of Partner Specials. Any change to the level structure applies from the next monthly review."
+        ? "This includes the pricing scale, the spend at which the deepest price is reached, the benefits of membership, and the availability of Partner Specials. Any change to the pricing scale applies from the next monthly review."
         : "This includes how member pricing is calculated, the benefits of membership, and the availability of Partner Specials.",
       "Two changes are always notified in advance: an increase in the membership fee, and a change that materially reduces the benefits of your membership. In both cases we give 30 days written notice to the email address on your account, and you may cancel before the change takes effect.",
       "We may end the buying group with notice, in which case membership fees paid for any period after it ends are refunded.",
@@ -202,7 +212,7 @@ function buildClauses(hasYearlyPlan: boolean, ladderOn: boolean): Clause[] {
     body: [
       "Our goods come with guarantees that cannot be excluded under the Australian Consumer Law. Nothing in these terms limits those rights, and membership neither adds to nor reduces them. Manufacturer warranties apply in the ordinary way.",
       ladderOn
-        ? "We handle personal and account information in line with our privacy policy, and we use your order history to calculate your level."
+        ? "We handle personal and account information in line with our privacy policy, and we use your order history to calculate your pricing."
         : "We handle personal and account information in line with our privacy policy.",
       "These terms are governed by the laws of Victoria, Australia.",
     ],
@@ -223,11 +233,12 @@ export default async function MembershipTermsPage() {
   // running. See buildClauses.
   const [plans, ladder] = await Promise.all([
     getSubscriptionPlans().catch(() => [] as Array<{ billing_interval?: string }>),
-    getLadderConfig().catch(() => ({ enabled: false, levels: [] as Array<unknown> })),
+    getLadderConfig().catch(() => ({ enabled: false, fullShareSpend: 50_000 })),
   ]);
   const clauses = buildClauses(
     (plans as Array<{ billing_interval?: string }>).some((p) => p.billing_interval === "year"),
-    Boolean(ladder.enabled) && ladder.levels.length > 1
+    Boolean(ladder.enabled),
+    ladder.fullShareSpend
   );
   return (
     <div className="container-page section-padding">

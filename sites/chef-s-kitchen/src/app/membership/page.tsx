@@ -9,13 +9,15 @@ import {
   getLadderConfig,
 } from "@/lib/store";
 import { getSession } from "@/lib/auth";
-import { LadderExplorer } from "@/components/membership/LadderExplorer";
+import { ScaleExplorer } from "@/components/membership/ScaleExplorer";
 import { PlanChoice, type MembershipPlanOption } from "@/components/membership/PlanChoice";
 import { PartnerLogos } from "@/components/membership/PartnerLogos";
 
 // ============================================================================
 // The Chefs Depot buying group (card gk23c1VK — Tim Keenan's membership bundle,
-// signed off 2026-08-24).
+// signed off 2026-08-24; its pricing model LOCKED 11 Sep 2026: a member's price
+// moves continuously from the advertised Mates Rate at $0 of rolling twelve-month
+// spend down to Wholesale + 1% at $50,000 — no levels, no thresholds).
 //
 // This page replaces one that claimed "members-only pricing (10–25% off retail)"
 // in four places and ran a savings calculator producing a dollar figure from an
@@ -23,34 +25,40 @@ import { PartnerLogos } from "@/components/membership/PartnerLogos";
 // misdescribed the reference price, which is our standard trade price.
 //
 // SO: THERE IS NO PRODUCT-SAVING PERCENTAGE ON THIS PAGE, AND NONE MAY BE ADDED
-// until the real spread between the entry and floor trade prices has been
-// measured across the catalogue. The distance differs per item — it is set by
+// until the real spread between the advertised price and the floor has been
+// measured across the catalogue (`CD_PRICING.spread` stays null). The distance differs per item — it is set by
 // how hard the group buys that item — so the data cannot produce a single
 // site-wide figure, and any published claim has to survive an Australian
 // Consumer Law challenge on substantiation. The one percentage here is the
 // yearly fee against twelve monthly fees, which is arithmetic on our own prices.
 // (Blueprint §10 and §13.)
 //
-// AND: EVERY CLAIM ABOUT HOW THE PRICE IS BUILT IS GATED ON `ladderOn`, not
-// only the claims that name a level. The trade-price-list mechanism — "member
-// pricing comes off the same trade list our own team quotes from", "your price
-// steps down as your spend grows", "your level is recorded against every line"
-// — is the LADDER, and the ladder ships OFF (`channel_settings.cd_member_ladder`
-// is unwritten on both live channels). With it off a Chefs Depot member has no
-// level, no monthly review runs, and their price is a markup applied to our own
-// buying cost. Copy and engine turn on together, in one setting. Anything that
-// is true either way is written once, ungated.
+// AND: EVERY CLAIM ABOUT HOW THE PRICE IS BUILT IS GATED ON `ladderOn` — the
+// member price scale's switch (`channel_settings.cd_member_ladder`), which ships
+// OFF and is unwritten on both live channels. With it off a Chefs Depot member
+// is priced by a markup on our own buying cost from their first order, and no
+// monthly review runs. With it ON a new member pays the ADVERTISED price at $0
+// of spend — "there is no price step on joining" — so the off-state promise that
+// "every line reprices" the day you join is FALSE there, and so is anything
+// implying a day-one saving (Tim's may-not-say list). Copy and engine turn on
+// together, in one setting. Anything true either way is written once, ungated.
+//
+// Tim's 11 Sep `03-membership.html` still carries three sentences from the
+// retired model ("the step change on day one", "cross a threshold", "one step
+// at a time"). They contradict his own locked rules, so the ON copy below takes
+// his locked wording from the same page ("no tiers to cross and no thresholds to
+// just miss", "every dollar moves you a little further down") instead.
 // ============================================================================
 
 export async function generateMetadata() {
   // The description makes a claim about HOW the price is built, so it obeys the
   // same switch as the words on the page. A static export could not read it.
   const ladder = await getLadderConfig().catch(() => null);
-  const ladderOn = Boolean(ladder?.enabled) && (ladder?.levels.length ?? 0) > 1;
+  const ladderOn = Boolean(ladder?.enabled);
   return {
     title: "Chefs Depot Buying Group",
     description: ladderOn
-      ? "Members don't get a discount. They get a different price tier — calculated from the trade price list our own team quotes from, and applied from your first order."
+      ? "Members Spend More, Save More — member pricing moves with your rolling twelve-month spend, calculated from the trade price list our own team quotes from."
       : "Members don't get a discount. They get a different price tier — applied to your account automatically, from your first order.",
   };
 }
@@ -98,12 +106,11 @@ export default async function MembershipLandingPage() {
     }))
     .filter((p) => Number.isFinite(p.price));
 
-  // See rule 2 in the header note: every levels/thresholds/monthly-review claim
-  // on this page is gated on the channel's ladder actually being switched on.
-  const ladderOn = ladder.enabled && ladder.levels.length > 1;
-  const levels = ladder.levels.map((l) => ({ id: l.id, label: l.label, threshold: l.threshold }));
-  const firstLevel = levels[0];
-  const lastLevel = levels[levels.length - 1];
+  // See the header note: every claim about how the price is built is gated on
+  // the channel's member price scale actually being switched on.
+  const ladderOn = ladder.enabled;
+  const topSpend = ladder.fullShareSpend;
+  const topLabel = `$${Math.round(topSpend).toLocaleString("en-AU")}`;
 
   const feeCard = <PlanChoice plans={planOptions} ctaLabel={ctaLabel} ladderOn={ladderOn} />;
 
@@ -120,7 +127,7 @@ export default async function MembershipLandingPage() {
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-relaxed text-text-secondary">
                 {ladderOn
-                  ? "Members buy as a group and see a different number on every line, calculated from the same trade price list our own team quotes from. Your member price applies from your first order, and keeps stepping down as your spend builds over twelve months."
+                  ? `The price on screen is our standard trade price — the one anyone can pay. Members Spend More, Save More: from your first order, every dollar you spend moves your price a little further down on almost 40,000 items, reviewed on the first of each month, until you reach our deepest member price at ${topLabel}.`
                   : "Members buy as a group and see a different number on every line. Your member price applies from your first order, automatically, with no code to remember."}
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -148,22 +155,22 @@ export default async function MembershipLandingPage() {
       <section id="how-it-moves" className="container-page section-padding">
         <div className="mx-auto max-w-3xl">
           <div className="mb-10 text-center">
-            <p className="eyebrow mb-3">Spend more, save more</p>
+            <p className="eyebrow mb-3">Members Spend More, Save More</p>
             <h2 className="section-title">See how the price moves</h2>
           </div>
-          <LadderExplorer levels={levels} />
+          <ScaleExplorer topSpend={topSpend} maxSpend={Math.round(topSpend * 1.2)} />
           <div className="mt-8 grid gap-6 sm:grid-cols-3">
             <div>
               <h3 className="text-sm font-semibold text-text-primary">On joining</h3>
               <p className="mt-1 text-sm text-text-secondary">
-                Member pricing applies from your first order — no qualifying spend.
+                Your account starts building toward better pricing from your first order.
               </p>
             </div>
             <div>
               <h3 className="text-sm font-semibold text-text-primary">As you spend</h3>
               <p className="mt-1 text-sm text-text-secondary">
-                Measured on a rolling twelve months, not a calendar year, and reviewed on the first
-                of each month.
+                Spend More, Save More — measured on a rolling twelve months, not a calendar year, and
+                reviewed on the first of each month.
               </p>
             </div>
             <div>
@@ -185,46 +192,46 @@ export default async function MembershipLandingPage() {
             <p className="eyebrow mb-3">How it works</p>
             <h2 className="section-title">
               {ladderOn
-                ? "The price moves twice, and the first move is the big one."
+                ? "Your price moves with your spend — every dollar counts."
                 : "The price moves the day you join."}
             </h2>
             <p className="mx-auto mt-3 max-w-2xl text-text-secondary">
               {ladderOn
-                ? "Most schemes make you earn your way to anything worthwhile. This one gives you the step change on day one, then keeps going for as long as you keep buying. Partner Specials sit alongside both moves."
+                ? "No tiers to cross and no thresholds to just miss. The more you buy over twelve months, the further down your price goes — for as long as you keep buying. Partner Specials sit alongside."
                 : "Most schemes make you earn your way to anything worthwhile. This one gives you the step change on day one. Partner Specials sit alongside it."}
             </p>
           </div>
 
           <div className={ladderOn ? "grid gap-6 lg:grid-cols-3" : "grid gap-6 lg:grid-cols-2"}>
             <article className="rounded-2xl border border-border-strong bg-white p-6">
-              <p className="eyebrow mb-2">{ladderOn ? "Move one · joining" : "On joining"}</p>
-              <h3 className="heading-serif text-xl text-text-primary">Straight to member pricing</h3>
+              <p className="eyebrow mb-2">{ladderOn ? "Joining" : "On joining"}</p>
+              <h3 className="heading-serif text-xl text-text-primary">
+                {ladderOn ? "Your pricing starts moving" : "Straight to member pricing"}
+              </h3>
               <p className="mt-3 text-sm leading-relaxed text-text-secondary">
-                The moment your membership is active, every line on the site reprices. No points, no
-                qualifying period, no code to remember at four in the afternoon with a delivery to
-                book. The price on the product page is your price.
+                {ladderOn
+                  ? "The moment your membership is active, your account starts building toward better pricing on every line. No points, no qualifying period, no code to remember at four in the afternoon with a delivery to book. The price on the product page is your price."
+                  : "The moment your membership is active, every line on the site reprices. No points, no qualifying period, no code to remember at four in the afternoon with a delivery to book. The price on the product page is your price."}
               </p>
               <p className="mt-3 text-xs text-text-muted">
-                Member pricing is the default across the range, not a promotion on selected lines.
+                Member pricing is the default across {ladderOn ? "almost 40,000 items" : "the range"}, not a
+                promotion on selected lines.
               </p>
             </article>
 
             {ladderOn && (
             <article className="rounded-2xl border border-border-strong bg-white p-6">
-              <p className="eyebrow mb-2">Move two · spending</p>
-              <h3 className="heading-serif text-xl text-text-primary">Spend more, save more</h3>
+              <p className="eyebrow mb-2">Spending</p>
+              <h3 className="heading-serif text-xl text-text-primary">Spend More, Save More</h3>
               <p className="mt-3 text-sm leading-relaxed text-text-secondary">
-                Your rolling twelve-month spend sets your pricing. Cross a threshold and you step
-                down again at the next monthly review. Nobody buys evenly across a year, so a quiet
-                quarter costs you nothing for ninety days — and even then you only ever move back one
-                step at a time.
+                Your rolling twelve-month spend sets your price directly, reviewed on the first of each
+                month. Nobody buys evenly across a year, so a quiet quarter costs you nothing for ninety
+                days — and even then your price only ever moves back gradually, a little at a time.
               </p>
-              {firstLevel && lastLevel && (
-                <p className="mt-3 text-xs text-text-muted">
-                  {firstLevel.label} is where member pricing starts; {lastLevel.label} is our deepest
-                  trade price.
-                </p>
-              )}
+              <p className="mt-3 text-xs text-text-muted">
+                Every member starts at the advertised price and reaches our deepest member price at{" "}
+                {topLabel}.
+              </p>
             </article>
             )}
 
@@ -234,7 +241,7 @@ export default async function MembershipLandingPage() {
               <p className="mt-3 text-sm leading-relaxed text-text-secondary">
                 Suppliers bring us bulk buys, clearance and end-of-line stock, and it reaches the
                 group before it goes anywhere else. A special is priced by what we managed to secure,
-                {ladderOn ? " independent of your level." : " independent of your member pricing."}
+                {" independent of your member pricing."}
               </p>
               <p className="mt-3 text-xs text-text-muted">
                 You always land on the lower of the two.
@@ -258,8 +265,8 @@ export default async function MembershipLandingPage() {
             ...(ladderOn
               ? [
                   {
-                    title: "Spend more, save more",
-                    body: `${levels.length} levels, set by your rolling twelve-month spend. Cross a threshold and your pricing steps down again at the next monthly review — and keeps going until it reaches our deepest trade price.`,
+                    title: "Spend More, Save More",
+                    body: `Your rolling twelve-month spend sets your price directly — no tiers to cross and no thresholds to just miss. Every dollar moves you a little further down, reviewed monthly, until you reach our deepest member price at ${topLabel}.`,
                   },
                 ]
               : []),
@@ -272,7 +279,7 @@ export default async function MembershipLandingPage() {
             {
               title: "Member pricing on every line",
               body: ladderOn
-                ? "Applied automatically across the range, with no codes and no minimum order. Clearance, Partner Specials and special-order lines are priced separately — you always get the better of the two. Your level shows on your account and on every quote."
+                ? "Applied automatically across almost 40,000 items, with no codes and no minimum order. Clearance, Partner Specials and special-order lines are priced separately — you always get the better of the two."
                 : "Applied automatically across the range, with no codes and no minimum order. Clearance, Partner Specials and special-order lines are priced separately — you always get the better of the two.",
             },
             {
@@ -375,7 +382,7 @@ export default async function MembershipLandingPage() {
               ? [
                   {
                     title: "Every price is on the record",
-                    body: "Your level and the trade prices behind it are recorded against every quote and every order line. Ask us about a price from six months ago and we can show you exactly how it was built.",
+                    body: "Where your pricing sat and the trade prices behind it are recorded against every quote and every order line. Ask us about a price from six months ago and we can show you exactly how it was built.",
                   },
                 ]
               : []),
@@ -423,29 +430,29 @@ export default async function MembershipLandingPage() {
                 ...(ladderOn
                   ? [
                       {
-                        q: "How your level is calculated",
-                        a: "Your rolling twelve-month spend, excluding GST, freight, installation and third-party service. Clearance, end-of-line and Partner Specials all count toward it, at whatever you actually paid. Reviewed on the first of each month.",
+                        q: "How your pricing is calculated",
+                        a: "Your rolling twelve-month spend as a member, excluding GST, freight, installation and third-party service. Clearance, end-of-line and Partner Specials all count toward it, at whatever you actually paid. Reviewed on the first of each month.",
                       },
                       {
                         q: "How your pricing moves",
-                        a: "Your pricing improves at the first monthly review after you cross a threshold. A quiet spell is forgiven for ninety days, and any adjustment after that is a single step at a time.",
+                        a: "Your price moves down at the first monthly review after your spend grows — every dollar counts, with no thresholds to cross. A quiet spell is forgiven for ninety days, and any move back after that is gradual, never more than a sixth of the way at a time.",
                       },
                       {
                         q: "Your first big order",
-                        a: "The order you place today sets the level you buy at next. If your first order is a large one, talk to us first and we'll look after it on the day.",
+                        a: "The order you place today counts toward the price you buy at next, not toward its own. If your first order is a large one, talk to us first and we'll look after it on the day.",
                       },
                     ]
                   : []),
                 {
                   q: "You always get the better price",
                   a: ladderOn
-                    ? "Where a clearance, end-of-line or Partner Special is sharper than your member price, you get the sharper one. Either way the full amount counts toward your spend and moves you up the levels."
+                    ? "Where a clearance, end-of-line or Partner Special is sharper than your member price, you get the sharper one. Either way the full amount counts toward your spend and moves your pricing further down."
                     : "Where a clearance, end-of-line or Partner Special is sharper than your member price, you get the sharper one — never both.",
                 },
                 {
                   q: "Where member pricing applies",
                   a: ladderOn
-                    ? "Member pricing runs across our range. Clearance, end-of-line, Partner Specials, indent and special-order lines, freight, installation and third-party service are priced on their own terms. Where one of those is sharper than your member price, you pay the sharper one — and everything you spend on goods still counts toward your level."
+                    ? "Member pricing runs across our range of almost 40,000 items. A small number of brands and products sit outside it, and those are flagged on the product page — what you spend on them still counts toward your pricing everywhere else. Clearance, end-of-line, Partner Specials, indent and special-order lines, freight, installation and third-party service are priced on their own terms. Where one of those is sharper than your member price, you pay the sharper one — and everything you spend on goods still counts toward your pricing."
                     : "Member pricing runs across our range. Clearance, end-of-line, Partner Specials, indent and special-order lines, freight, installation and third-party service are priced on their own terms. Where one of those is sharper than your member price, you pay the sharper one.",
                 },
               ].map((item, i) => (

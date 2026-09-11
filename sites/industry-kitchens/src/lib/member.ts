@@ -8,7 +8,7 @@ import {
   accountService,
   applyAccountPricesToProducts,
   applyAdvertisedLadderPrices,
-  getMemberLadderLevelId,
+  getMemberLadderShare,
 } from "@/lib/store";
 
 export interface MemberContext {
@@ -29,11 +29,11 @@ export interface MemberContext {
    */
   accountId: number | null;
   /**
-   * The shopper's rung on the buying-group ladder (card gk23c1VK), or null when
+   * The member's position on the Chefs Depot price scale (card gk23c1VK), 0..1, or null when
    * this channel has no ladder switched on — which is every channel but Chefs
    * Depot. Resolved once per request and threaded into every pricing call.
    */
-  ladderLevelId: string | null;
+  ladderShare: number | null;
 }
 
 /**
@@ -66,7 +66,7 @@ export async function getMemberContext(): Promise<MemberContext> {
     loggedIn: !!session,
     customerGroupId: null,
     accountId,
-    ladderLevelId: null,
+    ladderShare: null,
   };
 
   const enabled = await getFeatureFlag("member_pricing_enabled");
@@ -80,8 +80,8 @@ export async function getMemberContext(): Promise<MemberContext> {
     customer_group_id: number | null;
   } | null;
 
-  // The ladder rung (card gk23c1VK) — null on a channel with no ladder.
-  const ladderLevelId = await getMemberLadderLevelId({
+  // The member's position on the price scale (card gk23c1VK) — null on a channel with the scale off.
+  const ladderShare = await getMemberLadderShare({
     accountId,
     contactId: session.contactId,
   }).catch(() => null);
@@ -91,7 +91,7 @@ export async function getMemberContext(): Promise<MemberContext> {
     loggedIn: true,
     customerGroupId: contact?.customer_group_id ?? null,
     accountId,
-    ladderLevelId,
+    ladderShare,
   };
 }
 
@@ -120,7 +120,7 @@ export async function getListingMemberPrices(
   products: { id: number }[]
 ): Promise<Record<number, number>> {
   if (products.length === 0) return {};
-  const { customerGroupId, accountId, ladderLevelId } = await getMemberContext();
+  const { customerGroupId, accountId, ladderShare } = await getMemberContext();
   if (!customerGroupId && !accountId) return {};
-  return getMemberPriceMap(products.map((p) => p.id), customerGroupId, accountId, ladderLevelId);
+  return getMemberPriceMap(products.map((p) => p.id), customerGroupId, accountId, ladderShare);
 }

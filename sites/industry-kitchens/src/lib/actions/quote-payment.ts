@@ -28,6 +28,8 @@ import {
   productImageService,
   snapshotOrderLadderPricing,
 } from "@keenan/services";
+import { QUOTE_REPRICED_ON_ACCEPT_MESSAGE } from "@keenan/services/member-ladder";
+import { repriceQuoteForCustomer } from "@/lib/quotes/reprice-deltas";
 import { getSession } from "@/lib/auth";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
@@ -79,6 +81,12 @@ import {
 
 export type PayQuoteResult = {
   error?: string;
+  /**
+   * Chefs Depot member pricing (card gk23c1VK): paying would have ACCEPTED the
+   * quote, and repricing it for acceptance moved a line's money. Nothing was
+   * charged; the page re-reads so the per-line change is on screen first.
+   */
+  repriced?: boolean;
   /** Card payments: hand off to Stripe Elements in the browser. */
   stripe?: { clientSecret: string; orderNumber: string; amount: string };
   /** Everything else: the order is placed; send the customer to its confirmation. */
@@ -142,8 +150,24 @@ export async function payQuote(
   const session = await getSession();
   if (!session?.contactId) return { error: "Please sign in to pay this quote." };
 
-  const quote = await loadOwnedQuote(quoteId, session.contactId);
-  if (!quote) return { error: "Quote not found." };
+  const owned = await loadOwnedQuote(quoteId, session.contactId);
+  if (!owned) return { error: "Quote not found." };
+
+  // ── CHEFS DEPOT MEMBER PRICING: reprice BEFORE paying (card gk23c1VK) ────
+  // Paying a quote that is still open ACCEPTS it (below, `markAccepted`), and
+  // "a quote reprices on view and on acceptance, with the per-line delta
+  // surfaced BEFORE acceptance" (§5). So this door does exactly what the other
+  // two acceptance doors do — the storefront's own Accept (`acceptQuote`) and
+  // the emailed link's accept route: reprice first, and if a line's money moved,
+  // refuse without charging anything and send the customer back to a page that
+  // now shows the per-line change. Only after they have seen it can they pay.
+  // A no-op unless this channel runs the scale and the quote is still open, so
+  // it moves nothing today. When it moves nothing, the quote read above is
+  // still the quote, so every figure below is the one the customer was shown.
+  if ((await repriceQuoteForCustomer(owned.id)) > 0) {
+    return { error: QUOTE_REPRICED_ON_ACCEPT_MESSAGE, repriced: true };
+  }
+  const quote = owned;
 
   // ── What is owed ────────────────────────────────────────────────────────
   const gstRate = await resolveQuoteGstRate(quote.tax_class_id);
@@ -460,12 +484,18 @@ export async function payQuote(
           // The buying-group M/W/R snapshot on the ORDER's own lines (card gk23c1VK):
           // the quote's snapshot does not carry over, because these are new lines
           // with new ids on the document the customer is actually charged on.
-          await snapshotOrderLadderPricing(order.id).catch(() => ({ written: 0 }));
+          // The quote's id rides along because the conversion link is stamped
+          // AFTER this (`markConverted`), and a rep's per-quote override is part
+          // of what priced these lines.
+          await snapshotOrderLadderPricing(order.id, { quoteId: quote.id }).catch(() => ({ written: 0 }));
           // The quote is settled the moment the order exists. markAccepted first so
           // the acceptance is audited and staff alerted exactly as any other
           // acceptance, then markConverted stamps the linkage.
           if (quote.status !== "quote_accepted") {
-            await quoteService.markAccepted(quote.id);
+            // Already repriced for acceptance at the top of this action, and the
+            // order was built from those prices — repricing again here could
+            // move the quote away from the order it has just become.
+            await quoteService.markAccepted(quote.id, { alreadyRepriced: true });
           }
           await quoteService.markConverted(quote.id, order.id);
           return order;
