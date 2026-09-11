@@ -177,3 +177,37 @@ test("casing and stray whitespace on a known status do not defeat the mapping", 
   assert.equal(customerOrderStage("  Shipped  "), "On its way");
   assert.equal(customerOrderStage("COMPLETE"), "Complete");
 });
+
+test("a SilverChef or Skope Funding order still reads Placed to the shopper", () => {
+  // Card MHHjnZ0c moved finance orders onto `net_terms_account` so STAFF see them in
+  // the net-terms bucket. That is an internal change and the shopper must not feel
+  // it: an order nobody has paid, approved or started reads "Placed", exactly as it
+  // did when it carried `pending_payment` (Product Brief §3, cards XJo20XmX/uvRji87U).
+  assert.equal(customerOrderStage("net_terms_account", "silverchef"), "Placed");
+  assert.equal(customerOrderStage("net_terms_account", "finance"), "Placed");
+  assert.equal(customerOrderStage("net_terms_account", "SilverChef"), "Placed");
+  assert.equal(customerOrderStage("  net_terms_account  ", " finance "), "Placed");
+  // A REAL net-terms account is untouched: credit is extended, so the goods are
+  // worked on at once and the word stays what it has always been.
+  assert.equal(customerOrderStage("net_terms_account"), "Being prepared");
+  assert.equal(customerOrderStage("net_terms_account", "net_terms"), "Being prepared");
+  assert.equal(customerOrderStage("net_terms_account", "cc"), "Being prepared");
+  // The override is scoped to the one status the card writes. A finance order that
+  // has genuinely moved on reads the stage its status says, not "Placed" forever.
+  assert.equal(customerOrderStage("shipped", "silverchef"), "On its way");
+  assert.equal(customerOrderStage("processing", "finance"), "Being prepared");
+});
+
+test("no finance company can be named to a shopper, whatever the method", () => {
+  // The HARD LIMIT on card MHHjnZ0c, asserted by name: neither the status a finance
+  // order lands on, nor the hand-set Zoey statuses an operator can still choose, may
+  // put a financier's name (or any raw value) in front of a customer.
+  const methods = [undefined, null, "silverchef", "finance", "net_terms", "cc"];
+  for (const status of ["net_terms_account", "silverchef", "skope_funding", "food_by_us"]) {
+    for (const method of methods) {
+      const stage = customerOrderStage(status, method);
+      assert.ok((ORDER_STAGES as readonly string[]).includes(stage), `${status} escaped the closed set`);
+      assert.equal(/silver|skope|scope|finance|food by us/i.test(stage), false, `${status}/${method}`);
+    }
+  }
+});

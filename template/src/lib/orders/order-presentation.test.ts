@@ -353,6 +353,19 @@ test("being prepared is green, and an unpaid order is not", () => {
   assert.notEqual(orderStageColourClass("pending_payment"), orderStageColourClass("processing"));
 });
 
+test("a finance order wears the Placed colour, not the being-prepared green", () => {
+  // Card MHHjnZ0c put SilverChef/Skope orders on `net_terms_account` for STAFF. The
+  // colour has to follow the word the shopper actually reads, or the list chip goes
+  // green while the word says Placed.
+  assert.equal(orderStageColourClass("net_terms_account", "silverchef"), orderStageColourClass("pending_payment"));
+  assert.equal(orderStageColourClass("net_terms_account", "finance"), orderStageColourClass("pending_payment"));
+  assert.equal(orderStatusChipClass("net_terms_account", "silverchef"), orderStatusChipClass("pending_payment"));
+  assert.equal(orderStatusPillClass("net_terms_account", "finance"), orderStatusPillClass("pending_payment"));
+  // A real net-terms account is unchanged.
+  assert.equal(orderStageColourClass("net_terms_account"), orderStageColourClass("processing"));
+  assert.equal(orderStageColourClass("net_terms_account", "net_terms"), orderStageColourClass("processing"));
+});
+
 test("a status nobody has seen before is coloured, not left blank", () => {
   // Same total fallback the wording has: unknown reads "Being prepared".
   assert.equal(orderStageColourClass("some_new_zoey_status"), orderStageColourClass("processing"));

@@ -713,13 +713,21 @@ export async function getSitemapProducts(
  */
 export async function getGuestOrdersForEmail(
   email: string
-): Promise<Array<{ id: number; order_number: string; status: string; total_inc_tax: string; created_at: string | Date | null }>> {
+): Promise<Array<{ id: number; order_number: string; status: string; payment_method: string | null; total_inc_tax: string; created_at: string | Date | null }>> {
   const sql = getCommerceClient();
   if (!sql || !email) return [];
   const target = normalizeEmailForMatch(email);
   if (!target) return [];
-  const rows = await sql<{ id: number; order_number: string; status: string; total_inc_tax: string; created_at: string | Date | null }[]>`
-    SELECT id, order_number, status, total_inc_tax, created_at
+  // `payment_method` is read but never rendered: it is what tells a SilverChef or
+  // Skope Funding order apart from a real net-terms one, and since card MHHjnZ0c both
+  // carry `net_terms_account` — without it such an order reads "Being prepared" where
+  // it should read "Placed". The order-history page happens not to depend on it today
+  // (it re-reads every row through `orderService.getById` for the items, and that read
+  // carries the whole row), but it FALLS BACK to the row this function returned when
+  // that read comes back null, and this docstring promises "the same shape as the
+  // order list rows". Both of those are only true with the column in the SELECT.
+  const rows = await sql<{ id: number; order_number: string; status: string; payment_method: string | null; total_inc_tax: string; created_at: string | Date | null }[]>`
+    SELECT id, order_number, status, payment_method, total_inc_tax, created_at
     FROM orders
     WHERE ${guestOrderForEmailCondition(sql, target)}
     ORDER BY id DESC
