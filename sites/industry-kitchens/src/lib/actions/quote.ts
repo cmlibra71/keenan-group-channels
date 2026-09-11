@@ -776,7 +776,9 @@ export async function acceptQuote(quoteId: number) {
   // `suppressStaffAlert`: the portal follow-up called below is the one sender of
   // the acceptance email. Without it the service sends its own older alert too
   // and every configured inbox gets two.
-  await quoteService.markAccepted(quoteId, { requiresAdminApproval, suppressStaffAlert: true });
+  // `alreadyRepriced`: the reprice for acceptance ran just above; a second pass
+  // inside markAccepted would only write the same snapshot twice.
+  await quoteService.markAccepted(quoteId, { requiresAdminApproval, suppressStaffAlert: true, alreadyRepriced: true });
 
   // Flag the acceptance so staff know this contact's conversions need sign-off
   // before the quote becomes an order. Best-effort — never fail the acceptance.

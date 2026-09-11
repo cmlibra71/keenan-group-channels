@@ -115,6 +115,8 @@
     "lib/actions/finance-application.ts",
     "lib/actions/google-auth.ts",
     "lib/actions/membership-activation.ts",
+    "lib/actions/quote-payment-reprice.test.ts",
+    "lib/actions/quote-payment.ts",
     "lib/actions/reviews.ts",
     "lib/auth.ts",
     "lib/brand-listing.test.ts",

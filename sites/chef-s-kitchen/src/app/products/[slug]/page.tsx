@@ -122,10 +122,23 @@ export default async function ProductPage({
 
     // Member prices for ALL variants so the client can update on variant change. The account is
     // threaded in so its contract price short-circuits the member / cost-plus price.
+    //
+    // The member's SHARE on the price scale rides along too (card gk23c1VK), so this legacy /
+    // CMS-template path prices a reviewed member exactly as the node path and the cart do. Without
+    // it the engine priced them at share 0 (M) here while the cart charged their share price —
+    // two of our screens stating two prices for one line. Null (and harmless) with the scale off.
     const variants = product.variants ?? [];
     const pricingResults = await Promise.all(
       variants.map((v) =>
-        getEffectivePrice(v.id, CHANNEL_ID, memberCtx.customerGroupId, 1, memberCtx.accountId)
+        getEffectivePrice(
+          v.id,
+          CHANNEL_ID,
+          memberCtx.customerGroupId,
+          1,
+          memberCtx.accountId,
+          null,
+          memberCtx.ladderShare ?? null
+        )
       )
     );
     for (let i = 0; i < variants.length; i++) {

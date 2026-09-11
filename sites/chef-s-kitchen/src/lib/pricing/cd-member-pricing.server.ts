@@ -43,7 +43,7 @@ import {
   getMemberPricingExclusion,
   getMemberTrailingSpend,
 } from "@/lib/store";
-import { floorPrice } from "@keenan/services/member-ladder";
+import { floorPrice, ladderDataIsFresh } from "@keenan/services/member-ladder";
 import type { CdMembershipData, CdMembershipPitch, CdVariantPrices } from "./cd-member-pricing";
 
 /**
@@ -148,6 +148,7 @@ export async function buildCdMembershipData(input: CdMembershipInput): Promise<C
     : null;
 
   const pricesByVariant: Record<number, CdVariantPrices> = {};
+  const now = new Date();
   if (priced) {
     for (const variantId of variantIds) {
       const row = priced.rows.get(variantId);
@@ -156,7 +157,9 @@ export async function buildCdMembershipData(input: CdMembershipInput): Promise<C
       const floor = floorPrice(row, priced.config);
       const roundedFloor = floor == null ? null : Math.round(floor * 100) / 100;
       const excludedHere = productExcluded || priced.excluded.has(variantId);
-      const held = row.validationState !== "ok" || priced.stale;
+      // Held, or stale — judged for THIS row, as the engine judges it, so one stale
+      // sibling variant cannot hide the band on a fresh one.
+      const held = row.validationState !== "ok" || !ladderDataIsFresh(row.syncedAt, now, priced.config);
       const hasBand =
         !excludedHere && !held && row.mates != null && roundedFloor != null && roundedFloor < row.mates;
       pricesByVariant[variantId] = {

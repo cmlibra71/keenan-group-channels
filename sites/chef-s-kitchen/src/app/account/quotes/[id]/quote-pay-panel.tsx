@@ -159,6 +159,9 @@ export function QuotePayPanel({
         if (r.error || !r.stripe) {
           setError(r.error ?? "We couldn't start the payment.");
           setProcessing(false);
+          // Repriced for acceptance (Chefs Depot member pricing): nothing was
+          // charged — re-read so the per-line change is on screen.
+          if (r.repriced) router.refresh();
           return;
         }
         const { error: stripeErr } = await stripeRef.current.confirmCardPayment(
@@ -182,6 +185,7 @@ export function QuotePayPanel({
       const r = await payQuote(quoteId, method, addressId);
       if (r.error) {
         setError(r.error);
+        if (r.repriced) router.refresh();
         return;
       }
       if (r.placed) {
