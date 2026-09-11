@@ -22,14 +22,21 @@ import type { NodeTree, BuilderNode } from "@keenan/services/builder";
 // WHY A RENDER-TIME TRANSFORM. The labels live in STORED trees, so editing a
 // seed or a component ships nothing, and rewriting the stored masters would
 // change the page while the scale is still OFF — where "RRP" is true (a Chefs
-// Depot guest pays the catalogue price). Copy and engine turn on together: this
-// pass runs only where the channel's scale is on, is applied once at the
-// `getComponents` seam in each site's `lib/store.ts` (the read every authored
-// route goes through), and writes nothing back. The same seam and the same
-// shape as the promo tag and the brand-logo fallback.
+// Depot guest pays the catalogue price). Copy and engine turn on together: the
+// "RRP" relabel runs only where the channel's scale is on, is applied once at
+// the `getComponents` seam in each site's `lib/store.ts` (the read every
+// authored route goes through), and writes nothing back. The same seam and the
+// same shape as the promo tag and the brand-logo fallback.
 //
-// PURE + IDEMPOTENT. Returns the SAME map when there is nothing to do (the scale
-// off: every channel today), so the common path allocates nothing.
+// THE PERCENTAGE IS DIFFERENT: IT GOES IN BOTH STATES WHERE THE CHANNEL SAYS SO.
+// The card's rule is "no saving percentage renders anywhere while the spread is
+// unmeasured" — no on/off carve-out — so a channel whose store sets
+// `HIDE_MEMBER_SAVING_PCT` (Chefs Depot) has its member-saving percentages cut
+// with the scale off too; only the "RRP" wording waits for the switch. Industry
+// Kitchens and the template leave the flag false and are untouched.
+//
+// PURE + IDEMPOTENT. Returns the SAME map when there is nothing to do (scale off
+// and no percentage to hide), so that path allocates nothing.
 // ============================================================================
 
 /** What the headline and the comparison are called while the scale is on. */
@@ -45,10 +52,10 @@ const MEMBER_PCT_BINDING = /(^|\.)(savePct|member_save_pct|teaser_save_pct|membe
 
 type TextPart = NonNullable<Extract<BuilderNode, { kind: "element" }>["text"]>[number];
 
-function relabel(parts: TextPart[]): TextPart[] | null {
+function relabel(parts: TextPart[], relabelRrp: boolean): TextPart[] | null {
   let changed = false;
   let next: TextPart[] = parts.map((p) => {
-    if (p.kind === "static" && /^\s*RRP\s*$/.test(p.value)) {
+    if (relabelRrp && p.kind === "static" && /^\s*RRP\s*$/.test(p.value)) {
       changed = true;
       return { ...p, value: p.value.replace("RRP", STANDARD_PRICE_LABEL) };
     }
@@ -77,12 +84,12 @@ function stillPrintsPct(parts: TextPart[] | undefined): boolean {
   return !!parts?.some((p) => p.kind === "binding" && MEMBER_PCT_BINDING.test(p.path));
 }
 
-function walk(node: BuilderNode): BuilderNode {
+function walk(node: BuilderNode, relabelRrp: boolean): BuilderNode {
   let out: BuilderNode = node;
   if (node.kind === "element") {
-    const text = node.text ? relabel(node.text) : null;
+    const text = node.text ? relabel(node.text, relabelRrp) : null;
     const kids = node.children ?? [];
-    const nextKids = kids.map(walk);
+    const nextKids = kids.map((k) => walk(k, relabelRrp));
     const kidsChanged = nextKids.some((k, i) => k !== kids[i]);
     const finalText = text ?? node.text;
     // A percentage we could not cut out cleanly ("Members save up to {pct}%")
@@ -99,9 +106,9 @@ function walk(node: BuilderNode): BuilderNode {
     }
   } else if (node.kind === "repeat") {
     const kids = node.children ?? [];
-    const nextKids = kids.map(walk);
+    const nextKids = kids.map((k) => walk(k, relabelRrp));
     const empty = node.emptyChildren ?? [];
-    const nextEmpty = empty.map(walk);
+    const nextEmpty = empty.map((k) => walk(k, relabelRrp));
     if (nextKids.some((k, i) => k !== kids[i]) || nextEmpty.some((k, i) => k !== empty[i])) {
       out = { ...node, children: nextKids, emptyChildren: nextEmpty } as BuilderNode;
     }
@@ -109,23 +116,40 @@ function walk(node: BuilderNode): BuilderNode {
   return out;
 }
 
-/** One tree, relabelled — the SAME object when nothing in it needed it. */
-export function withMemberScaleLabelsInTree<T extends NodeTree>(tree: T): T {
+export interface MemberScaleLabelOptions {
+  /**
+   * Read a static "RRP" as "Standard price". True only while the channel's
+   * member price scale is ON (where "RRP" beside a Mates Rate would be false).
+   * Defaults to true for a single tree: callers pass it explicitly.
+   */
+  relabelRrp?: boolean;
+}
+
+/**
+ * One tree: member-saving percentages cut (always), "RRP" relabelled when
+ * `relabelRrp` — the SAME object when nothing in it needed either.
+ */
+export function withMemberScaleLabelsInTree<T extends NodeTree>(tree: T, opts: MemberScaleLabelOptions = {}): T {
   if (!tree?.root) return tree;
-  const root = walk(tree.root);
+  const root = walk(tree.root, opts.relabelRrp !== false);
   return root === tree.root ? tree : ({ ...tree, root } as T);
 }
 
 /**
- * Every component master, relabelled when the channel's scale is ON; the SAME
- * map, untouched, when it is off.
+ * Every component master: relabelled when the channel's scale is ON; with it
+ * off, member percentages still cut where `hideMemberPct` (the channel's
+ * `HIDE_MEMBER_SAVING_PCT`); the SAME map, untouched, when neither applies.
  */
-export function withMemberScaleLabels<M extends Record<string, NodeTree>>(components: M, scaleOn: boolean): M {
-  if (!scaleOn || !components) return components;
+export function withMemberScaleLabels<M extends Record<string, NodeTree>>(
+  components: M,
+  scaleOn: boolean,
+  { hideMemberPct = false }: { hideMemberPct?: boolean } = {}
+): M {
+  if ((!scaleOn && !hideMemberPct) || !components) return components;
   let changed = false;
   const out: Record<string, NodeTree> = {};
   for (const [key, tree] of Object.entries(components)) {
-    const next = withMemberScaleLabelsInTree(tree);
+    const next = withMemberScaleLabelsInTree(tree, { relabelRrp: scaleOn });
     if (next !== tree) changed = true;
     out[key] = next;
   }

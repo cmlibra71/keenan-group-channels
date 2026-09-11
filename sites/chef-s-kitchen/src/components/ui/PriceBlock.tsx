@@ -18,7 +18,7 @@ import { useMemberScaleOn } from "@/lib/member-scale-context";
  *            lower again as their twelve-month spend grows." [See member pricing]
  *            The last clause is the SPEND LADDER and is printed only where the
  *            channel runs one (`ladderOn`, default false) — see that prop.
- *   Member   $1,346.40 ex GST [★ MEMBER PRICE] / RRP ~~$1,683~~ · You save $337 (20%)
+ *   Member   $1,346.40 ex GST [★ MEMBER PRICE] / RRP ~~$1,683~~ · You save $337
  *   Account  $1,500.00 ex GST · Your account price / RRP ~~$1,683~~
  *
  * A member price is only ever computed for an actual member (see lib/member.ts),
@@ -76,9 +76,14 @@ export function PriceBlock({
   // Chefs Depot member price scale (card gk23c1VK): the prop, OR the channel's
   // own switch from the root layout — so a caller that never threads it still
   // reads the truth. It changes WORDS only: under the scale the headline is the
-  // Mates Rate, our standard price, never an "RRP", and no member saving carries
-  // a percentage ("no percentage saving may be published until the spread is
-  // measured"). Off — every channel today — this file renders exactly as before.
+  // Mates Rate, our standard price, never an "RRP".
+  //
+  // NO MEMBER SAVING CARRIES A PERCENTAGE, IN EITHER STATE. The card's rule is "no
+  // saving percentage renders anywhere while the spread is unmeasured", with no
+  // on/off carve-out, and Tim's pack allows a per-product DOLLAR figure computed
+  // from that product's own prices — not a percentage. So "You save $X" and
+  // "Member saves $X" keep their dollars and never print "(N%)"; the old card
+  // teaser "Members save up to N%" is gone outright.
   const channelScaleOn = useMemberScaleOn();
   const scaleOn = ladderOn || channelScaleOn;
   const priceWord = scaleOn ? "Standard price" : "RRP";
@@ -119,7 +124,6 @@ export function PriceBlock({
               {" · "}
               <b className="text-member-text">
                 You save {fmtRound(d.savings)}
-                {scaleOn ? null : ` (${d.savingsPct}%)`}
               </b>
             </>
           )}
@@ -144,7 +148,6 @@ export function PriceBlock({
         <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-member-text">
           <Star className="h-3 w-3 fill-current" />
           Member saves {fmtRound(d.savings)}
-          {scaleOn ? null : ` (${d.savingsPct}%)`}
         </p>
       )}
 
@@ -197,13 +200,10 @@ export function PriceBlock({
         </div>
       )}
 
-      {/* Card-sized teaser: one quiet line, no CTA button */}
-      {d.showJoin && size === "card" && d.teaserPct > 0 && !scaleOn && (
-        <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-member-text">
-          <Star className="h-3 w-3 fill-current" />
-          Members save up to {d.teaserPct}%
-        </p>
-      )}
+      {/* No card-sized join teaser. It printed "Members save up to N%", a saving
+          percentage with no measured basis (card gk23c1VK; Tim's pack §8.2) — it
+          had already stopped rendering when Nyp8bkPm zeroed the percentage at
+          source, and it is removed so it cannot come back with a number. */}
     </div>
   );
 }

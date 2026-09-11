@@ -7,6 +7,7 @@ import {
   getDraftComponents,
   getChannelSetting,
   getLadderConfig,
+  HIDE_MEMBER_SAVING_PCT,
 } from "@/lib/store";
 import { CHANNEL_ID } from "@/lib/channel";
 import { loadJsSandbox, computeCallResults, guardBuyControls, guardBuyControlsInComponents } from "@keenan/services/builder";
@@ -220,11 +221,12 @@ export async function renderProductNodeBranch({
   // The member price scale's WORDING (card gk23c1VK): while this channel's scale
   // is ON, a static "RRP" beside the Mates Rate headline reads "Standard price"
   // and a member saving loses its percentage — on the stored template as well as
-  // on the component masters (`lib/store.ts` does those). A no-op while the
-  // scale is off, which is every channel until one is switched on.
+  // on the component masters (`lib/store.ts` does those). With the scale off the
+  // percentage still goes where the channel's `HIDE_MEMBER_SAVING_PCT` says so
+  // (Chefs Depot), "RRP" stays; elsewhere the tree is returned untouched.
   const scaleOn = (await getLadderConfig().catch(() => null))?.enabled === true;
   const scaleWording = <T extends typeof SEED_PRODUCT_TREE>(tree: T): T =>
-    scaleOn ? withMemberScaleLabelsInTree(tree) : tree;
+    scaleOn || HIDE_MEMBER_SAVING_PCT ? withMemberScaleLabelsInTree(tree, { relabelRrp: scaleOn }) : tree;
 
   const nodeTree = guardBuyControls(
     withCdMemberPricingNode(

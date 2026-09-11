@@ -109,6 +109,31 @@ test("with the scale OFF nothing changes — the same map comes back, 'RRP' is s
   assert.equal(withMemberScaleLabels(components, false), components);
 });
 
+test("Chefs Depot, scale OFF: a member saving loses its percentage in this state too, and 'RRP' stays", () => {
+  // The card's rule is "no saving percentage renders anywhere while the spread is
+  // unmeasured" — no on/off carve-out. Only the RRP wording waits for the switch.
+  const components = { "price-panel": pricePanel(), "price-block": priceBlock() };
+  const out = withMemberScaleLabels(components, false, { hideMemberPct: true });
+  assert.notEqual(out, components);
+  assert.equal(textOf(find(out["price-panel"].root, "rrp-save-x17")), "You save ${purchase.saveAmount}");
+  assert.equal(textOf(find(out["price-block"].root, "span-cseed-207")), "Member saves {props.card.member_save_ex_label}");
+  assert.equal(textOf(find(out["price-panel"].root, "price-rrp-label-x24")), "RRP");
+  assert.equal(textOf(find(out["price-panel"].root, "rrp-label-x14")), "RRP ");
+  assert.equal(textOf(find(out["price-block"].root, "card-rrp-label-x42")), "RRP");
+  assert.deepEqual(
+    (find(out["price-panel"].root, "teaser-copy-b-x28") as { condition?: unknown }).condition,
+    { kind: "expr", source: "false" }
+  );
+  // The SALE badge is not a member claim, in this state either.
+  assert.equal(textOf(find(out["price-block"].root, "span-cseed-8")), "Save {props.card.save_pct}%");
+});
+
+test("a single tree with relabelRrp false cuts the percentage and keeps 'RRP'", () => {
+  const out = withMemberScaleLabelsInTree(pricePanel(), { relabelRrp: false });
+  assert.equal(textOf(find(out.root, "rrp-save-x17")), "You save ${purchase.saveAmount}");
+  assert.equal(textOf(find(out.root, "price-rrp-label-x24")), "RRP");
+});
+
 test("with the scale ON the headline and the comparison are the standard price, not RRP", () => {
   const out = withMemberScaleLabelsInTree(pricePanel());
   assert.equal(textOf(find(out.root, "price-rrp-label-x24")), STANDARD_PRICE_LABEL);

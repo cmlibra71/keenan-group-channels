@@ -231,6 +231,8 @@
     "lib/membership/free-trial-offer.ts",
     "lib/membership/free-trial.ts",
     "lib/membership/join-capture.ts",
+    "lib/membership/welcome-copy.test.ts",
+    "lib/membership/welcome-copy.ts",
     "lib/orders/customer-order-notes.test.ts",
     "lib/orders/customer-order-notes.ts",
     "lib/orders/invoice-archive-data.ts",

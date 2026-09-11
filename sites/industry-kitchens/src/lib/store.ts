@@ -183,15 +183,26 @@ const withMasterTransforms = (components: ComponentMap): ComponentMap =>
   ) as ComponentMap;
 
 /**
+/**
+ * Whether this channel cuts member-saving percentages from its stored price
+ * masters even with the member price scale off. Chefs Depot only (card
+ * gk23c1VK); this channel prints its masters as authored. Read by
+ * `withScaleWording` below and by `product-node-branch`.
+ */
+export const HIDE_MEMBER_SAVING_PCT = false;
+
+/**
  * The member price scale's WORDING on the stored price masters (card gk23c1VK):
  * while this channel's scale is ON, "RRP" beside a Mates Rate headline becomes
- * "Standard price" and a member saving loses its percentage. A no-op — the same
- * map back — while it is off, which is every channel until one is switched on.
- * See `builder/member-scale-labels.ts`.
+ * "Standard price" and a member saving loses its percentage; with it off, the
+ * percentage still goes where `HIDE_MEMBER_SAVING_PCT` says so, and otherwise
+ * the same map comes back. See `builder/member-scale-labels.ts`.
  */
 const withScaleWording = async (components: ComponentMap): Promise<ComponentMap> => {
   const scaleOn = (await _store.getLadderConfig().catch(() => null))?.enabled === true;
-  return withMemberScaleLabels(components as Record<string, NodeTree>, scaleOn) as ComponentMap;
+  return withMemberScaleLabels(components as Record<string, NodeTree>, scaleOn, {
+    hideMemberPct: HIDE_MEMBER_SAVING_PCT,
+  }) as ComponentMap;
 };
 
 export const getComponents = async (): Promise<ComponentMap> =>
