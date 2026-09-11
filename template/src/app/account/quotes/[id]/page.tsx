@@ -695,7 +695,14 @@ export default async function QuoteDetailPage({
           a cancelled one. Whether the order page can actually take a card is that
           page's own decision (card Sh03niVC): Chefs Depot offers it, Industry
           Kitchens' copy of `pay-balance-site.tsx` still answers "not offered" and
-          the customer reads the bank details beside the balance instead. */}
+          the customer reads the bank details beside the balance instead.
+          A quote carrying a rep-set DEPOSIT says only "View your order": the
+          totals above print "Deposit due now", and the order page's Pay control
+          takes the WHOLE balance with no partial payments (cards 0Wy0xHuq x
+          Sh03niVC — recorded on sf-account-quotes). Accepting a deposit quote
+          HERE never converts it (`acceptQuote` holds it so the deposit is paid on
+          the quote); it reaches this block only when the emailed link or a rep
+          converted it. */}
       {status === "converted_to_order" && quote.converted_order_id ? (
         <div className="mt-6">
           <h2 className="text-sm font-semibold text-zinc-900 mb-1">Your order</h2>
@@ -710,7 +717,7 @@ export default async function QuoteDetailPage({
             href={`/account/orders/${quote.converted_order_id}`}
             className="mt-3 inline-flex items-center justify-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
           >
-            View and pay your order
+            {deposit ? "View your order" : "View and pay your order"}
           </Link>
         </div>
       ) : null}

@@ -23,19 +23,45 @@
 //  2. NOT EVERY STOREFRONT CAN TAKE THE MONEY. Card Sh03niVC's Pay-by-card
 //     control is Chefs Depot only; Industry Kitchens' copy still answers "card
 //     payment not offered" (the OPEN GAP on `sf-account-orders` in
-//     `customers.md`) — and IK is where the volume is, 281 of 415 open quotes
-//     passing the freight gate against 0 of 1 on CD (prod, 2026-09-11). So the
-//     verb is decided, not assumed: "Pay your order" only where the channel
-//     actually offers cards, "View your order" everywhere else, with the invoice
-//     sentence beside it. A promise the storefront cannot keep is worse than a
-//     plain direction — the same rule the portal's acknowledgement page follows
-//     when it can draw no pay control.
+//     `customers.md`). IK's storefront is not launched and its open quotes are
+//     Zoey's today, so no IK customer reaches this email yet — but the build
+//     must be right for the day one does. So the verb is decided, not assumed:
+//     "Pay your order" only where the channel actually offers cards, "View your
+//     order" everywhere else, with the invoice sentence beside it. A promise the
+//     storefront cannot keep is worse than a plain direction — the same rule the
+//     portal's acknowledgement page follows when it can draw no pay control.
+//
+//  3. A DEPOSIT QUOTE DOES NOT CONVERT HERE AT ALL (`accountAcceptanceHoldsConversion`
+//     below). Its pro-forma prints "Deposit due now $X / Balance $Y" (card
+//     0Wy0xHuq), and the order's Pay control takes the WHOLE balance with no
+//     partial payments (card Sh03niVC). So the acceptance holds the conversion,
+//     no order id comes back, and this module draws the unconverted "Pay this
+//     quote" call — which `payQuote` answers by charging the deposit and raising
+//     the order.
 //
 // The card question is asked at CHANNEL level on purpose. An account's own
 // allow-list can narrow payment further, but that is re-decided on the order
 // page by `decidePayBalance`, which is where it belongs; an email cannot
 // re-decide a payment, and it must not imply it has.
 // ============================================================================
+
+import { readQuoteDeposit } from "./quote-deposit";
+
+/**
+ * Does accepting THIS quote in the account area hold the conversion back, so
+ * the PAYMENT raises the order (card isl1uwjR x 0Wy0xHuq x Sh03niVC)?
+ *
+ * Yes exactly when the rep set a deposit on it. The deposit is charged by paying
+ * the QUOTE (`payQuote`); the order's Pay control only ever takes the whole
+ * balance. Converting would email a pro-forma naming one amount and link it to a
+ * page charging another. Keyed on the STORED deposit terms, not the resolved
+ * figure: the rep asked for the money to be taken on the quote, and a deposit
+ * that happens to resolve to the whole amount is still charged correctly there.
+ * Every other quote converts on acceptance when it carries its delivery.
+ */
+export function accountAcceptanceHoldsConversion(attributes: unknown): boolean {
+  return readQuoteDeposit(attributes) !== null;
+}
 
 export interface ProFormaPayCallInput {
   /** This storefront's own base URL, no trailing slash. */

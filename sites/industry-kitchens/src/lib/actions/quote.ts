@@ -49,6 +49,7 @@ import {
 } from "@/lib/quotes/customer-editable";
 import { isStaffOnlyDraft, withoutStaffOnlyDrafts } from "@/lib/quotes/draft-visibility";
 import { acceptanceAcknowledgementUrl } from "@/lib/quotes/acknowledgement-url";
+import { accountAcceptanceHoldsConversion } from "@/lib/quotes/pro-forma-pay-call";
 import { getContactPermissions } from "@/lib/role-permissions";
 import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import { isProductVisibleToViewer, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
@@ -789,10 +790,11 @@ export async function acceptQuote(quoteId: number) {
   // Best-effort and never fatal: the customer has already been told their
   // acceptance succeeded. The endpoint is idempotent, so a retry is safe.
   //
-  // `customerAlreadyNotified` matters: this path has just sent the customer
-  // their pro-forma (card 0Wy0xHuq), which IS their acceptance confirmation.
-  // Without the flag they would get a second email about the same event, and a
-  // person gets ONE email per order (Product Brief).
+  // `customerAlreadyNotified` matters: this path sends the customer their
+  // pro-forma itself, just below and AFTER this call (card 0Wy0xHuq), and that
+  // pro-forma IS their acceptance confirmation. Without the flag they would get
+  // a second email about the same event, and a person gets ONE email per order
+  // (Product Brief).
   //
   // ACCEPTING HERE CONVERTS, like every other acceptance path (card isl1uwjR,
   // Tim 2026-09-08: "If freight has been allocated to a quote, the customer
@@ -809,8 +811,23 @@ export async function acceptQuote(quoteId: number) {
   // the acknowledgement page and from the emailed `/q/<uuid>` link. `payQuote` is
   // untouched and still raises the order for a customer who pays without
   // accepting first.
+  //
+  // EXCEPT A QUOTE CARRYING A REP-SET DEPOSIT, which is still held back so the
+  // PAYMENT raises the order, exactly as every account-area acceptance was
+  // before this card. Two rules meet here and both are about money. The deposit
+  // (card 0Wy0xHuq): the customer is charged the deposit the rep set, with the
+  // balance following — and `payQuote` is what charges it. The order's Pay
+  // control (card Sh03niVC): it takes the WHOLE owing balance, "no partial
+  // payments" (Tim, 2026-08-10). Converting a deposit quote here would email a
+  // pro-forma reading "Deposit due now $X" whose button leads to a page charging
+  // the whole amount. Holding it keeps both rules true; the order still exists
+  // the moment the deposit is paid. The predicate (and why it reads the STORED
+  // deposit) is `accountAcceptanceHoldsConversion`, unit-tested.
+  // Which way this should go is Tim's call; it is recorded on sf-account-quotes.
+  const holdForDeposit = accountAcceptanceHoldsConversion(q.attributes);
   const followUp = await runPortalAcceptanceFollowUp(q.uuid, {
     customerAlreadyNotified: true,
+    suppressConversion: holdForDeposit,
   });
   // The follow-up is the ONE sender of the acceptance email, and `markAccepted`
   // was told to stay quiet on that basis. If the portal could not be reached —

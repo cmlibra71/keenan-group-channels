@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { proFormaPayCall } from "./pro-forma-pay-call";
+import { accountAcceptanceHoldsConversion, proFormaPayCall } from "./pro-forma-pay-call";
 
 /**
  * The pro-forma is the ONLY email the storefront account-acceptance path sends,
@@ -65,4 +65,38 @@ test("a trailing slash on the site url never doubles up in the link", () => {
     canPayByCard: true,
   });
   assert.equal(call.href, "https://chefsdepot.com.au/account/orders/9");
+});
+
+/**
+ * A deposit quote is still paid on the QUOTE. The pro-forma names "Deposit due
+ * now $X" (card 0Wy0xHuq) and the order page's Pay control would take the whole
+ * balance (card Sh03niVC, no partial payments), so the account-area acceptance
+ * holds the conversion and the deposit payment raises the order.
+ */
+test("a quote carrying a rep-set deposit holds the conversion; every other quote converts", () => {
+  assert.equal(accountAcceptanceHoldsConversion({ deposit: { mode: "percent", value: "50" } }), true);
+  assert.equal(accountAcceptanceHoldsConversion({ deposit: { mode: "amount", value: "1200.00" } }), true);
+  // A deposit that would resolve to the whole amount is still the rep's
+  // instruction to take the money on the quote — payQuote charges it correctly.
+  assert.equal(accountAcceptanceHoldsConversion({ deposit: { mode: "percent", value: "100" } }), true);
+
+  for (const attributes of [
+    null,
+    undefined,
+    {},
+    { test_mode: true },
+    { deposit: null },
+    { deposit: { mode: "percent", value: "0" } },
+    { deposit: { mode: "bogus", value: "50" } },
+    "not an object",
+  ]) {
+    assert.equal(accountAcceptanceHoldsConversion(attributes), false, JSON.stringify(attributes));
+  }
+});
+
+test("a held deposit quote gets the unconverted call, so Pay this quote charges the deposit", () => {
+  // The hold means no order id comes back from the portal follow-up.
+  const call = proFormaPayCall({ ...CD, convertedOrderId: null, canPayByCard: true });
+  assert.equal(call.label, "Pay this quote");
+  assert.equal(call.href, "https://chefsdepot.com.au/account/quotes/42");
 });
