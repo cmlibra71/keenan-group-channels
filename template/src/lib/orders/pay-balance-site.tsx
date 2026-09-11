@@ -50,3 +50,28 @@ export async function payBalanceForOrder(
 ): Promise<{ decision: PayBalanceDecision; panel: ReactNode }> {
   return { decision: NOT_OFFERED, panel: null };
 }
+
+/**
+ * Does THIS storefront take a card payment on an existing ORDER at all? No — this is the
+ * default copy, and Industry Kitchens still uses it (the Sh03niVC gap on `sf-account-orders`).
+ *
+ * Asked by the customer's pro-forma (`lib/quotes/pro-forma-email.ts`, card isl1uwjR), which
+ * links a converted quote to its order and must not say "Pay your order" to a page with no Pay
+ * control. It is the SITE's answer, not the channel's: Industry Kitchens' channel has `stripe`
+ * enabled at checkout, so asking the channel's method list alone promised a card payment this
+ * order page cannot take. Kept beside `payBalanceForOrder` so the two answers change together.
+ */
+export const ORDER_CARD_PAYMENT_OFFERED = false;
+
+/**
+ * The decision alone, without building the control — for a page that only needs to know
+ * whether to say "pay" about an order it links to (the account quote page, card isl1uwjR).
+ * The default storefront never offers it.
+ */
+export async function payBalanceDecisionForOrder(
+  _order: PayBalanceOrderRow,
+  _session: { contactId: number; email: string },
+  _opts: { checkoutSettings?: CheckoutSettings } = {}
+): Promise<PayBalanceDecision> {
+  return NOT_OFFERED;
+}

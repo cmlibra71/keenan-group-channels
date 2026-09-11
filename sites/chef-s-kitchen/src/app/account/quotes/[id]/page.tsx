@@ -48,6 +48,7 @@ import {
 import { QuoteItemControls } from "./quote-item-controls";
 import { readQuoteDeposit, resolveQuoteDeposit, depositLabel } from "@/lib/quotes/quote-deposit";
 import { resolveQuotePayState } from "@/lib/quotes/quote-payable";
+import { resolveConvertedOrderLink } from "@/lib/quotes/converted-order-link-context";
 import { quoteFreightStillPending } from "@/lib/quotes/freight-pending";
 import { QuotePayPanel, type PayMethod } from "./quote-pay-panel";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
@@ -78,6 +79,13 @@ interface QuoteDetail {
   uuid: string;
   status: string | null;
   channel_id: number;
+  /**
+   * The order this quote became, when it became one. Rendered as the customer's
+   * way to the order that now carries their balance (card isl1uwjR) — a quote in
+   * `converted_to_order` has no Pay control of its own (`quote-payable.ts`), and
+   * before that card it never reached this state from here at all.
+   */
+  converted_order_id: number | null;
   contact_id: number | null;
   quote_number: string | null;
   /** The name the customer gave the request when they sent it (card 9tbz3sBF). */
@@ -269,6 +277,15 @@ export default async function QuoteDetailPage({
   // lead with, so the site's Pay button and the document the customer was sent
   // can never name different money.
   const amountDue = deposit ? deposit.due_now : Math.round(gst.payableInc * 100) / 100;
+
+  // The way to the order this quote became, when it became one (card isl1uwjR).
+  // Decided by the ORDER, not by the quote's status: see `resolveConvertedOrderLink`.
+  const convertedLink =
+    status === "converted_to_order" && raw.converted_order_id
+      ? await resolveConvertedOrderLink(Number(raw.converted_order_id), session, {
+          carriesDeposit: deposit !== null,
+        })
+      : null;
 
   // Payment methods are read EXACTLY as checkout reads them — the channel's
   // customer-facing list (enabled, minus channel staff-only), narrowed by the
@@ -691,6 +708,39 @@ export default async function QuoteDetailPage({
         acceptState={acceptState}
         requestState={requestState}
       />
+      {/* THE ORDER THIS QUOTE BECAME, and where its balance is paid
+          (card isl1uwjR, Tim 2026-09-08: a quote carrying its freight converts
+          from the account area). `converted_to_order` is a terminal pay state on
+          the quote (`quote-payable.ts`), so the panel below draws nothing — the
+          money has moved to the order, and this is the way to it.
+          `converted_order_id` set does NOT mean the order is live (card KRn2c8ZC's
+          release rule), so the link is decided by the ORDER, through the order
+          page's own two questions (`resolveConvertedOrderLink`): nothing to a
+          cancelled order (either spelling) or one this viewer cannot open, and
+          "View and pay your order" only where that page will draw a Pay control
+          for this viewer and no rep-set DEPOSIT is on the quote — otherwise
+          "View your order". Industry Kitchens' order page offers no card
+          payment (the Sh03niVC gap), so its link always says "View your order",
+          which is also what its pro-forma says. */}
+      {convertedLink ? (
+        <div className="mt-6">
+          <h2 className="text-sm font-semibold text-zinc-900 mb-1">Your order</h2>
+          <p className="text-sm text-zinc-600">
+            This quote is now an order. Anything still owing on it, and how to pay it, is on the
+            order.
+          </p>
+          {/* Plain utilities, not a site button class: `.btn-primary` is defined
+              in Chefs Depot's stylesheet and not in Industry Kitchens', and this
+              page is not one of the byte-identical shared files. */}
+          <Link
+            href={convertedLink.href}
+            className="mt-3 inline-flex items-center justify-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+          >
+            {convertedLink.label}
+          </Link>
+        </div>
+      ) : null}
+
       {/* Pay this quote — inside the logged-in account area, per Steve. The
           panel renders even while pricing is being prepared: the Pay button
           stays visible and greyed with the reason rather than vanishing. */}
