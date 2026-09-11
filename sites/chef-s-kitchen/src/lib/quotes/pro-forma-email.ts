@@ -15,6 +15,9 @@ import { resolveQuoteTotal } from "@/lib/quotes/price-visibility";
 import { readQuoteDeposit, resolveQuoteDeposit, depositLabel } from "@/lib/quotes/quote-deposit";
 import { PLUS_FREIGHT_NOTICE } from "@/lib/quotes/quote-payable";
 import { quoteFreightStillPending } from "@/lib/quotes/freight-pending";
+import { getCheckoutSettings } from "@/lib/store";
+import { ORDER_CARD_PAYMENT_OFFERED } from "@/lib/orders/pay-balance-site";
+import { proFormaCanPayByCard, proFormaPayCall } from "@/lib/quotes/pro-forma-pay-call";
 
 /**
  * The pro-forma a customer receives when they ACCEPT a quote without paying it.
@@ -24,11 +27,38 @@ import { quoteFreightStillPending } from "@/lib/quotes/freight-pending";
  * document that says "this is now agreed, here is what to pay and how" — so it
  * restates the quote as an amount payable (GST-INCLUSIVE, with ex-GST and GST
  * broken out), names the deposit when the rep set one, carries the Plus Freight
- * warning when no delivery charge was allocated, and links straight back to the
- * quote in the customer's account area where they can pay it.
+ * warning when no delivery charge was allocated, and links the customer to where
+ * they pay it.
  *
- * It deliberately raises no order and no invoice number: the order is created
- * when money is actually taken (payQuote) or when staff convert the quote. This
+ * WHERE THAT LINK POINTS DEPENDS ON WHETHER THE ACCEPTANCE RAISED AN ORDER
+ * (card isl1uwjR, Tim 2026-09-08). Until that card, accepting here never
+ * converted, so the button was "Pay this quote" pointing at the quote in the
+ * account area. Now a quote carrying its delivery converts on acceptance, and
+ * `converted_to_order` is a TERMINAL pay state on that quote page
+ * (`quote-payable.ts`, card 0Wy0xHuq) — so the old button would have sent the
+ * customer to a page whose Pay control the same request had just retired. This
+ * is the ONLY email the account-acceptance path sends, so that link is the whole
+ * of what the customer is told and it has to be true. When `convertedOrderId` is
+ * given the document names the order and points at `/account/orders/<id>`, where
+ * card Sh03niVC's Pay-by-card control lives; with no order it is unchanged.
+ *
+ * THE VERB IS NOT A PROMISE THIS STOREFRONT CANNOT KEEP. "Pay your order" only
+ * appears where THIS SITE's order page takes a card at all
+ * (`ORDER_CARD_PAYMENT_OFFERED`, exported beside `payBalanceForOrder` by each
+ * site's `pay-balance-site.tsx` — true on Chefs Depot, false on Industry
+ * Kitchens) AND the channel offers cards to customers (`stripe` among
+ * `customerPaymentMethods`, the same list checkout and the order page read).
+ * The channel list alone is not enough: Industry Kitchens' channel HAS stripe
+ * enabled at checkout, yet its order page offers no card payment (the Sh03niVC
+ * gap on `sf-account-orders`), so asking only the channel promised a card
+ * payment IK cannot take. IK says "View your order" and that the invoice follows
+ * by email — the same words its account quote page uses. A per-account
+ * restriction can still narrow it further on the order page itself; the label is
+ * deliberately the site-and-channel answer, because an email cannot re-decide a
+ * payment.
+ *
+ * It still raises no order and no invoice number of its own: the order is
+ * created by the acceptance follow-up, by payQuote, or by staff converting. This
  * is paperwork, not a transaction.
  *
  * Best-effort — a mail failure must never fail the acceptance the customer just
@@ -64,8 +94,22 @@ type QuoteRow = Record<string, unknown> &
     items?: Record<string, unknown>[];
   };
 
+export interface ProFormaOptions {
+  /**
+   * The order this acceptance raised, when it raised one (card isl1uwjR).
+   * Null/absent keeps the pre-isl1uwjR wording, which is what an unconverted
+   * acceptance — and a portal one release back that does not report the id —
+   * must still get.
+   */
+  convertedOrderId?: number | null;
+}
+
 /** Send the pro-forma for an accepted quote. Never throws. */
-export async function sendQuoteProForma(quote: QuoteRow, to: string | null): Promise<void> {
+export async function sendQuoteProForma(
+  quote: QuoteRow,
+  to: string | null,
+  options: ProFormaOptions = {}
+): Promise<void> {
   // EMAIL_GLOBAL_REDIRECT is no longer read here: `safeSesSend` applies it — and the @e2e.test
   // swap, the tracking CC and the `[TEST — who]` subject with it — from `resolveTestRedirect`,
   // which is the ONE place the test-safety rule lives. A pro-forma addressed to nobody is not
@@ -84,12 +128,32 @@ export async function sendQuoteProForma(quote: QuoteRow, to: string | null): Pro
   // for, so the pro-forma must not tell the customer it will be quoted separately.
   const freightPending = quoteFreightStillPending(quote, gst.freightEx);
 
-  const [{ site }, branding] = await Promise.all([
+  const orderId =
+    typeof options.convertedOrderId === "number" && options.convertedOrderId > 0
+      ? options.convertedOrderId
+      : null;
+
+  const [{ site }, branding, checkout] = await Promise.all([
     getSiteConfig(),
     resolveEmailBranding(CHANNEL_ID).catch(() => undefined),
+    // Only asked when there IS an order to send them to, and never allowed to
+    // fail the email: an unknown answer reads as "no card here", which
+    // under-promises rather than over-promising.
+    orderId ? getCheckoutSettings().catch(() => null) : Promise.resolve(null),
   ]);
   const siteUrl = siteBaseUrl(site?.url);
-  const payLink = `${siteUrl}/account/quotes/${quote.id}`;
+  // The whole decision — where the button goes, what it says, and what the
+  // sentence under it promises — is the pure `proFormaPayCall`, so it can be
+  // asked in a test rather than asserted against this file's source.
+  const payCall = proFormaPayCall({
+    siteUrl,
+    quoteId: quote.id,
+    convertedOrderId: orderId,
+    canPayByCard: proFormaCanPayByCard({
+      siteOffersOrderCardPayment: ORDER_CARD_PAYMENT_OFFERED,
+      customerPaymentMethodIds: (checkout?.customerPaymentMethods ?? []).map((m) => m.id),
+    }),
+  });
   const reference = (quote.quote_number as string) || `#${quote.id}`;
   const subject = `Pro-forma for quote ${reference}`;
 
@@ -134,7 +198,9 @@ export async function sendQuoteProForma(quote: QuoteRow, to: string | null): Pro
     <h1 style="margin:0 0 8px 0;color:#1e293b;font-size:24px;font-weight:700;text-align:center;">Pro-forma</h1>
     <p style="margin:0 0 20px 0;color:#64748b;font-size:15px;text-align:center;line-height:1.6;">
       Thanks for accepting quote <strong style="color:#1e293b;">${escapeHtml(reference)}</strong>.
-      This pro-forma sets out what is now agreed and what to pay.
+      This pro-forma sets out what is now agreed and what to pay.${
+        payCall.intro ? ` ${escapeHtml(payCall.intro)}` : ""
+      }
     </p>
     <table role="presentation" width="100%" style="margin:0 0 12px 0;border-collapse:collapse;"><tbody>${itemRows}</tbody></table>
     <table role="presentation" width="100%" style="border-top:1px solid #e4e4e7;padding-top:8px;border-collapse:collapse;"><tbody>${summary}</tbody></table>
@@ -146,16 +212,17 @@ export async function sendQuoteProForma(quote: QuoteRow, to: string | null): Pro
         : ""
     }
     <table role="presentation" width="100%"><tr><td align="center" style="padding:24px 0 8px 0;">
-      ${brandedButton("Pay this quote", payLink, branding?.brandColor ?? undefined)}
+      ${brandedButton(payCall.label, payCall.href, branding?.brandColor ?? undefined)}
     </td></tr></table>
     <p style="margin:0;color:#94a3b8;font-size:13px;text-align:center;">
-      Sign in to your account to pay, or reply to this email and we&apos;ll help.
+      ${escapeHtml(payCall.footer)}
     </p>`;
 
   const html = brandedEmailLayout(subject, content, undefined, branding);
 
   const text = [
     `Pro-forma for quote ${reference}`,
+    payCall.intro,
     "",
     ...items.map((it) => `- ${(it.product_name as string) || "Item"} x ${Number(it.quantity ?? 1)}`),
     "",
@@ -169,7 +236,8 @@ export async function sendQuoteProForma(quote: QuoteRow, to: string | null): Pro
     deposit ? `Balance: ${money(deposit.balance, currency)}` : "",
     freightPending ? `\n${PLUS_FREIGHT_NOTICE}` : "",
     "",
-    `Pay it here: ${payLink}`,
+    `${payCall.label}: ${payCall.href}`,
+    payCall.footer,
   ]
     .filter((l) => l !== "")
     .join("\n");
