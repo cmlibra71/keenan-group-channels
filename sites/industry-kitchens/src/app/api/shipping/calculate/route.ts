@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { summariseLinesFreight, cartService } from "@keenan/services";
+import { summariseLinesFreight, cartService, channelSettingsService } from "@keenan/services";
 import { gstSplit } from "@keenan/services/calc";
-import { calculateShipping } from "@/lib/store";
+import { calculateShipping, CHANNEL_ID } from "@/lib/store";
+import { cartLineGoodsExTax } from "@/lib/checkout/order-draft";
 import { getCartUuid } from "@/lib/cart";
 
 export async function POST(request: NextRequest) {
@@ -55,10 +56,33 @@ export async function POST(request: NextRequest) {
       const cart = uuid ? await cartService.getByUuid(uuid) : null;
       const full = cart ? await cartService.getWithItems(cart.id) : null;
       if (full) {
+        // Are the stored cart prices GST-inclusive? A goods-basis freight attribute is read
+        // against the goods EX GST (card Xw9VQmAJ round 2), so the line figures are split the
+        // one way the whole codebase splits GST — never a hand-written / 1.1.
+        let pricesIncludeTax = false;
+        try {
+          const taxSetting = await channelSettingsService.getByKey(CHANNEL_ID, "prices_include_tax");
+          pricesIncludeTax = taxSetting.setting_value === true || taxSetting.setting_value === "true";
+        } catch {
+          // Default: prices are ex-tax, same fallback the checkout uses.
+        }
         const summary = await summariseLinesFreight(
-          (full.items as Array<{ product_id: number; quantity: number }>).map((i) => ({
-            product_id: i.product_id,
+          (full.items as Array<Record<string, unknown>>).map((i) => ({
+            product_id: Number(i.product_id),
             quantity: Number(i.quantity) || 0,
+            // What this line's goods are worth ex GST — the basis a `goods` percentage at
+            // line/unit stacking reads. Taken from the SHOPPER'S OWN CART on the server, like
+            // every other measure here, never from the posted body, and through the SAME
+            // `cartLineGoodsExTax` the checkout's own line totals are built from, so the cart's
+            // estimate and the order it becomes can never disagree about what the goods are worth.
+            goods_ex_tax: cartLineGoodsExTax(
+              {
+                sale_price: (i.sale_price as string | null) ?? null,
+                list_price: String(i.list_price ?? "0"),
+                quantity: Number(i.quantity) || 0,
+              },
+              pricesIncludeTax
+            ),
           }))
         );
         // `has_unweighed_lines` travels WITH the weight: 85% of the catalogue carries no
@@ -71,6 +95,11 @@ export async function POST(request: NextRequest) {
           // replacement for the single bulky boolean): the zone's rate PLUS whatever surcharges
           // these goods carry. Read from the cart's own products, like every other measure
           // here, so a crafted post cannot price a bratt pan as an ordinary parcel.
+          //
+          // `subtotal` — what an `order`-stacked goods percentage is read against — still comes
+          // from the posted body on this ESTIMATE route, exactly as the tier lookup and the
+          // order-value cap always have. Nothing here is ever charged: `placeOrder` re-prices
+          // freight against its own server-computed `subtotalExTax` before an order exists.
           attributes: summary.attributes,
           addressType,
         };
