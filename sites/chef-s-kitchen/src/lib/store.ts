@@ -1,6 +1,7 @@
 import { unstable_cache } from "next/cache";
 import type { NodeTree } from "@keenan/services/builder";
 import { withPromoTagInComponents } from "@/builder/promo-tag-node";
+import { guardTileBuyControlsInComponents } from "@keenan/services/builder";
 import { withMemberScaleLabels } from "@/builder/member-scale-labels";
 import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
 import { initCommerceDb, createChannelStore, getCommerceClient, blogService } from "@keenan/services";
@@ -181,11 +182,24 @@ type ComponentMap = Awaited<ReturnType<typeof _store.getComponents>>;
 
 const BRAND_LOGO_TARGETS = targetsForChannel(CHANNEL_ID);
 
+/**
+ * Card 1sgz4B3v — a TILE offers exactly the buttons the product's own page does.
+ * `guardTileBuyControlsInComponents` ANDs `!<row>.cart_refused` /
+ * `!<row>.quote_refused` into every node that buys a TILE's product, so the
+ * authored `product-card` master stops drawing an Add to Cart that the cart
+ * would only refuse — silently, on this master (kyMjCmAw). Channel-agnostic and
+ * data-driven: with no product flagged it returns the very same map.
+ */
+const withTileBuyGuard = (components: ComponentMap): ComponentMap =>
+  guardTileBuyControlsInComponents(components as Record<string, NodeTree>) as ComponentMap;
+
 const withMasterTransforms = (components: ComponentMap): ComponentMap =>
-  withPromoTagInComponents(
-    withBrandLogoFallback(components, BRAND_LOGO_TARGETS) as Record<string, NodeTree>,
-    PROMO_TAG_LABEL
-  ) as ComponentMap;
+  withTileBuyGuard(
+    withPromoTagInComponents(
+      withBrandLogoFallback(components, BRAND_LOGO_TARGETS) as Record<string, NodeTree>,
+      PROMO_TAG_LABEL
+    ) as ComponentMap
+  );
 
 /**
 /**

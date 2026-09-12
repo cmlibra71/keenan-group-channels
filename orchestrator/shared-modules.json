@@ -128,6 +128,8 @@
     "lib/brand-search.ts",
     "lib/cart-quote-counts.tsx",
     "lib/cart.ts",
+    "lib/cart/restricted-message.test.ts",
+    "lib/cart/restricted-message.ts",
     "lib/category-attributes.test.ts",
     "lib/category-attributes.ts",
     "lib/channel.ts",

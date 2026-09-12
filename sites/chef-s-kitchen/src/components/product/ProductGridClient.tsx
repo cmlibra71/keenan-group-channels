@@ -18,6 +18,15 @@ export interface GridProduct {
   availability?: string | null;
   inventoryLevel?: number | null;
   inventoryTracking?: string | null;
+  /**
+   * The product's own buying controls (card 7vu2iEEZ), carried onto the tile by
+   * card 1sgz4B3v so it offers exactly the buttons the product page does. They
+   * ride the SHARED sources — the materialized `category_listing_cache` payload
+   * and the Meilisearch document — so every listing surface gets them at once.
+   * Absent reads as "not restricted", never the other way round.
+   */
+  restrictAddToCart?: boolean | null;
+  restrictAddToQuote?: boolean | null;
   thumbnailImage?: { urlStandard: string; urlThumbnail: string | null } | null;
   /**
    * Card tSrCcnvx: the brand's logo, which the tile shows instead of the grey
@@ -123,6 +132,8 @@ export function ProductGridClient({
           availability={product.availability}
           inventoryLevel={product.inventoryLevel}
           inventoryTracking={product.inventoryTracking}
+          restrictAddToCart={product.restrictAddToCart}
+          restrictAddToQuote={product.restrictAddToQuote}
           listId={listId}
           listName={listName}
           listIndex={indexOffset + index}

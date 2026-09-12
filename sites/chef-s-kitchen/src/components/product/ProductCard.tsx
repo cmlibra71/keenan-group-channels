@@ -9,6 +9,7 @@ import { AddToCartButton } from "./AddToCartButton";
 import { AddToQuoteButton } from "./AddToQuoteButton";
 import { ga4SelectItem } from "@/components/analytics/ga4";
 import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
+import { tileControlsOf, tileButtons } from "@keenan/services/tile-controls";
 
 /**
  * Design-system product card: white 1:1 image stage, corner badges (max two),
@@ -51,6 +52,15 @@ export interface ProductCardProps {
   /** Render the ink Clearance badge (clearance/last-units contexts). */
   clearance?: boolean;
   availability?: string | null;
+  /**
+   * The product's own buying controls (`products.restrict_add_to_cart` /
+   * `restrict_add_to_quote`, card 7vu2iEEZ), carried onto the tile by card
+   * 1sgz4B3v so it offers exactly the buttons the product page does. Absent
+   * reads as "not restricted", never the other way round — an older cache row
+   * or a caller that does not read them must leave the tile as it was.
+   */
+  restrictAddToCart?: boolean | null;
+  restrictAddToQuote?: boolean | null;
   /** Accepted and deliberately unused: the tile does not gate on stock (7vu2iEEZ). Kept so the
    *  grid can keep passing what it reads without every caller changing. */
   inventoryLevel?: number | null;
@@ -81,6 +91,8 @@ export function ProductCard({
   planPrice,
   clearance,
   availability,
+  restrictAddToCart,
+  restrictAddToQuote,
   listId,
   listName,
   listIndex,
@@ -115,6 +127,18 @@ export function ProductCard({
   // next morning, and card CXnP1lrL removed the only wording that would have explained it.
   // (IK and the template card carry no stock gate at all, so this is Chefs Depot only.)
   const outOfStock = availability === "disabled";
+
+  // Card 1sgz4B3v: the two per-product buying controls, read through the ONE
+  // shared rule every tile renderer uses (the authored `product-card` master
+  // reaches the same answer through `guardTileBuyControls`). Until this, a
+  // restricted product's tile went on offering the very button its own page had
+  // taken away and the add was refused server-side — silently on the authored
+  // tile, which is the "CTA that does nothing" 7bmpuqei forbids here.
+  const buttons = tileButtons(
+    tileControlsOf({ restrictAddToCart, restrictAddToQuote }),
+    hasPrice,
+    outOfStock
+  );
 
   // Non-blocking: gtag queues the event; navigation proceeds immediately.
   function handleSelect() {
@@ -231,22 +255,18 @@ export function ProductCard({
 
         {/* CTAs */}
         <div className="mt-3 flex flex-col gap-2">
-          {hasPrice && !outOfStock ? (
-            <>
-              <AddToCartButton
-                productId={id}
-                size="sm"
-                productName={name}
-                sku={sku}
-                price={sale ?? rrp}
-                brandName={brandName ?? undefined}
-                categoryName={eyebrow ?? undefined}
-              />
-              <AddToQuoteButton productId={id} size="sm" />
-            </>
-          ) : (
-            <AddToQuoteButton productId={id} size="sm" />
+          {buttons.cart && (
+            <AddToCartButton
+              productId={id}
+              size="sm"
+              productName={name}
+              sku={sku}
+              price={sale ?? rrp}
+              brandName={brandName ?? undefined}
+              categoryName={eyebrow ?? undefined}
+            />
           )}
+          {buttons.quote && <AddToQuoteButton productId={id} size="sm" />}
         </div>
       </div>
     </div>
