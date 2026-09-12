@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert";
 import {
   CART_RESTRICTED_ERROR,
+  cartLineNotice,
   restrictedCheckoutMessage,
   quantityRefusedCheckoutMessage,
 } from "./restricted-message";
@@ -56,5 +57,32 @@ describe("Place Order names the line it refused", () => {
       restrictedCheckoutMessage("Widget"),
       quantityRefusedCheckoutMessage("Widget")
     );
+  });
+});
+
+describe("cartLineNotice — what ONE cart line says under its name", () => {
+  it("says nothing on an ordinary line nobody has been refused on", () => {
+    assert.equal(cartLineNotice(null, false), null);
+    assert.equal(cartLineNotice(undefined, false), null);
+    assert.equal(cartLineNotice("", false), null);
+    assert.equal(cartLineNotice("   ", false), null);
+  });
+
+  it("a restricted line explains itself BEFORE it is touched", () => {
+    assert.equal(cartLineNotice(null, true), CART_RESTRICTED_ERROR);
+    assert.equal(cartLineNotice("", true), CART_RESTRICTED_ERROR);
+  });
+
+  it("what the SERVER said about the last change wins over the standing reason", () => {
+    // Review 2026-09-12: a restricted line can still be refused for some OTHER
+    // reason. Answering that with the standing sentence tells the shopper the
+    // wrong thing about the press they just made.
+    const other = "Please open the product page and fill in Instructions before adding this.";
+    assert.equal(cartLineNotice(other, true), other);
+    assert.equal(cartLineNotice(other, false), other);
+  });
+
+  it("an unrestricted line still reports its refusal — no press is ever silent", () => {
+    assert.equal(cartLineNotice("Only 2 left.", false), "Only 2 left.");
   });
 });

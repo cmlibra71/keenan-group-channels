@@ -102,9 +102,15 @@ function cardData(p: AnyRecord, opts: { eyebrow?: string | null; clearance?: boo
     ...imageFields(rawImage),
     eyebrow: opts.eyebrow ?? null,
     savePct,
-    // Card 1sgz4B3v: a tile offers exactly the buttons the product page does, so
-    // a product staff switched off for cart is not "buyable" on a card either.
-    buyable: hasPrice && !outOfStock && p.restrictAddToCart !== true,
+    // Card 1sgz4B3v: `buyable` deliberately does NOT read restrictAddToCart. The
+    // quote-only case is already handled one level down — AddToCartWidget returns
+    // null on the flag (blocks/widgets-client.tsx) — so a flagged product renders
+    // this branch's `{{widget add_to_cart}}` as nothing and keeps its correctly
+    // labelled "Add to Quote". Folding the flag in here instead drops the card to
+    // the partial's `{{else}}` leg, whose no-stock-problem case is
+    // `{{widget add_to_quote label="Enquire"}}` — so the same product would read
+    // "Enquire" here and "Add to Quote" on every other renderer.
+    buyable: hasPrice && !outOfStock,
     outOfStock,
     showSaveBadge,
     showClearanceBadge,

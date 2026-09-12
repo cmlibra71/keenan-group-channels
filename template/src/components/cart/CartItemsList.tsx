@@ -4,7 +4,7 @@ import { useState, useTransition, useOptimistic } from "react";
 import { useRouter } from "next/navigation";
 import { updateCartItem, removeCartItem } from "@/lib/actions/cart";
 import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
-import { CART_RESTRICTED_ERROR } from "@/lib/cart/restricted-message";
+import { CART_RESTRICTED_ERROR, cartLineNotice } from "@/lib/cart/restricted-message";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { backorderMessage } from "@keenan/services/backorder";
 import {
@@ -116,6 +116,7 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
   /** Staff switched this product off for online ordering: the standing reason,
    *  shown whether or not the shopper has just pressed anything. */
   const restricted = item.restrict_add_to_cart === true;
+  const notice = cartLineNotice(refusal, restricted);
 
   const unitPrice = item.sale_price
     ? parseFloat(item.sale_price)
@@ -252,15 +253,16 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
             {backorderNote}
           </p>
         )}
-        {/* Card 1sgz4B3v. The standing reason first — this product is not sold
-            online — and otherwise whatever the server said when it refused the
-            last change, so no press on this row is ever silent. */}
-        {(restricted || refusal) && (
+        {/* Card 1sgz4B3v. `cartLineNotice` owns the precedence (unit-tested):
+            what the SERVER said about the last change wins, otherwise the
+            standing reason, otherwise nothing. So no press here is ever silent
+            and a refusal never gets answered with the wrong sentence. */}
+        {notice && (
           <p
             role="status"
             className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900"
           >
-            {restricted ? CART_RESTRICTED_ERROR : refusal}
+            {notice}
           </p>
         )}
       </div>

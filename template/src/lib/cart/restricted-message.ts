@@ -24,6 +24,26 @@ export const CART_RESTRICTED_ERROR =
   "This product isn't available to order online — please add it to a quote.";
 
 /**
+ * What ONE cart line says under its name — card 1sgz4B3v.
+ *
+ * Precedence, and it matters: what the SERVER said about the last change wins.
+ * A line whose product is restricted can still be refused for some OTHER reason
+ * (a required customisation, a catalogue-scope refusal), and answering that with
+ * the standing sentence would tell the shopper the wrong thing about the press
+ * they just made. With nothing refused, the standing reason shows instead — a
+ * restricted line explains itself before it is touched, which is the point of
+ * marking it at all. Neither: the line says nothing.
+ */
+export function cartLineNotice(
+  refusal: string | null | undefined,
+  restricted: boolean
+): string | null {
+  const said = (refusal ?? "").trim();
+  if (said) return said;
+  return restricted ? CART_RESTRICTED_ERROR : null;
+}
+
+/**
  * The same refusal with the LINE NAMED, for `placeOrder` (card 1sgz4B3v).
  *
  * Until this, Place Order answered a cart holding a restricted product with "One
