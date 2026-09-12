@@ -23,6 +23,10 @@ type RowProduct = {
   availability?: string | null;
   inventoryLevel?: number | null;
   inventoryTracking?: string | null;
+  /** The product's own buying controls (7vu2iEEZ), carried onto the tile by card
+   *  1sgz4B3v so the rail offers exactly the buttons the product page does. */
+  restrictAddToCart?: boolean | null;
+  restrictAddToQuote?: boolean | null;
   thumbnailImage?: { urlStandard: string; urlThumbnail: string | null } | null;
 };
 
@@ -78,6 +82,8 @@ export function ClearanceSpotlight({
                 memberPrice={pricing?.memberPriceMap?.[product.id] ?? null}
                 isMember={pricing?.isMember}
                 planPrice={pricing?.planPrice}
+                restrictAddToCart={product.restrictAddToCart}
+                restrictAddToQuote={product.restrictAddToQuote}
                 clearance
               />
             </div>
@@ -117,6 +123,8 @@ export function ClearanceRail({
             memberPrice={pricing?.memberPriceMap?.[product.id] ?? null}
             isMember={pricing?.isMember}
             planPrice={pricing?.planPrice}
+            restrictAddToCart={product.restrictAddToCart}
+            restrictAddToQuote={product.restrictAddToQuote}
             clearance
           />
         </div>

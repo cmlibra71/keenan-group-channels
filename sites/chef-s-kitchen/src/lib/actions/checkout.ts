@@ -19,6 +19,10 @@ import {
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, forOrderInsert, type BelowCostLine } from "@/lib/checkout/order-draft";
 import { backorderFactsForProducts } from "@/lib/cart/backorder-facts";
 import { canPurchaseQuantity } from "@keenan/services/backorder";
+import {
+  restrictedCheckoutMessage,
+  quantityRefusedCheckoutMessage,
+} from "@/lib/cart/restricted-message";
 import { normaliseAddressType } from "@keenan/services/residential";
 import { getLineCosts } from "@/lib/store";
 import { sendStaffNotification } from "@/lib/staff-email";
@@ -227,15 +231,24 @@ export async function placeOrder(
     const stock = await backorderFactsForProducts(
       (fullCart.items as { product_id: number }[]).map((i) => i.product_id)
     );
-    const refused = (fullCart.items as { product_id: number; quantity: number }[]).find((i) => {
+    // Card 1sgz4B3v: the refusal NAMES the line. A shopper told to review a cart
+    // that marks nothing has nothing to find, and the quote-only write flags
+    // thousands of products at once — every open cart holding one lands here.
+    const lines = fullCart.items as {
+      product_id: number;
+      quantity: number;
+      product_name?: string | null;
+    }[];
+    const restricted = lines.find((i) => stock.get(i.product_id)?.restrictAddToCart === true);
+    if (restricted) {
+      return { error: restrictedCheckoutMessage(restricted.product_name) };
+    }
+    const shortOfStock = lines.find((i) => {
       const facts = stock.get(i.product_id);
-      return facts ? facts.restrictAddToCart || !canPurchaseQuantity(facts, i.quantity) : false;
+      return facts ? !canPurchaseQuantity(facts, i.quantity) : false;
     });
-    if (refused) {
-      return {
-        error:
-          "One of the items in your cart isn't available to order online at that quantity. Please review your cart, or ask us for a quote.",
-      };
+    if (shortOfStock) {
+      return { error: quantityRefusedCheckoutMessage(shortOfStock.product_name) };
     }
   } catch (e) {
     console.error("[placeOrder] buying-control check failed (non-fatal):", e);

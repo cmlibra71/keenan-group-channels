@@ -24,6 +24,14 @@ export type SearchProduct = {
   price: string;
   salePrice: string | null;
   thumbnailImage?: { urlStandard: string; urlThumbnail: string | null } | null;
+  /**
+   * The product's own buying controls (card 7vu2iEEZ), carried so a search-result
+   * TILE offers exactly the buttons the product page does (card 1sgz4B3v).
+   * Absent — a document indexed before the field existed — reads as "not
+   * restricted", never the other way round.
+   */
+  restrictAddToCart?: boolean | null;
+  restrictAddToQuote?: boolean | null;
 };
 
 export type SearchChunk = {
@@ -117,6 +125,8 @@ export async function fetchSearchChunk(
         thumbnailImage: hit.thumbnailUrl
           ? { urlStandard: hit.thumbnailUrl, urlThumbnail: hit.thumbnailUrl }
           : null,
+        restrictAddToCart: hit.restrictAddToCart === true,
+        restrictAddToQuote: hit.restrictAddToQuote === true,
       })),
       total: result.estimatedTotalHits,
     };
