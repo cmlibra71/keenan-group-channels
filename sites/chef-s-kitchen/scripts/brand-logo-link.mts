@@ -11,10 +11,16 @@
  *
  * What it inserts: an `<a rel="nofollow" href="/brands/…">` whose only content
  * is the brand's logo `<img>` with the brand name as its ALT tag, immediately
- * above the product title. Chefs Depot's plain-text brand line becomes the
- * no-logo fallback; Industry Kitchens has no brand line at all, so the link
+ * above the product title, and — card GwzIv4M9 — a second `<a>` beside it that
+ * prints the brand's NAME for the brands that have no logo, so a logo-less brand
+ * still links to its page instead of sitting there as plain text. Chefs Depot's
+ * existing plain brand line is narrowed to the last resort (a brand with neither
+ * a logo nor a page); Industry Kitchens has no brand line at all, so the pair
  * anchors on the `<h1>`. The rule itself lives in
  * `src/builder/brand-logo-link.ts` and is unit-tested.
+ *
+ * Re-running it over a tree that already carries the LOGO link — every live tree
+ * before GwzIv4M9 — adds only the name link and the narrowed condition.
  *
  * Every channel is processed, not just this site's: the brand link is a
  * group-wide rule (Tim, 2026-08-11).
@@ -55,11 +61,12 @@ function plan(label: string, tree: NodeTree | null): NodeTree | null {
     console.log(`  ${label}: no tree`);
     return null;
   }
-  const { tree: next, inserted, anchorId, eyebrowGuarded } = applyBrandLogoLink(tree);
+  const { tree: next, inserted, logoInserted, nameLinkInserted, anchorId, eyebrowGuarded } =
+    applyBrandLogoLink(tree);
   if (!inserted) {
     // Two very different non-events, and confusing them would hide a broken run.
     const already = checkBrandLogoLink(tree).length === 0;
-    console.log(`  ${label}: ${already ? "already has the brand logo link" : "NO ANCHOR — no brand line and no bound <h1>; skipped"}`);
+    console.log(`  ${label}: ${already ? "already has both brand links" : "NO ANCHOR — no brand line and no bound <h1>; skipped"}`);
     return null;
   }
   const problems = checkBrandLogoLink(next);
@@ -67,10 +74,11 @@ function plan(label: string, tree: NodeTree | null): NodeTree | null {
     throw new Error(`${label} is wrong after insertion: ${problems.join(" / ")}`);
   }
   changes++;
-  console.log(
-    `  ${label}: inserts the brand logo link above "${anchorId}"` +
-      (eyebrowGuarded ? " (the text brand line becomes the no-logo fallback)" : "")
-  );
+  const did: string[] = [];
+  if (logoInserted) did.push(`inserts the brand logo link above "${anchorId}"`);
+  if (nameLinkInserted) did.push("inserts the brand-name link for brands with no logo");
+  if (eyebrowGuarded) did.push("narrows the plain brand line to brands with no logo AND no page");
+  console.log(`  ${label}: ${did.join("; ")}`);
   return next;
 }
 
@@ -131,7 +139,7 @@ async function main() {
 
     console.log(
       changes === 0
-        ? "\nnothing to do — every stored product template already links the brand logo"
+        ? "\nnothing to do — every stored product template already carries both brand links"
         : APPLY
           ? `\ndone — ${changes} tree(s) planned; see UPDATED lines for what was written`
           : `\ndry run — ${changes} tree(s) would change. Re-run with --apply to write.`
