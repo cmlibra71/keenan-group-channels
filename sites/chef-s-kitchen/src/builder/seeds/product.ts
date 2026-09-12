@@ -1,5 +1,12 @@
 import type { NodeTree, BuilderNode } from "@keenan/services/builder";
-import { brandLogoLinkNode, EYEBROW_FALLBACK_CONDITION } from "../brand-logo-link";
+import { brandLogoLinkNode, brandNameLinkNode, EYEBROW_FALLBACK_CONDITION } from "../brand-logo-link";
+
+/**
+ * The brand line's look, shared by the plain eyebrow and its linked twin so the
+ * no-logo fallback is the same line the page always had — only clickable
+ * (card GwzIv4M9).
+ */
+const BRAND_EYEBROW_CLASSES = ["mb-1", "text-[12px]", "font-bold", "uppercase", "tracking-[0.1em]", "text-accent-dark"];
 
 // ============================================================================
 // Phase-5: the CD Product Page as a FULL-PARITY node tree, transcribed from the
@@ -214,14 +221,19 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                   // Shared with the database pass in builder/brand-logo-link.ts,
                   // which puts the same node into the trees already authored.
                   brandLogoLinkNode(),
+                  // A brand with no logo falls back to its NAME as a link to the
+                  // same page (card GwzIv4M9) — same slot, same rel="nofollow",
+                  // same styling as the plain line it replaces.
+                  brandNameLinkNode([...BRAND_EYEBROW_CLASSES, "inline-block"]),
                   {
                     id: "brand-eyebrow",
                     kind: "element",
                     tag: "p",
-                    // Only the fallback now: a brand WITH a logo shows the logo
-                    // instead, never both.
+                    // The last resort only: a brand with a logo shows the logo,
+                    // a brand with a page shows the linked name, and this plain
+                    // line is left for a brand with neither. Never two at once.
                     condition: { kind: "expr", source: EYEBROW_FALLBACK_CONDITION },
-                    classes: ["mb-1", "text-[12px]", "font-bold", "uppercase", "tracking-[0.1em]", "text-accent-dark"],
+                    classes: [...BRAND_EYEBROW_CLASSES],
                     text: [{ kind: "binding", path: "brand.name" }],
                   },
                   {
