@@ -102,7 +102,9 @@ function cardData(p: AnyRecord, opts: { eyebrow?: string | null; clearance?: boo
     ...imageFields(rawImage),
     eyebrow: opts.eyebrow ?? null,
     savePct,
-    buyable: hasPrice && !outOfStock,
+    // Card 1sgz4B3v: a tile offers exactly the buttons the product page does, so
+    // a product staff switched off for cart is not "buyable" on a card either.
+    buyable: hasPrice && !outOfStock && p.restrictAddToCart !== true,
     outOfStock,
     showSaveBadge,
     showClearanceBadge,

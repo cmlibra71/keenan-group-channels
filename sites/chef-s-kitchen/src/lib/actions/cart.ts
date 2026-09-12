@@ -5,6 +5,7 @@ import { cartService, cartItemService, productService, productVariantService, co
 import { resolveAccountLinePrices, accountLineKey } from "@keenan/services";
 import { getAccountId } from "@/lib/member";
 import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
+import { CART_RESTRICTED_ERROR } from "@/lib/cart/restricted-message";
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { getCartUuid, setCartUuid } from "@/lib/cart";
 import { brandIdsForProducts } from "@/lib/checkout/free-shipping-brands";
@@ -339,7 +340,6 @@ async function readAddonsForAdd(
  * explicitly set to "No - do not let this product be purchased when Out of Stock" is turned away,
  * and only for the units that are not on the shelf.
  */
-const CART_RESTRICTED_ERROR = "This product isn't available to order online — please add it to a quote.";
 const CART_QUANTITY_ERROR = "This product is not available in the requested quantity.";
 
 async function refuseCartQuantity(
@@ -706,6 +706,11 @@ const readCart = cache(async () => {
         brand_id: brands.get(i.product_id) ?? null,
         available_units: facts ? availableUnits(facts) : null,
         backorder_policy: facts ? resolveBackorderPolicy(facts.backorderPolicy) : null,
+        // Card 1sgz4B3v: a line whose product staff switched off for online
+        // ordering SAYS SO on the row and cannot be increased, so the shopper
+        // told at checkout to review their cart has something to find. Removing
+        // or reducing it stays allowed — see `refuseCartQuantity`.
+        restrict_add_to_cart: facts?.restrictAddToCart === true,
         // The SELLING UNIT, resolved once here (cards O108e4jH / zeMPVcA3), so the row can step
         // by a whole pack and say what a pack holds without a second lookup or a second opinion.
         pack_size: resolvePackSize(facts),

@@ -1,9 +1,10 @@
 "use client";
 
-import { useTransition, useOptimistic } from "react";
+import { useState, useTransition, useOptimistic } from "react";
 import { useRouter } from "next/navigation";
 import { updateCartItem, removeCartItem } from "@/lib/actions/cart";
 import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
+import { CART_RESTRICTED_ERROR } from "@/lib/cart/restricted-message";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { backorderMessage } from "@keenan/services/backorder";
 import {
@@ -40,6 +41,13 @@ export type CartItemRow = {
   available_units?: number | null;
   /** deny | allow_silent | allow_notify — only allow_notify says anything to the shopper. */
   backorder_policy?: string | null;
+  /**
+   * `products.restrict_add_to_cart` (card 7vu2iEEZ): staff switched this product
+   * off for online ordering. The line SAYS SO and cannot be increased — card
+   * 1sgz4B3v, so the shopper the checkout tells to review their cart has
+   * something to find. Reducing and removing stay allowed (`sf-cart`).
+   */
+  restrict_add_to_cart?: boolean | null;
   /**
    * The paid extras this line was configured with (card 0CDcCYmO), as stored on
    * `cart_items.modifier_selections`. Their price is already INSIDE the line's unit price —
@@ -96,6 +104,18 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
   // The displayed quantity flips instantly on click and auto-reverts to the
   // prop if the transition ends without fresh items (error → refresh self-heal).
   const [displayQty, setDisplayQty] = useOptimistic(item.quantity);
+  /**
+   * What the SERVER said when it refused the last +/- (card 1sgz4B3v). The
+   * refusal used to be swallowed: `updateCartItem` returned `{ error }` and this
+   * row answered it with `router.refresh()` alone, which the slide-out drawer —
+   * holding its items in client state — never sees, so a refused "+" left the
+   * optimistic number on screen with nothing said. Shown on the row, and the
+   * quantity is put back by re-reading the cart.
+   */
+  const [refusal, setRefusal] = useState<string | null>(null);
+  /** Staff switched this product off for online ordering: the standing reason,
+   *  shown whether or not the shopper has just pressed anything. */
+  const restricted = item.restrict_add_to_cart === true;
 
   const unitPrice = item.sale_price
     ? parseFloat(item.sale_price)
@@ -143,10 +163,16 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
 
   function handleQuantity(newQty: number) {
     startTransition(async () => {
+      setRefusal(null);
       setDisplayQty(Math.max(0, newQty));
       try {
         const res = await updateCartItem(item.id, newQty);
         if (res?.error) {
+          // SAY IT. `onMutate` re-reads the cart so the drawer's own client state
+          // (and with it the quantity) goes back to what the server holds; the
+          // /cart page self-heals on the refresh. Neither alone is enough.
+          setRefusal(res.error);
+          await onMutate?.();
           router.refresh();
           return;
         }
@@ -224,6 +250,17 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
             {backorderNote}
           </p>
         )}
+        {/* Card 1sgz4B3v. The standing reason first — this product is not sold
+            online — and otherwise whatever the server said when it refused the
+            last change, so no press on this row is ever silent. */}
+        {(restricted || refusal) && (
+          <p
+            role="status"
+            className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900"
+          >
+            {restricted ? CART_RESTRICTED_ERROR : refusal}
+          </p>
+        )}
       </div>
 
       {/* Quantity controls */}
@@ -238,7 +275,11 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
         <span className="min-w-8 px-1 text-center text-sm font-medium">{displayQty}</span>
         <button
           onClick={() => handleQuantity(item.quantity + packSize)}
-          disabled={isPending}
+          // A restricted line may be reduced and removed, never increased — the
+          // server refuses it anyway (`refuseCartQuantity`), and a button that
+          // only ever refuses is the control this card exists to remove.
+          disabled={isPending || restricted}
+          title={restricted ? CART_RESTRICTED_ERROR : undefined}
           className="h-8 w-8 flex items-center justify-center rounded border border-zinc-300 text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
         >
           <Plus className="h-3 w-3" />
