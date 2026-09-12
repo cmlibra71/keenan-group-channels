@@ -539,11 +539,14 @@ export async function placeOrder(
       product_id: i.product_id,
       quantity: Number(i.quantity) || 0,
       // What this line's goods are worth ex GST — the basis a `goods` percentage at line/unit
-      // stacking reads (card Xw9VQmAJ round 2). `builtLineItems` is built from these same cart
-      // items, in this same order, and `subtotalExTax` (which `calculateShipping` below is
-      // handed as the subtotal, and which the zone's order-value cap is read against) is the SUM
-      // of these very figures — so the same attribute at `order` stacking and at `line` stacking
-      // can never disagree about what the goods are worth.
+      // stacking reads (card Xw9VQmAJ round 2). It is the CHARGED line total: `builtLineItems` is
+      // built from these same cart items, in this same order, and `subtotalExTax` (which
+      // `calculateShipping` below is handed as the subtotal, and which the zone's order-value cap
+      // is read against) is the SUM of these very figures — so the same attribute at `order`
+      // stacking and at `line` stacking can never disagree about what the goods are worth.
+      // `buildLineItems` and `cartLineGoodsExTax` (which is what the CART'S estimate route feeds
+      // this same argument) are one expression, so the estimate and the charge cannot disagree
+      // either — see the note on `cartLineGoodsExTax` in `lib/checkout/order-draft.ts`.
       goods_ex_tax: Number(builtLineItems[idx]?.totalExTax ?? NaN),
     }))
   ).catch(() => null);

@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  summariseLinesFreight,
-  cartService,
-  channelSettingsService,
-  freightLineGoodsExTax,
-} from "@keenan/services";
+import { summariseLinesFreight, cartService, channelSettingsService } from "@keenan/services";
 import { gstSplit } from "@keenan/services/calc";
 import { calculateShipping, CHANNEL_ID } from "@/lib/store";
+import { cartLineGoodsExTax } from "@/lib/checkout/order-draft";
 import { getCartUuid } from "@/lib/cart";
 
 export async function POST(request: NextRequest) {
@@ -76,8 +72,17 @@ export async function POST(request: NextRequest) {
             quantity: Number(i.quantity) || 0,
             // What this line's goods are worth ex GST — the basis a `goods` percentage at
             // line/unit stacking reads. Taken from the SHOPPER'S OWN CART on the server, like
-            // every other measure here, never from the posted body.
-            goods_ex_tax: gstSplit(freightLineGoodsExTax(i), pricesIncludeTax).exTax,
+            // every other measure here, never from the posted body, and through the SAME
+            // `cartLineGoodsExTax` the checkout's own line totals are built from, so the cart's
+            // estimate and the order it becomes can never disagree about what the goods are worth.
+            goods_ex_tax: cartLineGoodsExTax(
+              {
+                sale_price: (i.sale_price as string | null) ?? null,
+                list_price: String(i.list_price ?? "0"),
+                quantity: Number(i.quantity) || 0,
+              },
+              pricesIncludeTax
+            ),
           }))
         );
         // `has_unweighed_lines` travels WITH the weight: 85% of the catalogue carries no

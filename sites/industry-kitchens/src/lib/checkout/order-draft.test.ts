@@ -4,6 +4,7 @@ import {
   determinePaymentStatus,
   lineUnitPrice,
   buildLineItems,
+  cartLineGoodsExTax,
   withShipping,
   findBelowCostLines,
   withLineCosts,
@@ -45,6 +46,24 @@ const line = (over: Partial<CartLineInput>): CartLineInput => ({
   list_price: "100",
   sale_price: null,
   ...over,
+});
+
+test("cartLineGoodsExTax IS the charged line total, so an estimate and an order agree", () => {
+  // Card Xw9VQmAJ round 2. A `goods`-basis freight attribute is a percentage of this number, and
+  // the cart's /api/shipping/calculate estimate and placeOrder must read the SAME one — otherwise
+  // the cart quotes one delivery and the order charges another.
+  const l = line({ list_price: "100", sale_price: "90", quantity: 3 });
+  const built = buildLineItems([l], false);
+  assert.equal(cartLineGoodsExTax(l, false), Number(built.lineItems[0].totalExTax));
+  assert.equal(cartLineGoodsExTax(l, false), 270);
+
+  // Inc-GST stored prices are backed out the one way the codebase backs GST out.
+  const builtInc = buildLineItems([l], true);
+  assert.equal(cartLineGoodsExTax(l, true), Number(builtInc.lineItems[0].totalExTax));
+
+  // A line with no quantity is worth nothing, and an unreadable price is $0, never NaN.
+  assert.equal(cartLineGoodsExTax(line({ quantity: 0 }), false), 0);
+  assert.equal(cartLineGoodsExTax(line({ list_price: "", sale_price: null }), false), 0);
 });
 
 test("buildLineItems: ex-tax prices add GST on top", () => {

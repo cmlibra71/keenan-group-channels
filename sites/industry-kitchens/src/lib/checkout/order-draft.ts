@@ -69,6 +69,31 @@ export function lineUnitPrice(item: { sale_price: string | null; list_price: str
   return item.sale_price ? parseFloat(item.sale_price) : parseFloat(item.list_price);
 }
 
+/**
+ * What ONE cart line's goods are worth EX GST — the figure a `goods`-basis freight attribute is
+ * read against (card Xw9VQmAJ round 2), and deliberately the very figure the shopper is CHARGED
+ * for that line: `lineUnitPrice x quantity`, GST-split exactly as `buildLineItems` does it below,
+ * so `totalExTax` on the order line and the goods basis behind the surcharge are one number.
+ *
+ * WHY NOT `freightLineGoodsExTax`. That shared helper prefers a line's stored `extended_*`
+ * columns, which is right on a QUOTE (a quote line's extended columns ARE its money, and
+ * `base_amount` is summed from them) and wrong on a CART: `cart_items` carries `extended_*` too,
+ * but nothing in the checkout charges from them — `buildLineItems` re-derives every figure from
+ * `sale_price`/`list_price` x quantity. A cart line whose stored extended value has drifted from
+ * unit x quantity would otherwise make the cart's estimate and the charged order disagree about
+ * what the goods are worth, and a goods percentage of it disagree with them. The cart estimate
+ * route and `placeOrder` both come through here, so they cannot.
+ */
+export function cartLineGoodsExTax(
+  item: { sale_price: string | null; list_price: string; quantity: number },
+  pricesIncludeTax: boolean
+): number {
+  const unit = lineUnitPrice(item);
+  if (!Number.isFinite(unit)) return 0;
+  const qty = Number(item.quantity) || 0;
+  return gstSplit(unit * qty, pricesIncludeTax).exTax;
+}
+
 /** Snake_case cart-line shape consumed here (a subset of cartService.getWithItems items). */
 export type CartLineInput = {
   product_id: number;
