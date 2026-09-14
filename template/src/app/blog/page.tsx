@@ -1,7 +1,8 @@
 import Link from "next/link";
 import Image from "next/image";
 import type { Metadata } from "next";
-import { getBlogPosts, getBlogTags } from "@/lib/store";
+import { getBlogPosts, getBlogTags, getSiteConfig } from "@/lib/store";
+import { blogByline } from "@/lib/blog-byline";
 
 // A zeroed/invalid imported timestamp (e.g. epoch 0) must not render as
 // "1 Jan 1970" — treat pre-2000 or unparseable dates as "no date".
@@ -29,10 +30,18 @@ export default async function BlogIndexPage({
   const sp = await searchParams;
   const page = Number(sp.page ?? "1");
   const tag = sp.tag;
-  const [{ posts, pagination }, tags] = await Promise.all([
+  // The BYLINE is this storefront's own name, never a hard-coded one. This list
+  // used to print "Industry Kitchens" under every post with no author, and this
+  // file is the SHARED template — so a Chefs Depot reader was told an Industry
+  // Kitchens masthead wrote it (card nHVhkIR4; Chris, 2026-09-14: "anything
+  // customer-facing needs to be branded to the correct site"). A channel we
+  // cannot name prints NO byline rather than borrowing the other business's.
+  const [{ posts, pagination }, tags, { site, channel }] = await Promise.all([
     getBlogPosts({ page, limit: 12, tag }),
     getBlogTags(),
+    getSiteConfig().catch(() => ({ channel: null, site: null })),
   ]);
+
   const totalPages = Math.max(1, Math.ceil(pagination.total / pagination.limit));
 
   return (
@@ -110,7 +119,7 @@ export default async function BlogIndexPage({
                   <p className="mt-2 text-sm text-zinc-600 line-clamp-3">{p.excerpt}</p>
                 )}
                 <div className="mt-4 flex items-center justify-between text-xs text-zinc-500">
-                  <span>{p.author_name ?? "Industry Kitchens"}</span>
+                  <span>{blogByline(p.author_name, site?.siteName, channel?.name)}</span>
                   {formatPublishDate(p.published_at) && (
                     <time dateTime={String(p.published_at)}>
                       {formatPublishDate(p.published_at)}
