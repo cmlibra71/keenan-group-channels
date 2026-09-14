@@ -109,8 +109,11 @@ export async function sendAddedPeopleEmail(input: {
 
     // Through the SHARED transport, not a client of our own (card FBNK0aaG): the configuration set
     // (so SES reports a delivery or a bounce back), the test-safety guard and the stopwatch all
-    // live there. The local EMAIL_GLOBAL_REDIRECT above is kept so this send behaves exactly as it
-    // did on a staging build; the shared guard is idempotent over it.
+    // live there. The local EMAIL_GLOBAL_REDIRECT handling above is kept — it still picks the
+    // recipient. The shared guard then runs over that choice as well, so on a build that sets
+    // EMAIL_GLOBAL_REDIRECT (staging, never production) this send now also gains the `[TEST — …]`
+    // subject prefix and the TEST_EMAIL_RECIPIENT CC that every other send on that build carries.
+    // Same inbox either way; production, where the variable is unset, is untouched.
     await safeSesSend(
       new SendEmailCommand({
         Source: emailSource(branding),
