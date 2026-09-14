@@ -13,15 +13,16 @@
 // a real customer.
 // ============================================================================
 
-import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
-import { brandedEmailLayout, emailSource, resolveEmailBranding } from "@keenan/services";
+import { SendEmailCommand } from "@aws-sdk/client-ses";
+import {
+  brandedEmailLayout,
+  emailSource,
+  resolveEmailBranding,
+  safeSesSend,
+} from "@keenan/services";
 import { CHANNEL_ID } from "@/lib/channel";
 import type { AccountRoleOption } from "./account-roles";
 import { personName, type AccountPerson } from "./account-people";
-
-const ses = new SESClient({
-  region: process.env.AWS_SES_REGION || process.env.AWS_REGION || "ap-southeast-2",
-});
 
 function escapeHtml(s: string): string {
   return s
@@ -106,7 +107,14 @@ export async function sendAddedPeopleEmail(input: {
     const branding = await resolveEmailBranding(CHANNEL_ID).catch(() => undefined);
     const { subject, html, text } = renderAddedPeopleEmail(input);
 
-    await ses.send(
+    // Through the SHARED transport, not a client of our own (card FBNK0aaG): the configuration set
+    // (so SES reports a delivery or a bounce back), the test-safety guard and the stopwatch all
+    // live there. The local EMAIL_GLOBAL_REDIRECT handling above is kept — it still picks the
+    // recipient. The shared guard then runs over that choice as well, so on a build that sets
+    // EMAIL_GLOBAL_REDIRECT (staging, never production) this send now also gains the `[TEST — …]`
+    // subject prefix and the TEST_EMAIL_RECIPIENT CC that every other send on that build carries.
+    // Same inbox either way; production, where the variable is unset, is untouched.
+    await safeSesSend(
       new SendEmailCommand({
         Source: emailSource(branding),
         Destination: { ToAddresses: recipients },
@@ -117,7 +125,8 @@ export async function sendAddedPeopleEmail(input: {
             Text: { Data: text, Charset: "UTF-8" },
           },
         },
-      })
+      }),
+      { latencyKind: "account_person_added", channelId: CHANNEL_ID }
     );
     return recipients;
   } catch (e) {

@@ -1,4 +1,4 @@
-import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
+import { SendEmailCommand } from "@aws-sdk/client-ses";
 import {
   brandedEmailLayout,
   brandedButton,
@@ -7,6 +7,7 @@ import {
   resolveChannelStaffNotificationRecipients,
   resolveOrderNotificationRecipients,
   excludePurchaser,
+  safeSesSend,
 } from "@keenan/services";
 import { CHANNEL_ID } from "@/lib/store";
 
@@ -36,10 +37,6 @@ import { CHANNEL_ID } from "@/lib/store";
 // When nothing resolves the send is skipped with a warning so customer actions
 // never depend on it. Sends are best-effort: callers must swallow failures (the
 // customer's action already succeeded by the time we notify).
-
-const sesClient = new SESClient({
-  region: process.env.AWS_SES_REGION || process.env.AWS_REGION || "ap-southeast-2",
-});
 
 const PORTAL_URL = "https://keenan-group.com.au";
 
@@ -136,7 +133,11 @@ export async function sendStaffNotification({
     rows.map(([label, value]) => `${label}: ${value}`).join("\n") +
     `\n\n${linkLabel}: ${link}\n`;
 
-  await sesClient.send(
+  // Through the SHARED transport, not a client of our own (card FBNK0aaG). That is what attaches
+  // the SES configuration set — the only thing that makes SES report a delivery or a bounce back —
+  // applies the test-safety guard, and times the send. A storefront alert sent on a bare client
+  // could never be measured and could never show an outcome.
+  await safeSesSend(
     new SendEmailCommand({
       Source: emailSource(branding),
       Destination: { ToAddresses: recipients },
@@ -147,6 +148,7 @@ export async function sendStaffNotification({
           Text: { Data: text, Charset: "UTF-8" },
         },
       },
-    })
+    }),
+    { latencyKind: "storefront_staff_alert", channelId: CHANNEL_ID }
   );
 }
