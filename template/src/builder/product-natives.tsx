@@ -24,6 +24,7 @@ import { ProductKitNative } from "@/components/product/ProductKitNative";
 import type { ProductKit } from "@/lib/product-kit";
 import { GstToggle } from "@/components/layout/GstToggle";
 import { SilverChefPanel } from "@/components/product/SilverChefPanel";
+import { ReviewsSection } from "@/components/product/ProductTabs";
 import { ProductImageNotice } from "@/components/product/ProductImageNotice";
 import { ProductResidentialNotice } from "@/components/product/ProductResidentialNotice";
 import { ProductPackNote } from "@/components/product/ProductPackNote";
@@ -67,6 +68,37 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // because the figure follows the LIVE purchase state — variant choice,
     // member/contract price — and an authored tree cannot call the finance
     // calculator. It renders nothing for a product with no price.
+    // The product page's Reviews tab (card qxVqy5Dn). Sealed rather than
+    // authored because the Write a Review form needs client state (the star
+    // picker) and a server action, neither of which a node tree can carry —
+    // and because the panel the stored trees DO carry printed a title and a
+    // body and nothing else. `product-reviews-node.ts` swaps it in at render
+    // time; the key is deliberately NOT `product-reviews`, which is an
+    // Industry Kitchens MASTER.
+    "product-reviews-panel": () => {
+      const list = ((payload.reviews as { list?: unknown[] } | undefined)?.list ??
+        []) as Array<{
+        id: number;
+        rating: number;
+        title: string | null;
+        text: string | null;
+        authorName?: string | null;
+        createdAt?: string | null;
+      }>;
+      return (
+        <ReviewsSection
+          productId={Number(product.id)}
+          reviews={list.map((r) => ({
+            id: r.id,
+            rating: r.rating,
+            title: r.title ?? null,
+            text: r.text ?? null,
+            author_name: r.authorName ?? null,
+            created_at: r.createdAt ?? null,
+          }))}
+        />
+      );
+    },
     "silverchef-panel": () => <SilverChefPanel />,
     // The free-text customisation groups — the "Instructions" box on Custom Stainless
     // Steel (card kyMjCmAw). SEALED for the same reason the kit block is: it holds the

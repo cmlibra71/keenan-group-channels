@@ -18,6 +18,7 @@ import { withSilverChefNode } from "@/builder/silverchef-node";
 import { withAddonsNode } from "@/builder/product-addons-node";
 import { withProductInstructionsNode } from "@/builder/product-instructions-node";
 import { withImageNoticeNode } from "@/builder/product-image-notice";
+import { withReviewsBlock, withReviewsBlockInComponents } from "@/builder/product-reviews-node";
 import { withResidentialNoticeNode } from "@/builder/product-residential-notice";
 import { withPackNoteNode } from "@/builder/product-pack-note";
 import { withModularNoticeNode } from "@/builder/modular-notice";
@@ -249,7 +250,9 @@ export async function renderProductNodeBranch({
             withProductInstructionsNode(
               withPackNoteNode(
                 withModularNoticeNode(
-                  withImageNoticeNode(withSilverChefNode(scaleWording(storedTree ?? SEED_PRODUCT_TREE)))
+                  withReviewsBlock(
+                    withImageNoticeNode(withSilverChefNode(scaleWording(storedTree ?? SEED_PRODUCT_TREE)))
+                  )
                 )
               )
             )
@@ -280,11 +283,17 @@ export async function renderProductNodeBranch({
   }).catch(() => null);
 
   const namedStyles = await getNamedStyles().catch(() => ({}));
-  const components = guardBuyControlsInComponents(
-    (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<
-      string,
-      typeof SEED_PRODUCT_TREE
-    >
+  // Both live product pages place the tab strip as a `product-tabs` MASTER, so
+  // the Reviews panel is not in the page tree at all — it is in the component
+  // library. `withReviewsBlock` above covers a site that authored the panel
+  // inline; this covers the two that did not. (Card qxVqy5Dn.)
+  const components = withReviewsBlockInComponents(
+    guardBuyControlsInComponents(
+      (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<
+        string,
+        typeof SEED_PRODUCT_TREE
+      >
+    )
   );
   // CSS for AUTHORED classes: the static Tailwind sheet only covers classes in
   // this repo's source, so the portal compiles the channel's designer

@@ -123,6 +123,28 @@ const POLICIES = {
     message: "Too many address lookups.",
     buckets: [{ scope: "ip", windowMs: 5 * MINUTE, max: 150 }],
   },
+  /**
+   * Submitting a product review (card qxVqy5Dn).
+   *
+   * Zoey guards this form with a captcha; ours had nothing at all, and the
+   * action is open to anyone. This is one half of the replacement — the other
+   * is the form's hidden honeypot field.
+   *
+   * The `account` bucket is NOT an account: `lib/actions/reviews.ts` passes the
+   * caller's own bucket key plus the product id, so it is a per-VISITOR,
+   * per-PRODUCT budget. That is the shape the abuse takes (one listing papered
+   * with reviews), and keying it that way means a shopper who genuinely reviews
+   * a second product is never charged for the first. The `ip` bucket is the
+   * site-wide envelope: ten reviews an hour from one connection is already far
+   * beyond anything a customer does.
+   */
+  product_review: {
+    message: "Too many reviews submitted.",
+    buckets: [
+      { scope: "ip", windowMs: 60 * MINUTE, max: 10 },
+      { scope: "account", windowMs: 60 * MINUTE, max: 2 },
+    ],
+  },
   /** The checkout "do you already have an account?" probe (bulk enumeration). */
   email_lookup: {
     message: "Too many attempts.",

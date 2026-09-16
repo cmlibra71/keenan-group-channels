@@ -66,6 +66,8 @@
     "builder/product-pack-note.ts",
     "builder/product-residential-notice.test.ts",
     "builder/product-residential-notice.ts",
+    "builder/product-reviews-node.test.ts",
+    "builder/product-reviews-node.ts",
     "builder/promo-tag-node.test.ts",
     "builder/promo-tag-node.ts",
     "builder/seeds/product.ts",

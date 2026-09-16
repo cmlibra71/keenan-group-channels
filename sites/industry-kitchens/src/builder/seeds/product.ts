@@ -1172,33 +1172,22 @@ export const SEED_PRODUCT_TREE: NodeTree = {
                 tag: "div",
                 condition: { kind: "state", ref: "tab", equals: 3 },
                 classes: ["py-6"],
+                // Card qxVqy5Dn. The panel used to repeat `reviews.list` and print
+                // each review's title and body — no stars, no reviewer name, no
+                // date, and no way to write one. A review FORM cannot be authored
+                // as nodes (client state, a server action), so the whole panel is
+                // one SEALED leaf: `ReviewsSection` from components/product/ProductTabs.
+                // Keyed `product-reviews-panel`, NOT `product-reviews` — Industry
+                // Kitchens owns a MASTER under that key, and a native must never
+                // share a key with a master. `product-reviews-node.ts` performs the
+                // same swap at render time on the AUTHORED trees, which is what
+                // actually reaches a customer; this keeps a NEW channel right from
+                // its first render.
                 children: [
                   {
-                    id: "reviews-repeat",
-                    kind: "repeat",
-                    source: "reviews.list",
-                    itemAlias: "review",
-                    children: [
-                      {
-                        id: "review-card",
-                        kind: "element",
-                        tag: "div",
-                        classes: ["border-b", "border-border", "py-4"],
-                        children: [
-                          { id: "review-title", kind: "element", tag: "p", classes: ["text-sm", "font-semibold", "text-text-primary"], text: [{ kind: "binding", path: "review.title" }] },
-                          { id: "review-text", kind: "element", tag: "p", classes: ["mt-1", "text-sm", "text-text-secondary"], text: [{ kind: "binding", path: "review.text" }] },
-                        ],
-                      },
-                    ],
-                    emptyChildren: [
-                      {
-                        id: "reviews-empty",
-                        kind: "element",
-                        tag: "p",
-                        classes: ["text-sm", "text-text-muted"],
-                        text: [{ kind: "static", value: "No reviews yet." }],
-                      },
-                    ],
+                    id: "product-reviews-panel",
+                    kind: "component",
+                    componentKey: "product-reviews-panel",
                   },
                 ],
               },
