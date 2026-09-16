@@ -71,7 +71,16 @@ export async function createSubscription(planId: number): Promise<{
       CHANNEL_ID
     );
     if (existing) {
-      return { success: false, error: "You already have an active subscription" };
+      // A membership belongs to the BUSINESS (card avihBwqi), so "already a member" can
+      // mean a colleague took it out. Say which — a shopper told "you already have an
+      // active subscription" when they have never paid for one rings the office.
+      return {
+        success: false,
+        error:
+          Number(existing.contact_id) === Number(session.contactId)
+            ? "You already have an active subscription"
+            : "Your business already has a membership, so you already get member pricing. Nothing more to pay.",
+      };
     }
 
     // THE PLAN'S ACCOUNT DECIDES, not today's channel rule (card OHDx84DK). The
@@ -319,7 +328,14 @@ export async function attemptTestMembership(
     if (!plan) return { created: false, error: "Plan not found" };
 
     const existing = await subscriptionService.getActiveForContact(session.contactId, CHANNEL_ID);
-    if (existing) return { created: false, error: "You already have an active subscription" };
+    if (existing)
+      return {
+        created: false,
+        error:
+          Number(existing.contact_id) === Number(session.contactId)
+            ? "You already have an active subscription"
+            : "Your business already has a membership, so you already get member pricing. Nothing more to pay.",
+      };
 
     // Recover any stranded pending subscription (e.g. an abandoned real Stripe
     // attempt that never completed) by activating it, rather than blocking.
