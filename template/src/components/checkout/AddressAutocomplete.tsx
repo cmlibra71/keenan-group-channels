@@ -16,6 +16,10 @@ import type { PlacePrediction } from "@keenan/services/integrations";
 type Props = {
   onSelect: (address: {
     address1: string;
+    /** The unit ("Unit 3"), or "" when the address has none. ALWAYS present, because the
+     *  caller assigns line 2 on every pick so a new address cannot inherit the last
+     *  one's unit (card GVSR6VQd). */
+    address2: string;
     city: string;
     state: string;
     postalCode: string;
@@ -79,6 +83,10 @@ export function AddressAutocomplete({ onSelect, inputRef }: Props) {
       if (details) {
         onSelect({
           address1: details.address1,
+          // `?? ""` and not omitted: an older build of the details route may not carry
+          // the field yet, and the caller must still be handed an explicit empty so it
+          // clears the previous address's unit rather than keeping it.
+          address2: details.address2 ?? "",
           city: details.city,
           state: details.state,
           postalCode: details.postalCode,

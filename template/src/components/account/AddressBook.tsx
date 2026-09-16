@@ -249,6 +249,7 @@ function AddressForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const address1Ref = useRef<HTMLInputElement>(null);
+  const address2Ref = useRef<HTMLInputElement>(null);
   const cityRef = useRef<HTMLInputElement>(null);
   // State and postcode are controlled — the address book stores AU addresses
   // only, and these are the two fields that decide whether an order can be
@@ -261,8 +262,22 @@ function AddressForm({
     (initial?.postalCode ?? "").replace(/\D/g, "").slice(0, 4)
   );
 
-  function handlePlaceSelect(place: { address1: string; city: string; state: string; postalCode: string }) {
+  function handlePlaceSelect(place: {
+    address1: string;
+    address2?: string;
+    city: string;
+    state: string;
+    postalCode: string;
+  }) {
     if (address1Ref.current) address1Ref.current.value = place.address1;
+    // A pick REPLACES line 2 (card GVSR6VQd). Every other field here is overwritten from
+    // the pick, but line 2 used to be left alone, and it is the one field that must not
+    // be: it belongs to the address it was typed against. Editing a saved address and
+    // choosing a new suggestion therefore kept the PREVIOUS address's text in
+    // "Apartment, suite" -- the client's screenshot shows "16 Old Gembrook Road" in the
+    // street box with "Old Gembrook Rd" below it, so the street reads as duplicated --
+    // and saving persisted it. Assign it every time: the unit Google gives, or nothing.
+    if (address2Ref.current) address2Ref.current.value = place.address2 ?? "";
     if (cityRef.current) cityRef.current.value = place.city;
     // Places returns "VIC" or "Victoria" — normalise so the dropdown matches.
     setStateValue(normaliseAuState(place.state) ?? "");
@@ -326,7 +341,7 @@ function AddressForm({
       </div>
       <div>
         <label className={LABEL}>Apartment, suite, etc. (optional)</label>
-        <input name="address2" type="text" defaultValue={initial?.address2} className={INPUT} />
+        <input ref={address2Ref} name="address2" type="text" defaultValue={initial?.address2} className={INPUT} />
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <div>

@@ -374,6 +374,10 @@ export function QuotePanel() {
                     setNewAddress((prev) => ({
                       ...prev,
                       address1: a.address1,
+                      // A pick REPLACES line 2, empty included (card GVSR6VQd). It
+                      // belongs to the address it was typed against, so a unit left over
+                      // from a previously chosen address is simply wrong here.
+                      address2: a.address2 ?? "",
                       city: a.city,
                       // Google hands back "Victoria" as often as "VIC"; the State
                       // control only speaks codes, so normalise on the way in rather
