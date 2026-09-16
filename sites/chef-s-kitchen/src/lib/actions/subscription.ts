@@ -490,7 +490,11 @@ export async function createBillingPortalSession(returnUrl: string): Promise<{
   }
 
   try {
-    const sub = await subscriptionService.getActiveForContact(
+    // THE PERSON'S OWN subscription, never the business's (card avihBwqi). A colleague
+    // at a member business gets member PRICES; the Stripe billing portal lists the
+    // payer's card and their invoices, so it belongs to whoever pays for it. The page
+    // hides the button for a colleague; this is the refusal that actually binds.
+    const sub = await subscriptionService.getOwnActiveForContact(
       session.contactId,
       CHANNEL_ID
     );
@@ -515,7 +519,13 @@ export async function createBillingPortalSession(returnUrl: string): Promise<{
 }
 
 /**
- * Cancel the current customer's subscription (at period end).
+ * Cancel the current customer's OWN subscription (at period end).
+ *
+ * Their own, never their business's (card avihBwqi). A membership belongs to the
+ * account for PRICING — a colleague at a member business is a member — but cancelling
+ * it stops somebody else's payment, so it stays with the person who took it out. The
+ * page hides the button for a colleague; this is the refusal that actually binds, and
+ * a colleague gets the same plain "no membership of your own" answer a non-member does.
  */
 export async function cancelSubscription(): Promise<{
   success: boolean;
@@ -527,7 +537,7 @@ export async function cancelSubscription(): Promise<{
   }
 
   try {
-    const sub = await subscriptionService.getActiveForContact(
+    const sub = await subscriptionService.getOwnActiveForContact(
       session.contactId,
       CHANNEL_ID
     );

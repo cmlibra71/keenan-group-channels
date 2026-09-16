@@ -41,11 +41,25 @@ export default async function MembershipPage() {
   // Melbourne, always — see member-date.ts.
   const memberSinceLabel = formatMemberSince(memberSince);
 
-  // If user has active subscription, show status
+  // If an active membership reaches this shopper, show its status.
   if (activeSub) {
+    /**
+     * Is this membership THEIRS, or their business's? (card avihBwqi)
+     *
+     * A membership belongs to the account, so a colleague at a member business is a
+     * member and sees member prices. What does NOT travel with it is the money: the
+     * Stripe billing portal lists the payer's card and invoices, and cancelling stops
+     * the payer's payment. Both stay with the person who took it out — the server
+     * actions refuse a colleague outright, and this is what stops them being offered.
+     */
+    const ownsMembership = Number(activeSub.contact_id) === Number(session.contactId);
+
     // Required onboarding gate: bounce members missing business/billing details.
+    // Only the person who PAYS is asked to complete it — a colleague never signed up,
+    // so there is nothing of theirs to finish and bouncing them would strand them in a
+    // form that cannot apply to them.
     const profile = await getMembershipProfile(session.contactId);
-    if (!profile.complete) redirect("/account/membership/complete-profile");
+    if (ownsMembership && !profile.complete) redirect("/account/membership/complete-profile");
 
     const drawsEnabled = await getFeatureFlag("draws_enabled");
     let totalEntries = 0;
@@ -61,8 +75,21 @@ export default async function MembershipPage() {
       <AccountShell>
         <h1 className="page-title mb-8">Membership</h1>
 
-        {/* Past due warning */}
-        {isPastDue && (
+        {/* This membership came from the business, not from this person (card avihBwqi).
+            Said plainly and up front, because every control below is about a payment
+            somebody else makes and the page would otherwise read as their own. */}
+        {!ownsMembership && (
+          <div className="border border-brand-light/40 bg-brand-tint rounded-lg p-4 mb-4">
+            <p className="text-brand-deep text-sm font-medium">
+              This membership belongs to your business, so you get member pricing on
+              everything you buy. Someone else on the account set it up, and they look
+              after the billing and any changes to it.
+            </p>
+          </div>
+        )}
+
+        {/* Past due warning — the payer's problem to fix, and only they can. */}
+        {isPastDue && ownsMembership && (
           <div className="border border-sale/30 bg-sale-bg rounded-lg p-4 mb-4">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-sale shrink-0" />
@@ -73,7 +100,8 @@ export default async function MembershipPage() {
           </div>
         )}
 
-        {/* Cancelling notice */}
+        {/* Cancelling notice. Shown to a colleague too — the business's membership
+            ending changes the prices they pay, so it is their business as well. */}
         {isCancelling && (
           <div className="border border-member/40 bg-member-bg rounded-lg p-4 mb-4">
             <div className="flex items-center gap-2">
@@ -182,16 +210,24 @@ export default async function MembershipPage() {
           </dl>
         </div>
 
-        <div className="flex items-center gap-4 mt-4">
-          <ManageBillingButton />
-          {!activeSub.cancel_at_period_end && (
-            <CancelConfirmationModal
-              currentPeriodEnd={activeSub.current_period_end ? String(activeSub.current_period_end) : null}
-              totalEntries={totalEntries}
-              consecutiveMonths={activeSub.consecutive_months ?? 0}
-            />
-          )}
-        </div>
+        {/* Billing and cancellation belong to the person who PAYS (card avihBwqi).
+            A colleague on a member business is a member for pricing; offering them
+            the payer's Stripe portal would show them somebody else's card and
+            invoices, and offering them Cancel would stop somebody else's payment.
+            The server actions refuse either outright — this only stops them being
+            offered a control that would fail. */}
+        {ownsMembership && (
+          <div className="flex items-center gap-4 mt-4">
+            <ManageBillingButton />
+            {!activeSub.cancel_at_period_end && (
+              <CancelConfirmationModal
+                currentPeriodEnd={activeSub.current_period_end ? String(activeSub.current_period_end) : null}
+                totalEntries={totalEntries}
+                consecutiveMonths={activeSub.consecutive_months ?? 0}
+              />
+            )}
+          </div>
+        )}
       </AccountShell>
     );
   }
