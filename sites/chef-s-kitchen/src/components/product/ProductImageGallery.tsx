@@ -5,20 +5,14 @@ import Image from "next/image";
 import { Package, Play } from "lucide-react";
 import type { FacadeVideo } from "@keenan/services/product-page";
 import imageLoader from "@/lib/image-loader";
+import {
+  resolveGalleryImages,
+  isShowingVariant,
+  galleryImageKey as imageKey,
+  type GalleryImage,
+} from "./gallery-images";
 
-export interface ProductImage {
-  id: number;
-  urlStandard: string;
-  urlThumbnail: string | null;
-  urlZoom: string | null;
-  altText: string | null;
-  isThumbnail: boolean | null;
-}
-
-/** Stable identity for a gallery image — the variant stand-in has no real id. */
-function imageKey(img: ProductImage): string {
-  return img.id === -1 ? `variant:${img.urlStandard}` : `img:${img.id}`;
-}
+export type ProductImage = GalleryImage;
 
 export function ProductImageGallery({
   images,
@@ -51,7 +45,7 @@ export function ProductImageGallery({
    * broken falls through to the same empty state an imageless product hits and
    * gets the same brand logo, instead of the browser's broken-image glyph.
    */
-  const [brokenKeys, setBrokenKeys] = useState<Set<string>>(() => new Set());
+  const [brokenKeys, setBrokenKeys] = useState<ReadonlySet<string>>(() => new Set<string>());
   const markBroken = useCallback((key: string) => {
     setBrokenKeys((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
   }, []);
@@ -59,31 +53,30 @@ export function ProductImageGallery({
   const [brandLogoBroken, setBrandLogoBroken] = useState(false);
   const logoUrl = brandLogoBroken ? null : brandLogoUrl;
 
-  // Build effective image list: prepend variant image if available
-  const effectiveImages = useMemo(() => {
-    const withVariant: ProductImage[] = !variantImageUrl
-      ? images
-      : [
-          {
-            id: -1,
-            urlStandard: variantImageUrl,
-            urlThumbnail: variantImageUrl,
-            urlZoom: variantImageUrl,
-            altText: productName,
-            isThumbnail: null,
-          },
-          ...images,
-        ];
-    if (brokenKeys.size === 0) return withVariant;
-    return withVariant.filter((img) => !brokenKeys.has(imageKey(img)));
-  }, [images, variantImageUrl, productName, brokenKeys]);
+  /**
+   * Once a pick resolves a variation's photograph, the gallery IS that
+   * variation: the picture REPLACES the product's own photos rather than
+   * joining them, which is what Zoey does and what card VNh9DdYd asks for.
+   * Hero, thumbnail strip and the zoom overlay all read this ONE list, so no
+   * surface can lag another. Clearing every select drops `variantImageUrl` back
+   * to null and the product's gallery returns exactly as before.
+   * A variation file that turns out to be DEAD is dropped by `brokenKeys` and
+   * the product's own gallery comes back with it, so a bad row can never leave
+   * the shopper with an empty stage.
+   */
+  const effectiveImages = useMemo(
+    () => resolveGalleryImages({ images, variantImageUrl, productName, brokenKeys }),
+    [images, variantImageUrl, productName, brokenKeys],
+  );
 
-  // The chosen variation's photograph IS the displayed image, not merely an
-  // extra thumbnail: it sits at index 0 of `effectiveImages` and index 0 is
-  // what opens. Derived in the initialiser as well as in the effect below so a
-  // gallery that MOUNTS with a variation already chosen opens on that
-  // variation's picture, rather than painting the product thumbnail first and
-  // correcting itself a frame later. (Card 0CDcCYmO.)
+  /** True while the gallery is showing a variation rather than the product. */
+  const showingVariant = isShowingVariant(effectiveImages);
+
+  // The chosen variation's photograph IS the displayed image: it is the whole
+  // of `effectiveImages` and index 0 is what opens. Derived in the initialiser
+  // as well as in the effect below so a gallery that MOUNTS with a variation
+  // already chosen opens on that variation's picture, rather than painting the
+  // product thumbnail first and correcting itself a frame later. (Card 0CDcCYmO.)
   const [rawSelectedIndex, setSelectedIndex] = useState(() => {
     if (variantImageUrl) return 0;
     const thumbIdx = images.findIndex((img) => img.isThumbnail);
@@ -99,9 +92,11 @@ export function ProductImageGallery({
   const [playingVideoId, setPlayingVideoId] = useState<number | null>(null);
   const zoomRef = useRef<HTMLDivElement>(null);
 
-  // When variant image changes, jump to it (index 0) or reset to thumbnail
+  // When the gallery flips to a variation (or to a different one) it opens on
+  // that picture; when it flips back — every select cleared, or the variation's
+  // file dead — it reopens on the product's flagged thumbnail.
   useEffect(() => {
-    if (variantImageUrl) {
+    if (showingVariant) {
       setSelectedIndex(0);
     } else {
       const thumbIdx = images.findIndex((img) => img.isThumbnail);
@@ -109,7 +104,7 @@ export function ProductImageGallery({
     }
     setIsZooming(false);
     setPlayingVideoId(null);
-  }, [variantImageUrl, images]);
+  }, [showingVariant, variantImageUrl, images]);
 
   const selected = effectiveImages[selectedIndex];
   // A product with videos but no images opens on its first video rather than
@@ -243,12 +238,14 @@ export function ProductImageGallery({
         <p className="mt-2 text-xs text-text-muted text-center hidden sm:block">Click to zoom</p>
       )}
 
-      {/* Thumbnail strip — images first, then videos */}
-      {effectiveImages.length + videos.length > 1 && (
+      {/* Thumbnail strip — images first, then videos. A chosen variation keeps
+          its own single thumbnail (Zoey shows one too), so picking an option
+          does not make the strip vanish underneath the shopper. */}
+      {(effectiveImages.length + videos.length > 1 || showingVariant) && (
         <div className="mt-4 flex gap-2 overflow-x-auto">
           {effectiveImages.map((img, idx) => (
             <button
-              key={img.id === -1 ? "variant" : img.id}
+              key={imageKey(img)}
               onClick={() => showImage(idx)}
               className={`relative flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 overflow-hidden bg-surface-secondary cursor-pointer transition-all ${
                 idx === selectedIndex && !playing
