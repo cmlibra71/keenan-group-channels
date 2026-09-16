@@ -522,6 +522,7 @@ export function CheckoutForm({
 
   // Refs for address autocomplete
   const address1Ref = useRef<HTMLInputElement>(null);
+  const address2Ref = useRef<HTMLInputElement>(null);
   const cityRef = useRef<HTMLInputElement>(null);
 
   // Country / state / postcode are controlled: the State field is a fixed
@@ -624,6 +625,7 @@ export function CheckoutForm({
   const handlePlaceSelect = useCallback(
     (place: {
       address1: string;
+      address2?: string;
       city: string;
       state: string;
       postalCode: string;
@@ -638,6 +640,15 @@ export function CheckoutForm({
       // than the only one — a lookup that somehow answers with nothing usable leaves
       // the shopper's own words exactly where they are.
       if (address1Ref.current && place.address1) address1Ref.current.value = place.address1;
+      // LINE 2 IS THE EXACT OPPOSITE OF THE RULE ABOVE, deliberately (card GVSR6VQd).
+      // The street is only written when the pick HAS one, because an empty street would
+      // erase a required field. Line 2 is written EVERY time, empty included, because it
+      // belongs to the address it was typed against and a unit carried over from a
+      // different address is wrong — and at checkout it would follow the order all the
+      // way to despatch. Leaving it alone is what produced the reported bug: editing a
+      // saved address and picking a new suggestion kept the previous address's text in
+      // "Apartment, suite", so the street read as duplicated, and saving persisted it.
+      if (address2Ref.current) address2Ref.current.value = place.address2 ?? "";
       if (cityRef.current && place.city) cityRef.current.value = place.city;
       // Card HMtUxvwZ — THE CHECK THE CARD OPENS WITH, made where the address is
       // chosen. Derived from this same Places pick, so no second call and no second
@@ -1117,6 +1128,7 @@ export function CheckoutForm({
                     Apartment, suite, etc. (optional)
                   </label>
                   <input
+                    ref={address2Ref}
                     type="text"
                     name="address2"
                     defaultValue={prefill?.address2 ?? ""}
