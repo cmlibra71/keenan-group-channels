@@ -10,6 +10,11 @@ import { PANEL_TITLE_CLASS } from "@/lib/orders/order-page-styles";
 //
 // When an order went out in more than one dispatch, each entry lists what was in
 // it — resolved against the order's already-loaded line items, so no extra query.
+//
+// Lots & serial numbers (card 22BxasWi) are listed per dispatch whenever the warehouse recorded
+// any — which is most often on serialised equipment and almost never on consumables. This is the
+// copy a customer still has months later when a machine needs a warranty claim, so it is shown
+// whether the order went out in one dispatch or five, unlike the line list above it.
 // ============================================================================
 
 interface AddressLike {
@@ -38,6 +43,14 @@ interface ShipmentLike {
   items?: Array<{ id: number; order_item_id: number; quantity: number }>;
 }
 
+/** One recorded lot / serial, already worded by the portal so both sites read identically. */
+interface SerialLike {
+  /** `shipment_items.id` — the line inside this dispatch that the number belongs to. */
+  shipment_item_id: number;
+  order_item_id: number;
+  label: string;
+}
+
 function formatDate(value: string | Date | null): string {
   if (!value) return "";
   const d = value instanceof Date ? value : new Date(value);
@@ -51,14 +64,24 @@ export function ShipmentsSection({
   requiredDeliveryDate,
   shipments,
   items,
+  serials = [],
 }: {
   address: AddressLike | null;
   deliveryNotes: string | null;
   requiredDeliveryDate: string | null;
   shipments: ShipmentLike[];
   items: Array<{ id: number; name: string }>;
+  /** Lots / serials recorded against this order's dispatches. Empty on almost every order. */
+  serials?: SerialLike[];
 }) {
   const nameById = new Map(items.map((i) => [i.id, i.name]));
+  // Grouped by dispatch LINE, so a part shipment lists only the units that were in that box.
+  const serialsByShipmentItem = new Map<number, SerialLike[]>();
+  for (const serial of serials) {
+    const list = serialsByShipmentItem.get(serial.shipment_item_id) ?? [];
+    list.push(serial);
+    serialsByShipmentItem.set(serial.shipment_item_id, list);
+  }
   const addressLines = address
     ? [
         [address.first_name, address.last_name].filter(Boolean).join(" "),
@@ -193,6 +216,33 @@ export function ShipmentsSection({
                         ))}
                       </ul>
                     )}
+                    {/* Lots & serial numbers for what was in THIS box (card 22BxasWi). Rendered
+                        whatever the dispatch count — it is the number a customer quotes on a
+                        warranty claim, not a "which box was it in" aid. */}
+                    {(() => {
+                      const withSerials = (shipment.items ?? [])
+                        .map((si) => ({
+                          si,
+                          rows: serialsByShipmentItem.get(si.id) ?? [],
+                        }))
+                        .filter((x) => x.rows.length > 0);
+                      if (!withSerials.length) return null;
+                      return (
+                        <dl className="mt-2 text-sm">
+                          <dt className="text-text-muted">Serial / lot numbers</dt>
+                          {withSerials.map(({ si, rows }) => (
+                            <dd key={si.id} className="text-text-primary">
+                              <span className="text-text-secondary">
+                                {nameById.get(si.order_item_id) ?? "Item"}:
+                              </span>{" "}
+                              <span className="font-medium">
+                                {rows.map((r) => r.label).join(", ")}
+                              </span>
+                            </dd>
+                          ))}
+                        </dl>
+                      );
+                    })()}
                     {!carrier &&
                       !shipment.tracking_number &&
                       !shipment.shipping_method &&

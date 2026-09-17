@@ -166,8 +166,21 @@ jobs:
           SESSION_SECRET=${{ secrets.SESSION_SECRET }}
           E2E_LOGIN_SECRET=${{ secrets.E2E_LOGIN_SECRET }}
           TEST_CHECKOUT_SECRET=${{ secrets.TEST_CHECKOUT_SECRET }}
-          TEST_EMAIL_RECIPIENT=chrisbmosely@gmail.com
-          STAFF_NOTIFICATIONS_EMAIL=${{ secrets.STAFF_NOTIFICATIONS_EMAIL || 'chrisbmosely@gmail.com' }}
+          # NO personal addresses in a production deploy (card tOEAcSOj).
+          #
+          # TEST_EMAIL_RECIPIENT was hard-coded here, so every email addressed to an @e2e.test
+          # account was quietly redirected to one person's inbox on the live storefronts. With it
+          # unset, @keenan/services DROPS a fake test-domain recipient rather than mailing it —
+          # .test is a reserved TLD, so sending would be a guaranteed hard bounce against our
+          # SES reputation. Set it in a staging/preview environment if a safety inbox is wanted.
+          #
+          # STAFF_NOTIFICATIONS_EMAIL fell back to the same personal address. It is only ever
+          # read when a channel has configured no staff-notification list, and BOTH live channels
+          # have one (checked on production 2026-09-16: channel 1 and channel 2 each carry
+          # channel_settings.staff_notification_emails), so the fallback was dead and its only
+          # possible effect was to send internal alerts somewhere personal if a list were ever
+          # cleared. The secret still overrides; there is no hard-coded default behind it.
+          STAFF_NOTIFICATIONS_EMAIL=${{ secrets.STAFF_NOTIFICATIONS_EMAIL }}
           GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
           GOOGLE_PLACES_API_KEY=${{ secrets.GOOGLE_PLACES_API_KEY }}
           MEILI_URL=http://keenan-search:7700

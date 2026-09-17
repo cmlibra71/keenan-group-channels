@@ -6,14 +6,14 @@ import { resolveAccountLinePrices, accountLineKey } from "@keenan/services";
 import { getAccountId } from "@/lib/member";
 import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { CART_RESTRICTED_ERROR } from "@/lib/cart/restricted-message";
-import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice } from "@/lib/store";
+import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice, subscriptionPlanService } from "@/lib/store";
 import { getCartUuid, setCartUuid } from "@/lib/cart";
 import { brandIdsForProducts } from "@/lib/checkout/free-shipping-brands";
 import { backorderFactsForProducts, backorderFactsForProduct, type ProductBackorderFacts } from "@/lib/cart/backorder-facts";
 import { availableUnits, canPurchaseQuantity, resolveBackorderPolicy } from "@keenan/services/backorder";
 import { resolvePackSize, resolvePackUnit, snapToPack } from "@keenan/services/pack";
 import { getSession } from "@/lib/auth";
-import { pickBestBulkUnit, layerCartPrice } from "@/lib/pricing/cart-pricing";
+import { pickBestBulkUnit, layerCartPrice, memberPricingGroupId } from "@/lib/pricing/cart-pricing";
 import {
   addonPanelShown,
   readProductAddons,
@@ -185,7 +185,21 @@ async function layerItemPricing(
       const activeSub = await getActiveSubscriptionForContact(session.contactId);
       if (activeSub) {
         const contact = (await contactService.getById(session.contactId)) as { customer_group_id: number | null } | null;
-        if (contact?.customer_group_id) {
+        // THE MEMBER'S PRICING GROUP — their own, else the one their membership's PLAN grants
+        // (card avihBwqi). A membership belongs to the BUSINESS, so a colleague at a member
+        // business is a member without ever having subscribed, and only the subscribe flow
+        // stamps a customer group on a person. Reading the contact's own group alone priced
+        // the product page as a member (`member-policy.ts` resolves
+        // `contactGroupId ?? basePlanGroupId`) and charged this cart RRP — one price shown,
+        // another charged, on exactly the population this card creates.
+        const plan = (await subscriptionPlanService.getById(
+          Number((activeSub as { plan_id: number }).plan_id)
+        )) as { member_customer_group_id: number | null } | null;
+        const memberGroupId = memberPricingGroupId(
+          contact?.customer_group_id,
+          plan?.member_customer_group_id
+        );
+        if (memberGroupId) {
           const variantResult = variantId ? null : await productVariantService.listForParent(productId, { page: 1, limit: 1, sort: "id", direction: "asc" });
           const pricingVariantId = variantId || (variantResult?.data[0] as { id: number } | undefined)?.id;
           if (pricingVariantId) {
@@ -198,7 +212,7 @@ async function layerItemPricing(
             const pricing = await getEffectivePrice(
               pricingVariantId,
               CHANNEL_ID,
-              contact.customer_group_id,
+              memberGroupId,
               quantity,
               // accountId is deliberately NOT passed. The account's own contract
               // prices are resolved separately above (`resolveAccountLinePrices`)

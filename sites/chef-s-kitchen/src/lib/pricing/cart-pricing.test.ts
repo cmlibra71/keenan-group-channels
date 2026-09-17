@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pickBestBulkUnit, layerCartPrice, type BulkRule } from "./cart-pricing.ts";
+import { pickBestBulkUnit, layerCartPrice, memberPricingGroupId, type BulkRule } from "./cart-pricing.ts";
 
 // ---- pickBestBulkUnit ------------------------------------------------------
 
@@ -107,4 +107,25 @@ test("best-price-wins across all three layers", () => {
     layerCartPrice({ ...base, catalogSalePrice: "80", memberSalePrice: "70", bulkUnit: 65 }).salePrice,
     "65"
   );
+});
+
+// ---- memberPricingGroupId (card avihBwqi) ---------------------------------
+
+test("a subscriber's own customer group wins", () => {
+  assert.equal(memberPricingGroupId(1505, 1499), 1505);
+});
+
+test("a colleague made a member by the BUSINESS is priced at the plan's member group", () => {
+  // Nothing ever stamps a customer group on somebody who never subscribed. Without the
+  // fallback the product page showed a member price and the cart charged RRP.
+  assert.equal(memberPricingGroupId(null, 1505), 1505);
+});
+
+test("no group anywhere means no member price — the line falls back to RRP", () => {
+  assert.equal(memberPricingGroupId(null, null), null);
+});
+
+test("zero and undefined are not groups", () => {
+  assert.equal(memberPricingGroupId(0, 0), null);
+  assert.equal(memberPricingGroupId(undefined, 1505), 1505);
 });

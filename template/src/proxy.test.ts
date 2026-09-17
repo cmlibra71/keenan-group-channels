@@ -21,8 +21,18 @@ const SOURCE = readFileSync(new URL("./proxy.ts", import.meta.url), "utf8");
  *
  * `@/lib/acquisition` is deliberately NOT on this list: it reads `next/headers`. The
  * pure half the proxy needs lives in `@/lib/acquisition-campaign`, which imports nothing.
+ *
+ * `@/lib/search-session` qualifies on the same terms (card LjdIfc92): it has ZERO imports —
+ * a cookie name, a `crypto.randomUUID` call and two string helpers — so nothing new rides
+ * into `middleware.js` behind it. The list stays CLOSED: a module joins it only by importing
+ * nothing itself, and the register entry naming it is updated in the same change.
  */
-const ALLOWED_PROXY_IMPORTS = new Set(["next/server", "@/lib/guard", "@/lib/acquisition-campaign"]);
+const ALLOWED_PROXY_IMPORTS = new Set([
+  "next/server",
+  "@/lib/guard",
+  "@/lib/acquisition-campaign",
+  "@/lib/search-session",
+]);
 
 test("proxy.ts imports nothing that would drag the data layer into the middleware", () => {
   const imported = [...SOURCE.matchAll(/^import[\s\S]*?from\s+"([^"]+)";/gm)].map((m) => m[1]);
@@ -48,8 +58,43 @@ test("proxy.ts imports nothing that would drag the data layer into the middlewar
 test("the campaign cookie is attached only after the /json and /render branches", () => {
   const jsonBranch = SOURCE.indexOf('pathname.startsWith("/json/")');
   const renderBranch = SOURCE.indexOf('pathname.startsWith("/render/")');
-  const attach = SOURCE.indexOf("attachCampaignCookie(req)");
+  // Matches the CALL wherever its argument list has grown — `attachCampaignCookie(req)` became
+  // `attachCampaignCookie(req, session?.init)` on card LjdIfc92, and an `indexOf` of the old
+  // literal would have returned -1 and failed open instead of asserting the ordering.
+  const attach = SOURCE.search(/attachCampaignCookie\(req[,)]/);
   assert.ok(jsonBranch > 0 && renderBranch > 0, "the /json and /render branches are gone");
+  assert.ok(attach > 0, "the attachCampaignCookie call is gone — the fall-through lost its cookie");
   assert.ok(attach > jsonBranch, "the campaign cookie runs before the /json branch");
   assert.ok(attach > renderBranch, "the campaign cookie runs before the /render branch");
+});
+
+/**
+ * Same rule, the other thing the fall-through now does: `/search` mints the search-session id
+ * (card LjdIfc92). It only ADDS a cookie, so it belongs at the bottom with the campaign one —
+ * in front of `/json` or `/render` it would return a plain `NextResponse.next()` for a preview
+ * URL under `/json/search` and strip the rewrite, the headers and the noindex.
+ */
+test("the search session is minted only after the /json and /render branches", () => {
+  const jsonBranch = SOURCE.indexOf('pathname.startsWith("/json/")');
+  const renderBranch = SOURCE.indexOf('pathname.startsWith("/render/")');
+  const mint = SOURCE.search(/mintSearchSession\(req[,)]/);
+  assert.ok(mint > 0, "the mintSearchSession call is gone");
+  assert.ok(mint > jsonBranch, "the search session is minted before the /json branch");
+  assert.ok(mint > renderBranch, "the search session is minted before the /render branch");
+});
+
+/**
+ * The closed list is only worth anything while the modules ON it stay pure — the rule is
+ * "which between them import nothing else", not "these three names are fine forever".
+ * `lib/search-session.ts` is the newest entry and the easiest to grow an import, so it is
+ * checked here rather than trusted to a comment.
+ */
+test("the search-session module the proxy imports still imports nothing itself", () => {
+  const source = readFileSync(new URL("./lib/search-session.ts", import.meta.url), "utf8");
+  const imported = [...source.matchAll(/^import[\s\S]*?from\s+"([^"]+)";/gm)].map((m) => m[1]);
+  assert.deepEqual(
+    imported,
+    [],
+    `lib/search-session.ts now imports ${imported.join(", ")} — that rides into middleware.js`
+  );
 });

@@ -4,10 +4,17 @@
  * Split out of member.ts so the rule can be tested directly. member.ts fetches the
  * facts; this decides. Same shape as lib/checkout/net-terms-policy.ts.
  *
- * THE RULE: only a signed-in shopper with an ACTIVE subscription carries a pricing
- * group. Everyone else — logged out, or logged in without a live subscription —
+ * THE RULE: only a signed-in shopper REACHED BY an active subscription carries a pricing
+ * group. Everyone else — logged out, or logged in with no live membership anywhere —
  * carries `customerGroupId: null`, so no member price is computed for them and none
  * can reach the page.
+ *
+ * "Reached by" is the account-level rule (card avihBwqi): the membership belongs to the
+ * BUSINESS, so a colleague at a business that holds one is a member too, and the person
+ * who happened to click Subscribe does not own it. That resolution happens upstream, in
+ * `getActiveSubscriptionForContact`; by the time `hasActiveSubscription` arrives here it
+ * is already the account-then-person answer. Nothing about the guest branch moves: a
+ * guest has no session, so no contact, so no business, so no membership.
  *
  * This site used to hand guests the base member group so the page could show them the
  * member price as a "join and pay this" funnel. That published trade pricing to the
@@ -21,7 +28,10 @@ export interface MemberPricingFacts {
   featureEnabled: boolean;
   /** A session cookie is present (signed in — says nothing about membership). */
   hasSession: boolean;
-  /** That contact has a subscription in `active` status right now. */
+  /**
+   * An `active` subscription reaches this shopper right now — their own, or one held by
+   * the business they buy for (card avihBwqi). Resolved upstream; this file only decides.
+   */
   hasActiveSubscription: boolean;
   /** The contact's own customer group, when they have one. */
   contactGroupId: number | null;

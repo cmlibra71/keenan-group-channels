@@ -15,7 +15,13 @@ import {
 } from "@/lib/store";
 
 export interface MemberContext {
-  /** True only for a logged-in customer with an ACTIVE subscription. */
+  /**
+   * True for a logged-in shopper reached by an ACTIVE subscription — their own, or one
+   * held by the BUSINESS they buy for (card avihBwqi). A membership belongs to the
+   * account; the colleague who happened to sign up is not its owner. Resolved once, in
+   * `getActiveSubscriptionForContact`, so the badge, the price and the checkout cannot
+   * disagree.
+   */
   isMember: boolean;
   /** Signed in at all — a session exists. A non-member can be logged in. */
   loggedIn: boolean;
@@ -105,6 +111,12 @@ async function getBasePlan(): Promise<{ groupId: number | null; price: string | 
  *
  * Fetches the facts; `resolveMemberPricing` in member-policy.ts decides. Only an
  * active subscriber comes back with a pricing group — see that file for why.
+ *
+ * "Active subscriber" now means REACHED BY an active membership, the shopper's own or
+ * their business's (card avihBwqi): `getActiveSubscriptionForContact` prefers the
+ * account and falls back to the person. A GUEST is still no part of it — there is no
+ * session, so no contact, so no account, so no membership, and the guest-pricing gate
+ * (memory `cd_guest_pricing_gate`) is untouched.
  */
 export async function getMemberContext(): Promise<MemberContext> {
   const accountId = await getAccountId();

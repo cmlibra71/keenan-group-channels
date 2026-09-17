@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { guardRequest } from "@/lib/guard";
 import {
+  SEARCH_SESSION_COOKIE,
+  newSearchSessionId,
+  searchSessionCookieValue,
+  withCookie,
+} from "@/lib/search-session";
+import {
   ACQUISITION_COOKIE,
   ACQUISITION_MAX_AGE,
   acquisitionBagFromRequest,
@@ -16,7 +22,7 @@ import {
  *   2. /json/*   — the JSON draft-preview surface;
  *   3. /render/* — the chrome-free CMS render surface;
  *   4. everything else falls through, picking up the first-touch campaign cookie
- *      on the way if this visit carries one.
+ *      on the way if this visit carries one — and, on /search, the search session id.
  *
  * HISTORY: this file used to be scoped to /render/* and /json/* only, and
  * applied the CMS-render headers unconditionally to whatever the matcher
@@ -86,7 +92,37 @@ export default function proxy(req: NextRequest) {
   // silently losing every one of their protections to a stray query parameter. Down
   // here those branches have already returned, so the comment "only the pages that fall
   // through can reach this" is true of the code rather than of the intention.
-  return attachCampaignCookie(req) ?? NextResponse.next();
+  //
+  // /search ALSO mints the search session id (card LjdIfc92). Both cookies ride the
+  // same response; the session one owns the response init because it must reach THIS
+  // request's render, not just the browser.
+  const session = mintSearchSession(req);
+  const res = attachCampaignCookie(req, session?.init) ?? NextResponse.next(session?.init);
+  if (session) res.headers.append("Set-Cookie", session.setCookie);
+  return res;
+}
+
+/**
+ * A fresh search session id for a /search request whose browser has none — plus the request
+ * init that makes the render about to run see it (card LjdIfc92).
+ *
+ * `search_log` records one opaque id per browser so two searches by one shopper can be told
+ * apart from two shoppers. It is minted HERE because a Server Component cannot set a cookie,
+ * and ONLY on /search: a visitor who never searches never gets one, so this is not a site-wide
+ * tracking cookie, and nothing outside the search page reads it. Random uuid, no identity.
+ */
+function mintSearchSession(
+  req: NextRequest
+): { setCookie: string; init: { request: { headers: Headers } } } | null {
+  if (req.nextUrl.pathname !== "/search") return null;
+  if (req.cookies.has(SEARCH_SESSION_COOKIE)) return null;
+  const id = newSearchSessionId();
+  const headers = new Headers(req.headers);
+  headers.set("cookie", withCookie(req.headers.get("cookie"), SEARCH_SESSION_COOKIE, id));
+  return {
+    setCookie: searchSessionCookieValue(id, process.env.NODE_ENV === "production"),
+    init: { request: { headers } },
+  };
 }
 
 /**
@@ -99,11 +135,16 @@ export default function proxy(req: NextRequest) {
  * /render keep their own responses intact — a campaign link into a CMS preview is not
  * a shopper's arrival, and stealing its response cost it the headers that lock it down.
  */
-function attachCampaignCookie(req: NextRequest): NextResponse | null {
+function attachCampaignCookie(
+  req: NextRequest,
+  init?: { request: { headers: Headers } }
+): NextResponse | null {
   if (req.cookies.has(ACQUISITION_COOKIE)) return null;
   const bag = acquisitionBagFromRequest(req.nextUrl, req.headers.get("referer"));
   if (!bag) return null;
-  const res = NextResponse.next();
+  // `init` carries the search-session rewrite when there is one, so a campaign link landing
+  // straight on /search keeps BOTH cookies rather than one stealing the other's response.
+  const res = NextResponse.next(init);
   res.cookies.set(ACQUISITION_COOKIE, encodeURIComponent(JSON.stringify(bag)), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
