@@ -169,6 +169,68 @@ describe("storefront rate-limit rulebook", () => {
     }
   });
 
+  test("a review budget is per visitor PER PRODUCT, not per product", () => {
+    // The identifier the action passes is "<caller>|product:<id>" (card
+    // qxVqy5Dn), so papering ONE listing trips, while reviewing a SECOND
+    // product from the same connection still goes through. Keying the bucket on
+    // the product alone would have let one abuser lock every other shopper out
+    // of reviewing that product.
+    const t0 = 30_000_000;
+    const ip = "203.0.113.20";
+    const max = RATE_LIMIT_POLICIES.product_review.buckets[1].max;
+
+    for (let i = 0; i < max; i++) {
+      assert.equal(
+        consumeRateLimit("product_review", { ip, identifier: `${ip}|product:1368` }, t0 + i).allowed,
+        true
+      );
+    }
+    const blocked = consumeRateLimit(
+      "product_review",
+      { ip, identifier: `${ip}|product:1368` },
+      t0 + max
+    );
+    assert.equal(blocked.allowed, false);
+    assert.equal(blocked.scope, "account");
+
+    assert.equal(
+      consumeRateLimit("product_review", { ip, identifier: `${ip}|product:2094` }, t0 + max + 1)
+        .allowed,
+      true,
+      "a different product is a different budget"
+    );
+
+    // And a DIFFERENT visitor is never blocked by the first one's spree.
+    assert.equal(
+      consumeRateLimit(
+        "product_review",
+        { ip: "198.51.100.7", identifier: "198.51.100.7|product:1368" },
+        t0 + max + 2
+      ).allowed,
+      true
+    );
+  });
+
+  test("the site-wide review envelope still stops one connection flooding", () => {
+    const t0 = 31_000_000;
+    const ip = "203.0.113.21";
+    const max = RATE_LIMIT_POLICIES.product_review.buckets[0].max;
+    for (let i = 0; i < max; i++) {
+      // A fresh product each time, so only the IP bucket can ever trip.
+      assert.equal(
+        consumeRateLimit("product_review", { ip, identifier: `${ip}|product:${i}` }, t0 + i).allowed,
+        true
+      );
+    }
+    const blocked = consumeRateLimit(
+      "product_review",
+      { ip, identifier: `${ip}|product:999` },
+      t0 + max
+    );
+    assert.equal(blocked.allowed, false);
+    assert.equal(blocked.scope, "ip");
+  });
+
   test("every policy is well formed", () => {
     for (const [name, policy] of Object.entries(RATE_LIMIT_POLICIES)) {
       assert.ok(policy.buckets.length > 0, `${name} has no buckets`);

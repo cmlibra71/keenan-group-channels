@@ -235,7 +235,7 @@ function StarPicker({
 
 // ── Reviews Section ────────────────────────────────────────────────────
 
-function ReviewsSection({
+export function ReviewsSection({
   reviews,
   productId,
 }: {
@@ -252,9 +252,16 @@ function ReviewsSection({
     const authorName = formData.get("authorName") as string;
     const title = formData.get("title") as string;
     const text = formData.get("text") as string;
+    // The hidden spam trap (card qxVqy5Dn). It rides to the action, which
+    // answers a filled-in trap exactly the way it answers a success.
+    const honeypot = (formData.get("website") as string) ?? "";
 
     if (rating === 0) {
       setError("Please select a rating");
+      return;
+    }
+    if (!title?.trim()) {
+      setError("Please add a review title");
       return;
     }
 
@@ -264,6 +271,7 @@ function ReviewsSection({
         title,
         text,
         authorName,
+        honeypot,
       });
       if (result.error) {
         setError(result.error);
@@ -300,7 +308,7 @@ function ReviewsSection({
         </div>
       ) : (
         <p className="text-sm text-zinc-500">
-          Be the first to review this product!
+          Be the first to review this product.
         </p>
       )}
 
@@ -317,32 +325,39 @@ function ReviewsSection({
           <form action={handleSubmit} className="space-y-4 max-w-lg">
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1">
-                Rating
+                Your Rating
               </label>
-              <StarPicker rating={rating} onChange={setRating} />
+              {/* Zoey rates one measure and labels it Quality; card qxVqy5Dn
+                  matches its fields exactly and adds none. */}
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-zinc-600">Quality</span>
+                <StarPicker rating={rating} onChange={setRating} />
+              </div>
             </div>
 
             <div>
               <label htmlFor="authorName" className="block text-sm font-medium text-zinc-700 mb-1">
-                Your Name
+                Name
               </label>
               <input
                 id="authorName"
                 name="authorName"
                 type="text"
                 required
+                placeholder="This can be your name, or nickname"
                 className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
               />
             </div>
 
             <div>
               <label htmlFor="title" className="block text-sm font-medium text-zinc-700 mb-1">
-                Title (optional)
+                Review Title
               </label>
               <input
                 id="title"
                 name="title"
                 type="text"
+                required
                 className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
               />
             </div>
@@ -357,6 +372,21 @@ function ReviewsSection({
                 rows={4}
                 required
                 className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+              />
+            </div>
+
+            {/* Spam trap. Off-screen, aria-hidden and tab-skipped, so no
+                shopper and no screen reader ever meets it — only a script
+                that fills every input it finds. Zoey uses a captcha here. */}
+            <div aria-hidden="true" className="absolute left-[-9999px] h-0 w-0 overflow-hidden">
+              <label htmlFor="website">Leave this field empty</label>
+              <input
+                id="website"
+                name="website"
+                type="text"
+                tabIndex={-1}
+                autoComplete="off"
+                defaultValue=""
               />
             </div>
 
