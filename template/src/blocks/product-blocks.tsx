@@ -257,6 +257,26 @@ async function ProductWarrantyNotesBlock({ ctx }: BlockProps) {
   );
 }
 
+// A review row as the SHOPPER may see it. `getProductReviews` returns the whole
+// `product_reviews` row — `author_email`, `contact_id`, `customer_id`, the
+// moderation status — and `ProductTabs` is a client component, so a dev build
+// would serialise all of it into the page. Load only what we render.
+// (PRODUCT-BRIEF §3; register rule owned by card BIig1Zo1. Card qxVqy5Dn.)
+function publicReviews(rows: unknown): unknown {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((row) => {
+    const r = row as Record<string, unknown>;
+    return {
+      id: r.id,
+      rating: r.rating,
+      title: r.title ?? null,
+      text: r.text ?? null,
+      author_name: r.author_name ?? null,
+      created_at: r.created_at ?? null,
+    };
+  });
+}
+
 // ── Tabs (description / specs / reviews / attachments) ──────────────────────
 
 async function ProductTabsBlock({ ctx }: BlockProps) {
@@ -264,7 +284,7 @@ async function ProductTabsBlock({ ctx }: BlockProps) {
   if (!product) return null;
   const extras = extrasOf(ctx);
   const [reviews, attachments] = await Promise.all([
-    extras.reviews ?? getProductReviews(product.id).catch(() => []),
+    extras.reviews ?? getProductReviews(product.id).then(publicReviews).catch(() => []),
     extras.attachments ?? getProductAttachments(product.id).catch(() => []),
   ]);
   return (

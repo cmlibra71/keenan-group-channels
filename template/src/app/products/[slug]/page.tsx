@@ -50,8 +50,19 @@ export default async function ProductPage({
   const accountId = await getAccountId();
   const [product] = await applyAccountPrices([cachedProduct]);
 
-  const [reviewsRaw, attachmentsRaw, videos, relatedRaw, brandRow] = await Promise.all([
-    getProductReviews(product.id),
+  // Reviews are PROJECTED BEFORE THEY ARE AWAITED. `getProductReviews` returns the
+  // whole `product_reviews` row — `author_email` (stamped on every signed-in
+  // reviewer since card qxVqy5Dn), `contact_id`, `customer_id`, the moderation
+  // status — and a dev build serialises every AWAITED value into the page, so a
+  // cast or a `.map()` after the await strips nothing: the raw row is already in
+  // the flight payload by then (measured on this page 2026-09-16, review id 89's
+  // whole row with `author_email` and `contact_id` in it). Projecting on the
+  // PROMISE means nothing unprojected is ever awaited here, and the rows handed to
+  // `ProductTabs` ("use client") and to `RenderContext.extras` carry only the six
+  // fields this page renders. (PRODUCT-BRIEF §3: on a customer-facing surface,
+  // load only what you render; register rule owned by card BIig1Zo1.)
+  const [reviews, attachmentsRaw, videos, relatedRaw, brandRow] = await Promise.all([
+    getProductReviews(product.id).then(publicReviews),
     getProductAttachments(product.id),
     getProductVideos(product.id),
     getRelatedProducts(product.id, product.categoryIds ?? []),
@@ -133,15 +144,6 @@ export default async function ProductPage({
       }
     }
   }
-
-  const reviews = reviewsRaw as {
-    id: number;
-    rating: number;
-    title: string | null;
-    text: string | null;
-    author_name: string | null;
-    created_at: string | Date | null;
-  }[];
 
   const attachments = attachmentsRaw as {
     id: number;
@@ -320,4 +322,27 @@ export default async function ProductPage({
       )}
     </div>
   );
+}
+
+/** A review row as the SHOPPER may see it — the six fields this page renders. */
+function publicReviews(rows: unknown): {
+  id: number;
+  rating: number;
+  title: string | null;
+  text: string | null;
+  author_name: string | null;
+  created_at: string | Date | null;
+}[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((row) => {
+    const r = row as Record<string, unknown>;
+    return {
+      id: r.id as number,
+      rating: r.rating as number,
+      title: (r.title ?? null) as string | null,
+      text: (r.text ?? null) as string | null,
+      author_name: (r.author_name ?? null) as string | null,
+      created_at: (r.created_at ?? null) as string | Date | null,
+    };
+  });
 }

@@ -198,6 +198,9 @@ function ActionsBridge({
           title: str("title"),
           text: str("text"),
           authorName: str("authorName"),
+          // The sealed panel carries the honeypot; an authored form that adds
+          // one gets the same trap for free (card qxVqy5Dn).
+          honeypot: str("website"),
         });
       },
       enquire: (args?: Record<string, unknown>) => {

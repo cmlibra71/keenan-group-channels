@@ -6,6 +6,7 @@ import type { ProductKit } from "@/lib/product-kit";
 import { WarrantyDirectory } from "@/components/product/WarrantyDirectory";
 import { GstToggle } from "@/components/layout/GstToggle";
 import { SilverChefPanel } from "@/components/product/SilverChefPanel";
+import { ReviewsSection } from "@/components/product/ProductTabs";
 import { ProductImageNotice } from "@/components/product/ProductImageNotice";
 import { ProductResidentialNotice } from "@/components/product/ProductResidentialNotice";
 import { ProductPackNote } from "@/components/product/ProductPackNote";
@@ -95,6 +96,37 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // pressed, which an authored tree cannot do. It renders nothing for a product with
     // no text groups, so the node is safe in front of every product page.
     "product-instructions": () => <ProductInstructionsNative />,
+    // The product page's Reviews tab (card qxVqy5Dn). Sealed rather than
+    // authored because the Write a Review form needs client state (the star
+    // picker) and a server action, neither of which a node tree can carry —
+    // and because the panel the stored trees DO carry printed a title and a
+    // body and nothing else. `product-reviews-node.ts` swaps it in at render
+    // time; the key is deliberately NOT `product-reviews`, which is an
+    // Industry Kitchens MASTER.
+    "product-reviews-panel": () => {
+      const list = ((payload.reviews as { list?: unknown[] } | undefined)?.list ??
+        []) as Array<{
+        id: number;
+        rating: number;
+        title: string | null;
+        text: string | null;
+        authorName?: string | null;
+        createdAt?: string | null;
+      }>;
+      return (
+        <ReviewsSection
+          productId={Number(product.id)}
+          reviews={list.map((r) => ({
+            id: r.id,
+            rating: r.rating,
+            title: r.title ?? null,
+            text: r.text ?? null,
+            author_name: r.authorName ?? null,
+            created_at: r.createdAt ?? null,
+          }))}
+        />
+      );
+    },
     "silverchef-panel": () => <SilverChefPanel />,
     // Chefs Depot's three prices (RRP / Mates Rates / this shopper's member price)
     // and the spend-more-save-more ladder (card Nyp8bkPm). Sealed rather than
