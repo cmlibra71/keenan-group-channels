@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { permanentRedirect } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import Image from "next/image";
 import Link from "next/link";
@@ -34,7 +34,11 @@ export default async function BrandCategoryPage({
   if (!brand) {
     // A renamed brand address redirects rather than bare-404ing. (card EVvRDnZt)
     await redirectIfMapped(`/brands/${slug}/${path.join("/")}`);
-    notFound();
+    // A RANGE under a brand we no longer carry — 379 of these in the legacy sitemap
+    // (card InEoeMZh). One hop to the brand index, not two: `/brands/<dead>` would
+    // only send the reader on again. A range under a brand we DO carry never gets
+    // here; it falls through below to the brand's own products.
+    permanentRedirect("/brands");
   }
 
   // If we can't resolve the category, fall back to brand-only products. This

@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { notFound } from "next/navigation";
+import { permanentRedirect } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import type { Metadata } from "next";
 import { draftMode, headers } from "next/headers";
@@ -114,7 +114,13 @@ export default async function BrandPage({
   if (!brand) {
     // A renamed brand address redirects rather than bare-404ing. (card EVvRDnZt)
     await redirectIfMapped(`/brands/${slug}`);
-    notFound();
+    // Nothing mapped, and we do not carry this brand: send the reader to the brand
+    // index rather than a dead end. The legacy Industry Kitchens sitemap advertises
+    // 384 brand landing pages, 36 of which name a brand this catalogue no longer
+    // holds, and each of those dies the moment the domain moves (card InEoeMZh). The
+    // index is the closest page that exists — the same answer the Zoey redirect
+    // import already gives 5,763 dead product addresses.
+    permanentRedirect("/brands");
   }
 
   // Brand page content is an ordered block list (the __brand__ template's `main`

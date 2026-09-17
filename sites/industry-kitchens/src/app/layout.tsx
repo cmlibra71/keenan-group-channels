@@ -12,7 +12,7 @@ import { FinanceRatesProvider } from "@/lib/finance/finance-rates-context";
 import { financeRatesForChannel } from "@/lib/finance/finance-rates";
 import { CartQuoteCountsProvider } from "@/lib/cart-quote-counts";
 import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
-import { siteBaseUrl } from "@/lib/seo";
+import { siteBaseUrl, siteRobots } from "@/lib/seo";
 import "./globals.css";
 
 export const dynamic = "force-dynamic";
@@ -32,8 +32,11 @@ export async function generateMetadata(): Promise<Metadata> {
     description: site?.metaDescription || `Welcome to ${channel?.name || "our store"}`,
     // Favicon is provided by app/icon.tsx — it uses faviconUrl when set,
     // otherwise generates one from the logo.
-    // Build/test site — keep it out of search engines until it goes live.
-    robots: { index: false, follow: false },
+    // Whether this storefront may be indexed at all is ONE switch, SITE_INDEXABLE,
+    // shared with robots.txt and sitemap.xml — see siteRobots(). Never hardcode a
+    // noindex here: the cutover step is to flip that env var, and a hardcoded value
+    // survives the flip (card InEoeMZh).
+    robots: siteRobots(),
   };
 }
 

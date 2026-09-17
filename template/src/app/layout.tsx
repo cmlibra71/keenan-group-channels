@@ -4,7 +4,7 @@ import { getSiteConfig, getFeatureFlag, getFooterConfig, getTopCategories, getKl
 import { getPublishedTokenVars } from "@/lib/design-tokens";
 import { KlaviyoTracking } from "@/components/analytics/KlaviyoTracking";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
-import { siteBaseUrl } from "@/lib/seo";
+import { siteBaseUrl, siteRobots } from "@/lib/seo";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ScrollReset } from "@/components/layout/ScrollReset";
@@ -31,6 +31,11 @@ export async function generateMetadata(): Promise<Metadata> {
     title: site?.metaTitle || channel?.name || "Store",
     description: site?.metaDescription || `Welcome to ${channel?.name || "our store"}`,
     icons: site?.faviconUrl ? { icon: site.faviconUrl } : undefined,
+    // Whether this storefront may be indexed at all is ONE switch, SITE_INDEXABLE,
+    // shared with robots.txt and sitemap.xml — see siteRobots(). Never hardcode a
+    // noindex here: the cutover step is to flip that env var, and a hardcoded value
+    // survives the flip (card InEoeMZh).
+    robots: siteRobots(),
   };
 }
 
