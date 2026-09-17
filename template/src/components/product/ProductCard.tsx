@@ -48,7 +48,15 @@ export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName,
   }
 
   return (
-    <Link href={`/products/${slug}`} className="group block" onClick={handleSelect}>
+    <Link
+      href={`/products/${slug}`}
+      className="group block"
+      onClick={handleSelect}
+      // Read by SearchClickLogger to stamp `clicked_product_id` on the search that produced
+      // this tile (card LjdIfc92). On the LINK, never on the card, so Add to Cart is not a
+      // click-through. Inert everywhere else.
+      data-product-id={productId}
+    >
       <div className="relative aspect-square overflow-hidden rounded-lg bg-zinc-100">
         {imageUrl ? (
           <Image
