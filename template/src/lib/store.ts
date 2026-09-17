@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import { cache } from "react";
 import type { NodeTree } from "@keenan/services/builder";
 import { withPromoTagInComponents } from "@/builder/promo-tag-node";
 import { guardTileBuyControlsInComponents } from "@keenan/services/builder";
@@ -249,12 +250,32 @@ export const getChannelSettings = async (
 
 export type { MegaMenuNode, MegaMenuFeatured, ContentPage } from "@keenan/services";
 
-// Contact-keyed active subscription (identity unification: the session subject
-// is a CONTACT id, so the member badge / pricing / checkout all key off it).
-// The channel store's getActiveSubscription remains customer-keyed for legacy
-// callers; storefront code should use this.
-export const getActiveSubscriptionForContact = (contactId: number) =>
-  subscriptionService.getActiveForContact(contactId, CHANNEL_ID);
+/**
+ * THE ONE ANSWER TO "IS THIS SHOPPER A MEMBER".
+ *
+ * The session subject is a CONTACT id (identity unification), so the member badge,
+ * member pricing, the cart, the checkout's re-check and the free-delivery threshold
+ * all key off it. The channel store's `getActiveSubscription` remains customer-keyed
+ * for legacy callers; storefront code uses this.
+ *
+ * MEMBERSHIP BELONGS TO THE BUSINESS, THE PERSON IS THE FALLBACK (card avihBwqi).
+ * `getActiveForContact` resolves the shopper's account and matches a live membership
+ * on it as well as on the shopper themselves, so a colleague at a business that holds
+ * a membership is a member — the person who happened to click Subscribe does not own
+ * it. A shopper with no business account resolves to none and takes exactly the
+ * person-level query this always ran, so individual Chefs Depot shoppers are
+ * completely unaffected. The resolution lives in @keenan/services, not here, because
+ * the portal's account screen has to give the same answer.
+ *
+ * MEMOIZED PER REQUEST. Six surfaces ask this on one page render (the header badge,
+ * the member context behind every price, the cart page, the checkout page, and
+ * `placeOrder` twice), and resolving the business costs a second query. Caching it
+ * also makes the two `placeOrder` calls — the subscription it records on the order
+ * and the one the free-delivery threshold reads — physically the same answer.
+ */
+export const getActiveSubscriptionForContact = cache((contactId: number) =>
+  subscriptionService.getActiveForContact(contactId, CHANNEL_ID)
+);
 
 /**
  * This account's STATEMENT on THIS storefront (card k6pHXQBf).

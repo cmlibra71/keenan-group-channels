@@ -159,7 +159,15 @@ export function ProductCard({
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-card border border-border bg-white shadow-sm transition-all duration-200 hover:-translate-y-[3px] hover:border-brand-light hover:shadow-hover">
       {/* Image stage — uniform white 1:1 */}
-      <Link href={`/products/${slug}`} className="relative block aspect-square bg-white" onClick={handleSelect}>
+      <Link
+        href={`/products/${slug}`}
+        className="relative block aspect-square bg-white"
+        onClick={handleSelect}
+        // Read by SearchClickLogger to stamp `clicked_product_id` on the search that produced
+        // this tile (card LjdIfc92). On the LINKS, never on the card, so Add to Cart and Add to
+        // Quote are not click-throughs. Inert everywhere else.
+        data-product-id={id}
+      >
         {photoUrl ? (
           <Image
             src={photoUrl}
@@ -207,7 +215,12 @@ export function ProductCard({
         {eyebrow && (
           <p className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.1em] text-steel-400">{eyebrow}</p>
         )}
-        <Link href={`/products/${slug}`} className="block" onClick={handleSelect}>
+        <Link
+          href={`/products/${slug}`}
+          className="block"
+          onClick={handleSelect}
+          data-product-id={id}
+        >
           <h3 className="line-clamp-2 min-h-[2.5rem] text-[13.5px] font-medium leading-snug text-ink-800 transition-colors duration-200 group-hover:text-accent">
             {name}
           </h3>
