@@ -31,7 +31,6 @@ export function useWaveScene(
     let cleanupFn: (() => void) | null = null;
 
     async function init() {
-      console.log("[hero-wave] init starting, container:", container.clientWidth, "x", container.clientHeight);
       // Renderer
       const renderer = new THREE.WebGLRenderer({
         alpha: true,
@@ -85,7 +84,6 @@ export function useWaveScene(
         imageCountRef.current
       );
 
-      console.log("[hero-wave] atlas loaded, imageCount:", imageCount);
       // Bail if unmounted during async load
       if (disposed) {
         texture.dispose();
@@ -162,7 +160,6 @@ export function useWaveScene(
         animationId = requestAnimationFrame(animate);
       }
 
-      console.log("[hero-wave] scene ready, grid:", gridConfig.cols, "x", gridConfig.rows);
       onReadyRef.current();
 
       // Resize observer — rebuild geometry when viewport changes
