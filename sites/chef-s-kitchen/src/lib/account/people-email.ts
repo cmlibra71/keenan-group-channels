@@ -133,8 +133,9 @@ export async function sendAddedPeopleEmail(input: {
         // customer mail, so it belongs on the person who received it rather than on a staff
         // trail, and it recorded nothing at all until this kind existed. One row per recipient
         // is the person trail's shape by design — each manager really was written to — and the
-        // recipient is matched on THIS channel's contact row, so a Chefs Depot notice never
-        // lands on an Industry Kitchens record.
+        // recipient is resolved by the shared `pickContactForEmail` rules, which PREFER this
+        // channel's contact row but will still file the row on a person whose only row was first
+        // seen on the other site (card utA2Ebnp's deliberate single-row cross-over).
         emailKind: "account_person_added",
       }
     );
