@@ -92,3 +92,28 @@ export function layerCartPrice(input: CartPriceInputs): { listPrice: string; sal
 
   return { listPrice, salePrice };
 }
+
+/**
+ * WHICH PRICING GROUP A MEMBER'S CART LINE IS PRICED AT (card avihBwqi).
+ *
+ * Their own customer group where they have one, else the group their membership's PLAN
+ * grants. The fallback is the whole point: a membership belongs to the BUSINESS, so a
+ * colleague at a member business is a member without ever having subscribed — and nothing
+ * ever stamped a customer group on them, because only the subscribe flow does that.
+ *
+ * Reading the contact's own group alone priced the CATALOGUE as a member (the product page
+ * resolves `contactGroupId ?? basePlanGroupId` in `member-policy.ts`) and charged the CART
+ * RRP: one price shown, another charged, on exactly the population this card creates. This
+ * is the same resolution, made in the same order, so the two cannot disagree.
+ *
+ * Null means no member price — the line falls back to RRP, which is what a non-member pays.
+ */
+export function memberPricingGroupId(
+  contactGroupId: number | null | undefined,
+  planMemberGroupId: number | null | undefined
+): number | null {
+  const own = Number(contactGroupId);
+  if (Number.isFinite(own) && own > 0) return own;
+  const plan = Number(planMemberGroupId);
+  return Number.isFinite(plan) && plan > 0 ? plan : null;
+}
