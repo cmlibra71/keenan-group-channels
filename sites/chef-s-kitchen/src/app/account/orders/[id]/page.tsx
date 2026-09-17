@@ -2,7 +2,12 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ChevronLeft, Download, Package, Printer } from "lucide-react";
-import { ApiError, loadOrderContactForOrder } from "@keenan/services";
+import {
+  ApiError,
+  loadOrderContactForOrder,
+  serialLabel,
+  shipmentSerialService,
+} from "@keenan/services";
 import { getSession } from "@/lib/auth";
 import { signInRedirect } from "@/lib/account-redirect";
 import {
@@ -302,6 +307,26 @@ export default async function OrderDetailPage({
   );
   const shipments = (shipmentPage.data ?? []) as unknown as ShipmentRow[];
 
+  // Lots & serial numbers for what actually went out (card 22BxasWi). It cannot join the
+  // Promise.all above — the shipment ids only exist once that resolves — but it is ONE statement
+  // projecting seven columns for however many dispatches this order has, and it is skipped
+  // entirely on an order with none, which is almost all of them. Best effort: a serial lookup must
+  // never be able to 500 a customer's order page.
+  const shipmentSerials = shipments.length
+    ? await shipmentSerialService
+        .listForShipments(shipments.map((s) => s.id))
+        .then((rows) =>
+          rows.map((r) => ({
+            shipment_item_id: r.shipment_item_id,
+            order_item_id: r.order_item_id,
+            // Worded once, in the portal, so the packing slip, the dispatch email and this page
+            // cannot say one serial three different ways.
+            label: serialLabel(r),
+          }))
+        )
+        .catch(() => [])
+    : [];
+
   // Notes staff published to this customer from the portal's Order History panel. Read off the
   // order row that is already loaded — no extra query, and the ONLY metafield keys this page
   // touches are this one and the net-terms figure below.
@@ -592,6 +617,7 @@ export default async function OrderDetailPage({
         deliveryNotes={order.delivery_notes}
         requiredDeliveryDate={order.required_delivery_date}
         shipments={shipments}
+        serials={shipmentSerials}
         items={items.map((i) => ({ id: i.id, name: i.name }))}
       />
 
