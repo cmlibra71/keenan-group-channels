@@ -1,4 +1,4 @@
-import { permanentRedirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import type { Metadata } from "next";
 import Image from "next/image";
@@ -109,7 +109,16 @@ export default async function BrandPage({
     // holds, and each of those dies the moment the domain moves (card InEoeMZh). The
     // index is the closest page that exists — the same answer the Zoey redirect
     // import already gives 5,763 dead product addresses.
-    permanentRedirect("/brands");
+    //
+    // TEMPORARY (307), not permanent (308), and that is deliberate. A brand we do
+    // not carry today may be one we carry tomorrow, and `getBrandBySlug` caches a
+    // miss for 1,800s: a reader who opens a brand-new brand's address inside that
+    // window would be pinned to `/brands` for that address FOREVER on a 308 —
+    // browsers keep a permanent redirect with no expiry, no screen could explain
+    // it, and we could not clear it. The target is a generic index, so a crawler
+    // reads it as a soft 404 and consolidates nothing either way; the permanent
+    // status would buy no ranking and cost a trap.
+    redirect("/brands");
   }
 
   const page = parseBrandPage(sp.page);

@@ -1,4 +1,4 @@
-import { permanentRedirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import Image from "next/image";
 import Link from "next/link";
@@ -38,7 +38,9 @@ export default async function BrandCategoryPage({
     // (card InEoeMZh). One hop to the brand index, not two: `/brands/<dead>` would
     // only send the reader on again. A range under a brand we DO carry never gets
     // here; it falls through below to the brand's own products.
-    permanentRedirect("/brands");
+    // Temporary (307), not permanent (308) — same reason as `brands/[slug]`: a
+    // cached 308 to a generic index cannot be undone once the brand comes back.
+    redirect("/brands");
   }
 
   // If we can't resolve the category, fall back to brand-only products. This
