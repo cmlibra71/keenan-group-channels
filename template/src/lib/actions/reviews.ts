@@ -109,6 +109,9 @@ export async function submitReview(productId: number, data: SubmitReviewInput) {
       ],
       portalPath: "/dashboard/products/reviews?status=pending",
       linkLabel: "Moderate reviews",
+      // No order and no quote to record it against, so it lands on the platform trail
+      // (card wlEdBRZX).
+      emailKind: "review_pending_alert",
     });
   } catch (e) {
     console.error("[submitReview] staff notification failed (non-fatal):", e);

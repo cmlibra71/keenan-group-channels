@@ -126,7 +126,17 @@ export async function sendAddedPeopleEmail(input: {
           },
         },
       }),
-      { latencyKind: "account_person_added", channelId: CHANNEL_ID }
+      {
+        latencyKind: "account_person_added",
+        channelId: CHANNEL_ID,
+        // What makes the send land on the manager's own Contact history (card wlEdBRZX). It is
+        // customer mail, so it belongs on the person who received it rather than on a staff
+        // trail, and it recorded nothing at all until this kind existed. One row per recipient
+        // is the person trail's shape by design — each manager really was written to — and the
+        // recipient is matched on THIS channel's contact row, so a Chefs Depot notice never
+        // lands on an Industry Kitchens record.
+        emailKind: "account_person_added",
+      }
     );
     return recipients;
   } catch (e) {

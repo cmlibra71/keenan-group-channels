@@ -37,6 +37,14 @@ import { CHANNEL_ID } from "@/lib/store";
 // When nothing resolves the send is skipped with a warning so customer actions
 // never depend on it. Sends are best-effort: callers must swallow failures (the
 // customer's action already succeeded by the time we notify).
+//
+// EVERY ONE OF THESE SENDS IS NOW RECORDED (card wlEdBRZX). They were not: the transport only
+// writes a trail when the caller says WHICH email this is, and this one passed a `latencyKind`
+// for the stopwatch and no `emailKind` at all — so a storefront staff alert that went out could
+// not be proved to have gone and a bounce on one could not be traced. An alert about an ORDER
+// lands on that order's own history, beside the backorder alert; one about nothing in particular
+// (a pending review) lands on the platform trail. Neither can fail a send: the trail writers all
+// swallow their own errors.
 
 const PORTAL_URL = "https://keenan-group.com.au";
 
@@ -76,6 +84,8 @@ export async function sendStaffNotification({
   linkLabel,
   audience = "staff",
   excludeEmail,
+  emailKind,
+  orderId,
 }: {
   subject: string;
   heading: string;
@@ -86,6 +96,19 @@ export async function sendStaffNotification({
   linkLabel: string;
   /** Which portal recipient list to notify. Defaults to the staff list. */
   audience?: StaffNotificationAudience;
+  /**
+   * WHICH alert this is, so the send is recorded (card wlEdBRZX). An order kind —
+   * `order_below_cost_alert`, `order_no_freight_alert` — paired with `orderId` writes the order's
+   * own history line; a `PLATFORM_EMAIL_KINDS` key writes the platform trail. Omit it and the
+   * send records nothing, which is what every one of these did before.
+   */
+  emailKind?: string;
+  /**
+   * The order the alert is about. The transport writes the history line on it, so this must be
+   * set whenever `emailKind` is an order kind — without it an order alert would fall through to
+   * the platform trail, where a reader could not tell which order it was about.
+   */
+  orderId?: number | null;
   /**
    * Address to drop from the resolved list — the person whose own action raised
    * the alert. A staff member who is on the notification list and buys from the
@@ -149,6 +172,13 @@ export async function sendStaffNotification({
         },
       },
     }),
-    { latencyKind: "storefront_staff_alert", channelId: CHANNEL_ID }
+    {
+      latencyKind: "storefront_staff_alert",
+      channelId: CHANNEL_ID,
+      // What makes the send appear on a trail at all (card wlEdBRZX). The stopwatch keeps its own
+      // label above so every storefront alert still measures as one thing.
+      emailKind,
+      orderId: orderId ?? null,
+    }
   );
 }
