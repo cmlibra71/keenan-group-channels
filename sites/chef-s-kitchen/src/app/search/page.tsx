@@ -5,6 +5,7 @@ import { applyCatalogScope } from "@/lib/catalog-scope";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { SearchTypeahead } from "@/components/search/SearchTypeahead";
 import { SearchResultsFeed } from "@/components/search/SearchResultsFeed";
+import { SearchClickLogger } from "@/components/search/SearchClickLogger";
 import { FacetRail, FacetChips, SortSelect, type FacetGroupDef } from "@/components/category/FilterRail";
 import Link from "next/link";
 import {
@@ -28,6 +29,7 @@ import {
   type SearchProduct,
 } from "./search-query";
 import { loadMoreSearchResults } from "./actions";
+import { logStorefrontSearch } from "@/lib/search-logging";
 
 export const metadata = {
   title: "Search",
@@ -166,6 +168,13 @@ export default async function SearchPage({
   // still be followed by results this shopper can see.
   const feedHasMore = !!results && !results.exhausted && results.consumed < MAX_RESULTS;
 
+  // Record the search, now that its results are in hand (card LjdIfc92). Best-effort: this
+  // returns null rather than throwing, so a logging fault cannot cost a shopper their results.
+  // `results.total` is the SEARCH's own count, not the tiles this shopper was shown — the Phase 2
+  // zero-result report has to mean "the catalogue answered nothing", never "this account may not
+  // see them". The row id comes back so a click on a result can stamp THIS search.
+  const searchLogId = results ? await logStorefrontSearch(query, results.total) : null;
+
   const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
   const showRail = groups.length > 0;
 
@@ -236,28 +245,30 @@ export default async function SearchPage({
 
               {/* Results feed: this first page is server-rendered; scrolling
                   appends further pages through the load-more server action. */}
-              <SearchResultsFeed
-                key={`${query}|${sp.brand ?? ""}|${sp.category ?? ""}|${sp.price ?? ""}|${sortKey}`}
-                gridClassName={GRID_CLASS}
-                params={params}
-                loadMore={loadMoreSearchResults}
-                initialOffset={results.consumed}
-                initialCount={visible.length}
-                initialHasMore={feedHasMore}
-                total={results.total}
-                fallbackHref={pageHref(Math.min(MAX_PAGES, page + 1))}
-                emptyState={emptyState}
-              >
-                <ProductGrid
-                  products={visible}
-                  memberPricingAvailable={memberPricingEnabled}
-                  {...(await getListingPricing(visible))}
-                  listId="search_results"
-                  listName="Search Results"
-                  wrapperClassName="contents"
-                  renderEmpty={false}
-                />
-              </SearchResultsFeed>
+              <SearchClickLogger searchLogId={searchLogId}>
+                <SearchResultsFeed
+                  key={`${query}|${sp.brand ?? ""}|${sp.category ?? ""}|${sp.price ?? ""}|${sortKey}`}
+                  gridClassName={GRID_CLASS}
+                  params={params}
+                  loadMore={loadMoreSearchResults}
+                  initialOffset={results.consumed}
+                  initialCount={visible.length}
+                  initialHasMore={feedHasMore}
+                  total={results.total}
+                  fallbackHref={pageHref(Math.min(MAX_PAGES, page + 1))}
+                  emptyState={emptyState}
+                >
+                  <ProductGrid
+                    products={visible}
+                    memberPricingAvailable={memberPricingEnabled}
+                    {...(await getListingPricing(visible))}
+                    listId="search_results"
+                    listName="Search Results"
+                    wrapperClassName="contents"
+                    renderEmpty={false}
+                  />
+                </SearchResultsFeed>
+              </SearchClickLogger>
             </div>
           </div>
         )}

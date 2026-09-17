@@ -72,6 +72,14 @@ test("a trailing slash cannot dodge a tighter budget", () => {
   assert.equal(classifySurface("/api/search/"), "search");
 });
 
+test("the search-click beacon is ordinary api traffic, never the tight search budget", () => {
+  // The click beacon (card LjdIfc92) fires once per result a shopper opens. Charging it to the
+  // `search` budget — the tightest on the site, and the one a continuous scroll is already sized
+  // against — would let counting a click rate-limit the shopper who made it.
+  assert.equal(classifySurface("/api/search-log/click"), "api");
+  assert.notEqual(classifySurface("/api/search-log/click"), "search");
+});
+
 test("a lookalike path does not inherit an exemption", () => {
   assert.notEqual(classifySurface("/api/healthcheck-probe"), "exempt");
   assert.notEqual(classifySurface("/api/testing"), "exempt");
