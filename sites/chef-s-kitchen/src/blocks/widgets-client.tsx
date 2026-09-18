@@ -207,9 +207,19 @@ export const OptionSelectorWidget: WidgetComponent = () => {
           />
         ))}
       </div>
-      {/* Card VNh9DdYd — every option answered and nothing built that way. The sentence has
-          to be here: this widget's Add to Cart greys with nothing else on screen to explain
-          it, and CXnP1lrL removed every availability string that used to. */}
+      {/* Card VNh9DdYd — every option answered and nothing built that way, and this is the ONLY
+          place the sentence can go on the v2 widget path. The other two renderers put it
+          immediately above the buy row, which is where it belongs; here there is no buy row to
+          be above. A v2 page is a STORED template of independently placed widgets, so this
+          component cannot know whether an `add_to_cart` / `add_to_quote` widget was placed at
+          all, or where — there is no chain to run last in, as there is in
+          `product-node-branch.tsx`, and no sibling to anchor on, as there is in
+          `ProductDetail.tsx`. Drawing it from the buy widgets instead would print it twice on a
+          page carrying both, and not at all on a quote-only product (`AddToCartWidget` returns
+          null at a zero price). So it rides the picker that CREATES the state it describes, and
+          the residual gap is recorded on `sf-product-page`: the sentence reaches a v2 page only
+          where `option_selector` is placed — the same shape as the still-open
+          `ProductInstructionsPanel` gap on that surface. */}
       <ProductCombinationNotice />
     </div>
   );

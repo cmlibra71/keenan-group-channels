@@ -177,10 +177,6 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
               />
             ))}
           </div>
-          {/* Card VNh9DdYd — every option answered and nothing built that way. This renderer's
-              buy row greys on `allOptionsSelected`, and CXnP1lrL removed every availability
-              string that used to explain a dead control, so the sentence lives here too. */}
-          <ProductCombinationNotice />
         </div>
       )}
 
@@ -223,6 +219,18 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
       )}
 
       <ProductAddons />
+
+      {/* Card VNh9DdYd — every option answered and nothing built that way, so the buy row below
+          is dead and has to bring its own words: CXnP1lrL took away every availability string
+          that used to explain one. It sits IMMEDIATELY above the buy row, AFTER the extras,
+          because that is where the node tree puts it — `withCombinationNoticeNode` is the
+          outermost of the `actions-row` placers in `builder/product-node-branch.tsx`, so on that
+          renderer the sentence is the last thing before the buttons. catalogue.md
+          `sf-product-page` binds the two orderings together: if one of these anchors moves, all
+          of them move, or the panels swap places between renderers. Inside the Configure block it
+          would sit ABOVE the pack note, the Instructions box and the extras on a configurable
+          carrying them — a sentence about a dead button, a whole panel away from the button. */}
+      <ProductCombinationNotice />
 
       {/* ═══ Qty + dual CTAs (design buy row) ═══ */}
       <div className="mt-6 flex flex-wrap items-stretch gap-3">

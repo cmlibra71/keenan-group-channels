@@ -233,39 +233,37 @@ export async function renderProductNodeBranch({
   const nodeTree = guardBuyControls(
     withCdMemberPricingNode(
       withUpsellBlock(
-        // Extras sit OUTSIDE the pack note on purpose. Every one of these passes inserts
-        // before the same `actions-row` anchor, so whichever runs LAST ends up nearest the
-        // buy buttons: the pack note is a fact about the price and belongs with the price
-        // panel, while ticking an extra changes what Add to Cart will charge, so the extras
-        // are the last PRICED control the shopper meets before the buttons (cards 0CDcCYmO /
-        // O108e4jH / zeMPVcA3). Since card VNh9DdYd the very last thing before the buy row is
-        // the unmade-combination sentence, which runs after them — it explains the button
-        // itself, so nothing may come between the two.
-        //
-        // The free-text Instructions box (card kyMjCmAw) sits directly ABOVE the extras, for
-        // the other half of that same reason: it is a description of what to build and moves
-        // no money, so the priced control keeps the place next to the button whose charge it
-        // changes. Page order is therefore price -> pack sentence -> Instructions -> extras
-        // -> buy row, and `ProductDetail.tsx` (the non-node fallback renderer) is hand-ordered
-        // to match so the two renderers cannot disagree.
-        // Card VNh9DdYd: the "we do not make that combination" sentence goes in LAST, so it
-        // lands immediately before the buy row whatever the passes below have added above it.
-        // A greyed Add to Cart on this page has to bring its own words — CXnP1lrL took away
-        // every availability string that used to explain one (`sf-product-page`).
+        // FOUR passes share the `actions-row` anchor and each one inserts BEFORE it, so
+        // whichever runs LAST ends up nearest the buy buttons. The order is decided, not
+        // accidental:
+        //   * the UNMADE-COMBINATION sentence (card VNh9DdYd) is outermost, and therefore the
+        //     very last thing before the buttons — it explains a DEAD button, so nothing may
+        //     come between the two. CXnP1lrL took away every availability string that used to
+        //     explain one (`sf-product-page`).
+        //   * the PRICED EXTRAS (0CDcCYmO) come next: ticking one changes what Add to Cart
+        //     will charge, and a priced control belongs beside the button it moves.
+        //   * the free-text INSTRUCTIONS box (kyMjCmAw) sits above them — it describes what to
+        //     build and moves no money, so the priced control keeps the nearer place.
+        //   * the PACK NOTE (O108e4jH / zeMPVcA3) is innermost: a fact about the price, which
+        //     belongs with the price panel.
+        // Page order is therefore price -> pack sentence -> Instructions -> extras -> "we do
+        // not make that combination" -> buy row. `ProductDetail.tsx` (the non-node fallback
+        // renderer) is hand-ordered to match so the two renderers cannot disagree, and if any
+        // of these anchors moves they all move together (catalogue.md `sf-product-page`).
         withCombinationNoticeNode(
-        withResidentialNoticeNode(
-          withAddonsNode(
-            withProductInstructionsNode(
-              withPackNoteNode(
-                withModularNoticeNode(
-                  withReviewsBlock(
-                    withImageNoticeNode(withSilverChefNode(scaleWording(storedTree ?? SEED_PRODUCT_TREE)))
+          withResidentialNoticeNode(
+            withAddonsNode(
+              withProductInstructionsNode(
+                withPackNoteNode(
+                  withModularNoticeNode(
+                    withReviewsBlock(
+                      withImageNoticeNode(withSilverChefNode(scaleWording(storedTree ?? SEED_PRODUCT_TREE)))
+                    )
                   )
                 )
               )
             )
           )
-        )
         )
       )
     )
