@@ -7,6 +7,7 @@ import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { siteBaseUrl } from "@/lib/seo";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { CheckoutExitSurvey } from "@/components/checkout/CheckoutExitSurvey";
 import { ScrollReset } from "@/components/layout/ScrollReset";
 import { GstProvider } from "@/lib/gst";
 import { FinanceRatesProvider } from "@/lib/finance/finance-rates-context";
@@ -102,6 +103,14 @@ export default async function RootLayout({
             <ScrollReset />
             <main className="flex-1">{children}</main>
             <Footer storeName={storeName} config={footerConfig} />
+            {/* The abandon-intent checkout questionnaire (card loDyEE3S). Mounted
+                HERE, in the layout, rather than on the checkout page, so that it
+                outlives a route change: the shopper who presses Back or follows a
+                link out of the checkout is the one this survey is for, and the page
+                they were on has gone by the time they can be asked. It arms ONLY
+                from the checkout's own marker (CheckoutExitSurveyArm), so it stays
+                silent on every other page, and it holds up no navigation, ever. */}
+            <CheckoutExitSurvey />
           </CartQuoteCountsProvider>
           </FinanceRatesProvider>
         </GstProvider>

@@ -25,6 +25,23 @@ import {
 /** Per-tab memory: shown once, then never again in this session. */
 export const EXIT_SURVEY_SESSION_KEY = "kg:checkout-survey:done";
 
+/**
+ * Per-tab memory of the other half: "a checkout was armed in this tab".
+ *
+ * A departure comes in two shapes and only one of them runs React code. An
+ * in-page navigation (Back within the app, a link, a router move) unmounts the
+ * checkout's marker, and that unmount is the signal. A FULL-page departure —
+ * Back across a hard page load, a typed address, a hard link — tears the whole
+ * document down without unmounting anything, so the next page is a fresh
+ * document with no memory at all.
+ *
+ * This is that memory. The pop-up, mounting on the page they landed on, sees
+ * the flag with no checkout on screen and knows the shopper left one. Cleared
+ * the moment the question is asked, and irrelevant once the checkout is
+ * submitted, because that stamps `EXIT_SURVEY_SESSION_KEY` instead.
+ */
+export const EXIT_SURVEY_ARMED_KEY = "kg:checkout-survey:armed";
+
 /** The free-text box is capped at what the stored contract will keep. */
 export const EXIT_SURVEY_OTHER_MAX_LENGTH = 500;
 
@@ -116,6 +133,87 @@ export function announceCheckoutSubmitted(): void {
     /* A page with no document, or a browser refusing the constructor. The
        survey merely stays armed; the order is unaffected. */
   }
+}
+
+/**
+ * The checkout page saying it is on screen, and — when that announcement is
+ * withdrawn — that the shopper has just LEFT it by an ordinary in-page route.
+ *
+ * Steve, 2026-09-17: "I can see no evidence of this on either website. It does
+ * not pop up anywhere when I go to leave from inside the checkout." He was
+ * right, and the reason is that the two original triggers are both things an
+ * ordinary departure does not do: the pointer crossing the TOP edge of the
+ * window, and coming back after twenty seconds away. Pressing Back, clicking a
+ * link or letting the router move fired neither. Tim's words on the card are
+ * "If customers abandoned cart before leaving screen", so leaving the screen is
+ * the trigger, however they leave it.
+ *
+ * THE POP-UP THEREFORE OUTLIVES THE CHECKOUT PAGE. It is mounted in the site
+ * layout and the checkout renders a marker (`CheckoutExitSurveyArm`); the
+ * marker's mount is what ARMS the survey and the marker's unmount is the
+ * departure. That is the only way to ask without breaking the rule that
+ * outranks everything here — a question asked BEFORE the navigation would have
+ * to hold the navigation up, and this one is asked after it has already
+ * happened, on the page the shopper landed on.
+ */
+export const CHECKOUT_ARMED_EVENT = "kg:checkout-armed";
+export const CHECKOUT_LEFT_EVENT = "kg:checkout-left";
+
+/**
+ * A React REMOUNT is an unmount immediately followed by a mount — which is what
+ * Strict Mode does to every component in development, and what a key change or
+ * a Suspense retry does anywhere. Announcing the departure synchronously would
+ * turn that into "the shopper left the checkout" and pop the questionnaire up
+ * on top of the checkout itself, on first load, in dev.
+ *
+ * So the departure is announced a turn of the event loop later and cancelled if
+ * a checkout marker mounts in the meantime. Nothing waits on this timer: it
+ * delays only the QUESTION, never the navigation, which has already happened.
+ */
+export const EXIT_SURVEY_LEAVE_SETTLE_MS = 0;
+
+let leaveTimer: ReturnType<typeof setTimeout> | null = null;
+let checkoutOnScreen = false;
+
+/**
+ * Whether a priced checkout is on screen right now.
+ *
+ * Read once by the pop-up when it mounts, because React runs a CHILD's effects
+ * before its parent's: on a full page load of /checkout the marker announces
+ * itself before the layout-level pop-up has subscribed, so the event alone
+ * would be missed.
+ */
+export function checkoutIsOnScreen(): boolean {
+  return checkoutOnScreen;
+}
+
+/** The checkout is on screen. Cancels a pending departure (see above). */
+export function announceCheckoutArmed(): void {
+  if (leaveTimer !== null) {
+    clearTimeout(leaveTimer);
+    leaveTimer = null;
+  }
+  checkoutOnScreen = true;
+  try {
+    document.dispatchEvent(new Event(CHECKOUT_ARMED_EVENT));
+  } catch {
+    /* No document, or a browser refusing the constructor. The survey simply
+       never arms; nothing else on the checkout is affected. */
+  }
+}
+
+/** The checkout page has gone. Never allowed to throw, and never to block. */
+export function announceCheckoutLeft(): void {
+  if (leaveTimer !== null) clearTimeout(leaveTimer);
+  leaveTimer = setTimeout(() => {
+    leaveTimer = null;
+    checkoutOnScreen = false;
+    try {
+      document.dispatchEvent(new Event(CHECKOUT_LEFT_EVENT));
+    } catch {
+      /* see above */
+    }
+  }, EXIT_SURVEY_LEAVE_SETTLE_MS);
 }
 
 /** The biggest body the survey endpoint will look at. Three short answers and

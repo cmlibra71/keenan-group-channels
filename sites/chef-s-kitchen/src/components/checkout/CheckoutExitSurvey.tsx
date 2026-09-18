@@ -23,6 +23,17 @@
 //     gate in everything but name (sf-checkout, "Do not break").
 //   * Nothing listens to `beforeunload`, cancels a click or delays a
 //     navigation. Leaving is exactly as fast with the pop-up open as without.
+//     That is why the question is asked AFTER an in-page departure rather than
+//     before it: this component is mounted in the site LAYOUT, so it outlives
+//     the checkout page, and the checkout's marker (`CheckoutExitSurveyArm`)
+//     going away is the signal. Back, a link, a router move — the shopper is
+//     already on the next page when they are asked, and nothing held them up.
+//     Arming still happens ONLY from that marker, so the survey still cannot
+//     reach the confirmation page, an empty basket or the IK sign-in gate.
+//     A departure that reloads the whole document — Back across a hard page
+//     load, a typed address — unmounts nothing, so the fact that this tab armed
+//     a checkout is written into `sessionStorage` too and the pop-up asks on
+//     whatever page the tab lands on next. Both shapes of leaving, one question.
 //   * The X closes it, Escape closes it, and answering closes it. Whatever is
 //     answered by then is filed; nothing is ever demanded.
 //   * It NEVER arms on a submitted checkout — the checkout form announcing that
@@ -50,8 +61,12 @@ import {
   CHECKOUT_SURVEY_THANKS,
 } from "@keenan/services/checkout-survey";
 import {
+  CHECKOUT_ARMED_EVENT,
+  CHECKOUT_LEFT_EVENT,
   CHECKOUT_SUBMITTED_EVENT,
+  checkoutIsOnScreen,
   EMPTY_SURVEY_DRAFT,
+  EXIT_SURVEY_ARMED_KEY,
   EXIT_SURVEY_FRAME_GUTTER_PX,
   EXIT_SURVEY_OTHER_MAX_LENGTH,
   EXIT_SURVEY_SESSION_KEY,
@@ -80,6 +95,12 @@ export function CheckoutExitSurvey() {
   const armed = useRef(false);
   const submitted = useRef(false);
   const filed = useRef(false);
+  /** True only while the checkout page's marker is mounted. The two ON-PAGE
+   *  triggers (the pointer leaving through the top, the return from twenty
+   *  seconds away) are questions asked of somebody still ON the checkout, so
+   *  they are gated on this; the departure trigger is not, because by then the
+   *  shopper has already left. */
+  const onCheckout = useRef(false);
 
   /** File once, whatever has been answered. Fire and forget — closing this
    *  pop-up is never allowed to wait on the network. */
@@ -113,21 +134,30 @@ export function CheckoutExitSurvey() {
   }, [file]);
 
   useEffect(() => {
-    let alreadyDone = false;
-    try {
-      alreadyDone = window.sessionStorage.getItem(EXIT_SURVEY_SESSION_KEY) === "1";
-    } catch {
-      // Private mode / blocked storage. Worst case the shopper is asked twice
-      // in one session; never a reason to skip the survey outright.
-    }
-    armed.current = mayArmSurvey({ hasItems: true, submitted: false, alreadyDone });
-    if (!armed.current) return;
+    const askedAlready = () => {
+      try {
+        return window.sessionStorage.getItem(EXIT_SURVEY_SESSION_KEY) === "1";
+      } catch {
+        // Private mode / blocked storage. Worst case the shopper is asked twice
+        // in one session; never a reason to skip the survey outright.
+        return false;
+      }
+    };
+
+    const forget = () => {
+      try {
+        window.sessionStorage.removeItem(EXIT_SURVEY_ARMED_KEY);
+      } catch {
+        /* see above */
+      }
+    };
 
     const show = () => {
       if (!mayArmSurvey({ hasItems: true, submitted: submitted.current, alreadyDone: false }))
         return;
       if (!armed.current) return;
       armed.current = false;
+      forget();
       try {
         window.sessionStorage.setItem(EXIT_SURVEY_SESSION_KEY, "1");
       } catch {
@@ -136,10 +166,60 @@ export function CheckoutExitSurvey() {
       setOpen(true);
     };
 
-    // Desktop: the pointer leaves through the top of the window.
+    // A priced checkout is on screen: past the empty-cart redirect, past the
+    // sign-in gate, with a basket. That is the ONLY thing that arms the survey,
+    // which is what keeps this layout-level pop-up off every other page —
+    // including the confirmation page, which never renders the marker.
+    // Re-read the session each time: a shopper can reach the checkout twice in
+    // one visit, and a redirect-form 3-D Secure comes back as a fresh load.
+    const onArmed = () => {
+      onCheckout.current = true;
+      armed.current = mayArmSurvey({
+        hasItems: true,
+        submitted: submitted.current,
+        alreadyDone: askedAlready(),
+      });
+      // Remember it in the TAB as well as in memory. A departure that reloads
+      // the document — Back across a hard page load, a typed address, a hard
+      // link — unmounts nothing, so the next page has no memory of the checkout
+      // at all unless it is written down here. See EXIT_SURVEY_ARMED_KEY.
+      if (armed.current) {
+        try {
+          window.sessionStorage.setItem(EXIT_SURVEY_ARMED_KEY, "1");
+        } catch {
+          /* see above */
+        }
+      }
+    };
+
+    // …and the marker going away is the shopper LEAVING the checkout by an
+    // ordinary in-page route: Back, a link, any router move. This is the
+    // trigger the card was reopened for (Steve, 2026-09-17: "It does not pop up
+    // anywhere when I go to leave from inside the checkout"). It fires AFTER
+    // the navigation has happened, on the page they landed on, so it delays
+    // nothing and cancels nothing — which is the one rule this component may
+    // never break.
+    const onLeft = () => {
+      onCheckout.current = false;
+      show();
+    };
+
+    // Desktop, still on the checkout: the pointer leaves through the top of the
+    // window. Kept exactly as it was — it asks EARLIER than the departure does,
+    // while the shopper can still change their mind.
     const onMouseOut = (e: MouseEvent) => {
+      if (!onCheckout.current) return;
       if (isExitIntent({ clientY: e.clientY, relatedTarget: e.relatedTarget })) show();
     };
+
+    // The page itself going away — closing the tab, typing an address, a hard
+    // navigation. React runs no unmount for any of those, so there is no
+    // departure event and nothing to ask on; all that is left to do is FILE
+    // whatever was already answered. `pagehide` is the event that fires for all
+    // of them (and on the back/forward cache path, where `unload` does not),
+    // and it is a listener, never a gate: it returns nothing and blocks
+    // nothing, unlike the `beforeunload` this component must never use.
+    const onPageHide = () => file();
 
     // Touch: they left the page and came back. There is no hover on a phone, so
     // this is the only honest signal there — and it fires AFTER they return, so
@@ -160,7 +240,7 @@ export function CheckoutExitSurvey() {
         file();
         return;
       }
-      if (hiddenAt && returnedFromLeaving(Date.now() - hiddenAt)) show();
+      if (onCheckout.current && hiddenAt && returnedFromLeaving(Date.now() - hiddenAt)) show();
       hiddenAt = 0;
     };
 
@@ -190,6 +270,7 @@ export function CheckoutExitSurvey() {
       // /checkout as a fresh page load, where `submitted` starts false again.
       // Without the stamp the survey would re-arm on somebody who has just
       // paid, which is the one thing it must never do.
+      forget();
       try {
         window.sessionStorage.setItem(EXIT_SURVEY_SESSION_KEY, "1");
       } catch {
@@ -197,15 +278,46 @@ export function CheckoutExitSurvey() {
       }
     };
 
+    document.addEventListener(CHECKOUT_ARMED_EVENT, onArmed);
+    document.addEventListener(CHECKOUT_LEFT_EVENT, onLeft);
     document.addEventListener("mouseout", onMouseOut);
     document.addEventListener("visibilitychange", onVisibility);
     document.addEventListener(CHECKOUT_SUBMITTED_EVENT, onSubmitted);
+    window.addEventListener("pagehide", onPageHide);
+
+    // React runs a CHILD's effects before its parent's, and this pop-up lives
+    // in the layout while the marker lives on the page — so on a full load of
+    // /checkout the marker has already announced itself by the time we
+    // subscribe. Read the current state once rather than miss that first event.
+    if (checkoutIsOnScreen()) {
+      onArmed();
+    } else {
+      // No checkout on this page — but this TAB armed one, and the document it
+      // was on has been torn down. That is the full-page half of leaving the
+      // checkout, and it is the only route Back takes when the checkout was
+      // reached by a hard page load rather than a link. Ask here, on the page
+      // they landed on, exactly as the in-page route does.
+      let leftOne = false;
+      try {
+        leftOne = window.sessionStorage.getItem(EXIT_SURVEY_ARMED_KEY) === "1";
+      } catch {
+        /* see above */
+      }
+      if (leftOne && !askedAlready()) {
+        armed.current = true;
+        show();
+      }
+    }
+
     return () => {
+      document.removeEventListener(CHECKOUT_ARMED_EVENT, onArmed);
+      document.removeEventListener(CHECKOUT_LEFT_EVENT, onLeft);
       document.removeEventListener("mouseout", onMouseOut);
       document.removeEventListener("visibilitychange", onVisibility);
       document.removeEventListener(CHECKOUT_SUBMITTED_EVENT, onSubmitted);
+      window.removeEventListener("pagehide", onPageHide);
     };
-  }, []);
+  }, [file]);
 
   // The page grows by exactly the card's height while the pop-up is open, so
   // nothing at the BOTTOM of the checkout can be left unreachable underneath

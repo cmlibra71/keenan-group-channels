@@ -84,6 +84,7 @@
     "builder/use-form-handlers.ts",
     "components/account/InvoiceArchivePanel.tsx",
     "components/account/OrderMoney.tsx",
+    "components/checkout/CheckoutExitSurveyArm.tsx",
     "components/layout/ScrollReset.tsx",
     "components/product/CdMemberPricingPanel.tsx",
     "components/product/ProductAddons.tsx",
