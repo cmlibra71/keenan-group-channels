@@ -237,8 +237,10 @@ export async function renderProductNodeBranch({
         // before the same `actions-row` anchor, so whichever runs LAST ends up nearest the
         // buy buttons: the pack note is a fact about the price and belongs with the price
         // panel, while ticking an extra changes what Add to Cart will charge, so the extras
-        // are the last thing the shopper meets before the buttons (cards 0CDcCYmO /
-        // O108e4jH / zeMPVcA3).
+        // are the last PRICED control the shopper meets before the buttons (cards 0CDcCYmO /
+        // O108e4jH / zeMPVcA3). Since card VNh9DdYd the very last thing before the buy row is
+        // the unmade-combination sentence, which runs after them — it explains the button
+        // itself, so nothing may come between the two.
         //
         // The free-text Instructions box (card kyMjCmAw) sits directly ABOVE the extras, for
         // the other half of that same reason: it is a description of what to build and moves

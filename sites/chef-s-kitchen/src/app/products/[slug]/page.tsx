@@ -12,6 +12,7 @@ import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { renderProductNodeBranch } from "@/builder/product-node-branch";
 import { readProductKit } from "@/lib/product-kit";
 import { readProductAddons } from "@keenan/services/product-addons";
+import { readOptionValueOrder } from "@keenan/services/product-option-order";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 import {
   ProductBuyBox,
@@ -294,6 +295,10 @@ export default async function ProductPage({
         // keeps its own. Two storefronts must never read the same product differently.
         // The node path reads the same field out of its own payload.
         addons: readProductAddons(product.metafields),
+        // Card VNh9DdYd — the order STAFF authored for this product's variation choices, read
+        // from the same portal-owned metafields bag. Null when nobody has authored one, and then
+        // `orderOptionValues` derives the order from the product's own combinations.
+        optionValueOrder: readOptionValueOrder(product.metafields),
       },
       memberPrice,
       memberPriceMap,
