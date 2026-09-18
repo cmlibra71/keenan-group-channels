@@ -2,13 +2,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  announceCheckoutArmed,
+  announceCheckoutLeft,
+  bottomBarClearancePx,
+  checkoutIsOnScreen,
   hasSurveyAnswer,
   isExitIntent,
   mayArmSurvey,
   reservesFlowSpace,
   returnedFromLeaving,
   surveyAnswers,
+  CHECKOUT_ARMED_EVENT,
+  CHECKOUT_LEFT_EVENT,
   CHECKOUT_SURVEY_ENDPOINT,
+  EXIT_SURVEY_BOTTOM_BAR_MAX_FRACTION,
   EXIT_SURVEY_OTHER_MAX_LENGTH,
   EXIT_SURVEY_TWO_COLUMN_MIN_PX,
 } from "./exit-survey";
@@ -158,6 +165,59 @@ test("the spacer runs where it is load-bearing, and reserves when the width is u
   assert.equal(reservesFlowSpace(null), true, "no matchMedia: cover nothing, waste a little page");
 });
 
+// The card is no longer only ever seen on the checkout. It is mounted in the
+// LAYOUT and asked on the page the shopper landed on — most often a product
+// page, because the ordinary way into the checkout is the header cart drawer
+// opened from one. That page carries a FIXED mobile buy bar below `lg`
+// (`fixed inset-x-0 bottom-0 z-[90]`) holding the ex-GST price and Add to Cart,
+// and those are rules card 33HGX8U2 put on `sf-product-page` ("it must work on
+// phones — 60% of Industry Kitchens' shoppers are on one"). A `fixed` bar does
+// not scroll, so the flow spacer above cannot clear it: the frame itself has to
+// stop short of the bottom edge.
+
+test("the card is lifted clear of a site's fixed bottom bar", () => {
+  const vh = 844; // iPhone 14 Pro, the width the defect was measured at
+  // Chefs Depot's mobile buy bar as it stands today: 77px, hard against the
+  // bottom edge. 65px of it was covered by the card before this.
+  assert.equal(bottomBarClearancePx([{ top: 767, bottom: 844 }], vh), 77);
+  // A fractional rect still counts as pinned to the edge.
+  assert.equal(bottomBarClearancePx([{ top: 766.5, bottom: 843.2 }], vh), 77);
+  // Two bars: clear the tallest, not the sum.
+  assert.equal(bottomBarClearancePx([{ top: 767, bottom: 844 }, { top: 800, bottom: 844 }], vh), 77);
+});
+
+test("only a bar pinned to the bottom edge moves the card, and only if it is a bar", () => {
+  const vh = 844;
+  // Nothing there — the checkout itself, and every width at `lg` and up, where
+  // the buy bar is `lg:hidden` and measures zero.
+  assert.equal(bottomBarClearancePx([], vh), 0);
+  assert.equal(bottomBarClearancePx([{ top: 767, bottom: 767 }], vh), 0);
+  // Floating mid-screen: covers nothing the card wants, so lifting would only
+  // be dead space.
+  assert.equal(bottomBarClearancePx([{ top: 400, bottom: 460 }], vh), 0);
+  // A sheet or drawer, not a bar. Lifting by its height would push the
+  // questionnaire off the top of the screen; the pop-up already sits UNDER the
+  // mobile navigation drawer for the same reason.
+  const sheet = { top: 844 - vh * EXIT_SURVEY_BOTTOM_BAR_MAX_FRACTION - 1, bottom: 844 };
+  assert.equal(bottomBarClearancePx([sheet], vh), 0);
+});
+
+test("the pop-up measures that bar rather than hard-coding its height", () => {
+  // A source guard, like the two above it: the bar is 77px on Chefs Depot
+  // today, it is AUTHORED content in the `mobile_buy_bar` widget and in
+  // Industry Kitchens' builder seed, and a magic number here would be wrong the
+  // first time somebody changes its padding.
+  assert.match(component, /measureBottomBar\(/);
+  assert.match(component, /elementsFromPoint/);
+  assert.match(component, /bottomBarClearancePx\(/);
+  // …and the measurement has to actually reach the frame, or the card still
+  // sits on the bar.
+  assert.match(component, /style=\{barClear \? \{ bottom: barClear \} : undefined\}/);
+  // The spacer clears both, so nothing at the bottom of a single-column page is
+  // left unreachable either.
+  assert.match(component, /EXIT_SURVEY_FRAME_GUTTER_PX \+ bar/);
+});
+
 test("nothing in the pop-up ever delays a navigation", () => {
   // The rule that outranks every other rule on this component. Matched against
   // the CODE, so the two comments that name `beforeunload` to say we do not use
@@ -280,4 +340,123 @@ test("the thank-you is stamped from the form's own setting, not from a guess", (
 test("filing still cannot throw at a shopper on their way out", () => {
   const code = filing.replace(/\/\/[^\n]*/g, "");
   assert.match(code, /catch \(e\) \{[\s\S]*?return \{ stored: false \};/);
+});
+
+// ── Leaving the checkout by an ordinary route ───────────────────────────────
+//
+// Steve, 2026-09-17: "I can see no evidence of this on either website. It does
+// not pop up anywhere when I go to leave from inside the checkout." He was
+// right. The two original triggers were the pointer crossing the TOP edge of
+// the window and coming back after twenty seconds away — neither of which is
+// anything an ordinary departure does. Pressing Back, clicking a link or a
+// router move fired nothing at all, and Tim's words on the card are "If
+// customers abandoned cart before leaving screen".
+//
+// So the pop-up moved into the site LAYOUT, where it outlives the checkout
+// page, and the checkout renders a marker whose UNMOUNT is the departure. The
+// question is asked AFTER the navigation, on the page the shopper landed on,
+// which is the only way to ask it without holding anybody up.
+
+const layout = readFileSync(new URL("../../app/layout.tsx", import.meta.url), "utf8");
+const checkoutPage = readFileSync(new URL("../../app/checkout/page.tsx", import.meta.url), "utf8");
+const marker = readFileSync(
+  new URL("../../components/checkout/CheckoutExitSurveyArm.tsx", import.meta.url),
+  "utf8"
+);
+
+test("the pop-up is mounted where it survives a route change", () => {
+  // On the checkout page it was unmounted by the very navigation it exists to
+  // ask about, which is why Back and a link click produced nothing at all.
+  assert.match(layout, /<CheckoutExitSurvey \/>/);
+  assert.match(layout, /from "@\/components\/checkout\/CheckoutExitSurvey"/);
+  assert.ok(
+    !/<CheckoutExitSurvey \/>/.test(checkoutPage),
+    "the checkout page must render the marker, not the pop-up it would unmount"
+  );
+});
+
+test("only a real checkout arms it, so the layout mount stays silent everywhere else", () => {
+  // The marker sits past the empty-cart redirect and past the sign-in gate, and
+  // the confirmation page does not render it at all.
+  assert.match(checkoutPage, /<CheckoutExitSurveyArm \/>/);
+  assert.match(marker, /announceCheckoutArmed\(\)/);
+  assert.match(marker, /return \(\) => announceCheckoutLeft\(\)/);
+  assert.match(component, /if \(checkoutIsOnScreen\(\)\) \{\n\s*onArmed\(\);/);
+  assert.match(component, /addEventListener\(CHECKOUT_ARMED_EVENT, onArmed\)/);
+  assert.match(component, /addEventListener\(CHECKOUT_LEFT_EVENT, onLeft\)/);
+});
+
+test("a departure that reloads the document is asked on the page they land on", () => {
+  // The other half of leaving, and the half a browser Back takes whenever the
+  // checkout was reached by a hard page load: the document is torn down, React
+  // unmounts nothing, and the next page is a fresh document with no memory. The
+  // tab keeps one, so the pop-up mounting anywhere else can still ask.
+  assert.match(component, /window\.sessionStorage\.setItem\(EXIT_SURVEY_ARMED_KEY, "1"\)/);
+  assert.match(component, /getItem\(EXIT_SURVEY_ARMED_KEY\) === "1"/);
+  assert.match(component, /removeItem\(EXIT_SURVEY_ARMED_KEY\)/);
+  // …and it is asked ONCE: the flag is dropped when the question goes up, and a
+  // submitted checkout drops it too rather than asking on the confirmation page.
+  const shown = component.slice(component.indexOf("const show = () => {"));
+  assert.match(shown.slice(0, shown.indexOf("};")), /forget\(\);/);
+  const submitHandler = component.slice(component.indexOf("const onSubmitted = () => {"));
+  assert.match(submitHandler.slice(0, submitHandler.indexOf("};")), /forget\(\);/);
+});
+
+test("the two on-page triggers stay on the page they are about", () => {
+  // Exit intent and the return-from-away ask somebody who is STILL on the
+  // checkout. With the pop-up now mounted site-wide they have to say so, or a
+  // stale arm would put the questionnaire on an unrelated page.
+  const mouse = component.slice(component.indexOf("const onMouseOut = "));
+  assert.match(mouse.slice(0, mouse.indexOf("};")), /if \(!onCheckout\.current\) return;/);
+  assert.match(component, /onCheckout\.current && hiddenAt && returnedFromLeaving/);
+});
+
+test("a page that is going away files what was answered, and asks nothing", () => {
+  // Closing the tab or typing an address runs no React unmount, so there is no
+  // departure event and no page left to ask on. `pagehide` is the event that
+  // fires for all of those; it FILES and returns, and it is not `beforeunload`.
+  assert.match(component, /const onPageHide = \(\) => file\(\);/);
+  assert.match(component, /addEventListener\("pagehide", onPageHide\)/);
+  assert.match(component, /removeEventListener\("pagehide", onPageHide\)/);
+});
+
+test("nothing in the marker delays a navigation either", () => {
+  const code = marker.replace(/\/\/[^\n]*/g, "");
+  assert.ok(!/beforeunload/.test(code), "beforeunload would turn the prompt into a gate");
+  assert.ok(!/preventDefault/.test(code), "nothing here may cancel a click");
+  assert.ok(
+    !/history\.|pushState|router\./.test(code),
+    "no history trap: the back button must work first time, every time"
+  );
+});
+
+test("a React remount of the checkout is not a departure", async () => {
+  // Strict Mode unmounts and immediately remounts every component in
+  // development, and a key change or a Suspense retry does it anywhere. Read
+  // naively that is "the shopper left the checkout", and the questionnaire
+  // would open on top of the checkout itself on first load.
+  const target = new EventTarget();
+  const previous = (globalThis as { document?: unknown }).document;
+  (globalThis as { document?: unknown }).document = target;
+  try {
+    let departures = 0;
+    let armings = 0;
+    target.addEventListener(CHECKOUT_LEFT_EVENT, () => departures++);
+    target.addEventListener(CHECKOUT_ARMED_EVENT, () => armings++);
+
+    announceCheckoutArmed();
+    announceCheckoutLeft();
+    announceCheckoutArmed();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.equal(departures, 0, "a remount must not read as leaving the checkout");
+    assert.equal(armings, 2);
+    assert.equal(checkoutIsOnScreen(), true);
+
+    announceCheckoutLeft();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.equal(departures, 1, "actually leaving is announced once");
+    assert.equal(checkoutIsOnScreen(), false);
+  } finally {
+    (globalThis as { document?: unknown }).document = previous;
+  }
 });
