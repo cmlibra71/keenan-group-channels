@@ -297,6 +297,8 @@
     "lib/quotes/pro-forma-email.ts",
     "lib/quotes/pro-forma-pay-call.test.ts",
     "lib/quotes/pro-forma-pay-call.ts",
+    "lib/quotes/quote-request-notes.test.ts",
+    "lib/quotes/quote-request-notes.ts",
     "lib/quotes/quote-request.test.ts",
     "lib/quotes/quote-request.ts",
     "lib/quotes/reprice-deltas.ts",
