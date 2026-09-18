@@ -62,6 +62,13 @@ const REQUIRED: Array<{ file: string; needles: string[] }> = [
       "const summaryImages = await orderSummaryImagesForProducts(",
       "image_url: summaryImages.get(Number(i.product_id)) ?? null,",
       "items={summaryItems}",
+      // The exit survey ARMS from this marker and nowhere else (card loDyEE3S). The pop-up itself
+      // lives in `app/layout.tsx` so it outlives the departure it asks about, which means a site
+      // left on the old `<CheckoutExitSurvey />` here would mount a pop-up that is destroyed by
+      // the very Back press it exists to catch — the bug Steve reported on 2026-09-17, shipped to
+      // one site only. `exit-survey.test.ts` asserts the same pair per tree; both pins are
+      // deliberate, and this is the one that names the file the rule is about.
+      "<CheckoutExitSurveyArm />",
     ],
   },
 ];
