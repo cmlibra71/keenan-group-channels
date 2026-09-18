@@ -122,6 +122,8 @@
     "lib/actions/quote-payment.ts",
     "lib/actions/reviews.ts",
     "lib/auth.ts",
+    "lib/borrowed-image.test.ts",
+    "lib/borrowed-image.ts",
     "lib/brand-listing.test.ts",
     "lib/brand-listing.ts",
     "lib/brand-logo-fallback.ts",

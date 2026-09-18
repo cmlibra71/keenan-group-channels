@@ -11,7 +11,12 @@ import {
   getFeatureFlag,
   getDefaultListingSort,
   getCategoryBySlug,
+  // Product photographs a pictureless brand can borrow (InEoeMZh).
+  getBorrowedImageCandidates,
+  applyBorrowedCategoryImages,
 } from "@/lib/store";
+import { borrowedImageFor } from "@/lib/borrowed-image";
+import { ownersNeedingBorrowedImage } from "@keenan/services";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { BrandIntro } from "@/components/brand/BrandIntro";
@@ -99,7 +104,7 @@ export default async function BrandPage({
   const [{ slug }, sp] = await Promise.all([params, searchParams]);
   // getBrandBySlug → getBySlug runs transformRow, so the row is snake_case at runtime
   // (image_url). Type it so the loose Record<string,unknown> doesn't surface as `unknown`.
-  const brand = (await getBrandBySlug(slug)) as
+  const brandRow = (await getBrandBySlug(slug)) as
     | {
         id: number;
         name: string;
@@ -113,7 +118,7 @@ export default async function BrandPage({
       }
     | null;
 
-  if (!brand) {
+  if (!brandRow) {
     // A renamed brand address redirects rather than bare-404ing. (card EVvRDnZt)
     await redirectIfMapped(`/brands/${slug}`);
     // Nothing mapped, and we do not carry this brand: send the reader to the brand
@@ -133,6 +138,28 @@ export default async function BrandPage({
     // status would buy no ranking and cost a trap.
     redirect("/brands");
   }
+
+  // A brand with no logo of its own shows a photograph of one of its own
+  // products instead (card InEoeMZh, Chris 2026-09-18: "use product images").
+  // Resolved ONCE, here, and overlaid on the row — so every branch below draws
+  // the same picture without knowing where it came from, including the authored
+  // Site Builder tree, which is what Industry Kitchens actually renders this
+  // page from.
+  //
+  // Read-time only: nothing is written to `brands.image_url`, so real artwork
+  // added later simply takes over and a retired product cannot leave a stale
+  // copy stamped into the record. Only a PICTURELESS brand pays for the lookup
+  // (`ownersNeedingBorrowedImage` returns nothing for the other 412), and
+  // measured on production 2026-09-18 five of the six pictureless brands have no
+  // storefront-visible products at all — so the answer is usually `null` and the
+  // hero keeps the no-logo layout it already had. (`lib/borrowed-image.ts`.)
+  const brand = {
+    ...brandRow,
+    image_url: borrowedImageFor(
+      brandRow,
+      await getBorrowedImageCandidates("brand", ownersNeedingBorrowedImage([brandRow]))
+    ),
+  };
 
   const page = parseBrandPage(sp.page);
   // `?sort=` wins, including `?sort=relevance`; with nothing on the URL the
@@ -197,11 +224,17 @@ export default async function BrandPage({
   // Where a tile GOES depends on the rail configuration: with the Category
   // facet on it narrows this brand page, with it switched off it goes to the
   // category's own page rather than being a control that does nothing.
-  const categoryTiles = facets.categories.map((category) => ({
-    ...category,
+  // A category with no picture of its own borrows one from its products, the
+  // same way its own page's tiles do — this strip reads the brand listing's
+  // FACETS, which come out of `listBrandFaceted` and not out of the wrapped
+  // category reads, so it needs the fill applied by hand (card InEoeMZh).
+  const categoryTiles = (
+    await applyBorrowedCategoryImages(facets.categories as { id: number; image_url?: string | null }[])
+  ).map((category) => ({
+    ...(category as (typeof facets.categories)[number]),
     href: categoryEnabled
       ? `/brands/${slug}?${CATEGORY_PARAM}=${category.id}`
-      : `/categories/${category.slug}`,
+      : `/categories/${(category as (typeof facets.categories)[number]).slug}`,
   }));
   const shown = products.length;
   const hasMore = shown < total && page < MAX_PAGES;

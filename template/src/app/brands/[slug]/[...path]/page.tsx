@@ -9,7 +9,11 @@ import {
   getProducts,
   getFeatureFlag,
   getDefaultListingSort,
+  // Product photographs a pictureless brand can borrow (InEoeMZh).
+  getBorrowedImageCandidates,
 } from "@/lib/store";
+import { borrowedImageFor } from "@/lib/borrowed-image";
+import { ownersNeedingBorrowedImage } from "@keenan/services";
 import type { ListingSort } from "@/lib/listing-sort";
 import { categorySlugCandidates } from "@/lib/legacy-address";
 import { getListingMemberPrices } from "@/lib/member";
@@ -68,6 +72,20 @@ export default async function BrandCategoryPage({
     redirect("/brands");
   }
 
+  // The brand's own logo, or — when it has none — a photograph of one of its own
+  // products (card InEoeMZh, Chris 2026-09-18: "use product images"). Read-time
+  // only: nothing is written to `brands.image_url`. Only a pictureless brand
+  // pays for the lookup, and most of those have no visible products either, so
+  // the answer is usually `null` and the hero keeps its no-logo layout.
+  // (`lib/borrowed-image.ts`.)
+  const brandPicture = borrowedImageFor(
+    brand as { id: number; image_url?: string | null },
+    await getBorrowedImageCandidates(
+      "brand",
+      ownersNeedingBorrowedImage([brand as { id: number; image_url?: string | null }])
+    )
+  );
+
   // If we can't resolve the category, fall back to brand-only products. This
   // gives the URL a sensible landing instead of 404.
   const filter: {
@@ -118,10 +136,10 @@ export default async function BrandCategoryPage({
       </nav>
 
       <div className="mb-10 flex flex-col lg:flex-row gap-8 items-start bg-zinc-50 rounded-2xl overflow-hidden">
-        {(brand.image_url as string | null) && (
+        {brandPicture && (
           <div className="lg:w-2/5 flex-shrink-0 bg-white rounded-2xl m-3 p-6 relative min-h-[200px]">
             <Image
-              src={brand.image_url as string}
+              src={brandPicture}
               alt={brand.name as string}
               fill
               sizes="(max-width: 1024px) 100vw, 40vw"
@@ -129,7 +147,7 @@ export default async function BrandCategoryPage({
             />
           </div>
         )}
-        <div className={`flex-1 py-8 pr-8 text-left ${brand.image_url ? "" : "pl-8"}`}>
+        <div className={`flex-1 py-8 pr-8 text-left ${brandPicture ? "" : "pl-8"}`}>
           <h1 className="text-3xl font-bold text-zinc-900">{heading}</h1>
           <p className="mt-3 text-sm text-zinc-500">
             {total} {total === 1 ? "product" : "products"}

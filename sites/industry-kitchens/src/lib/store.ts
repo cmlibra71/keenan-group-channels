@@ -50,6 +50,8 @@ import {
   readPriorFreeTrial,
   readQualifyingOrder,
   membershipNumber,
+  // The picture a pictureless landing page borrows from its products (InEoeMZh).
+  ownersNeedingBorrowedImage,
 } from "@keenan/services";
 import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
@@ -67,6 +69,7 @@ import {
   DEFAULT_LISTING_SORT_SETTING_KEY,
   normalizeDefaultListingSort,
 } from "./listing-sort";
+import { applyBorrowedImages } from "./borrowed-image";
 
 // Auto-initialize DB connection on first import
 const dbUrl = process.env.COMMERCE_DATABASE_URL;
@@ -94,11 +97,12 @@ export const {
   getProductBySlug,
   getRedirectForPath,
   getTopCategories,
-  getCategories,
+  // Wrapped below so a pictureless category borrows a product photograph (InEoeMZh).
+  getCategories: getCategoriesRaw,
   getMegaMenu,
   getCategoryListing,
   getCategoryBySlug,
-  getSubcategories,
+  getSubcategories: getSubcategoriesRaw,
   getCategoryStats,
   getCategoryBreadcrumbs,
   getProductBreadcrumbs,
@@ -476,6 +480,82 @@ export const getDefaultListingSort = unstable_cache(
   [`default-listing-sort-${CHANNEL_ID}`],
   { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
 );
+
+/** Product photographs a pictureless brand or category landing page can borrow,
+ *  in the fixed lowest-product-id order (card InEoeMZh, Chris 2026-09-18 "use
+ *  product images"). Keyed by owner id; an owner with nothing to borrow is
+ *  simply absent, which every caller reads as "draw the no-picture branch".
+ *
+ *  READ-ONLY by design: nothing is written to `brands.image_url` or
+ *  `categories.image_url`, so real artwork added later takes over with no
+ *  cleanup and a retired product cannot leave a stale copy behind.
+ *
+ *  Cached on the IDS, not on the request, because the pictureless set is a
+ *  property of the catalogue — which is what makes this affordable on the
+ *  uncached `/categories` index, where every visitor shares one entry. Tagged
+ *  `products` as well, because the answer changes when a product is retired or
+ *  re-photographed and not only when the brand row is edited.
+ *
+ *  Which candidate is USABLE is the storefront's own decision
+ *  (`lib/borrowed-image.ts`, `isAllowedImageUrl`) — see that module for why the
+ *  allowlist is not duplicated in SQL. */
+export const getBorrowedImageCandidates = (
+  kind: "brand" | "category",
+  ownerIds: readonly number[]
+): Promise<Record<number, string[]>> => {
+  const ids = [...new Set(ownerIds.filter((id) => Number.isInteger(id) && id > 0))].sort(
+    (a, b) => a - b
+  );
+  if (ids.length === 0) return Promise.resolve({});
+  return unstable_cache(
+    async () => productService.borrowedImageCandidates(CHANNEL_ID, kind, ids),
+    [`borrowed-images-${CHANNEL_ID}-${kind}-${ids.join(".")}`],
+    {
+      revalidate: 1800,
+      tags: [`channel-${CHANNEL_ID}`, "products", kind === "brand" ? "brands" : "categories"],
+    }
+  )();
+};
+
+// ── Landing-page pictures borrowed from products (card InEoeMZh) ─────────────
+// A category with no `image_url` of its own drew the grey package placeholder on
+// every tile that names it, including the two biggest pages a shopper arrives on
+// from Google (Combi Ovens 687 products, Pizza Ovens 367). Chris, 2026-09-18:
+// "use product images".
+//
+// The fill happens HERE, on the two reads every category tile on the site comes
+// out of, rather than in each tile component — because those tiles are drawn on
+// four different paths (the sealed category page, the `category_header` block,
+// the authored Site Builder tree Industry Kitchens actually renders from, and
+// the `/categories` index) and a fix in one of them would be invisible on the
+// other three. The row's `image_url` is what every one of those paths reads and
+// what the authored tree binds, so that is the field the answer lands on.
+//
+// Nothing is written to the database: this is a copy of the row on its way to
+// the screen. Only PICTURELESS rows are looked up, so the 4,915 categories that
+// already carry artwork cost nothing, and the lookup itself is one cached read
+// for the whole batch. (`lib/borrowed-image.ts`.)
+/** The same fill, for a list of categories that did NOT come out of the two
+ *  reads below — the brand page's category FACETS, which `listBrandFaceted`
+ *  computes. One exported helper so the brand page cannot fill them by a
+ *  second set of rules. */
+export const applyBorrowedCategoryImages = async <
+  T extends { id: number; image_url?: string | null },
+>(
+  rows: T[]
+): Promise<T[]> =>
+  applyBorrowedImages(
+    rows,
+    await getBorrowedImageCandidates("category", ownersNeedingBorrowedImage(rows))
+  );
+
+/** Every category this storefront shows, tiles included — `/categories`. */
+export const getCategories = async (...args: Parameters<typeof getCategoriesRaw>) =>
+  applyBorrowedCategoryImages(await getCategoriesRaw(...args));
+
+/** A category's children, as the subcategory tiles draw them. */
+export const getSubcategories = async (...args: Parameters<typeof getSubcategoriesRaw>) =>
+  applyBorrowedCategoryImages(await getSubcategoriesRaw(...args));
 
 /** GA4 Measurement ID (`G-XXXXXXXX`) for this channel — powers the gtag.js tag +
  *  client ecommerce funnel. Empty string when GA4 isn't configured (tag omitted). */
