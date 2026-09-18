@@ -1266,6 +1266,10 @@ export async function placeOrder(
         ]),
         portalPath: `/dashboard/orders/${order.id}`,
         linkLabel: "Review order",
+        // Recorded on the order's own history, beside the backorder alert (card wlEdBRZX). It is
+        // an internal alert, so it never joins the four resendable customer documents.
+        emailKind: "order_below_cost_alert",
+        orderId: order.id,
       });
     } catch (e) {
       console.error("[placeOrder] below-cost staff alert failed (non-fatal):", e);

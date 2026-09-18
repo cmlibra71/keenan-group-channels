@@ -126,7 +126,18 @@ export async function sendAddedPeopleEmail(input: {
           },
         },
       }),
-      { latencyKind: "account_person_added", channelId: CHANNEL_ID }
+      {
+        latencyKind: "account_person_added",
+        channelId: CHANNEL_ID,
+        // What makes the send land on the manager's own Contact history (card wlEdBRZX). It is
+        // customer mail, so it belongs on the person who received it rather than on a staff
+        // trail, and it recorded nothing at all until this kind existed. One row per recipient
+        // is the person trail's shape by design — each manager really was written to — and the
+        // recipient is resolved by the shared `pickContactForEmail` rules, which PREFER this
+        // channel's contact row but will still file the row on a person whose only row was first
+        // seen on the other site (card utA2Ebnp's deliberate single-row cross-over).
+        emailKind: "account_person_added",
+      }
     );
     return recipients;
   } catch (e) {

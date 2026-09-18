@@ -592,6 +592,10 @@ async function alertOrdersTeamNoFreight(
     ],
     portalPath: `/dashboard/orders/${order.id}`,
     linkLabel: "Open order",
+    // Recorded on the order's own history (card wlEdBRZX) — an order that needs freight putting
+    // on it, so the proof that somebody was told belongs on that order.
+    emailKind: "order_no_freight_alert",
+    orderId: order.id,
   });
 }
 
