@@ -21,6 +21,13 @@
 //     because at `lg` and up the summary is the right-hand column and nothing
 //     is covered. A pop-up sitting on the one control the shopper needs is a
 //     gate in everything but name (sf-checkout, "Do not break").
+//     The same rule follows it off the checkout. Because the pop-up is mounted
+//     in the LAYOUT it is asked on the page the shopper landed on, and that is
+//     usually a product page, which carries a FIXED mobile buy bar below `lg`
+//     holding the ex-GST price and Add to Cart (sf-product-page, card
+//     33HGX8U2). A fixed bar does not scroll, so the flow spacer cannot save
+//     it; instead the frame is measured off the bottom edge of the window by
+//     that bar's own height (`measureBottomBar`), on whatever page it lands on.
 //   * Nothing listens to `beforeunload`, cancels a click or delays a
 //     navigation. Leaving is exactly as fast with the pop-up open as without.
 //     That is why the question is asked AFTER an in-page departure rather than
@@ -61,6 +68,7 @@ import {
   CHECKOUT_SURVEY_THANKS,
 } from "@keenan/services/checkout-survey";
 import {
+  bottomBarClearancePx,
   CHECKOUT_ARMED_EVENT,
   CHECKOUT_LEFT_EVENT,
   CHECKOUT_SUBMITTED_EVENT,
@@ -81,17 +89,65 @@ import {
 
 type Step = "reason" | "likelihood" | "thanks";
 
+/**
+ * Measure the SITE's own fixed bottom bar on whatever page this pop-up has
+ * landed on, so the card can be lifted clear of it.
+ *
+ * Found by hit-testing the bottom edge of the window rather than by matching a
+ * class name: the three bars that exist today are a hand-written component on
+ * Chefs Depot, an authored `mobile_buy_bar` widget on the Chefs Depot product
+ * template and a builder seed on Industry Kitchens, and a fourth will be
+ * authored by somebody who never reads this file. Anything genuinely pinned to
+ * the bottom of the window is found; nothing has to opt in. `lg:hidden` bars
+ * measure zero on a laptop because they are display:none, so the breakpoint
+ * takes care of itself.
+ *
+ * Our own frame is `pointer-events-none` and is therefore already invisible to
+ * `elementsFromPoint`; the card is excluded explicitly anyway, so the
+ * measurement can never feed back on itself.
+ */
+function measureBottomBar(ours: HTMLElement | null): number {
+  if (typeof document === "undefined" || typeof document.elementsFromPoint !== "function") {
+    return 0;
+  }
+  const vh = window.innerHeight;
+  const vw = window.innerWidth;
+  if (!vh || !vw) return 0;
+  const bars: { top: number; bottom: number }[] = [];
+  // Three probes across the edge: a bar can be half-width, and the card sits
+  // bottom-centre on a phone and bottom-LEFT from `sm` up.
+  for (const x of [vw * 0.15, vw * 0.5, vw * 0.85]) {
+    for (const hit of document.elementsFromPoint(x, vh - 1)) {
+      let node: HTMLElement | null = hit as HTMLElement;
+      while (node) {
+        if (ours && (node === ours || ours.contains(node) || node.contains(ours))) break;
+        if (window.getComputedStyle(node).position === "fixed") {
+          bars.push(node.getBoundingClientRect());
+          break;
+        }
+        node = node.parentElement;
+      }
+    }
+  }
+  return bottomBarClearancePx(bars, vh);
+}
+
 export function CheckoutExitSurvey() {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<Step>("reason");
   const [draft, setDraft] = useState<SurveyDraft>(EMPTY_SURVEY_DRAFT);
   /** Flow height added below the checkout so the card covers nothing for good. */
   const [reserve, setReserve] = useState(0);
+  /** How far the card is lifted off the bottom edge to clear the SITE's own
+   *  fixed bottom bar — the product page's mobile buy bar, today. Measured from
+   *  the page the shopper actually landed on, never assumed. */
+  const [barClear, setBarClear] = useState(0);
 
   // Refs, not state: the listeners below read these on every event and must
   // never re-subscribe (a re-subscribe mid-gesture drops the gesture).
   const draftRef = useRef(draft);
   const cardRef = useRef<HTMLDivElement | null>(null);
+  const frameRef = useRef<HTMLDivElement | null>(null);
   const armed = useRef(false);
   const submitted = useRef(false);
   const filed = useRef(false);
@@ -339,17 +395,28 @@ export function CheckoutExitSurvey() {
       typeof window.matchMedia === "function"
         ? window.matchMedia(EXIT_SURVEY_SINGLE_COLUMN_QUERY)
         : null;
-    const measure = () =>
+    const measure = () => {
+      // Lift the card clear of the site's own fixed bottom bar FIRST, then
+      // reserve room for both. On the checkout there is no such bar and this is
+      // zero; on the product page a shopper lands on after pressing Back it is
+      // the mobile buy bar, and that bar does not scroll.
+      const bar = measureBottomBar(frameRef.current);
+      setBarClear(bar);
       setReserve(
-        reservesFlowSpace(mq ? mq.matches : null) ? el.offsetHeight + EXIT_SURVEY_FRAME_GUTTER_PX : 0
+        reservesFlowSpace(mq ? mq.matches : null)
+          ? el.offsetHeight + EXIT_SURVEY_FRAME_GUTTER_PX + bar
+          : 0
       );
+    };
     measure();
     mq?.addEventListener?.("change", measure);
+    window.addEventListener("resize", measure);
     const observer =
       typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
     observer?.observe(el);
     return () => {
       mq?.removeEventListener?.("change", measure);
+      window.removeEventListener("resize", measure);
       observer?.disconnect();
     };
   }, [open, step]);
@@ -385,6 +452,7 @@ export function CheckoutExitSurvey() {
       {/* No backdrop, and `pointer-events-none` on the frame so the checkout
           behind it stays clickable everywhere the card itself is not. */}
       <div
+        ref={frameRef}
         // z-[120] clears the sticky site header (z-50 on Industry Kitchens and
         // the template, z-[100] on Chefs Depot) and its mega menu (z-[110]) —
         // under either of them the question and the close button hide behind the
@@ -397,6 +465,14 @@ export function CheckoutExitSurvey() {
         // is disabled. Covering those would break a rule card 7vu2iEEZ put on
         // this surface, and would make a prompt behave like a gate.
         className="pointer-events-none fixed inset-0 z-[120] flex items-end justify-center p-3 sm:justify-start sm:p-6"
+        // The frame ENDS above the site's own fixed bottom bar rather than at
+        // the bottom of the window, so the card cannot land on it. On the
+        // product page a departing shopper is sent back to, that bar carries the
+        // ex-GST price and Add to Cart — rules card 33HGX8U2 put on
+        // sf-product-page — and it does not scroll, so the flow spacer below
+        // cannot clear it. Zero everywhere there is no such bar, which includes
+        // the checkout itself and every width at `lg` and up.
+        style={barClear ? { bottom: barClear } : undefined}
         aria-live="polite"
       >
         <div

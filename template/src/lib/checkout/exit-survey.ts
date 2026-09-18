@@ -76,6 +76,60 @@ export function reservesFlowSpace(singleColumn: boolean | null): boolean {
 }
 
 /**
+ * How close to the bottom edge of the window a fixed element has to finish
+ * before it counts as a bar PINNED there rather than something that merely
+ * happens to be low on the page. Sub-pixel layout means an exact comparison
+ * misses by fractions.
+ */
+export const EXIT_SURVEY_BOTTOM_BAR_TOLERANCE_PX = 2;
+
+/**
+ * A bar taller than this share of the window is not a bar — it is a sheet, a
+ * drawer or a full-screen overlay, and lifting the card by its height would
+ * push the questionnaire off the top of the screen. Left uncleared instead:
+ * those are screens the shopper opened on purpose and the pop-up already sits
+ * under the mobile navigation drawer for the same reason.
+ */
+export const EXIT_SURVEY_BOTTOM_BAR_MAX_FRACTION = 0.4;
+
+/**
+ * How far the pop-up must be lifted off the bottom of the window so it clears
+ * the SITE's own fixed bottom bar.
+ *
+ * The pop-up is mounted in the layout, so it is no longer only ever seen on the
+ * checkout: it appears on whatever page the departing shopper lands on, and the
+ * most ordinary route into the checkout is the header cart drawer opened from a
+ * product page — so Back lands them on `/products/[slug]`, which carries a
+ * FIXED mobile buy bar below `lg` (`fixed inset-x-0 bottom-0 z-[90]`, Chefs
+ * Depot's `ProductDetail` and `mobile_buy_bar` widget, Industry Kitchens'
+ * builder seed). That bar carries the ex-GST price and Add to Cart, both
+ * rule-bearing on `sf-product-page` (card 33HGX8U2, Steve 2026-08-05: it must
+ * work on phones, 60% of Industry Kitchens' shoppers are on one). A bottom-
+ * anchored card lands on top of it, and — unlike the checkout's Order Summary —
+ * a `fixed` bar does not scroll, so the flow spacer cannot rescue it.
+ *
+ * Measured, never assumed: the bar is 77px on Chefs Depot today, it is authored
+ * content on Industry Kitchens, and a magic number here would be wrong the day
+ * somebody changes its padding.
+ */
+export function bottomBarClearancePx(
+  bars: ReadonlyArray<{ top: number; bottom: number }>,
+  viewportHeight: number
+): number {
+  let clearance = 0;
+  for (const bar of bars) {
+    const height = bar.bottom - bar.top;
+    if (!(height > 0)) continue;
+    // Anchored to the bottom EDGE. A fixed element floating mid-screen covers
+    // nothing the card wants and lifting for it would be dead space.
+    if (bar.bottom < viewportHeight - EXIT_SURVEY_BOTTOM_BAR_TOLERANCE_PX) continue;
+    if (height > viewportHeight * EXIT_SURVEY_BOTTOM_BAR_MAX_FRACTION) continue;
+    clearance = Math.max(clearance, Math.ceil(height));
+  }
+  return clearance;
+}
+
+/**
  * True when the pointer left through the TOP edge of the window — the browser's
  * only honest "they are reaching for the address bar, the back button or the
  * tab strip" signal.

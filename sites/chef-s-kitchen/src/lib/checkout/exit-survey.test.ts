@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   announceCheckoutArmed,
   announceCheckoutLeft,
+  bottomBarClearancePx,
   checkoutIsOnScreen,
   hasSurveyAnswer,
   isExitIntent,
@@ -14,6 +15,7 @@ import {
   CHECKOUT_ARMED_EVENT,
   CHECKOUT_LEFT_EVENT,
   CHECKOUT_SURVEY_ENDPOINT,
+  EXIT_SURVEY_BOTTOM_BAR_MAX_FRACTION,
   EXIT_SURVEY_OTHER_MAX_LENGTH,
   EXIT_SURVEY_TWO_COLUMN_MIN_PX,
 } from "./exit-survey";
@@ -161,6 +163,59 @@ test("the spacer runs where it is load-bearing, and reserves when the width is u
   assert.equal(reservesFlowSpace(true), true, "one column — the summary is under the card");
   assert.equal(reservesFlowSpace(false), false, "two columns — the card is beside it");
   assert.equal(reservesFlowSpace(null), true, "no matchMedia: cover nothing, waste a little page");
+});
+
+// The card is no longer only ever seen on the checkout. It is mounted in the
+// LAYOUT and asked on the page the shopper landed on — most often a product
+// page, because the ordinary way into the checkout is the header cart drawer
+// opened from one. That page carries a FIXED mobile buy bar below `lg`
+// (`fixed inset-x-0 bottom-0 z-[90]`) holding the ex-GST price and Add to Cart,
+// and those are rules card 33HGX8U2 put on `sf-product-page` ("it must work on
+// phones — 60% of Industry Kitchens' shoppers are on one"). A `fixed` bar does
+// not scroll, so the flow spacer above cannot clear it: the frame itself has to
+// stop short of the bottom edge.
+
+test("the card is lifted clear of a site's fixed bottom bar", () => {
+  const vh = 844; // iPhone 14 Pro, the width the defect was measured at
+  // Chefs Depot's mobile buy bar as it stands today: 77px, hard against the
+  // bottom edge. 65px of it was covered by the card before this.
+  assert.equal(bottomBarClearancePx([{ top: 767, bottom: 844 }], vh), 77);
+  // A fractional rect still counts as pinned to the edge.
+  assert.equal(bottomBarClearancePx([{ top: 766.5, bottom: 843.2 }], vh), 77);
+  // Two bars: clear the tallest, not the sum.
+  assert.equal(bottomBarClearancePx([{ top: 767, bottom: 844 }, { top: 800, bottom: 844 }], vh), 77);
+});
+
+test("only a bar pinned to the bottom edge moves the card, and only if it is a bar", () => {
+  const vh = 844;
+  // Nothing there — the checkout itself, and every width at `lg` and up, where
+  // the buy bar is `lg:hidden` and measures zero.
+  assert.equal(bottomBarClearancePx([], vh), 0);
+  assert.equal(bottomBarClearancePx([{ top: 767, bottom: 767 }], vh), 0);
+  // Floating mid-screen: covers nothing the card wants, so lifting would only
+  // be dead space.
+  assert.equal(bottomBarClearancePx([{ top: 400, bottom: 460 }], vh), 0);
+  // A sheet or drawer, not a bar. Lifting by its height would push the
+  // questionnaire off the top of the screen; the pop-up already sits UNDER the
+  // mobile navigation drawer for the same reason.
+  const sheet = { top: 844 - vh * EXIT_SURVEY_BOTTOM_BAR_MAX_FRACTION - 1, bottom: 844 };
+  assert.equal(bottomBarClearancePx([sheet], vh), 0);
+});
+
+test("the pop-up measures that bar rather than hard-coding its height", () => {
+  // A source guard, like the two above it: the bar is 77px on Chefs Depot
+  // today, it is AUTHORED content in the `mobile_buy_bar` widget and in
+  // Industry Kitchens' builder seed, and a magic number here would be wrong the
+  // first time somebody changes its padding.
+  assert.match(component, /measureBottomBar\(/);
+  assert.match(component, /elementsFromPoint/);
+  assert.match(component, /bottomBarClearancePx\(/);
+  // …and the measurement has to actually reach the frame, or the card still
+  // sits on the bar.
+  assert.match(component, /style=\{barClear \? \{ bottom: barClear \} : undefined\}/);
+  // The spacer clears both, so nothing at the bottom of a single-column page is
+  // left unreachable either.
+  assert.match(component, /EXIT_SURVEY_FRAME_GUTTER_PX \+ bar/);
 });
 
 test("nothing in the pop-up ever delays a navigation", () => {
