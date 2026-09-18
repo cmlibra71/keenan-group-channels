@@ -12,6 +12,8 @@ import {
   getStorefrontFilters,
   getFeatureFlag,
   getCmsPage,
+  getDefaultListingSort,
+  getCategoryBySlug,
 } from "@/lib/store";
 import { getListingMemberPrices } from "@/lib/member";
 import { brandNodePathApplies, renderBrandNodeBranch } from "@/builder/brand-node-branch";
@@ -20,6 +22,11 @@ import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BrandIntro } from "@/components/brand/BrandIntro";
 import { BrandSearch } from "@/components/brand/BrandSearch";
 import { BrandProductLines } from "@/components/brand/BrandProductLines";
+import {
+  productLineCategorySlugs,
+  resolveProductLines,
+  type ProductLineCategory,
+} from "@/lib/brand-product-lines";
 import { BrandIndustryUses } from "@/components/brand/BrandIndustryUses";
 import { BrandFaq } from "@/components/brand/BrandFaq";
 import { BrandCategories } from "@/components/brand/BrandCategories";
@@ -44,6 +51,7 @@ import {
 
 type BrandMetafields = {
   intro_html?: string;
+  /** Authored ranges. Shape and picture resolution: `lib/brand-product-lines.ts`. */
   product_lines?: { name: string; slug?: string; href?: string; image_url?: string }[];
   industry_uses?: { name: string; image_url?: string; href?: string }[];
   faq?: { q: string; a: string }[];
@@ -138,6 +146,33 @@ export default async function BrandPage({
   const meta = ((brand.metafields as BrandMetafields | null) ?? {}) as BrandMetafields;
   const pageTitle = (brand.page_title as string | null) || (brand.name as string);
 
+  // Each product line's picture, resolved from the category it names. A line
+  // that already carries its own image asks for nothing; 416 of our 418 brands
+  // author no lines at all, so this is almost always zero reads, and the lookups
+  // it does make are the same cached `getCategoryBySlug` the category page uses.
+  const lineSlugs = productLineCategorySlugs(meta.product_lines);
+  const lineCategories = new Map<string, ProductLineCategory | null>(
+    lineSlugs.length === 0
+      ? []
+      : await Promise.all(
+          lineSlugs.map(
+            async (candidate) =>
+              [
+                candidate,
+                (await getCategoryBySlug(candidate).catch(
+                  () => null
+                )) as ProductLineCategory | null,
+              ] as [string, ProductLineCategory | null]
+          )
+        )
+  );
+  const productLines = resolveProductLines(meta.product_lines, lineCategories);
+
+  // This storefront's own listing order, used by BOTH branches below: the
+  // authored tree has no sort control at all, and the sealed listing falls back
+  // to it whenever `?sort=` says nothing (card InEoeMZh).
+  const defaultListingSort = await getDefaultListingSort();
+
   // Editable CMS zones on every brand page (global brand template) — empty unless set.
   // `x-kg-json` is the parity surface: /json/brands/<slug> forces the node path
   // and the draft tree, so a conversion can be diffed against this live page.
@@ -151,12 +186,29 @@ export default async function BrandPage({
   // shows 48, with nothing on screen to page or filter them.
   if (await brandNodePathApplies({ brandCms, draft })) {
     const [{ products: nodeProducts, total: nodeTotal }, nodeMemberPricing] = await Promise.all([
-      getProducts({ brandId: brand.id as number, limit: 48 }),
+      // The authored tree has no sort control, so the order is the storefront's
+      // own default and nothing else (card InEoeMZh). Unset that is still the
+      // alphabetical order this read has always returned.
+      getProducts({
+        brandId: brand.id as number,
+        limit: 48,
+        sort: defaultListingSort,
+      }),
       getFeatureFlag("member_pricing_enabled"),
     ]);
     const nodeRendered = await renderBrandNodeBranch({
       brandCms,
-      brand: brand as unknown as Record<string, unknown>,
+      // The authored tree binds `brand.meta.product_lines` verbatim, so the
+      // RESOLVED lines have to reach it too — otherwise the designed page keeps
+      // drawing the pictureless rows and only the sealed page gains the
+      // photographs (card InEoeMZh).
+      brand: {
+        ...(brand as unknown as Record<string, unknown>),
+        metafields: {
+          ...((brand.metafields as Record<string, unknown> | null) ?? {}),
+          product_lines: productLines,
+        },
+      },
       products: nodeProducts,
       total: nodeTotal,
       pricing: { memberPriceMap: await getListingMemberPrices(nodeProducts) },
@@ -167,7 +219,9 @@ export default async function BrandPage({
   }
 
   const page = parseBrandPage(sp.page);
-  const sort = parseBrandSort(sp.sort);
+  // `?sort=` wins, including `?sort=relevance`; with nothing on the URL the
+  // listing opens in THIS storefront's own order (card InEoeMZh).
+  const sort = parseBrandSort(sp.sort, defaultListingSort);
 
   // This storefront's rail configuration (portal: Products > Filtering). A
   // switched-off facet must stop FILTERING, not merely displaying, so its URL
@@ -299,8 +353,11 @@ export default async function BrandPage({
           disappears with the results. */}
       {brandTotal > 0 && <BrandSearch brandName={brand.name as string} />}
 
-      {/* Brand product lines (e.g. Rational iCombi Pro / Classic / Vario) */}
-      <BrandProductLines heading="Product Lines" lines={meta.product_lines} />
+      {/* Brand product lines (e.g. Rational iCombi Pro / Classic / Vario).
+          The picture comes from the CATEGORY the line names — a line is
+          authored as a name and a slug and nothing else, so every one of these
+          tiles was a grey placeholder until card InEoeMZh. */}
+      <BrandProductLines heading="Product Lines" lines={productLines} />
 
       {/* ═══ The brand's categories ═══ A tile narrows this page while the
           Category facet is on; with it switched off the tile goes to the
@@ -322,7 +379,7 @@ export default async function BrandPage({
               </p>
               <FacetChips groups={groups} />
             </div>
-            <SortSelect />
+            <SortSelect defaultSort={defaultListingSort} />
           </div>
 
           {products.length > 0 ? (

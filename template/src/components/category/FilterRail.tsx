@@ -19,6 +19,7 @@ import {
   sliderTravel,
   type AttributeFacet,
 } from "@/lib/category-attributes";
+import { FALLBACK_LISTING_SORT, sortParamFor, type ListingSort } from "@/lib/listing-sort";
 
 // ── Generic facet model ───────────────────────────────────────────────────
 // A group is one accordion section (Brand, Category, Price …). `value` is the
@@ -638,11 +639,20 @@ const DEFAULT_SORT_OPTIONS = [
 ];
 
 /** Sort dropdown — writes ?sort= to the URL. Callers can override the options. */
-export function SortSelect({ options = DEFAULT_SORT_OPTIONS }: { options?: { value: string; label: string }[] } = {}) {
+export function SortSelect({
+  options = DEFAULT_SORT_OPTIONS,
+  defaultSort = FALLBACK_LISTING_SORT,
+}: {
+  options?: { value: string; label: string }[];
+  /** This storefront's own default order (card InEoeMZh). The control has to
+   *  SHOW it when the URL says nothing, or a listing that opens price
+   *  high-to-low would sit under a dropdown reading "Relevance". */
+  defaultSort?: ListingSort;
+} = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const current = searchParams.get("sort") ?? "relevance";
+  const current = searchParams.get("sort") ?? defaultSort;
 
   return (
     <label className="flex items-center gap-2 text-[13px] text-zinc-600">
@@ -651,8 +661,13 @@ export function SortSelect({ options = DEFAULT_SORT_OPTIONS }: { options?: { val
         value={current}
         onChange={(e) => {
           const next = new URLSearchParams(searchParams.toString());
-          if (e.target.value === "relevance") next.delete("sort");
-          else next.set("sort", e.target.value);
+          // The storefront's OWN default is what writes no parameter, not the
+          // literal "relevance": on a price-ordered storefront, dropping the
+          // param for Relevance would land the shopper straight back on the
+          // price order and the control would read as broken.
+          const param = sortParamFor(e.target.value, defaultSort);
+          if (param === null) next.delete("sort");
+          else next.set("sort", param);
           next.delete("page");
           router.replace(`${pathname}?${next.toString()}`, { scroll: false });
         }}

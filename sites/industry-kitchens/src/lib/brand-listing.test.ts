@@ -159,6 +159,17 @@ test("page and sort are clamped, so a hand-typed URL cannot ask for everything",
   assert.equal(parseBrandSort("price_desc"), "price_desc");
 });
 
+test("a brand listing takes the storefront's own default order when ?sort= says nothing", () => {
+  // Card InEoeMZh: the legacy Industry Kitchens brand pages open price
+  // high-to-low, and the switch has to land the shopper on the same page.
+  assert.equal(parseBrandSort(undefined, "price_desc"), "price_desc");
+  assert.equal(parseBrandSort("drop table", "price_desc"), "price_desc");
+  // ...and ?sort=relevance still gets them back to Relevance, or the first
+  // option in the dropdown would be unreachable on exactly those storefronts.
+  assert.equal(parseBrandSort("relevance", "price_desc"), "relevance");
+  assert.equal(parseBrandSort("price_asc", "price_desc"), "price_asc");
+});
+
 test("category ids are integers or they are not ids", () => {
   assert.deepEqual(parseIds("11,12"), [11, 12]);
   assert.deepEqual(parseIds("11,abc,,13"), [11, 13]);

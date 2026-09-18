@@ -3,7 +3,14 @@ import { redirectIfMapped } from "@/lib/redirect-seam";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { getBrandBySlug, getCategoryBySlug, getProducts, getFeatureFlag } from "@/lib/store";
+import {
+  getBrandBySlug,
+  getCategoryBySlug,
+  getProducts,
+  getFeatureFlag,
+  getDefaultListingSort,
+} from "@/lib/store";
+import type { ListingSort } from "@/lib/listing-sort";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 
@@ -25,10 +32,14 @@ export default async function BrandCategoryPage({
   const last = path[path.length - 1] ?? "";
   const cleanCatSlug = last.replace(/-\d+$/, "");
 
-  const [brand, category, memberPricingEnabled] = await Promise.all([
+  const [brand, category, memberPricingEnabled, defaultListingSort] = await Promise.all([
     getBrandBySlug(slug),
     getCategoryBySlug(cleanCatSlug),
     getFeatureFlag("member_pricing_enabled"),
+    // 2,691 legacy brand-range addresses land here, and the page they are
+    // leaving lists price high-to-low. There is no sort control on this page,
+    // so the storefront's own default is the whole answer (card InEoeMZh).
+    getDefaultListingSort(),
   ]);
 
   if (!brand) {
@@ -45,9 +56,15 @@ export default async function BrandCategoryPage({
 
   // If we can't resolve the category, fall back to brand-only products. This
   // gives the URL a sensible landing instead of 404.
-  const filter: { brandId: number; categoryId?: number; limit: number } = {
+  const filter: {
+    brandId: number;
+    categoryId?: number;
+    limit: number;
+    sort: ListingSort;
+  } = {
     brandId: brand.id as number,
     limit: 48,
+    sort: defaultListingSort,
   };
   if (category) filter.categoryId = category.id;
 

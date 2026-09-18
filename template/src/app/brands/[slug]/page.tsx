@@ -4,12 +4,24 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { getBrandBySlug, getBrandListing, getStorefrontFilters, getFeatureFlag } from "@/lib/store";
+import {
+  getBrandBySlug,
+  getBrandListing,
+  getStorefrontFilters,
+  getFeatureFlag,
+  getDefaultListingSort,
+  getCategoryBySlug,
+} from "@/lib/store";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { BrandIntro } from "@/components/brand/BrandIntro";
 import { BrandSearch } from "@/components/brand/BrandSearch";
 import { BrandProductLines } from "@/components/brand/BrandProductLines";
+import {
+  productLineCategorySlugs,
+  resolveProductLines,
+  type ProductLineCategory,
+} from "@/lib/brand-product-lines";
 import { BrandIndustryUses } from "@/components/brand/BrandIndustryUses";
 import { BrandFaq } from "@/components/brand/BrandFaq";
 import { BrandCategories } from "@/components/brand/BrandCategories";
@@ -34,6 +46,7 @@ import {
 
 type BrandMetafields = {
   intro_html?: string;
+  /** Authored ranges. Shape and picture resolution: `lib/brand-product-lines.ts`. */
   product_lines?: { name: string; slug?: string; href?: string; image_url?: string }[];
   industry_uses?: { name: string; image_url?: string; href?: string }[];
   faq?: { q: string; a: string }[];
@@ -122,7 +135,10 @@ export default async function BrandPage({
   }
 
   const page = parseBrandPage(sp.page);
-  const sort = parseBrandSort(sp.sort);
+  // `?sort=` wins, including `?sort=relevance`; with nothing on the URL the
+  // listing opens in THIS storefront's own order (card InEoeMZh).
+  const defaultListingSort = await getDefaultListingSort();
+  const sort = parseBrandSort(sp.sort, defaultListingSort);
 
   // This storefront's rail configuration (portal: Products > Filtering). A
   // switched-off facet must stop FILTERING, not merely displaying, so its URL
@@ -193,6 +209,28 @@ export default async function BrandPage({
   const meta = ((brand.metafields as BrandMetafields | null) ?? {}) as BrandMetafields;
   const pageTitle = (brand.page_title as string | null) || (brand.name as string);
 
+  // Each product line's picture, resolved from the category it names. A line
+  // that already carries its own image asks for nothing; 416 of our 418 brands
+  // author no lines at all, so this is almost always zero reads, and the lookups
+  // it does make are the same cached `getCategoryBySlug` the category page uses.
+  const lineSlugs = productLineCategorySlugs(meta.product_lines);
+  const lineCategories = new Map<string, ProductLineCategory | null>(
+    lineSlugs.length === 0
+      ? []
+      : await Promise.all(
+          lineSlugs.map(
+            async (candidate) =>
+              [
+                candidate,
+                (await getCategoryBySlug(candidate).catch(
+                  () => null
+                )) as ProductLineCategory | null,
+              ] as [string, ProductLineCategory | null]
+          )
+        )
+  );
+  const productLines = resolveProductLines(meta.product_lines, lineCategories);
+
   const brandTotal = unfiltered ? unfiltered.total : total;
 
   const nextPageHref = brandNextPageHref({
@@ -253,8 +291,11 @@ export default async function BrandPage({
           disappears with the results. */}
       {brandTotal > 0 && <BrandSearch brandName={brand.name as string} />}
 
-      {/* Brand product lines (e.g. Rational iCombi Pro / Classic / Vario) */}
-      <BrandProductLines heading="Product Lines" lines={meta.product_lines} />
+      {/* Brand product lines (e.g. Rational iCombi Pro / Classic / Vario).
+          The picture comes from the CATEGORY the line names — a line is
+          authored as a name and a slug and nothing else, so every one of these
+          tiles was a grey placeholder until card InEoeMZh. */}
+      <BrandProductLines heading="Product Lines" lines={productLines} />
 
       {/* ═══ The brand's categories ═══ A tile narrows this page while the
           Category facet is on; with it switched off the tile goes to the
@@ -276,7 +317,7 @@ export default async function BrandPage({
               </p>
               <FacetChips groups={groups} />
             </div>
-            <SortSelect />
+            <SortSelect defaultSort={defaultListingSort} />
           </div>
 
           {products.length > 0 ? (

@@ -63,6 +63,10 @@ import {
   STOREFRONT_FILTERS_SETTING_KEY,
   normalizeStorefrontFilters,
 } from "./storefront-filters";
+import {
+  DEFAULT_LISTING_SORT_SETTING_KEY,
+  normalizeDefaultListingSort,
+} from "./listing-sort";
 
 // Auto-initialize DB connection on first import
 const dbUrl = process.env.COMMERCE_DATABASE_URL;
@@ -451,6 +455,25 @@ export const getStorefrontFilters = unstable_cache(
       await getJsonSetting<unknown>(STOREFRONT_FILTERS_SETTING_KEY, null)
     ),
   [`storefront-filters-${CHANNEL_ID}`],
+  { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
+/** The order products come back in on a LANDING page when the shopper has not
+ *  chosen one — category pages, brand pages and the brand-range pages under
+ *  `/brands/<brand>/<range>` (card InEoeMZh). Set in the portal (Products >
+ *  Filtering), which busts `channel-${CHANNEL_ID}` on save, so an edit lands on
+ *  the next page view; the TTL is only the backstop.
+ *
+ *  Never configured = `relevance`, which is the order these listings have always
+ *  used and the one the behaviour register records — so a storefront nobody has
+ *  configured is untouched by this setting existing. Search is deliberately NOT
+ *  covered: a search result's order IS its relevance to what was typed. */
+export const getDefaultListingSort = unstable_cache(
+  async () =>
+    normalizeDefaultListingSort(
+      await getJsonSetting<unknown>(DEFAULT_LISTING_SORT_SETTING_KEY, null)
+    ),
+  [`default-listing-sort-${CHANNEL_ID}`],
   { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
 );
 

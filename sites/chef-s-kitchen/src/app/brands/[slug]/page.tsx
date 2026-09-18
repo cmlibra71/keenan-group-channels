@@ -12,6 +12,7 @@ import {
   getStorefrontFilters,
   getFeatureFlag,
   getCmsPage,
+  getDefaultListingSort,
 } from "@/lib/store";
 import { getListingPricing } from "@/lib/member";
 import {
@@ -149,9 +150,21 @@ export default async function BrandPage({
   // the load it has always had: asking for the faceted listing here would hand a
   // designed page 24 rows where it shows 48, with nothing on screen to page or
   // filter them. ═══
+  // This storefront's own listing order, used by BOTH branches below: the
+  // authored tree has no sort control at all, and the sealed listing falls back
+  // to it whenever `?sort=` says nothing (card InEoeMZh).
+  const defaultListingSort = await getDefaultListingSort();
+
   if (await brandNodePathApplies({ brandCms, draft })) {
     const [{ products: nodeProducts, total: nodeTotal }, nodeMemberPricing] = await Promise.all([
-      getProducts({ brandId: brand.id as number, limit: 48 }),
+      // The authored tree has no sort control, so the order is the storefront's
+      // own default and nothing else (card InEoeMZh). Unset that is still the
+      // alphabetical order this read has always returned.
+      getProducts({
+        brandId: brand.id as number,
+        limit: 48,
+        sort: defaultListingSort,
+      }),
       getFeatureFlag("member_pricing_enabled"),
     ]);
     const nodeRendered = await renderBrandNodeBranch({
@@ -167,7 +180,9 @@ export default async function BrandPage({
   }
 
   const page = parseBrandPage(sp.page);
-  const sort = parseBrandSort(sp.sort);
+  // `?sort=` wins, including `?sort=relevance`; with nothing on the URL the
+  // listing opens in THIS storefront's own order (card InEoeMZh).
+  const sort = parseBrandSort(sp.sort, defaultListingSort);
 
   // This storefront's rail configuration (portal: Products > Filtering). A
   // switched-off facet must stop FILTERING, not merely displaying, so its URL
@@ -304,7 +319,7 @@ export default async function BrandPage({
               </p>
               <FacetChips groups={groups} />
             </div>
-            <SortSelect />
+            <SortSelect defaultSort={defaultListingSort} />
           </div>
 
           {products.length === 0 && filtered ? (
