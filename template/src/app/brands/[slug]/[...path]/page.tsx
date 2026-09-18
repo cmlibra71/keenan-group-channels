@@ -12,8 +12,7 @@ import {
   // Product photographs a pictureless brand can borrow (InEoeMZh).
   getBorrowedImageCandidates,
 } from "@/lib/store";
-import { borrowedImageFor } from "@/lib/borrowed-image";
-import { ownersNeedingBorrowedImage } from "@keenan/services";
+import { borrowedImageFor, ownersNeedingBorrowedImage } from "@/lib/borrowed-image";
 import type { ListingSort } from "@/lib/listing-sort";
 import { categorySlugCandidates } from "@/lib/legacy-address";
 import { getListingMemberPrices } from "@/lib/member";

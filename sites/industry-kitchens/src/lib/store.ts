@@ -51,7 +51,6 @@ import {
   readQualifyingOrder,
   membershipNumber,
   // The picture a pictureless landing page borrows from its products (InEoeMZh).
-  ownersNeedingBorrowedImage,
 } from "@keenan/services";
 import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
@@ -69,7 +68,7 @@ import {
   DEFAULT_LISTING_SORT_SETTING_KEY,
   normalizeDefaultListingSort,
 } from "./listing-sort";
-import { applyBorrowedImages } from "./borrowed-image";
+import { applyBorrowedImages, ownersNeedingBorrowedImage } from "./borrowed-image";
 
 // Auto-initialize DB connection on first import
 const dbUrl = process.env.COMMERCE_DATABASE_URL;

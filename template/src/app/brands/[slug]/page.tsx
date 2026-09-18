@@ -15,8 +15,7 @@ import {
   getBorrowedImageCandidates,
   applyBorrowedCategoryImages,
 } from "@/lib/store";
-import { borrowedImageFor } from "@/lib/borrowed-image";
-import { ownersNeedingBorrowedImage } from "@keenan/services";
+import { borrowedImageFor, ownersNeedingBorrowedImage } from "@/lib/borrowed-image";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { BrandIntro } from "@/components/brand/BrandIntro";

@@ -11,9 +11,10 @@
  * FOUR RULES, all his:
  *
  * 1. **A page whose own picture is set keeps it.** Enforced by never asking the
- *    borrowed question — `ownersNeedingBorrowedImage` in `@keenan/services`
- *    only names the empty ones, so the 412 brands and 4,915 categories that
- *    already carry artwork cost no lookups and cannot be overruled.
+ *    borrowed question — `ownersNeedingBorrowedImage` (below) names only the
+ *    records with no picture this storefront could draw, so the 412 brands and
+ *    4,915 categories that already carry usable artwork cost no lookups and
+ *    cannot be overruled.
  * 2. **Nothing is written to `brands.image_url` or `categories.image_url`.**
  *    This module returns a value; it never persists one. Real artwork added
  *    later just takes over, and a retired product cannot leave a stale copy
@@ -32,11 +33,30 @@
  *    have no storefront-visible products at all, so this is the common branch
  *    for brands, not the rare one.
  *
- * "USABLE" is `isAllowedImageUrl`, the image proxy's own allowlist, and it is
- * checked HERE rather than in the query on purpose: `/api/image` 403s anything
- * outside our own buckets and a 403 draws the browser's broken-image glyph —
- * exactly the tile gRLRF8yu promised Steve we would not ship. One copy of that
- * allowlist, on the storefront that enforces it.
+ * "USABLE" is `isAllowedImageUrl`, the image proxy's own allowlist, and this
+ * module owns BOTH halves of that question on purpose — which records need a
+ * borrow, and which candidate is drawable. `/api/image` 403s anything outside
+ * our own buckets and a 403 draws the browser's broken-image glyph, exactly the
+ * tile gRLRF8yu promised Steve we would not ship; `@keenan/services` therefore
+ * fetches candidates for the ids it is handed and asks nothing about them, so
+ * that allowlist exists once, on the storefront that enforces it.
+ *
+ * WHAT THIS DOES NOT REACH, measured on production 2026-09-18 — a pictureless
+ * DEPARTMENT can still draw the placeholder, and that is known, not missed:
+ * - A category borrows only from products assigned DIRECTLY to it
+ *   (`product_categories`), never from its children's. A department whose
+ *   products all sit in its subcategories has no candidates at all: on Chefs
+ *   Depot that is the two root departments "Stainless Steel, Sinks & Plumbing"
+ *   (1027894: 8 children, 0 direct products) and "Equipment Parts &
+ *   Accessories" (1027895: 1 child, 0 direct), both live today on
+ *   `chefsdepot.com.au/categories`.
+ * - `getCategories`, `getSubcategories` and the brand page's category facets go
+ *   through this module. `getTopCategories` and the mega menu do NOT, so the
+ *   Chefs Depot home department grid and the `/products` department strip keep
+ *   the placeholder for a pictureless department even where one could be
+ *   borrowed.
+ * Closing either needs a decision that is not this card's: a descendant walk in
+ * the candidate query, or a picture chosen by a person. Both are on the card.
  *
  * PURE module — no DB, no server-only imports — so a route and a test can both
  * read it. The route does the (cached) `getBorrowedImageCandidates` read and
@@ -63,13 +83,44 @@ function usable(url: string | null | undefined): boolean {
 }
 
 /**
+ * Which records to probe for a borrowed picture: the ones with no picture this
+ * storefront could actually draw.
+ *
+ * That is an EMPTY field or a URL the image proxy's allowlist rejects — the same
+ * `usable` test `borrowedImageFor` applies below, so the fetch step and the
+ * resolve step cannot disagree about the same row. (Asking `@keenan/services`
+ * this question instead would mean either a second copy of the allowlist in SQL
+ * or a row that is looked up by one rule and resolved by another; the second is
+ * what shipped first and it made the documented fallthrough unreachable.)
+ *
+ * A record that HAS a usable picture is never looked up, which is how Chris's
+ * rule 1 is enforced and why the 412 brands and 4,915 categories already
+ * carrying artwork cost nothing.
+ *
+ * Returned sorted and de-duplicated so the cache key a caller builds from it is
+ * stable.
+ */
+export function ownersNeedingBorrowedImage(
+  owners: readonly (PicturedRecord | null | undefined)[]
+): number[] {
+  const ids = new Set<number>();
+  for (const owner of owners) {
+    if (!owner) continue;
+    if (!usable(owner.image_url)) ids.add(owner.id);
+  }
+  return [...ids].sort((a, b) => a - b);
+}
+
+/**
  * The picture this record should draw, or `null` for "draw the no-picture
  * branch".
  *
  * The record's OWN picture wins whenever it is usable. A record carrying a real
  * but unusable URL falls through to a borrowed one — that is a broken picture,
  * and showing a real product beats showing the browser's broken-image glyph
- * while somebody fixes the source.
+ * while somebody fixes the source. That fallthrough is only reachable because
+ * `ownersNeedingBorrowedImage` above counts such a record as pictureless and
+ * fetches candidates for it.
  */
 export function borrowedImageFor(
   record: PicturedRecord | null | undefined,
