@@ -30,8 +30,22 @@ import {
   type QuoteRequestAddressFields,
   type SavedQuoteAddress,
 } from "@/lib/quotes/quote-request";
+import {
+  forgetQuoteRequestNotes,
+  keepQuoteRequestNotes,
+  readKeptQuoteRequestNotes,
+} from "@/lib/quotes/quote-request-notes";
 
 type QuoteData = Awaited<ReturnType<typeof getQuote>>;
+
+/** The quote this browser is holding, which is what the kept notes are stamped with. */
+function quoteUuidOf(data: QuoteData): string | null {
+  return ((data as Record<string, unknown> | null)?.uuid as string | undefined) ?? null;
+}
+
+function quoteHasItems(data: QuoteData): boolean {
+  return (((data as Record<string, unknown> | null)?.items as unknown[] | undefined) ?? []).length > 0;
+}
 
 type SessionInfo = {
   contactId: number;
@@ -86,6 +100,19 @@ export function QuotePanel() {
           getRememberedEmail(),
         ]);
         setQuote(data);
+        // The name and comments the shopper typed before they went back to shopping
+        // (card mSVeTQol). Kept against THIS quote's uuid, so a submitted request —
+        // which starts a fresh quote — can never hand its words to the next one. A
+        // browser with site data blocked simply opens with the boxes empty.
+        if (quoteHasItems(data)) {
+          const kept = readKeptQuoteRequestNotes(quoteUuidOf(data));
+          if (kept) {
+            setQuoteName(kept.quoteName);
+            setComments(kept.comments);
+          }
+        } else {
+          forgetQuoteRequestNotes();
+        }
         applyAddresses(addresses);
         setCanSaveAddress(maySave);
         setRememberedEmail(remembered);
@@ -103,6 +130,15 @@ export function QuotePanel() {
     startTransition(async () => {
       const data = await getQuote();
       setQuote(data);
+      // Removing the last line empties the quote, and an emptied quote keeps no
+      // notes: the next request is a new one. Only cleared HERE and on submit —
+      // never on an ordinary refresh, or a browser that refuses storage would wipe
+      // what the shopper has just typed (card mSVeTQol).
+      if (!quoteHasItems(data)) {
+        forgetQuoteRequestNotes();
+        setQuoteName("");
+        setComments("");
+      }
     });
   }, []);
 
@@ -117,6 +153,18 @@ export function QuotePanel() {
   const allPoa = items.length > 0 && poaCount === items.length;
 
   const requestForm = { quoteName, comments, addressId, newAddress };
+  const quoteUuid = quoteUuidOf(quote);
+
+  /** Type in either box and it is remembered for this quote until the request is sent. */
+  function changeQuoteName(value: string) {
+    setQuoteName(value);
+    keepQuoteRequestNotes(quoteUuid, { quoteName: value, comments });
+  }
+
+  function changeComments(value: string) {
+    setComments(value);
+    keepQuoteRequestNotes(quoteUuid, { quoteName, comments: value });
+  }
   // Australia unless Google's autocomplete said otherwise (IK sells into NZ). Decides
   // both the State control and whether the address book will take this address.
   const isAuAddress = quoteAddressCountryCode(newAddress) === "AU";
@@ -148,6 +196,10 @@ export function QuotePanel() {
       }
       setSubmitted(true);
       setQuote(null);
+      // The request is sent and LOCKED (card 9tbz3sBF), so the kept notes go with it.
+      forgetQuoteRequestNotes();
+      setQuoteName("");
+      setComments("");
       // Badge zeroes instantly; the kept server refresh() re-seeds it identically.
       setQuoteCount(0);
     });
@@ -183,6 +235,9 @@ export function QuotePanel() {
       setIsSubmitting(false);
       setSubmitted(true);
       setQuote(null);
+      forgetQuoteRequestNotes();
+      setQuoteName("");
+      setComments("");
       setQuoteCount(0);
     });
   }
@@ -273,7 +328,7 @@ export function QuotePanel() {
             type="text"
             value={quoteName}
             maxLength={QUOTE_NAME_MAX_LENGTH}
-            onChange={(e) => setQuoteName(e.target.value)}
+            onChange={(e) => changeQuoteName(e.target.value)}
             className="mt-1 w-full input focus:ring-1 focus:ring-text-primary"
             placeholder="e.g. Kitchen fit-out — Smith St"
           />
@@ -291,7 +346,7 @@ export function QuotePanel() {
           <textarea
             id="quote-comments"
             value={comments}
-            onChange={(e) => setComments(e.target.value)}
+            onChange={(e) => changeComments(e.target.value)}
             rows={3}
             className="mt-1 w-full input focus:ring-1 focus:ring-text-primary"
             placeholder="Any special requirements or questions..."
