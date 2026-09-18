@@ -58,6 +58,8 @@
     "builder/product-card-brand-logo.test.ts",
     "builder/product-card-brand-logo.ts",
     "builder/product-image-notice.test.ts",
+    "builder/product-combination-notice.ts",
+    "builder/product-combination-notice.test.ts",
     "builder/product-image-notice.ts",
     "builder/product-instructions-node.test.ts",
     "builder/product-instructions-node.ts",

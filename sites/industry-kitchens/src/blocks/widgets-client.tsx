@@ -13,6 +13,7 @@ import { ProductImageGallery } from "@/components/product/ProductImageGallery";
 import { AddToCartButton } from "@/components/product/AddToCartButton";
 import { AddToQuoteButton } from "@/components/product/AddToQuoteButton";
 import { OptionSelector } from "@/components/product/OptionSelector";
+import { ProductCombinationNotice } from "@/components/product/ProductCombinationNotice";
 import { Price } from "@/components/ui/Price";
 import { useProductPurchaseOptional } from "@/components/product/ProductPurchaseProvider";
 import { packPrice } from "@keenan/services/pack";
@@ -175,7 +176,14 @@ export const BulkPricingWidget: WidgetComponent = () => {
 export const OptionSelectorWidget: WidgetComponent = () => {
   const purchase = useProductPurchaseOptional();
   if (!purchase) return null;
-  const { product, useGroupedMode, selectedOptions, disabledValuesPerOption, selectOption } = purchase;
+  const {
+    product,
+    useGroupedMode,
+    orderedOptionValues,
+    selectedOptions,
+    disabledValuesPerOption,
+    selectOption,
+  } = purchase;
   if (!useGroupedMode) return null;
   return (
     <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-5">
@@ -185,13 +193,29 @@ export const OptionSelectorWidget: WidgetComponent = () => {
           <OptionSelector
             key={option.id}
             option={option}
-            values={product.optionValues.filter((v) => v.optionId === option.id)}
+            // Card VNh9DdYd — the ORDERED list, so this picker reads the way Industry
+            // Kitchens reads (smallest to largest, then the specials), not alphabetically.
+            values={orderedOptionValues.filter((v) => v.optionId === option.id)}
             selectedValueId={selectedOptions[option.id] ?? null}
             disabledValueIds={disabledValuesPerOption.get(option.id) ?? new Set()}
             onSelect={selectOption}
           />
         ))}
       </div>
+      {/* Card VNh9DdYd — every option answered and nothing built that way, and this is the ONLY
+          place the sentence can go on the v2 widget path. The other two renderers put it
+          immediately above the buy row, which is where it belongs; here there is no buy row to
+          be above. A v2 page is a STORED template of independently placed widgets, so this
+          component cannot know whether an `add_to_cart` / `add_to_quote` widget was placed at
+          all, or where — there is no chain to run last in, as there is in
+          `product-node-branch.tsx`, and no sibling to anchor on, as there is in
+          `ProductDetail.tsx`. Drawing it from the buy widgets instead would print it twice on a
+          page carrying both, and not at all on a quote-only product (`AddToCartWidget` returns
+          null at a zero price). So it rides the picker that CREATES the state it describes, and
+          the residual gap is recorded on `sf-product-page`: the sentence reaches a v2 page only
+          where `option_selector` is placed — the same shape as the still-open
+          `ProductInstructionsPanel` gap on that surface. */}
+      <ProductCombinationNotice />
     </div>
   );
 };

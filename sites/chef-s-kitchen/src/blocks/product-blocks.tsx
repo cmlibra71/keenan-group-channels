@@ -214,6 +214,9 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
           options: product.options ?? [],
           optionValues: product.optionValues ?? [],
           variantOptionMappings: product.variantOptionMappings ?? [],
+          // Card VNh9DdYd — the authored variation order, carried so this renderer lists the
+          // choices exactly as the node tree and the legacy page do.
+          optionValueOrder: product.optionValueOrder ?? null,
           // Belt AND braces on a money surface: the shared strip already empties this on
           // Chef's Depot (`getProductBySlug` -> `stripSuppressedCatalogPricing` in
           // @keenan/services, card Q9hRTbKO). Kept local as well, because a Bulk Pricing
@@ -542,6 +545,9 @@ async function ProductOverviewBlock({ props, ctx }: BlockProps) {
     options: product.options ?? [],
     optionValues: product.optionValues ?? [],
     variantOptionMappings: product.variantOptionMappings ?? [],
+    // Card VNh9DdYd — the authored variation order, carried so this renderer lists the
+    // choices exactly as the node tree and the legacy page do.
+    optionValueOrder: product.optionValueOrder ?? null,
     // Belt AND braces on a money surface: the shared strip already empties this on
     // Chef's Depot (`getProductBySlug` -> `stripSuppressedCatalogPricing` in
     // @keenan/services, card Q9hRTbKO). Kept local as well, because a Bulk Pricing
