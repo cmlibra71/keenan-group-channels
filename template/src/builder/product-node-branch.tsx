@@ -18,6 +18,7 @@ import { withSilverChefNode } from "@/builder/silverchef-node";
 import { withAddonsNode } from "@/builder/product-addons-node";
 import { withProductInstructionsNode } from "@/builder/product-instructions-node";
 import { withImageNoticeNode } from "@/builder/product-image-notice";
+import { withCombinationNoticeNode } from "@/builder/product-combination-notice";
 import { withReviewsBlock, withReviewsBlockInComponents } from "@/builder/product-reviews-node";
 import { withResidentialNoticeNode } from "@/builder/product-residential-notice";
 import { withPackNoteNode } from "@/builder/product-pack-note";
@@ -245,6 +246,11 @@ export async function renderProductNodeBranch({
         // changes. Page order is therefore price -> pack sentence -> Instructions -> extras
         // -> buy row, and `ProductDetail.tsx` (the non-node fallback renderer) is hand-ordered
         // to match so the two renderers cannot disagree.
+        // Card VNh9DdYd: the "we do not make that combination" sentence goes in LAST, so it
+        // lands immediately before the buy row whatever the passes below have added above it.
+        // A greyed Add to Cart on this page has to bring its own words — CXnP1lrL took away
+        // every availability string that used to explain one (`sf-product-page`).
+        withCombinationNoticeNode(
         withResidentialNoticeNode(
           withAddonsNode(
             withProductInstructionsNode(
@@ -257,6 +263,7 @@ export async function renderProductNodeBranch({
               )
             )
           )
+        )
         )
       )
     )

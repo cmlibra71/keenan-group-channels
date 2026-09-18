@@ -13,6 +13,7 @@ import { ProductImageGallery } from "@/components/product/ProductImageGallery";
 import { AddToCartButton } from "@/components/product/AddToCartButton";
 import { AddToQuoteButton } from "@/components/product/AddToQuoteButton";
 import { OptionSelector } from "@/components/product/OptionSelector";
+import { ProductCombinationNotice } from "@/components/product/ProductCombinationNotice";
 import { Price } from "@/components/ui/Price";
 import { useProductPurchaseOptional } from "@/components/product/ProductPurchaseProvider";
 import { packPrice } from "@keenan/services/pack";
@@ -175,7 +176,14 @@ export const BulkPricingWidget: WidgetComponent = () => {
 export const OptionSelectorWidget: WidgetComponent = () => {
   const purchase = useProductPurchaseOptional();
   if (!purchase) return null;
-  const { product, useGroupedMode, selectedOptions, disabledValuesPerOption, selectOption } = purchase;
+  const {
+    product,
+    useGroupedMode,
+    orderedOptionValues,
+    selectedOptions,
+    disabledValuesPerOption,
+    selectOption,
+  } = purchase;
   if (!useGroupedMode) return null;
   return (
     <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-5">
@@ -185,13 +193,19 @@ export const OptionSelectorWidget: WidgetComponent = () => {
           <OptionSelector
             key={option.id}
             option={option}
-            values={product.optionValues.filter((v) => v.optionId === option.id)}
+            // Card VNh9DdYd — the ORDERED list, so this picker reads the way Industry
+            // Kitchens reads (smallest to largest, then the specials), not alphabetically.
+            values={orderedOptionValues.filter((v) => v.optionId === option.id)}
             selectedValueId={selectedOptions[option.id] ?? null}
             disabledValueIds={disabledValuesPerOption.get(option.id) ?? new Set()}
             onSelect={selectOption}
           />
         ))}
       </div>
+      {/* Card VNh9DdYd — every option answered and nothing built that way. The sentence has
+          to be here: this widget's Add to Cart greys with nothing else on screen to explain
+          it, and CXnP1lrL removed every availability string that used to. */}
+      <ProductCombinationNotice />
     </div>
   );
 };

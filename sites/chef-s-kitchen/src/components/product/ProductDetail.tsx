@@ -16,6 +16,7 @@ import { AddToCartButton } from "./AddToCartButton";
 import { ProductAddons } from "./ProductAddons";
 import { AddToQuoteButton } from "./AddToQuoteButton";
 import { OptionSelector } from "./OptionSelector";
+import { ProductCombinationNotice } from "./ProductCombinationNotice";
 import { Price } from "@/components/ui/Price";
 import { PriceBlock } from "@/components/ui/PriceBlock";
 import { Minus, Plus, Truck, ShieldCheck } from "lucide-react";
@@ -44,6 +45,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
     setQuantity,
     packSize,
     useGroupedMode,
+    orderedOptionValues,
     disabledValuesPerOption,
     activeMemberPrice: memberPrice,
     displayPrice,
@@ -63,7 +65,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
     displayBasePrice,
   } = useProductPurchase();
 
-  const { id: productId, options, optionValues, bulkPricing } = product;
+  const { id: productId, options, bulkPricing } = product;
   // The sticky buy bar labels its own figure. It used to hard-code "ex GST",
   // which was only ever invisible because CD phones had no way to switch.
   const { inclusive } = useGst();
@@ -166,13 +168,19 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
               <OptionSelector
                 key={option.id}
                 option={option}
-                values={optionValues.filter((v) => v.optionId === option.id)}
+                // Card VNh9DdYd — the ORDERED list, so this picker reads the way Industry
+                // Kitchens reads (smallest to largest, then the specials), not alphabetically.
+                values={orderedOptionValues.filter((v) => v.optionId === option.id)}
                 selectedValueId={selectedOptions[option.id] ?? null}
                 disabledValueIds={disabledValuesPerOption.get(option.id) ?? new Set()}
                 onSelect={selectOption}
               />
             ))}
           </div>
+          {/* Card VNh9DdYd — every option answered and nothing built that way. This renderer's
+              buy row greys on `allOptionsSelected`, and CXnP1lrL removed every availability
+              string that used to explain a dead control, so the sentence lives here too. */}
+          <ProductCombinationNotice />
         </div>
       )}
 
