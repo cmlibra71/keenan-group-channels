@@ -27,6 +27,8 @@ import {
   sendOrderStaffNotificationEmail,
   productImageService,
   snapshotOrderLadderPricing,
+  loadQuoteMailSources,
+  quoteStampEmail,
 } from "@keenan/services";
 import { QUOTE_REPRICED_ON_ACCEPT_MESSAGE } from "@keenan/services/member-ladder";
 import { repriceQuoteForCustomer } from "@/lib/quotes/reprice-deltas";
@@ -378,10 +380,21 @@ export async function payQuote(
     attributes: quote.attributes,
   }).catch(() => ({ id: null, name: null, source: null as null }));
 
+  // THE CUSTOMER'S OWN ADDRESS, so the order this door creates is not born unmailable
+  // (card 35OtJLkQ). The SAME shared rule the portal's Convert applies — the quote's contact,
+  // else the primary contact on its account — because quote-acceptance-conversion requires both
+  // doors to produce the same order from the same quote, and this one could write the
+  // CD-QU:1135 shape (a billing blob with a name and a phone and no email) just as easily.
+  // `loadQuoteMailSources` never throws; nothing found simply leaves the snapshot alone.
+  const customerEmail = quoteStampEmail(
+    await loadQuoteMailSources(quote as Record<string, unknown>)
+  );
+
   const plan = planOrderFromPaidQuote(quote, {
     gstRate,
     salesRep,
     copyAttributeCodes,
+    customerEmail,
     fallbackShipTo,
     fallbackBilling: fallbackShipTo
       ? {
