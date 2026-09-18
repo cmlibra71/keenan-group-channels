@@ -400,6 +400,12 @@ export default async function QuoteDetailPage({
   // Card DIj4B7Gr: who is looking after this quote, which of the three "ask us
   // something" controls it offers, and the message thread both sides read.
   // Resolved server-side by the SAME rules the emailed /q/<uuid> link uses.
+  // Since card Hj20wiV8 that includes the storefront gate on the rep the quote
+  // CARRIES: an `@industrykitchens.com.au` rep on a Chefs Depot quote resolves
+  // to Chefs Depot's own desk rather than being named here (Tim, k6pHXQBf). The
+  // rule is entirely inside `@keenan/services`, so this page needed no logic
+  // change — but it is BAKED INTO THE BUILD, which is why the rule ships in the
+  // same wave as a redeploy of this site.
   const [repContact, quoteMessages] = await Promise.all([
     loadQuoteContactForQuote(quote.id).catch(() => ({
       name: "Customer Service",
