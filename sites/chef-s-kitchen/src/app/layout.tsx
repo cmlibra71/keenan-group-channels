@@ -14,7 +14,7 @@ import { MemberScaleProvider } from "@/lib/member-scale-context";
 import { financeRatesForChannel } from "@/lib/finance/finance-rates";
 import { CartQuoteCountsProvider } from "@/lib/cart-quote-counts";
 import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
-import { siteBaseUrl } from "@/lib/seo";
+import { siteBaseUrl, siteRobots } from "@/lib/seo";
 import "./globals.css";
 
 // Design-system type stack: Fraunces (serif voice for hero/marketing/PDP
@@ -57,6 +57,11 @@ export async function generateMetadata(): Promise<Metadata> {
     verification: {
       google: "BZrPnn49pyvvgUtV8Tt1WWQOm16FAHdGefsJ834ifac",
     },
+    // Whether this storefront may be indexed at all is ONE switch, SITE_INDEXABLE,
+    // shared with robots.txt and sitemap.xml — see siteRobots(). Never hardcode a
+    // noindex here: the cutover step is to flip that env var, and a hardcoded value
+    // survives the flip (card InEoeMZh).
+    robots: siteRobots(),
   };
 }
 

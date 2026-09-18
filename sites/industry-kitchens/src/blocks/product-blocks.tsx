@@ -213,6 +213,9 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
           options: product.options ?? [],
           optionValues: product.optionValues ?? [],
           variantOptionMappings: product.variantOptionMappings ?? [],
+          // Card VNh9DdYd — the authored variation order, carried so this renderer lists the
+          // choices exactly as the node tree and the legacy page do.
+          optionValueOrder: product.optionValueOrder ?? null,
           // Quantity breaks. EMPTY on a channel that suppresses the shared catalogue
           // pricing: the strip runs once, at the read, in `getProductBySlug` ->
           // `stripSuppressedCatalogPricing` (@keenan/services). Chef's Depot suppresses the
@@ -400,6 +403,9 @@ async function ProductOverviewBlock({ props, ctx }: BlockProps) {
     options: product.options ?? [],
     optionValues: product.optionValues ?? [],
     variantOptionMappings: product.variantOptionMappings ?? [],
+    // Card VNh9DdYd — the authored variation order, carried so this renderer lists the
+    // choices exactly as the node tree and the legacy page do.
+    optionValueOrder: product.optionValueOrder ?? null,
     // Quantity breaks. EMPTY on a channel that suppresses the shared catalogue
     // pricing: the strip runs once, at the read, in `getProductBySlug` ->
     // `stripSuppressedCatalogPricing` (@keenan/services). Chef's Depot suppresses the

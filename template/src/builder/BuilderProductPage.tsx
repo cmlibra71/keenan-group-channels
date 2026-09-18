@@ -15,6 +15,7 @@ import {
 import { addToCart } from "@/lib/actions/cart";
 import type { AddonSelectionInput, ProductAddons } from "@keenan/services/product-addons";
 import { missingAnswerSentence } from "@/lib/product/addon-panel";
+import { COMBINATION_UNAVAILABLE_TEXT } from "@/components/product/ProductCombinationNotice";
 import { addToQuote } from "@/lib/actions/quote";
 import { submitReview } from "@/lib/actions/reviews";
 import { useGst } from "@/lib/gst";
@@ -112,8 +113,12 @@ function ActionsBridge({
   const onOptionsRequired = React.useCallback(
     (missing: string[]) => {
       setOptionsPrompt(
+        // Nothing is missing and the buy still refused: that is the UNMADE COMBINATION, and
+        // this dialog must say what the page already says beside the buy row. ONE string,
+        // quoted from the notice itself — a shopper who reads the sentence on the page and a
+        // different one in the dialog learns two facts where there is one (card VNh9DdYd).
         missingAnswerSentence(promptAddons ?? null, missing, "quote") ??
-          "That combination isn't available — please choose a different configuration."
+          COMBINATION_UNAVAILABLE_TEXT
       );
     },
     [promptAddons]

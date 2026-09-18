@@ -24,6 +24,7 @@
  * same values either way.
  */
 import { gstSplit } from "@keenan/services/calc";
+import { withQuoteBillingEmail } from "@keenan/services";
 import { normaliseAddressType } from "@keenan/services/residential";
 import { quoteGstTotals, MONEY_EPSILON, type QuoteGstInput } from "./quote-gst";
 import { resolveQuoteTotal } from "./price-visibility";
@@ -149,6 +150,19 @@ export interface QuotePlanContext {
   /** Billing address when the quote carries none (falls back to the ship-to). */
   fallbackBilling?: Record<string, unknown> | null;
   /**
+   * The customer's own address, used ONLY to fill a hole: an order whose billing snapshot
+   * carries no email is born unmailable (card 35OtJLkQ). A quote's snapshot often holds a name
+   * and a phone and nothing else — CD-QU:1135 did, and the order it became could not be
+   * invoiced at all, because the portal's Xero run read that blob and nothing else.
+   *
+   * Resolved by the caller through the SHARED rule (`loadQuoteMailSources` + `quoteStampEmail`
+   * in @keenan/services: the quote's contact, else the primary contact on its account), which is
+   * the same resolution the portal's Convert performs — the quote-acceptance-conversion surface
+   * requires both doors to produce the same order from the same quote. Omitted ⇒ the snapshot
+   * carries across untouched, exactly as before.
+   */
+  customerEmail?: string | null;
+  /**
    * The rep this order carries, already resolved by `resolveQuoteOrderRep`
    * (card QRA0m4vh). Passed in rather than resolved here so this module stays
    * pure and the storefront and the portal share ONE rule: the quote's
@@ -253,9 +267,14 @@ export function planOrderFromPaidQuote(
 
   const quoteShip = quote.shipping_address as Record<string, string | null | undefined> | null;
   const quoteBilling = quote.billing_address as Record<string, unknown> | null;
-  const billing = hasAny(quoteBilling)
-    ? (quoteBilling as Record<string, unknown>)
-    : (ctx.fallbackBilling ?? {});
+  // A SNAPSHOT WITH NO EMAIL IS AN ORDER NOBODY CAN INVOICE (card 35OtJLkQ). `hasAny` is true
+  // for a name-and-phone blob, so the fallback below never rescued that shape — the stamp does,
+  // and only ever fills a hole: an address already carrying anything in `email` keeps it,
+  // because the snapshot is what the customer agreed to.
+  const billing = withQuoteBillingEmail(
+    hasAny(quoteBilling) ? (quoteBilling as Record<string, unknown>) : (ctx.fallbackBilling ?? {}),
+    ctx.customerEmail
+  );
 
   // The quote's rep becomes the ORDER's rep (card QRA0m4vh, reopened by Steve
   // 2026-09-03 for exactly this path). Two writes, one rep: the FK feeds the

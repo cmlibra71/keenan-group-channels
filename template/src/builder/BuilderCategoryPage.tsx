@@ -140,11 +140,19 @@ export function BuilderCategoryPage({
         return { success: true };
       },
       // filter-controls master's sort <select> → ?sort= (same as SortSelect).
+      //
+      // The choice is ALWAYS written to the URL, including "relevance". This
+      // page does not know the storefront's own default order (card InEoeMZh)
+      // and the payload's `listing.sort` already carries the EFFECTIVE one, so
+      // dropping the parameter for "relevance" would send a shopper on a
+      // price-ordered storefront straight back to the price order — a control
+      // that visibly does nothing. An explicit `?sort=relevance` is read as
+      // relevance by every listing route.
       setSort: (args: Record<string, unknown>) => {
         const value = String(args.value ?? "");
         const next = new URLSearchParams(searchParams.toString());
-        if (value === "relevance") next.delete("sort");
-        else next.set("sort", value);
+        if (value) next.set("sort", value);
+        else next.delete("sort");
         next.delete("page");
         router.replace(`${pathname}?${next.toString()}`, { scroll: false });
         return { success: true };

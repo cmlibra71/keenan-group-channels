@@ -283,6 +283,11 @@ export default async function OrderDetailPage({
       // rendered name/email/phone in there so the rep id never travels through
       // this page's data (card BIig1Zo1). Best effort: a contact panel must not be
       // able to 500 an order.
+      // Since card Hj20wiV8 the same resolver also refuses a rep whose address
+      // this storefront does not serve, handing back the desk instead — an
+      // Industry Kitchens rep on a Chefs Depot order is not named to a Chefs
+      // Depot customer (Tim, k6pHXQBf). No change here: it is baked into the
+      // build, so it ships in the same wave as a redeploy of this site.
       loadOrderContactForOrder(orderId).catch(() => null),
       // This storefront's own site row, for the tax-invoice host below (card EizZjaY3). Cached
       // for an hour and shared with the rest of the storefront, so it costs nothing here. A

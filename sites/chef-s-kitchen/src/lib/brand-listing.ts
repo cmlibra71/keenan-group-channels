@@ -27,6 +27,7 @@
 // does not read the tsconfig path alias.
 import type { FacetGroupDef, FacetOption } from "../components/category/FilterRail";
 import { attributeParam, type AttributeFacet } from "./category-attributes";
+import { parseListingSort, type ListingSort } from "./listing-sort";
 import { normalizeStorefrontFilters, type StorefrontFilter } from "./storefront-filters";
 
 /** Same page size and same hard cap as the category page. */
@@ -52,7 +53,13 @@ export type BrandSort = (typeof BRAND_SORTS)[number] | "relevance";
 
 /** Facets as `getBrandListing` returns them. */
 export interface BrandListingFacets {
-  categories: { id: number; name: string; slug: string; count: number }[];
+  /** `image_url` is declared, not merely present: `listBrandFaceted` has always
+   *  selected it (snake_case, the same key `getSubcategories` gives the category
+   *  page's tiles) and the brand page spreads the row into its tiles. Leaving it
+   *  off the type is how card 7LjU5UDE's bug happened on the category page — a
+   *  key the renderer reads but the type does not name compiles clean and draws
+   *  the grey placeholder for every tile. */
+  categories: { id: number; name: string; slug: string; image_url?: string | null; count: number }[];
   price: { key: string; count: number }[];
   priceRange?: { min: number; max: number } | null;
   attributes?: AttributeFacet[];
@@ -90,8 +97,17 @@ export function parseIds(v?: string): number[] {
   );
 }
 
-export function parseBrandSort(raw?: string): BrandSort {
-  return (BRAND_SORTS as readonly string[]).includes(raw ?? "") ? (raw as BrandSort) : "relevance";
+/**
+ * The order this brand listing runs in.
+ *
+ * `?sort=` wins when it names a real order, INCLUDING `?sort=relevance` — which
+ * is how a shopper on a storefront that DEFAULTS to a price order gets back to
+ * Relevance. Anything else takes the storefront's own default (card InEoeMZh);
+ * unset, that is still `relevance`, so a storefront that has configured nothing
+ * behaves exactly as it did.
+ */
+export function parseBrandSort(raw?: string, fallback: BrandSort = "relevance"): BrandSort {
+  return parseListingSort(raw, fallback as ListingSort) as BrandSort;
 }
 
 /** `?page=` is cumulative — page N renders results 1..N*PER_PAGE — and capped,

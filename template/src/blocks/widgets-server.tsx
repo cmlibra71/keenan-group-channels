@@ -228,6 +228,7 @@ export async function ListingGridWidget({
 // ── Category widgets (URL-state components) ─────────────────────────────────
 
 import { FilterChips, SortSelect } from "@/components/category/FilterRail";
+import type { ListingSort } from "@/lib/listing-sort";
 import Link from "next/link";
 
 export function FilterChipsWidget({ ctx }: { attrs: Record<string, unknown>; ctx?: RenderContext }) {
@@ -237,8 +238,16 @@ export function FilterChipsWidget({ ctx }: { attrs: Record<string, unknown>; ctx
   return <FilterChips facets={extras.listing.facets as never} />;
 }
 
-export function SortSelectWidget() {
-  return <SortSelect />;
+export function SortSelectWidget({ ctx }: { attrs: Record<string, unknown>; ctx?: RenderContext }) {
+  // The storefront's own default order comes down the RenderContext with the
+  // listing (InEoeMZh). Without it this control would read "Relevance" over a
+  // grid the server ordered by price — the register's rule for this surface is
+  // that the sort box SHOWS the effective order.
+  const extras =
+    ctx?.record?.kind === "category"
+      ? ((ctx.record.extras ?? {}) as { defaultSort?: ListingSort })
+      : {};
+  return <SortSelect defaultSort={extras.defaultSort} />;
 }
 
 export function LoadMoreWidget({ ctx }: { attrs: Record<string, unknown>; ctx?: RenderContext }) {
