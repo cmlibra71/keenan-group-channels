@@ -155,6 +155,27 @@ export function resolveQuotePayState(
 }
 
 /**
+ * Is this quote waiting on OUR pricing rather than on the customer?
+ *
+ * The Pay control is normally greyed-with-reason rather than removed (the note
+ * at the top of this file, card 0Wy0xHuq): a control that vanishes leaves the
+ * customer hunting for it. That reasoning holds for every reason a quote is
+ * NEARLY payable — an unpriced line, a stale zero total, no method on the
+ * account, no delivery address: there is a real amount and a real payment step,
+ * just not yet.
+ *
+ * It does not hold before we have quoted at all. On a quote we have not priced
+ * there is no figure, so the panel can only offer "Amount payable now — To be
+ * confirmed" over an empty card form and a dead button, which is what a
+ * customer opening their emailed quote reported as the link "not working"
+ * (card LhPZP5k2). On that quote the payment step is withheld entirely and this
+ * same reason is printed where it stood, so nothing is left unexplained.
+ */
+export function isPricingPendingPayState(state: QuotePayState): boolean {
+  return state.kind === "disabled" && state.reason === PAY_REASON_PRICING_PENDING;
+}
+
+/**
  * The line the customer must be shown on a payable quote carrying no freight.
  *
  * Steve, card 0Wy0xHuq: "When the invoice is sent, it should specify that the

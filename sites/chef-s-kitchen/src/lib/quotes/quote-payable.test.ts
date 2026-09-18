@@ -4,6 +4,7 @@ import {
   resolveQuotePayState,
   everyLinePriced,
   isPayQuoteExpired,
+  isPricingPendingPayState,
   PAY_REASON_UNPRICED_LINES,
   PAY_REASON_PRICING_PENDING,
   PAY_REASON_NOT_READY,
@@ -159,5 +160,54 @@ describe("resolveQuotePayState", () => {
       NOW
     );
     assert.deepEqual(s, { kind: "disabled", reason: PAY_REASON_NO_METHODS });
+  });
+});
+
+describe("isPricingPendingPayState", () => {
+  // The payment step is withheld ONLY while we have not priced the quote. Every
+  // other "nearly payable" reason keeps the greyed Pay button on screen with its
+  // reason, which is the rule card 0Wy0xHuq put on this surface (card LhPZP5k2).
+  test("an unpriced quote withholds the payment step", () => {
+    const pending = resolveQuotePayState(
+      { ...PAYABLE, status: "quote_pending", hidesPrices: true, amountDue: 0 },
+      NOW
+    );
+    assert.deepEqual(pending, { kind: "disabled", reason: PAY_REASON_PRICING_PENDING });
+    assert.equal(isPricingPendingPayState(pending), true);
+  });
+
+  test("a priced quote hiding prices after a change request withholds it too", () => {
+    const changed = resolveQuotePayState(
+      { ...PAYABLE, status: "open_change_request", hidesPrices: true },
+      NOW
+    );
+    assert.equal(isPricingPendingPayState(changed), true);
+  });
+
+  test("every other greyed reason KEEPS the panel", () => {
+    for (const state of [
+      resolveQuotePayState({ ...PAYABLE, items: [{ list_price: null, sale_price: null }] }, NOW),
+      resolveQuotePayState({ ...PAYABLE, amountDue: 0 }, NOW),
+      resolveQuotePayState({ ...PAYABLE, paymentMethodCount: 0 }, NOW),
+      resolveQuotePayState(
+        { ...PAYABLE, paymentMethodCount: 0, channelPaymentMethodCount: 2 },
+        NOW
+      ),
+      resolveQuotePayState({ ...PAYABLE, hasDeliveryAddress: false }, NOW),
+      resolveQuotePayState({ ...PAYABLE, status: "quote_on_hold" }, NOW),
+    ]) {
+      assert.equal(state.kind, "disabled");
+      assert.equal(isPricingPendingPayState(state), false);
+    }
+  });
+
+  test("a payable or terminal quote is not pricing-pending", () => {
+    assert.equal(isPricingPendingPayState(resolveQuotePayState(PAYABLE, NOW)), false);
+    assert.equal(
+      isPricingPendingPayState(
+        resolveQuotePayState({ ...PAYABLE, status: "quote_cancelled" }, NOW)
+      ),
+      false
+    );
   });
 });

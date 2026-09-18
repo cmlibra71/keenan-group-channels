@@ -46,7 +46,11 @@ import {
 } from "@/lib/quotes/customer-editable";
 import { QuoteItemControls } from "./quote-item-controls";
 import { readQuoteDeposit, resolveQuoteDeposit, depositLabel } from "@/lib/quotes/quote-deposit";
-import { resolveQuotePayState } from "@/lib/quotes/quote-payable";
+import {
+  resolveQuotePayState,
+  isPricingPendingPayState,
+  PAY_REASON_PRICING_PENDING,
+} from "@/lib/quotes/quote-payable";
 import { resolveConvertedOrderLink } from "@/lib/quotes/converted-order-link-context";
 import { quoteFreightStillPending } from "@/lib/quotes/freight-pending";
 import { QuotePayPanel, type PayMethod } from "./quote-pay-panel";
@@ -742,9 +746,19 @@ export default async function QuoteDetailPage({
       ) : null}
 
       {/* Pay this quote — inside the logged-in account area, per Steve. The
-          panel renders even while pricing is being prepared: the Pay button
-          stays visible and greyed with the reason rather than vanishing. */}
-      {
+          panel stays visible and greyed, with the reason, while a quote is
+          NEARLY payable (an unpriced line, no total, no method, no address):
+          a control that vanishes leaves the customer hunting for it.
+          Before we have priced the quote at all there is no payment step to
+          show — no figure, an empty card form and a dead button was what a
+          customer reported as their emailed link "not working" (card
+          LhPZP5k2) — so the step is withheld and its reason printed in its
+          place. One predicate decides, beside the one that greys the button. */}
+      {isPricingPendingPayState(payState) ? (
+        <p className="mt-8 rounded-lg border border-zinc-200 p-5 text-sm text-zinc-600">
+          {PAY_REASON_PRICING_PENDING}
+        </p>
+      ) : (
         <QuotePayPanel
           quoteId={quote.id}
           payState={payState}
@@ -768,7 +782,7 @@ export default async function QuoteDetailPage({
           freightPending={freightPending}
           currency={quote.currency_code || "AUD"}
         />
-      }
+      )}
       <QuoteMessages
         quoteId={quote.id}
         messages={quoteMessages}
