@@ -45,6 +45,30 @@ const withCollapsedHyphens = (slug: string): string | null => {
 };
 
 /**
+ * Every spelling of one legacy category slug worth a lookup, best first.
+ *
+ * Shared with the brand-RANGE route (`/brands/<brand>/<range>`), which does its
+ * own category lookup and is where 2,691 legacy addresses land — and where a
+ * miss is quieter than a 404: the page falls back to the brand's WHOLE catalogue,
+ * so `/brands/3monkeez/grates--drains` silently showed every 3monkeez product
+ * instead of the grates. The imported Industry Kitchens pages (m4Y1MlQp) carry
+ * three of those doubled-hyphen range links and nine more category ones, which is
+ * how the class was found. (InEoeMZh.)
+ */
+export function categorySlugCandidates(slug: string): string[] {
+  const out: string[] = [];
+  for (const candidate of [
+    slug,
+    withoutZoeySuffix(slug),
+    withCollapsedHyphens(slug),
+    withCollapsedHyphens(withoutZoeySuffix(slug) ?? ""),
+  ]) {
+    if (candidate && !out.includes(candidate)) out.push(candidate);
+  }
+  return out;
+}
+
+/**
  * The probes to try, in order, for an address no route claimed.
  *
  * A ONE-segment address is whatever Zoey published at the root, so it could be any of

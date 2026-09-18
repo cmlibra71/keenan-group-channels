@@ -19,7 +19,12 @@ import {
   sliderTravel,
   type AttributeFacet,
 } from "@/lib/category-attributes";
-import { FALLBACK_LISTING_SORT, sortParamFor, type ListingSort } from "@/lib/listing-sort";
+import {
+  FALLBACK_LISTING_SORT,
+  parseListingSort,
+  sortParamFor,
+  type ListingSort,
+} from "@/lib/listing-sort";
 
 // ── Generic facet model ───────────────────────────────────────────────────
 // A group is one accordion section (Brand, Category, Price …). `value` is the
@@ -717,7 +722,12 @@ export function SortSelect({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const current = searchParams.get("sort") ?? defaultSort;
+  // Normalised, not read raw: the server runs `parseListingSort` on the same
+  // parameter, so `?sort=banana` runs in the storefront's own order. Handing the
+  // raw value to the <select> would leave it with no matching option and the
+  // browser would paint the FIRST one — a control positively misreporting what
+  // the listing beneath it is doing.
+  const current = parseListingSort(searchParams.get("sort") ?? undefined, defaultSort);
 
   return (
     <label className="flex items-center gap-2 text-[13px] text-text-secondary">

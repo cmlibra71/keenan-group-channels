@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { legacyProbes, newStyleAddress } from "./legacy-address";
+import { legacyProbes, newStyleAddress, categorySlugCandidates } from "./legacy-address";
 
 test("a root-level address could be a product, a category or a page — in that order", () => {
   assert.deepEqual(legacyProbes("/roband-dm31w"), [
@@ -61,4 +61,25 @@ test("each probe knows its new-style address", () => {
   assert.equal(newStyleAddress({ kind: "product", slug: "x" }), "/products/x");
   assert.equal(newStyleAddress({ kind: "category", slug: "x" }), "/categories/x");
   assert.equal(newStyleAddress({ kind: "page", slug: "x" }), "/pages/x");
+});
+
+test("categorySlugCandidates: every legacy spelling of one slug, best first", () => {
+  // The exact shapes found in the imported Industry Kitchens pages (m4Y1MlQp):
+  // an ampersand that became an empty word, with and without Zoey's numeric
+  // disambiguator on the end.
+  assert.deepEqual(categorySlugCandidates("grates--drains"), [
+    "grates--drains",
+    "grates-drains",
+  ]);
+  assert.deepEqual(categorySlugCandidates("sinks--basins-1"), [
+    "sinks--basins-1",
+    "sinks--basins",
+    "sinks-basins-1",
+    "sinks-basins",
+  ]);
+  // An ordinary slug costs exactly the one lookup it always did.
+  assert.deepEqual(categorySlugCandidates("commercial-combi-ovens"), [
+    "commercial-combi-ovens",
+  ]);
+  assert.deepEqual(categorySlugCandidates(""), []);
 });

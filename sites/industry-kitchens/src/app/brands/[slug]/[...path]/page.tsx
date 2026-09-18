@@ -11,6 +11,7 @@ import {
   getDefaultListingSort,
 } from "@/lib/store";
 import type { ListingSort } from "@/lib/listing-sort";
+import { categorySlugCandidates } from "@/lib/legacy-address";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 
@@ -18,6 +19,17 @@ import { ProductGrid } from "@/components/product/ProductGrid";
 // specific category. Mirrors the original Zoey URL pattern
 // /brands/<brand>/<category-slug>. Uses the SAME PDP/category template
 // pattern — no new design, just a new filter combination.
+/** The first of the legacy spellings of `last` that names a real category on
+ *  this storefront — tried in order, and only as far as the first hit, so the
+ *  ordinary case is the one lookup it has always been. */
+async function firstCategoryOf(last: string) {
+  for (const candidate of categorySlugCandidates(last)) {
+    const category = await getCategoryBySlug(candidate);
+    if (category) return category;
+  }
+  return null;
+}
+
 export default async function BrandCategoryPage({
   params,
 }: {
@@ -27,14 +39,16 @@ export default async function BrandCategoryPage({
 
   // The original Zoey URLs vary in depth (e.g.
   // /brands/<brand>/<cat>, /brands/<brand>/<parent>/<cat>). Use the deepest
-  // segment as the category slug. The Zoey suffix (e.g. `combi-ovens-4`) is
-  // stripped before lookup.
+  // segment as the category slug, and try the same spellings the catch-all does:
+  // Zoey's numeric disambiguator stripped, and its doubled hyphens (an ampersand
+  // became an empty word — `grates--drains`) collapsed. A miss here is QUIETER
+  // than a 404 and so worth more care: the page falls back to the brand's whole
+  // catalogue, so the reader gets a plausible-looking page of the wrong products.
   const last = path[path.length - 1] ?? "";
-  const cleanCatSlug = last.replace(/-\d+$/, "");
 
   const [brand, category, memberPricingEnabled, defaultListingSort] = await Promise.all([
     getBrandBySlug(slug),
-    getCategoryBySlug(cleanCatSlug),
+    firstCategoryOf(last),
     getFeatureFlag("member_pricing_enabled"),
     // 2,691 legacy brand-range addresses land here, and the page they are
     // leaving lists price high-to-low. There is no sort control on this page,
@@ -68,11 +82,24 @@ export default async function BrandCategoryPage({
   };
   if (category) filter.categoryId = category.id;
 
-  const { products, total } = await getProducts(filter);
+  let { products, total } = await getProducts(filter);
+  // A range this brand has nothing in lands the same way an UNRESOLVED range
+  // does — on the brand's own products, not on an empty page. 2,691 legacy
+  // addresses arrive here and the pairing is Zoey's, not ours: `3 Monkeez ×
+  // Grates & Drains` is a real brand and a real shelf with no overlap. An empty
+  // grid under a heading naming both reads as "this shop has stopped carrying
+  // it", which is a different and wrong claim. (InEoeMZh.)
+  let rangeIsEmpty = false;
+  if (category && products.length === 0) {
+    rangeIsEmpty = true;
+    delete filter.categoryId;
+    ({ products, total } = await getProducts(filter));
+  }
 
-  const heading = category
-    ? `${brand.name as string} — ${category.name as string}`
-    : (brand.name as string);
+  const heading =
+    category && !rangeIsEmpty
+      ? `${brand.name as string} — ${category.name as string}`
+      : (brand.name as string);
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
@@ -82,7 +109,7 @@ export default async function BrandCategoryPage({
         <Link href={`/brands/${slug}`} className="hover:text-zinc-600">
           {brand.name as string}
         </Link>
-        {category && (
+        {category && !rangeIsEmpty && (
           <>
             <ChevronRight className="h-3.5 w-3.5" />
             <span className="text-zinc-700">{category.name as string}</span>

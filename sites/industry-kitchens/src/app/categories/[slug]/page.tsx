@@ -284,7 +284,10 @@ export default async function CategoryPage({
       const value = sp[param];
       if (value) next.set(param, value);
     }
-    if (sp.sort) next.set("sort", sp.sort);
+    // The NORMALISED order, not the raw parameter: `?sort=banana` runs in the
+    // storefront's own order, so a Load-more link repeating "banana" would be a
+    // link that does not describe the page it loads.
+    if (sp.sort) next.set("sort", sort);
     next.set("page", String(page + 1));
     return `/categories/${slug}?${next.toString()}`;
   })();
@@ -347,6 +350,11 @@ export default async function CategoryPage({
           category: category as unknown as Record<string, unknown>,
           extras: {
             listing: { products, total, facets },
+            // This storefront's own default order, so the template's sort
+            // <select> shows what the grid beneath it is actually doing on a
+            // storefront that opens on price (InEoeMZh). Without it the widget
+            // falls back to Relevance and the control misreports the listing.
+            defaultSort: defaultListingSort,
             memberPriceMap,
             memberPricingEnabled,
             breadcrumbs,

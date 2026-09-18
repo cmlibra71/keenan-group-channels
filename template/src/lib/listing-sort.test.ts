@@ -79,3 +79,17 @@ test("on a price-ordered storefront, choosing Relevance writes the parameter", (
 test("an unrecognised choice falls back to the default and so writes nothing", () => {
   assert.equal(sortParamFor("nonsense", "price_desc"), null);
 });
+
+test("whatever the sort control SHOWS is always one of its own options", () => {
+  // The <select> is given `parseListingSort(param ?? undefined, defaultSort)`,
+  // never the raw parameter. Handed a value with no matching <option> the
+  // browser paints the FIRST one, so `?sort=banana` would run price high-to-low
+  // on a price-ordered storefront under a box reading "Relevance" — a control
+  // positively misreporting the grid beneath it.
+  for (const raw of ["banana", "PRICE_DESC", "price desc", "0", "", undefined]) {
+    assert.ok(
+      (LISTING_SORTS as readonly string[]).includes(parseListingSort(raw, "price_desc")),
+      `${String(raw)} must resolve to a real option`
+    );
+  }
+});
