@@ -25,6 +25,23 @@ import {
 /** Per-tab memory: shown once, then never again in this session. */
 export const EXIT_SURVEY_SESSION_KEY = "kg:checkout-survey:done";
 
+/**
+ * Per-tab memory of the other half: "a checkout was armed in this tab".
+ *
+ * A departure comes in two shapes and only one of them runs React code. An
+ * in-page navigation (Back within the app, a link, a router move) unmounts the
+ * checkout's marker, and that unmount is the signal. A FULL-page departure —
+ * Back across a hard page load, a typed address, a hard link — tears the whole
+ * document down without unmounting anything, so the next page is a fresh
+ * document with no memory at all.
+ *
+ * This is that memory. The pop-up, mounting on the page they landed on, sees
+ * the flag with no checkout on screen and knows the shopper left one. Cleared
+ * the moment the question is asked, and irrelevant once the checkout is
+ * submitted, because that stamps `EXIT_SURVEY_SESSION_KEY` instead.
+ */
+export const EXIT_SURVEY_ARMED_KEY = "kg:checkout-survey:armed";
+
 /** The free-text box is capped at what the stored contract will keep. */
 export const EXIT_SURVEY_OTHER_MAX_LENGTH = 500;
 
@@ -56,6 +73,60 @@ export const EXIT_SURVEY_SINGLE_COLUMN_QUERY = `(max-width: ${EXIT_SURVEY_TWO_CO
  *  is the failure that matters, dead page is not. */
 export function reservesFlowSpace(singleColumn: boolean | null): boolean {
   return singleColumn !== false;
+}
+
+/**
+ * How close to the bottom edge of the window a fixed element has to finish
+ * before it counts as a bar PINNED there rather than something that merely
+ * happens to be low on the page. Sub-pixel layout means an exact comparison
+ * misses by fractions.
+ */
+export const EXIT_SURVEY_BOTTOM_BAR_TOLERANCE_PX = 2;
+
+/**
+ * A bar taller than this share of the window is not a bar — it is a sheet, a
+ * drawer or a full-screen overlay, and lifting the card by its height would
+ * push the questionnaire off the top of the screen. Left uncleared instead:
+ * those are screens the shopper opened on purpose and the pop-up already sits
+ * under the mobile navigation drawer for the same reason.
+ */
+export const EXIT_SURVEY_BOTTOM_BAR_MAX_FRACTION = 0.4;
+
+/**
+ * How far the pop-up must be lifted off the bottom of the window so it clears
+ * the SITE's own fixed bottom bar.
+ *
+ * The pop-up is mounted in the layout, so it is no longer only ever seen on the
+ * checkout: it appears on whatever page the departing shopper lands on, and the
+ * most ordinary route into the checkout is the header cart drawer opened from a
+ * product page — so Back lands them on `/products/[slug]`, which carries a
+ * FIXED mobile buy bar below `lg` (`fixed inset-x-0 bottom-0 z-[90]`, Chefs
+ * Depot's `ProductDetail` and `mobile_buy_bar` widget, Industry Kitchens'
+ * builder seed). That bar carries the ex-GST price and Add to Cart, both
+ * rule-bearing on `sf-product-page` (card 33HGX8U2, Steve 2026-08-05: it must
+ * work on phones, 60% of Industry Kitchens' shoppers are on one). A bottom-
+ * anchored card lands on top of it, and — unlike the checkout's Order Summary —
+ * a `fixed` bar does not scroll, so the flow spacer cannot rescue it.
+ *
+ * Measured, never assumed: the bar is 77px on Chefs Depot today, it is authored
+ * content on Industry Kitchens, and a magic number here would be wrong the day
+ * somebody changes its padding.
+ */
+export function bottomBarClearancePx(
+  bars: ReadonlyArray<{ top: number; bottom: number }>,
+  viewportHeight: number
+): number {
+  let clearance = 0;
+  for (const bar of bars) {
+    const height = bar.bottom - bar.top;
+    if (!(height > 0)) continue;
+    // Anchored to the bottom EDGE. A fixed element floating mid-screen covers
+    // nothing the card wants and lifting for it would be dead space.
+    if (bar.bottom < viewportHeight - EXIT_SURVEY_BOTTOM_BAR_TOLERANCE_PX) continue;
+    if (height > viewportHeight * EXIT_SURVEY_BOTTOM_BAR_MAX_FRACTION) continue;
+    clearance = Math.max(clearance, Math.ceil(height));
+  }
+  return clearance;
 }
 
 /**
@@ -116,6 +187,87 @@ export function announceCheckoutSubmitted(): void {
     /* A page with no document, or a browser refusing the constructor. The
        survey merely stays armed; the order is unaffected. */
   }
+}
+
+/**
+ * The checkout page saying it is on screen, and — when that announcement is
+ * withdrawn — that the shopper has just LEFT it by an ordinary in-page route.
+ *
+ * Steve, 2026-09-17: "I can see no evidence of this on either website. It does
+ * not pop up anywhere when I go to leave from inside the checkout." He was
+ * right, and the reason is that the two original triggers are both things an
+ * ordinary departure does not do: the pointer crossing the TOP edge of the
+ * window, and coming back after twenty seconds away. Pressing Back, clicking a
+ * link or letting the router move fired neither. Tim's words on the card are
+ * "If customers abandoned cart before leaving screen", so leaving the screen is
+ * the trigger, however they leave it.
+ *
+ * THE POP-UP THEREFORE OUTLIVES THE CHECKOUT PAGE. It is mounted in the site
+ * layout and the checkout renders a marker (`CheckoutExitSurveyArm`); the
+ * marker's mount is what ARMS the survey and the marker's unmount is the
+ * departure. That is the only way to ask without breaking the rule that
+ * outranks everything here — a question asked BEFORE the navigation would have
+ * to hold the navigation up, and this one is asked after it has already
+ * happened, on the page the shopper landed on.
+ */
+export const CHECKOUT_ARMED_EVENT = "kg:checkout-armed";
+export const CHECKOUT_LEFT_EVENT = "kg:checkout-left";
+
+/**
+ * A React REMOUNT is an unmount immediately followed by a mount — which is what
+ * Strict Mode does to every component in development, and what a key change or
+ * a Suspense retry does anywhere. Announcing the departure synchronously would
+ * turn that into "the shopper left the checkout" and pop the questionnaire up
+ * on top of the checkout itself, on first load, in dev.
+ *
+ * So the departure is announced a turn of the event loop later and cancelled if
+ * a checkout marker mounts in the meantime. Nothing waits on this timer: it
+ * delays only the QUESTION, never the navigation, which has already happened.
+ */
+export const EXIT_SURVEY_LEAVE_SETTLE_MS = 0;
+
+let leaveTimer: ReturnType<typeof setTimeout> | null = null;
+let checkoutOnScreen = false;
+
+/**
+ * Whether a priced checkout is on screen right now.
+ *
+ * Read once by the pop-up when it mounts, because React runs a CHILD's effects
+ * before its parent's: on a full page load of /checkout the marker announces
+ * itself before the layout-level pop-up has subscribed, so the event alone
+ * would be missed.
+ */
+export function checkoutIsOnScreen(): boolean {
+  return checkoutOnScreen;
+}
+
+/** The checkout is on screen. Cancels a pending departure (see above). */
+export function announceCheckoutArmed(): void {
+  if (leaveTimer !== null) {
+    clearTimeout(leaveTimer);
+    leaveTimer = null;
+  }
+  checkoutOnScreen = true;
+  try {
+    document.dispatchEvent(new Event(CHECKOUT_ARMED_EVENT));
+  } catch {
+    /* No document, or a browser refusing the constructor. The survey simply
+       never arms; nothing else on the checkout is affected. */
+  }
+}
+
+/** The checkout page has gone. Never allowed to throw, and never to block. */
+export function announceCheckoutLeft(): void {
+  if (leaveTimer !== null) clearTimeout(leaveTimer);
+  leaveTimer = setTimeout(() => {
+    leaveTimer = null;
+    checkoutOnScreen = false;
+    try {
+      document.dispatchEvent(new Event(CHECKOUT_LEFT_EVENT));
+    } catch {
+      /* see above */
+    }
+  }, EXIT_SURVEY_LEAVE_SETTLE_MS);
 }
 
 /** The biggest body the survey endpoint will look at. Three short answers and
