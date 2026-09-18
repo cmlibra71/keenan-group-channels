@@ -45,7 +45,7 @@ import { addressTypeFromContactBook } from "@keenan/services/residential";
 import { financeApplicationForm } from "@/lib/checkout/finance-form";
 import { CheckoutForm } from "@/components/checkout/CheckoutForm";
 import { StartedCheckoutTracker } from "@/components/analytics/StartedCheckoutTracker";
-import { CheckoutExitSurvey } from "@/components/checkout/CheckoutExitSurvey";
+import { CheckoutExitSurveyArm } from "@/components/checkout/CheckoutExitSurveyArm";
 
 export const metadata = {
   title: "Checkout",
@@ -590,13 +590,15 @@ export default async function CheckoutPage() {
         finance={financeMethodsEnabled ? financeOffer : null}
       />
       {/* The abandon-intent questionnaire (card loDyEE3S, Tim: "as per Myer").
-          Mounted only here, and only past the empty-cart redirect above, so it
-          can never appear on the confirmation page or on an empty basket. It is
-          a prompt, never a gate — see the component. LAST on the page on
-          purpose: while it is open it reserves flow height below the checkout,
-          so the Order Summary that ends this page can always be scrolled clear
-          of the card. */}
-      <CheckoutExitSurvey />
+          This marker renders nothing: it ARMS the survey, which is mounted in
+          the site layout so that it outlives this page. Only here, and only
+          past the empty-cart redirect and the sign-in gate above, so the
+          question can never reach the confirmation page, an empty basket or a
+          shopper who was never shown a checkout. The marker UNMOUNTING is the
+          shopper leaving — Back, a link, any in-page navigation — which is when
+          they are asked, after the navigation, on the page they landed on. It
+          is a prompt, never a gate; see the component. */}
+      <CheckoutExitSurveyArm />
     </div>
   );
 }
