@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import type { Metadata } from "next";
 import { draftMode, headers } from "next/headers";
@@ -12,7 +12,12 @@ import {
   getStorefrontFilters,
   getFeatureFlag,
   getCmsPage,
+  getDefaultListingSort,
+  // Product photographs a pictureless brand can borrow (InEoeMZh).
+  getBorrowedImageCandidates,
+  applyBorrowedCategoryImages,
 } from "@/lib/store";
+import { borrowedImageFor, ownersNeedingBorrowedImage } from "@/lib/borrowed-image";
 import { getListingPricing } from "@/lib/member";
 import {
   brandNodePathApplies,
@@ -100,7 +105,7 @@ export default async function BrandPage({
   const [{ slug }, sp] = await Promise.all([params, searchParams]);
   // getBrandBySlug → getBySlug runs transformRow, so the row is snake_case at runtime
   // (image_url). Type it so the loose Record<string,unknown> doesn't surface as `unknown`.
-  const brand = (await getBrandBySlug(slug)) as
+  const brandRow = (await getBrandBySlug(slug)) as
     | {
         id: number;
         name: string;
@@ -111,11 +116,48 @@ export default async function BrandPage({
       }
     | null;
 
-  if (!brand) {
+  if (!brandRow) {
     // A renamed brand address redirects rather than bare-404ing. (card EVvRDnZt)
     await redirectIfMapped(`/brands/${slug}`);
-    notFound();
+    // Nothing mapped, and we do not carry this brand: send the reader to the brand
+    // index rather than a dead end. The legacy Industry Kitchens sitemap advertises
+    // 384 brand landing pages, 36 of which name a brand this catalogue no longer
+    // holds, and each of those dies the moment the domain moves (card InEoeMZh). The
+    // index is the closest page that exists — the same answer the Zoey redirect
+    // import already gives 5,763 dead product addresses.
+    //
+    // TEMPORARY (307), not permanent (308), and that is deliberate. A brand we do
+    // not carry today may be one we carry tomorrow, and `getBrandBySlug` caches a
+    // miss for 1,800s: a reader who opens a brand-new brand's address inside that
+    // window would be pinned to `/brands` for that address FOREVER on a 308 —
+    // browsers keep a permanent redirect with no expiry, no screen could explain
+    // it, and we could not clear it. The target is a generic index, so a crawler
+    // reads it as a soft 404 and consolidates nothing either way; the permanent
+    // status would buy no ranking and cost a trap.
+    redirect("/brands");
   }
+
+  // A brand with no logo of its own shows a photograph of one of its own
+  // products instead (card InEoeMZh, Chris 2026-09-18: "use product images").
+  // Resolved ONCE, here, and overlaid on the row — so every branch below draws
+  // the same picture without knowing where it came from, including the authored
+  // Site Builder tree, which is what Industry Kitchens actually renders this
+  // page from.
+  //
+  // Read-time only: nothing is written to `brands.image_url`, so real artwork
+  // added later simply takes over and a retired product cannot leave a stale
+  // copy stamped into the record. Only a PICTURELESS brand pays for the lookup
+  // (`ownersNeedingBorrowedImage` returns nothing for the other 412), and
+  // measured on production 2026-09-18 five of the six pictureless brands have no
+  // storefront-visible products at all — so the answer is usually `null` and the
+  // hero keeps the no-logo layout it already had. (`lib/borrowed-image.ts`.)
+  const brand = {
+    ...brandRow,
+    image_url: borrowedImageFor(
+      brandRow,
+      await getBorrowedImageCandidates("brand", ownersNeedingBorrowedImage([brandRow]))
+    ),
+  };
 
   // Brand page content is an ordered block list (the __brand__ template's `main`
   // region), editable in Pages & Content. Defaults to hero + products when unset,
@@ -134,9 +176,21 @@ export default async function BrandPage({
   // the load it has always had: asking for the faceted listing here would hand a
   // designed page 24 rows where it shows 48, with nothing on screen to page or
   // filter them. ═══
+  // This storefront's own listing order, used by BOTH branches below: the
+  // authored tree has no sort control at all, and the sealed listing falls back
+  // to it whenever `?sort=` says nothing (card InEoeMZh).
+  const defaultListingSort = await getDefaultListingSort();
+
   if (await brandNodePathApplies({ brandCms, draft })) {
     const [{ products: nodeProducts, total: nodeTotal }, nodeMemberPricing] = await Promise.all([
-      getProducts({ brandId: brand.id as number, limit: 48 }),
+      // The authored tree has no sort control, so the order is the storefront's
+      // own default and nothing else (card InEoeMZh). Unset that is still the
+      // alphabetical order this read has always returned.
+      getProducts({
+        brandId: brand.id as number,
+        limit: 48,
+        sort: defaultListingSort,
+      }),
       getFeatureFlag("member_pricing_enabled"),
     ]);
     const nodeRendered = await renderBrandNodeBranch({
@@ -152,7 +206,9 @@ export default async function BrandPage({
   }
 
   const page = parseBrandPage(sp.page);
-  const sort = parseBrandSort(sp.sort);
+  // `?sort=` wins, including `?sort=relevance`; with nothing on the URL the
+  // listing opens in THIS storefront's own order (card InEoeMZh).
+  const sort = parseBrandSort(sp.sort, defaultListingSort);
 
   // This storefront's rail configuration (portal: Products > Filtering). A
   // switched-off facet must stop FILTERING, not merely displaying, so its URL
@@ -209,11 +265,17 @@ export default async function BrandPage({
   // Where a tile GOES depends on the rail configuration: with the Category
   // facet on it narrows this brand page, with it switched off it goes to the
   // category's own page rather than being a control that does nothing.
-  const categoryTiles = facets.categories.map((category) => ({
-    ...category,
+  // A category with no picture of its own borrows one from its products, the
+  // same way its own page's tiles do — this strip reads the brand listing's
+  // FACETS, which come out of `listBrandFaceted` and not out of the wrapped
+  // category reads, so it needs the fill applied by hand (card InEoeMZh).
+  const categoryTiles = (
+    await applyBorrowedCategoryImages(facets.categories as { id: number; image_url?: string | null }[])
+  ).map((category) => ({
+    ...(category as (typeof facets.categories)[number]),
     href: categoryEnabled
       ? `/brands/${slug}?${CATEGORY_PARAM}=${category.id}`
-      : `/categories/${category.slug}`,
+      : `/categories/${(category as (typeof facets.categories)[number]).slug}`,
   }));
   const shown = products.length;
   const hasMore = shown < total && page < MAX_PAGES;
@@ -289,7 +351,7 @@ export default async function BrandPage({
               </p>
               <FacetChips groups={groups} />
             </div>
-            <SortSelect />
+            <SortSelect defaultSort={defaultListingSort} />
           </div>
 
           {products.length === 0 && filtered ? (

@@ -20,6 +20,7 @@ import {
 import { getListingPricing } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
+import type { ListingSort } from "@/lib/listing-sort";
 import { RichContent } from "@/components/content/RichContent";
 import { BlockRenderer, effectiveSubBlocks, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { TemplateRenderer } from "@/blocks/TemplateRenderer";
@@ -61,6 +62,10 @@ export type CategoryExtras = {
   page?: number;
   hasMore?: boolean;
   nextPageHref?: string;
+  /** This storefront's own default listing order (InEoeMZh). The sort control
+   *  has to SHOW it when the URL says nothing, or a listing that opens price
+   *  high-to-low sits under a dropdown reading "Relevance". */
+  defaultSort?: ListingSort;
 };
 
 function categoryOf(ctx?: RenderContext): CategoryRecord | null {
@@ -273,7 +278,7 @@ async function CategoryListingBlock({ props, ctx }: BlockProps) {
               </p>
               <FilterChips facets={facets as never} />
             </div>
-            <SortSelect />
+            <SortSelect defaultSort={extras.defaultSort} />
           </div>
 
           <ProductGrid

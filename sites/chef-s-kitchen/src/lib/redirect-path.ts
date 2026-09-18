@@ -69,6 +69,16 @@ export function relativeRedirectTarget(toPath: string | null | undefined): strin
  *
  * This is deliberately NOT applied inside `redirectIfMapped`: the retire worker's rows are
  * `/products/<slug>`, and those are looked up from the product route's own 404 seam.
+ *
+ * `clearance` USED TO BE ON THIS LIST AND IS NOT ANY MORE (card InEoeMZh). It was here on
+ * the "a route already owns it" reasoning, but the route that owns it is `app/clearance/page.tsx`,
+ * which matches `/clearance` and nothing under it — Next gives a real route the exact path,
+ * never its children — so the only thing the entry ever did was refuse `/clearance/<child>`
+ * without a lookup. On the legacy Zoey site that shape WAS the clearance taxonomy, and the
+ * cutover replay found three of its landing pages dying on it with the right page sitting
+ * there: `/clearance/new` → Special Offer, `/clearance/warehouse-clearance` → Warehouse
+ * Clearance, `/clearance/scratch--dent-3` → Scratch & Dent. Every other entry here is a
+ * namespace with NO page under it at any depth, which is the test for belonging on this list.
  */
 export const RESERVED_CATCH_ALL_SEGMENTS = new Set([
   "_next",
@@ -78,7 +88,6 @@ export const RESERVED_CATCH_ALL_SEGMENTS = new Set([
   "cart",
   "catalog",
   "checkout",
-  "clearance",
   "customer",
   "index.php",
   "json",

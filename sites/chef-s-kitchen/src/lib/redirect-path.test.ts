@@ -61,3 +61,21 @@ test("the catch-all refuses namespaces the site owns, so a mistyped API path is 
     assert.equal(isReservedCatchAllPath(path), false, path);
   }
 });
+
+test("a legacy /clearance/<child> address is NOT refused — only /clearance itself has a route", () => {
+  // `app/clearance/page.tsx` answers `/clearance` exactly; Next never hands a real
+  // route its children, so these reach the catch-all and must be allowed a lookup and a
+  // probe. All three are live legacy Industry Kitchens landing pages with a category
+  // sitting behind them (card InEoeMZh).
+  for (const path of [
+    "/clearance/new",
+    "/clearance/warehouse-clearance",
+    "/clearance/scratch--dent-3",
+  ]) {
+    assert.equal(isReservedCatchAllPath(path), false, path);
+  }
+  // The namespaces with nothing behind them at any depth are still refused.
+  for (const path of ["/cart/anything", "/account/orders", "/products/x"]) {
+    assert.equal(isReservedCatchAllPath(path), true, path);
+  }
+});
