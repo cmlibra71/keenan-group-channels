@@ -42,6 +42,17 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * Trim a text column, treating blank as NULL — the same `cleanText` the portal's
+ * `planOrderFromQuote` applies, so an older quote (or an API caller) holding an
+ * empty string lands as NULL on the order rather than as a present-but-blank
+ * value on its Delivery card.
+ */
+function cleanText(value: unknown): string | null {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text.length > 0 ? text : null;
+}
+
 /** `gstSplit` as the 4dp strings the orders schema stores. */
 function split4(amount: unknown, rate: number, inclusive: boolean) {
   const s = gstSplit(num(amount), inclusive, rate);
@@ -74,6 +85,20 @@ export interface PlannedOrder {
    * storefront desk.
    */
   sales_rep_id: number | null;
+  /**
+   * Who meets the truck and the number to ring, straight off the quote's Ship To
+   * (card bPvb6An5). The quote stores them as its own columns
+   * (`quotes.site_contact_name` varchar(200) / `quotes.site_contact_phone`
+   * varchar(50)) and the order has carried the identical pair since migration
+   * 0035, so nothing truncates on the way across. The PORTAL's conversion
+   * (`lib/quotes/convert.ts` `planOrderFromQuote`) carries them too: a quote
+   * becomes an order two ways and both must produce the same order from the same
+   * document, or a customer paying their own accepted quote would raise an order
+   * with a blank Site contact off a quote that holds one. Null on the quotes that
+   * carry none, which is nearly all of them.
+   */
+  site_contact_name: string | null;
+  site_contact_phone: string | null;
   metafields: Record<string, unknown>;
 }
 
@@ -317,6 +342,11 @@ export function planOrderFromPaidQuote(
     customer_message: quote.customer_notes ?? null,
     internal_memo: buildInternalMemo(quote, items),
     sales_rep_id: rep?.id ?? null,
+    // Card bPvb6An5, and the same two lines the portal's `planOrderFromQuote`
+    // writes. The rep typed who meets the truck once, at quote stage; the order
+    // knows it from the moment it exists, whichever of the two paths raised it.
+    site_contact_name: cleanText(quote.site_contact_name),
+    site_contact_phone: cleanText(quote.site_contact_phone),
     metafields,
   };
 

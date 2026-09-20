@@ -339,6 +339,55 @@ describe("planOrderFromPaidQuote — the rep the order carries (card QRA0m4vh)",
   });
 });
 
+describe("planOrderFromPaidQuote — site contact (card bPvb6An5)", () => {
+  test("the quote's site contact carries onto the order, as the portal's conversion does", () => {
+    const plan = planOrderFromPaidQuote(
+      baseQuote({
+        site_contact_name: "Stacey Penjin",
+        site_contact_phone: "0412 345 678",
+      }),
+      CTX
+    );
+    assert.equal(plan.order.site_contact_name, "Stacey Penjin");
+    assert.equal(plan.order.site_contact_phone, "0412 345 678");
+  });
+
+  test("a blank or whitespace contact lands as NULL, not as a present-but-blank value", () => {
+    const plan = planOrderFromPaidQuote(
+      baseQuote({ site_contact_name: "   ", site_contact_phone: "" }),
+      CTX
+    );
+    assert.equal(plan.order.site_contact_name, null);
+    assert.equal(plan.order.site_contact_phone, null);
+  });
+
+  test("a contact is trimmed, and one half without the other still travels", () => {
+    const plan = planOrderFromPaidQuote(
+      baseQuote({ site_contact_name: "  Dario Kitchen Manager  " }),
+      CTX
+    );
+    assert.equal(plan.order.site_contact_name, "Dario Kitchen Manager");
+    assert.equal(plan.order.site_contact_phone, null);
+  });
+
+  test("a quote carrying none leaves both columns null rather than undefined", () => {
+    const plan = planOrderFromPaidQuote(baseQuote(), CTX);
+    assert.equal(plan.order.site_contact_name, null);
+    assert.equal(plan.order.site_contact_phone, null);
+  });
+
+  test("the site contact changes nothing about the money", () => {
+    const without = planOrderFromPaidQuote(baseQuote(), CTX);
+    const with_ = planOrderFromPaidQuote(
+      baseQuote({ site_contact_name: "Stacey Penjin", site_contact_phone: "0412 345 678" }),
+      CTX
+    );
+    assert.equal(with_.order.total_inc_tax, without.order.total_inc_tax);
+    assert.equal(with_.order.total_ex_tax, without.order.total_ex_tax);
+    assert.equal(with_.order.total_tax, without.order.total_tax);
+  });
+});
+
 describe("planOrderFromPaidQuote — an order is never born unmailable (card 35OtJLkQ)", () => {
   test("stamps the customer's address onto a snapshot that carries a name and a phone", () => {
     const plan = planOrderFromPaidQuote(
