@@ -14,7 +14,7 @@ import { availableUnits, canPurchaseQuantity, resolveBackorderPolicy } from "@ke
 import { resolvePackSize, resolvePackUnit, snapToPack } from "@keenan/services/pack";
 import { getSession } from "@/lib/auth";
 import { pickBestBulkUnit, layerCartPrice, memberPricingGroupId } from "@/lib/pricing/cart-pricing";
-import { resolveCartOffers, type OfferCartLine } from "@/lib/promotions/cart-offers";
+import { resolveCartOffers, couponCapRefusal, type OfferCartLine } from "@/lib/promotions/cart-offers";
 import { channelPricesIncludeTax } from "@/lib/promotions/tax-basis";
 import {
   addonPanelShown,
@@ -723,6 +723,9 @@ const readCart = cache(async () => {
     channelId: CHANNEL_ID,
     couponCodes: ((full as { coupon_codes?: string[] | null }).coupon_codes ?? []) as string[],
     pricesIncludeTax: await channelPricesIncludeTax(),
+    // A coupon's per-customer cap is judged against THIS shopper, so a code past
+    // it stops discounting the basket the moment it is read — not at the till.
+    contactId: (await getSession())?.contactId ?? null,
   });
   const offerByItem = new Map(offers.lines.map((l) => [l.itemId, l]));
 
@@ -756,11 +759,16 @@ const readCart = cache(async () => {
 });
 
 /**
- * Put a coupon code on the cart. The code is not judged here beyond "does an
- * offer actually move money for this basket" — the caps (`max_uses`,
- * `max_uses_per_customer`) are enforced atomically at redemption, under a row
- * lock, by `couponService.redeem`, because that is the only moment they can be
- * enforced without a race.
+ * Put a coupon code on the cart.
+ *
+ * THE CAPS ARE JUDGED HERE, not only at redemption. `max_uses` and
+ * `max_uses_per_customer` are read while the offer is evaluated
+ * (`evaluateBasketPromotions`), so a shopper past "one use per customer" is
+ * refused the code now instead of being billed the discounted total and having
+ * the redemption fail into a server log afterwards — which is what used to
+ * happen, and which made the card's "one use per customer" true nowhere that
+ * moved money. `couponService.redeem` still re-reads them under a row lock,
+ * because only the lock can settle two tabs racing for the last use.
  *
  * A code that discounts nothing is REFUSED rather than stored, so the shopper is
  * told now instead of discovering at the till that it did nothing. This is the
@@ -785,15 +793,25 @@ export async function applyCouponCode(rawCode: string): Promise<{ success?: true
     const full = await cartService.getWithItems(cart.id);
     const items = (full?.items ?? []) as unknown as OfferCartLine[];
     const pricesIncludeTax = await channelPricesIncludeTax();
+    const contactId = (await getSession())?.contactId ?? null;
 
-    const before = await resolveCartOffers(items, { channelId: CHANNEL_ID, couponCodes: existing, pricesIncludeTax });
+    const before = await resolveCartOffers(items, {
+      channelId: CHANNEL_ID,
+      couponCodes: existing,
+      pricesIncludeTax,
+      contactId,
+    });
     const after = await resolveCartOffers(items, {
       channelId: CHANNEL_ID,
       couponCodes: [...existing, code],
       pricesIncludeTax,
+      contactId,
     });
     if (after.totalDiscount <= before.totalDiscount || !after.appliedCouponCodes.includes(code)) {
-      return { error: "That code doesn't apply to what's in your cart." };
+      // Say the true reason where there is one: a code the shopper has already
+      // used is not a code that "doesn't apply to what's in your cart".
+      const capped = await couponCapRefusal(code, { contactId });
+      return { error: capped ?? "That code doesn't apply to what's in your cart." };
     }
 
     await cartService.update(cart.id, { couponCodes: [...existing, code] });

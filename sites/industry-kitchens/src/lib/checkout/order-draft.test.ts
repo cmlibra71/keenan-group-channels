@@ -435,6 +435,41 @@ test("withPromotionDiscounts records the discount on the LINE and nets the subto
   assert.equal(out.totalDiscount, 16);
 });
 
+test("the order row keeps a GROSS subtotal and an EX-GST discount beside it", () => {
+  // The identity the portal's Totals card prints and `recalculateOrderTotals`
+  // re-derives: Subtotal + Shipping − Discount = Grand Total (Excl. Tax). The
+  // order stores `built.subtotal` (gross) and `totalDiscountExTax`; only what is
+  // BILLED works from the net figure. Netting the subtotal AND writing a discount
+  // printed that identity wrong on a live invoice screen.
+  const built = buildLineItems(
+    [line({ product_id: 1, product_sku: "CAP-A", quantity: 4, list_price: "100" })],
+    false
+  );
+  const out = withPromotionDiscounts(
+    built.lineItems,
+    built.subtotal,
+    [{ discount: 16, promotionId: 7, promotionName: "Carton tiers" }],
+    false
+  );
+  const shippingExTax = 40;
+  const totalExTax = out.subtotal.exTax + shippingExTax;
+  assert.equal(built.subtotal.exTax, 400, "the STORED subtotal is gross of the offer");
+  assert.equal(out.totalDiscountExTax, 16);
+  assert.equal(built.subtotal.exTax + shippingExTax - out.totalDiscountExTax, totalExTax);
+});
+
+test("a GST-inclusive channel writes an EX-GST discount into an ex-GST column", () => {
+  const built = buildLineItems([line({ quantity: 1, list_price: "110" })], true);
+  const out = withPromotionDiscounts(
+    built.lineItems,
+    built.subtotal,
+    [{ discount: 11, promotionId: 1, promotionName: "x" }],
+    true
+  );
+  assert.equal(out.totalDiscount, 11, "what the shopper saw come off, in the cart's basis");
+  assert.equal(out.totalDiscountExTax, 10, "what orders.discount_amount is written in");
+});
+
 test("withPromotionDiscounts with nothing to apply returns the draft untouched", () => {
   const built = buildLineItems([line({ quantity: 2 })], false);
   const out = withPromotionDiscounts(built.lineItems, built.subtotal, [null], false);

@@ -484,6 +484,11 @@ export async function placeOrder(
       channelId: CHANNEL_ID,
       couponCodes: ((cartWithItems as { coupon_codes?: string[] | null }).coupon_codes ?? []) as string[],
       pricesIncludeTax,
+      // WHO is buying, so a coupon's per-customer cap binds on the charge as well
+      // as on the screen: a shopper past the cap is billed full price here rather
+      // than billed the discount and refused the redemption a moment later
+      // (card p6YVxc4P, requirement 5).
+      contactId: session?.contactId ?? null,
     });
   } catch (e) {
     console.error("[placeOrder] offer evaluation failed (non-fatal):", e);
@@ -507,6 +512,23 @@ export async function placeOrder(
   const subtotal = promoted.subtotal;
   const promotionDiscount = promoted.totalDiscount;
 
+  // WHAT IS BILLED vs WHAT IS STORED AS THE SUBTOTAL — two different figures, on
+  // purpose (card p6YVxc4P).
+  //
+  // `subtotal` here is NET of offers and is what everything downstream works
+  // from: the delivery rate lookup, the finance floor, the GST split and the
+  // Total. Subtracting the offer once, here, is what stops one of those call
+  // sites eventually being missed.
+  //
+  // The ORDER ROW is written the other way round, because that is the shape every
+  // order screen, `recalculateOrderTotals` and a converted quote already use:
+  // `subtotal_ex_tax` is GROSS, `discount_amount` carries the reduction, and it is
+  // `total_ex_tax` that is net — "Subtotal + Shipping − Discount = Grand Total
+  // (Excl.Tax)" is an identity the portal's Totals card prints and the order-money
+  // register entry records. Netting the subtotal AND writing a discount printed
+  // that identity wrong on a real invoice screen, and made the stored subtotal
+  // jump the next time a line-price approval re-added the order from its lines.
+  const grossSubtotal = built.subtotal;
   const subtotalIncTax = subtotal.incTax;
   const subtotalExTax = subtotal.exTax;
 
@@ -1148,12 +1170,19 @@ export async function placeOrder(
     // packing floor all read the same answer (card Wxjp8wpg).
     ...(deliveryServiceType ? { deliveryServiceType } : {}),
     currencyCode: cartWithItems.currency_code,
-    subtotalExTax: String(subtotalExTax),
-    subtotalIncTax: String(subtotalIncTax),
+    // GROSS — see the note beside `grossSubtotal` above. `discount_amount` below
+    // is what takes the offer off, inside `total_ex_tax` / `total_inc_tax`.
+    subtotalExTax: String(grossSubtotal.exTax),
+    subtotalIncTax: String(grossSubtotal.incTax),
     // The header total of the LINE discounts, the same way a converted quote
     // writes it (`src/lib/quotes/convert.ts`). The line is where the money is
-    // recorded; this is the roll-up every order screen already reads.
-    ...(promotionDiscount > 0 ? { discountAmount: promotionDiscount.toFixed(4) } : {}),
+    // recorded; this is the roll-up every order screen already reads, and it is
+    // an EX-GST figure — which is what the four production orders carrying one
+    // show (9297, 19931, 7959, 7396) and what the portal's Totals card subtracts
+    // to reach Grand Total (Excl.Tax).
+    ...(promoted.totalDiscountExTax > 0
+      ? { discountAmount: promoted.totalDiscountExTax.toFixed(4) }
+      : {}),
     shippingCostExTax: String(shippingExTax),
     shippingCostIncTax: String(shippingIncTax),
     totalExTax: String(totalExTax),

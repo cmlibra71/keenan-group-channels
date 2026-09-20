@@ -12,10 +12,34 @@
 // That also means no row is written to `products` for a bundle — which is just as
 // well, because the catalogue is Zoey-owned and the nightly ingest would fight
 // anything we invented there.
+//
+// WHERE THE PRICES AND THE NAMES COME FROM, and why it is not a plain product
+// read. Every component is resolved through `getProductBySlug`, the SAME
+// accessor the product page uses, and then through the catalogue-scope
+// chokepoint:
+//
+//   • `getProductBySlug` is CHANNEL-SCOPED (it inner-joins this channel's
+//     visible assignment), so a product that belongs to the other storefront
+//     resolves to nothing here and the bundle says so, instead of advertising a
+//     product this site does not sell;
+//   • it is SUPPRESSION-SANITISED (`stripSuppressedCatalogPricing`), so on a
+//     channel that suppresses the shared catalogue sale price — Chefs Depot —
+//     this page quotes RRP, which is what the CD cart charges. Reading
+//     `products.sale_price` raw is the Q9hRTbKO defect: the page advertised
+//     $44.00 while the cart charged $50.00, and all 149 CAP-/SC- products on
+//     channel 2 carry a sale price, so it fired on this card's own ranges;
+//   • `isProductVisibleToViewer` applies the per-account product restrictions and
+//     the group ∩ contact category access that `lib/catalog-scope.ts` records as
+//     the single read-time chokepoint, so a product exclusive to somebody else's
+//     account cannot appear on a public bundle page.
+//
+// The SKU lookup that precedes all that is used for ONE thing — finding the slug
+// — and nothing it returns is ever shown or priced.
 // ============================================================================
 
 import { loadBundlePromotions, parseOfferRule, type FixedBundleRule } from "@keenan/services";
-import { productService, CHANNEL_ID } from "@/lib/store";
+import { productService, CHANNEL_ID, getProductBySlug } from "@/lib/store";
+import { isProductVisibleToViewer } from "@/lib/catalog-scope";
 
 export type BundleComponentView = {
   sku: string;
@@ -26,7 +50,7 @@ export type BundleComponentView = {
   /** The per-unit price this storefront charges, ex GST, or null when unknown. */
   unitPrice: number | null;
   slug: string | null;
-  /** True when the SKU is not in this storefront's catalogue at all. */
+  /** True when the SKU is not in this storefront's catalogue, or not for this viewer. */
   missing: boolean;
 };
 
@@ -78,6 +102,73 @@ export async function loadBundles(): Promise<BundleView[]> {
   return out;
 }
 
+/**
+ * SKU → slug, and nothing else.
+ *
+ * `products.url_path` is the key every channel-scoped, sanitised read is keyed
+ * by, and a bundle is authored in SKUs. Deliberately the only thing taken from
+ * this read: its row is not channel-scoped, not suppression-sanitised and not
+ * scope-filtered, so a name or a price taken from here would be exactly the
+ * defect this module's header describes.
+ */
+async function slugForSku(sku: string): Promise<string | null> {
+  try {
+    const found = await productService.list({
+      page: 1,
+      limit: 1,
+      sort: "id",
+      direction: "asc",
+      filters: { sku: { type: "eq", value: sku } },
+    });
+    const row = found.data[0] as { url_path?: string | null } | undefined;
+    const slug = (row?.url_path ?? "").trim();
+    return slug === "" ? null : slug;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The component as THIS storefront and THIS viewer see it, or null when it is
+ * not theirs to see. One shape out, so the page cannot accidentally render a
+ * half-resolved row.
+ */
+async function resolveComponent(
+  sku: string
+): Promise<{ id: number; name: string; unitPrice: number | null; slug: string } | null> {
+  const slug = await slugForSku(sku);
+  if (!slug) return null;
+
+  const product = (await getProductBySlug(slug).catch(() => null)) as
+    | {
+        id: number;
+        name?: string | null;
+        price?: string | number | null;
+        salePrice?: string | number | null;
+        urlPath?: string | null;
+        categoryIds?: number[] | null;
+      }
+    | null;
+  if (!product) return null;
+  if (!(await isProductVisibleToViewer(product.id, product.categoryIds ?? null))) return null;
+
+  // The price a shopper sees on the product page: the channel's sale price where
+  // the channel HAS one after suppression, otherwise RRP. Account contract prices
+  // and member pricing are deliberately not resolved here — this page is read by
+  // signed-out shoppers too, and the CART is where the real price is decided for
+  // THAT shopper. The page says so.
+  const sale = product.salePrice == null ? NaN : parseFloat(String(product.salePrice));
+  const list = product.price == null ? NaN : parseFloat(String(product.price));
+  const unit = Number.isFinite(sale) && sale > 0 ? sale : Number.isFinite(list) && list > 0 ? list : null;
+
+  return {
+    id: product.id,
+    name: (product.name ?? "").trim() || sku,
+    unitPrice: unit,
+    slug: product.urlPath ?? slug,
+  };
+}
+
 async function resolveBundle(
   promotionId: number,
   promotionName: string,
@@ -87,46 +178,18 @@ async function resolveBundle(
   let componentTotal = 0;
 
   for (const component of rule.components) {
-    let row:
-      | { id: number; name: string; price: string | null; sale_price: string | null; url_path: string | null }
-      | undefined;
-    try {
-      const found = await productService.list({
-        page: 1,
-        limit: 1,
-        sort: "id",
-        direction: "asc",
-        filters: { sku: { type: "eq", value: component.sku } },
-      });
-      row = found.data[0] as typeof row;
-    } catch {
-      row = undefined;
-    }
-
-    // The price a shopper sees on the product page: the channel's sale price when
-    // there is one, otherwise RRP. Account contract prices and member pricing are
-    // deliberately NOT resolved here — this page is read by signed-out shoppers too,
-    // and the CART is where the real price is decided for THAT shopper. The page
-    // says so.
-    const unit = row
-      ? row.sale_price && Number.isFinite(parseFloat(row.sale_price))
-        ? parseFloat(row.sale_price)
-        : row.price && Number.isFinite(parseFloat(row.price))
-          ? parseFloat(row.price)
-          : null
-      : null;
-
-    if (unit != null) componentTotal += unit * component.quantity;
+    const resolved = await resolveComponent(component.sku);
+    if (resolved?.unitPrice != null) componentTotal += resolved.unitPrice * component.quantity;
 
     components.push({
       sku: component.sku,
       quantity: component.quantity,
-      productId: row?.id ?? null,
+      productId: resolved?.id ?? null,
       variantId: null,
-      name: row?.name ?? component.sku,
-      unitPrice: unit,
-      slug: row?.url_path ?? null,
-      missing: !row,
+      name: resolved?.name ?? component.sku,
+      unitPrice: resolved?.unitPrice ?? null,
+      slug: resolved?.slug ?? null,
+      missing: !resolved,
     });
   }
 

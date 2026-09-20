@@ -361,7 +361,19 @@ export function withPromotionDiscounts(
   subtotal: MoneySplit,
   discounts: (LinePromotionDraft | null | undefined)[],
   pricesIncludeTax: boolean
-): { lineItems: OrderLineDraft[]; subtotal: MoneySplit; totalDiscount: number } {
+): {
+  lineItems: OrderLineDraft[];
+  subtotal: MoneySplit;
+  totalDiscount: number;
+  /**
+   * The same reduction EX GST, which is the basis `orders.discount_amount` is
+   * written in (the portal's Totals card subtracts it from Subtotal + Shipping to
+   * reach Grand Total Excl. Tax). Identical to `totalDiscount` on a channel that
+   * prices ex GST, which both live channels do — it exists so a GST-inclusive
+   * channel cannot quietly write an inclusive figure into an exclusive column.
+   */
+  totalDiscountExTax: number;
+} {
   let discountExTax = 0;
   let discountIncTax = 0;
   let discountTax = 0;
@@ -382,7 +394,9 @@ export function withPromotionDiscounts(
     };
   });
 
-  if (totalDiscount === 0) return { lineItems, subtotal, totalDiscount: 0 };
+  if (totalDiscount === 0) {
+    return { lineItems, subtotal, totalDiscount: 0, totalDiscountExTax: 0 };
+  }
 
   return {
     lineItems: next,
@@ -392,6 +406,7 @@ export function withPromotionDiscounts(
       tax: Math.max(0, subtotal.tax - discountTax),
     },
     totalDiscount: Math.round(totalDiscount * 100) / 100,
+    totalDiscountExTax: Math.round(discountExTax * 100) / 100,
   };
 }
 

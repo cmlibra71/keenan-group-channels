@@ -20,7 +20,12 @@
 // nothing about a shopper's ability to buy depends on an offer resolving.
 // ============================================================================
 
-import { evaluateBasketPromotions, type PromotionEvaluation } from "@keenan/services";
+import {
+  couponService,
+  evaluateBasketPromotions,
+  loadCouponCustomerUses,
+  type PromotionEvaluation,
+} from "@keenan/services";
 
 /** The cart-line shape this module needs (a subset of cartService.getWithItems). */
 export type OfferCartLine = {
@@ -109,7 +114,19 @@ function toOffers(evaluation: PromotionEvaluation): CartOffers {
  */
 export async function resolveCartOffers(
   items: OfferCartLine[],
-  options: { channelId: number; couponCodes?: string[]; pricesIncludeTax?: boolean }
+  options: {
+    channelId: number;
+    couponCodes?: string[];
+    pricesIncludeTax?: boolean;
+    /**
+     * WHO is buying. A coupon's `max_uses_per_customer` is judged against this
+     * shopper's live redemptions before any discount is shown, so the cart
+     * refuses a code the till would refuse (card p6YVxc4P, requirement 5). A
+     * guest has no contact, so only the total cap can bind for them — which is
+     * the position a guest checkout is in anyway.
+     */
+    contactId?: number | null;
+  }
 ): Promise<CartOffers> {
   if (!items || items.length === 0) return NO_OFFERS;
   try {
@@ -126,12 +143,58 @@ export async function resolveCartOffers(
         channelId: options.channelId,
         couponCodes: options.couponCodes ?? [],
         taxInclusive: options.pricesIncludeTax === true,
+        contactId: options.contactId ?? null,
       }
     );
     return toOffers(evaluation);
   } catch (e) {
     console.error("[cart-offers] promotion evaluation failed (non-fatal):", e);
     return NO_OFFERS;
+  }
+}
+
+/**
+ * Why a code is being refused, in the shopper's words — or null when the caps
+ * are not the reason.
+ *
+ * The caps themselves are enforced twice over: `evaluateBasketPromotions` reads
+ * them so the discount is never SHOWN to somebody who cannot have it, and
+ * `CouponService.redeem` re-reads them under a row lock so two tabs cannot both
+ * spend the last use. This exists only so the refusal says something true —
+ * "you've already used that code" rather than "that code doesn't apply to what's
+ * in your cart", which would send the shopper looking at their basket for a
+ * problem that is not there.
+ */
+export async function couponCapRefusal(
+  code: string,
+  who: { contactId?: number | null; customerId?: number | null }
+): Promise<string | null> {
+  try {
+    const coupon = (await couponService.getByCode(code)) as
+      | {
+          id: number;
+          max_uses: number | null;
+          current_uses: number | null;
+          max_uses_per_customer: number | null;
+        }
+      | null;
+    // An unknown code is not a cap problem; the caller's own wording is right.
+    if (!coupon) return null;
+    if (coupon.max_uses != null && (coupon.current_uses ?? 0) >= coupon.max_uses) {
+      return "That code has been fully redeemed.";
+    }
+    if (
+      coupon.max_uses_per_customer != null &&
+      (who.contactId != null || who.customerId != null)
+    ) {
+      const uses = await loadCouponCustomerUses([coupon.id], who);
+      if ((uses.get(coupon.id) ?? 0) >= coupon.max_uses_per_customer) {
+        return "You've already used that code.";
+      }
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
 
