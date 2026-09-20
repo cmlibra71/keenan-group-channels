@@ -26,6 +26,7 @@ import { GstToggle } from "@/components/layout/GstToggle";
 import { SilverChefPanel } from "@/components/product/SilverChefPanel";
 import { ReviewsSection } from "@/components/product/ProductTabs";
 import { ProductImageNotice } from "@/components/product/ProductImageNotice";
+import { ProductCombinationNotice } from "@/components/product/ProductCombinationNotice";
 import { ProductResidentialNotice } from "@/components/product/ProductResidentialNotice";
 import { ProductPackNote } from "@/components/product/ProductPackNote";
 import { ProductInstructionsPanel } from "@/components/product/ProductInstructionsPanel";
@@ -139,6 +140,13 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // authored because the supplied panel colour is not a token on either site, and a
     // colour class invented in a STORED tree has no rule in the deployed stylesheet.
     // Renders null unless this product carries the tick.
+    // "We do not make that combination" (card VNh9DdYd). Sealed rather than authored
+    // because it follows the LIVE purchase state — which options are answered and
+    // whether a variant exists for them — and an authored tree has no node for it.
+    // Renders null unless every option is answered and nothing was built that way.
+    // NOT the back-order wording (7vu2iEEZ): that is Tim's, it is fixed, it lives in
+    // the cart, and it is never reused here.
+    "product-combination-notice": () => <ProductCombinationNotice />,
     "product-image-notice": () => (
       <ProductImageNotice show={product.imageIsIllustrative === true} />
     ),

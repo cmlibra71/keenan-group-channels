@@ -387,3 +387,48 @@ describe("planOrderFromPaidQuote — site contact (card bPvb6An5)", () => {
     assert.equal(with_.order.total_tax, without.order.total_tax);
   });
 });
+
+describe("planOrderFromPaidQuote — an order is never born unmailable (card 35OtJLkQ)", () => {
+  test("stamps the customer's address onto a snapshot that carries a name and a phone", () => {
+    const plan = planOrderFromPaidQuote(
+      baseQuote({ billing_address: { first_name: "Fiona", telephone: "0411 553 222" } }),
+      { ...CTX, customerEmail: "fiona@industrykitchens.com.au" }
+    );
+    assert.deepEqual(plan.order.billing_address, {
+      first_name: "Fiona",
+      telephone: "0411 553 222",
+      email: "fiona@industrykitchens.com.au",
+    });
+  });
+
+  test("never rewrites an address the customer already agreed to", () => {
+    const plan = planOrderFromPaidQuote(
+      baseQuote({ billing_address: { first_name: "Fiona", email: "agreed@example.com" } }),
+      { ...CTX, customerEmail: "someone.else@example.com" }
+    );
+    assert.equal(
+      (plan.order.billing_address as Record<string, unknown>).email,
+      "agreed@example.com"
+    );
+  });
+
+  test("no customer address found leaves the snapshot exactly as the quote wrote it", () => {
+    const snapshot = { first_name: "Fiona", telephone: "0411 553 222" };
+    const plan = planOrderFromPaidQuote(baseQuote({ billing_address: snapshot }), {
+      ...CTX,
+      customerEmail: null,
+    });
+    assert.deepEqual(plan.order.billing_address, snapshot);
+  });
+
+  test("the stamp changes nothing about the money", () => {
+    const without = planOrderFromPaidQuote(baseQuote(), CTX);
+    const with_ = planOrderFromPaidQuote(baseQuote(), {
+      ...CTX,
+      customerEmail: "fiona@industrykitchens.com.au",
+    });
+    assert.equal(with_.order.total_inc_tax, without.order.total_inc_tax);
+    assert.equal(with_.order.total_tax, without.order.total_tax);
+    assert.equal(with_.order.total_ex_tax, without.order.total_ex_tax);
+  });
+});

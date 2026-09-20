@@ -13,6 +13,7 @@ import {
   getChannelSetting,
   getCmsCategoryPage,
   getCmsTemplate,
+  getDefaultListingSort,
 } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
 import { getListingPricing } from "@/lib/member";
@@ -32,6 +33,7 @@ import {
   type CategoryListingPricing,
 } from "@/builder/category-node-branch";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
+import { parseListingSort } from "@/lib/listing-sort";
 import { RichContent } from "@/components/content/RichContent";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { CategorySeo } from "@/components/category/CategorySeo";
@@ -124,18 +126,23 @@ export default async function CategoryPage({
   await assertCategoryVisible(category.id);
 
   const page = Math.min(MAX_PAGES, Math.max(1, parseInt(sp.page || "1", 10)));
-  const sort = (["price_asc", "price_desc", "saving", "newest"] as const).includes(
-    sp.sort as never
-  )
-    ? (sp.sort as "price_asc" | "price_desc" | "saving" | "newest")
-    : "relevance";
 
   // This storefront's rail configuration (portal: Products > Filtering). A
   // switched-off facet must not filter either: its options are pruned from the
   // rail below, so a lingering ?brand= would narrow the listing with nothing on
   // screen explaining or clearing it.
-  const storefrontFilters = await getStorefrontFilters();
+  // Both are cached channel-settings reads and this page is one Tim has called
+  // slow, so they go together rather than one after the other.
+  const [storefrontFilters, defaultListingSort] = await Promise.all([
+    getStorefrontFilters(),
+    getDefaultListingSort(),
+  ]);
   const filtersOn = enabledFilterIds(storefrontFilters);
+
+  // `?sort=` wins, including `?sort=relevance`; with nothing on the URL the
+  // listing opens in THIS storefront's own order (card InEoeMZh). Unset that is
+  // still relevance, so a storefront nobody has configured is unchanged.
+  const sort = parseListingSort(sp.sort, defaultListingSort);
 
   // Price is one facet with two notations: the slider writes `?price=1000-3000`
   // and the three legacy band tokens are still honoured, so a bookmark and the
@@ -277,7 +284,10 @@ export default async function CategoryPage({
       const value = sp[param];
       if (value) next.set(param, value);
     }
-    if (sp.sort) next.set("sort", sp.sort);
+    // The NORMALISED order, not the raw parameter: `?sort=banana` runs in the
+    // storefront's own order, so a Load-more link repeating "banana" would be a
+    // link that does not describe the page it loads.
+    if (sp.sort) next.set("sort", sort);
     next.set("page", String(page + 1));
     return `/categories/${slug}?${next.toString()}`;
   })();
@@ -346,6 +356,11 @@ export default async function CategoryPage({
           category: category as unknown as Record<string, unknown>,
           extras: {
             listing: { products, total, facets },
+            // This storefront's own default order, so the template's sort
+            // <select> shows what the grid beneath it is actually doing on a
+            // storefront that opens on price (InEoeMZh). Without it the widget
+            // falls back to Relevance and the control misreports the listing.
+            defaultSort: defaultListingSort,
             pricing: pricing as unknown as Record<string, unknown>,
             memberPricingEnabled,
             breadcrumbs,
@@ -431,7 +446,7 @@ export default async function CategoryPage({
                 </p>
                 <FilterChips facets={facets} />
               </div>
-              <SortSelect />
+              <SortSelect defaultSort={defaultListingSort} />
             </div>
 
             <ProductGrid

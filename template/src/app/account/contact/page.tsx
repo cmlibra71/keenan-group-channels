@@ -21,6 +21,22 @@ export const metadata = {
  * rule, the same storefront gate, through the same loader. Only where neither a
  * quote nor an account names anybody does it fall back to the
  * storefront's customer-service desk, which is the normal answer on Chefs Depot.
+ *
+ * SINCE CARD Hj20wiV8 THE DESK IS ALSO THE ANSWER WHEN THE QUOTE'S REP IS
+ * SOMEBODY THIS STOREFRONT DOES NOT SERVE. That card put the Industry Kitchens
+ * sales and CS team on Chefs Depot's rep list — the IK team IS the CD team — so
+ * a Chefs Depot quote now routinely carries an `@industrykitchens.com.au` rep,
+ * and naming them here would tell a Chefs Depot customer to email the other
+ * business (Tim, card k6pHXQBf). `resolveQuoteContact` in `@keenan/services`
+ * refuses that address and hands back this storefront's own desk, so nothing on
+ * this page changes shape: `isFallback` is true and the panel reads exactly what
+ * it reads for a quote with no rep at all. The rep is NOT cleared — they still
+ * own the quote on every staff screen.
+ *
+ * THIS PAGE ONLY PICKS UP A RESOLVER CHANGE WHEN THE SITE IS REBUILT, because
+ * `@keenan/services` is baked into the build. That is why this commit exists:
+ * the rule ships in the same wave as the portal's, or the portal and the
+ * storefront name different people on one quote.
  */
 export default async function AccountContactPage() {
   const session = await getSession();
