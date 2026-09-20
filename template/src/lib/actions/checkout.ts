@@ -16,7 +16,9 @@ import {
   storedAddonsAsSelection,
   type ResolvedAddon,
 } from "@keenan/services/product-addons";
-import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, forOrderInsert, type BelowCostLine } from "@/lib/checkout/order-draft";
+import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, forOrderInsert, withPromotionDiscounts, lineGoodsExTax, type BelowCostLine, type LinePromotionDraft } from "@/lib/checkout/order-draft";
+import { resolveCartOffers, NO_OFFERS, type CartOffers, type OfferCartLine } from "@/lib/promotions/cart-offers";
+import { stampOrderLinePromotions } from "@keenan/services";
 import { backorderFactsForProducts } from "@/lib/cart/backorder-facts";
 import { canPurchaseQuantity } from "@keenan/services/backorder";
 import {
@@ -466,10 +468,45 @@ export async function placeOrder(
   }
 
   // Calculate line items + subtotal (pure; GST math delegated to gstSplit).
-  const { subtotal, itemsTotal: totalItems, lineItems: builtLineItems } = buildLineItems(
-    fullCart.items,
+  const built = buildLineItems(fullCart.items, pricesIncludeTax);
+  const totalItems = built.itemsTotal;
+
+  // ── OFFERS (card p6YVxc4P) ────────────────────────────────────────────────
+  // Re-evaluated HERE, from the lines about to be billed, never trusted from the
+  // page: show-equals-charge, the same rule the finance offer and the payment
+  // method already follow. The discount lands on the LINE
+  // (`order_items.discount_amount`) and comes off the subtotal, so the shipping
+  // rate lookup, the finance floor and the Total all read the money the customer
+  // actually owes.
+  let cartOffers: CartOffers = NO_OFFERS;
+  try {
+    cartOffers = await resolveCartOffers(fullCart.items as unknown as OfferCartLine[], {
+      channelId: CHANNEL_ID,
+      couponCodes: ((cartWithItems as { coupon_codes?: string[] | null }).coupon_codes ?? []) as string[],
+      pricesIncludeTax,
+    });
+  } catch (e) {
+    console.error("[placeOrder] offer evaluation failed (non-fatal):", e);
+  }
+  const offerByItemId = new Map(cartOffers.lines.map((l) => [l.itemId, l]));
+  const perLinePromotions: (LinePromotionDraft | null)[] = (
+    fullCart.items as { id: number }[]
+  ).map((item) => {
+    const offer = offerByItemId.get(item.id);
+    return offer
+      ? { discount: offer.discount, promotionId: offer.promotionId, promotionName: offer.promotionName }
+      : null;
+  });
+  const promoted = withPromotionDiscounts(
+    built.lineItems,
+    built.subtotal,
+    perLinePromotions,
     pricesIncludeTax
   );
+  const builtLineItems = promoted.lineItems;
+  const subtotal = promoted.subtotal;
+  const promotionDiscount = promoted.totalDiscount;
+
   const subtotalIncTax = subtotal.incTax;
   const subtotalExTax = subtotal.exTax;
 
@@ -560,7 +597,11 @@ export async function placeOrder(
       // `buildLineItems` and `cartLineGoodsExTax` (which is what the CART'S estimate route feeds
       // this same argument) are one expression, so the estimate and the charge cannot disagree
       // either — see the note on `cartLineGoodsExTax` in `lib/checkout/order-draft.ts`.
-      goods_ex_tax: Number(builtLineItems[idx]?.totalExTax ?? NaN),
+      // An OFFER comes off here too (card p6YVxc4P): the goods are worth what they are sold for,
+      // and `subtotalExTax` is net of offers, so this must be as well or the identity breaks.
+      goods_ex_tax: builtLineItems[idx]
+        ? lineGoodsExTax(builtLineItems[idx], pricesIncludeTax)
+        : NaN,
     }))
   ).catch(() => null);
   const bulkyProducts = cartFreight?.bulky ?? [];
@@ -997,6 +1038,31 @@ export async function placeOrder(
     ).toFixed(2);
     orderMetafields.finance_funding_type = financeApplication.funding_type ?? null;
   }
+  // WHICH OFFER PRODUCED THE SALE (card p6YVxc4P). The per-line column
+  // `order_items.promotion_id` is the durable form and is stamped after the lines
+  // are inserted; this is recorded as well because `metafields` exists in every
+  // environment, so the reporting requirement holds even before migration 0100 is
+  // applied — and it is the only place a bundle's own name survives.
+  if (cartOffers.appliedPromotionIds.length > 0) {
+    orderMetafields.promotions = {
+      total_discount: promotionDiscount.toFixed(2),
+      applied: cartOffers.appliedPromotionIds,
+      coupons: cartOffers.couponDiscounts.map((c) => ({
+        code: c.code,
+        promotion_id: c.promotionId,
+        discount: c.discount.toFixed(2),
+      })),
+      lines: cartOffers.lines.map((l) => ({
+        cart_item_id: l.itemId,
+        promotion_id: l.promotionId,
+        promotion_name: l.promotionName,
+        percent: l.percent,
+        discount: l.discount.toFixed(2),
+        floor_clamped: l.floorClamped,
+        ...(l.bundleSlug ? { bundle: l.bundleSlug } : {}),
+      })),
+    };
+  }
   if (belowCostLines.length > 0) {
     orderMetafields.below_cost_lines = belowCostLines.map((l) => ({
       product_id: l.productId,
@@ -1084,6 +1150,10 @@ export async function placeOrder(
     currencyCode: cartWithItems.currency_code,
     subtotalExTax: String(subtotalExTax),
     subtotalIncTax: String(subtotalIncTax),
+    // The header total of the LINE discounts, the same way a converted quote
+    // writes it (`src/lib/quotes/convert.ts`). The line is where the money is
+    // recorded; this is the roll-up every order screen already reads.
+    ...(promotionDiscount > 0 ? { discountAmount: promotionDiscount.toFixed(4) } : {}),
     shippingCostExTax: String(shippingExTax),
     shippingCostIncTax: String(shippingIncTax),
     totalExTax: String(totalExTax),
@@ -1134,6 +1204,29 @@ export async function placeOrder(
       }
     }
     return { error: err instanceof Error ? err.message : "We couldn't complete your order. Please try again." };
+  }
+
+  // Stamp WHICH offer discounted each line (card p6YVxc4P). `order_items.promotion_id`
+  // is written by raw SQL rather than in the insert above, because the column is
+  // deliberately outside the Drizzle model until migration 0100 is everywhere
+  // (services CONTEXT.md D10). Non-fatal by construction: the discount is already
+  // on the line and the applied promotions are on the order's metafields, so a
+  // stamp that cannot be written costs provenance, never money and never the order.
+  if (lineItems.some((l) => l.promotionId != null)) {
+    try {
+      await stampOrderLinePromotions(
+        order.id,
+        lineItems
+          .filter((l) => l.promotionId != null)
+          .map((l) => ({
+            productId: l.productId,
+            variantId: l.variantId,
+            promotionId: l.promotionId as number,
+          }))
+      );
+    } catch (e) {
+      console.error("[placeOrder] promotion stamp failed (non-fatal):", e);
+    }
   }
 
   // ── Every completed checkout attaches a customer record (card LiuLvc5b) ─────────────────────
@@ -1418,15 +1511,27 @@ export async function placeOrder(
   // coupon_redemptions row, and increments current_uses — so a code past its cap is simply
   // not redeemed (logged) rather than silently over-used. Runs before the Stripe early-return
   // so every payment method records redemption.
+  //
+  // The discount recorded is the REAL one the engine worked out for this basket
+  // (card p6YVxc4P). It used to be hardcoded "0" because nothing evaluated a
+  // coupon and no screen could set one — a redemption that said a code had been
+  // used and that it was worth nothing. A code that discounts nothing is not
+  // redeemed at all now: it never reaches `appliedCouponCodes`, so it stays
+  // usable rather than being burnt on an order it did not touch.
   const couponCodes = (cartWithItems as { coupon_codes?: string[] | null }).coupon_codes ?? [];
+  const couponDiscountByCode = new Map(
+    cartOffers.couponDiscounts.map((c) => [c.code, c.discount])
+  );
   for (const code of couponCodes) {
     if (!code) continue;
+    const discount = couponDiscountByCode.get((code ?? "").toUpperCase());
+    if (discount == null || !(discount > 0)) continue;
     try {
       await couponService.redeem({
         code,
         orderId: order.id,
         contactId: session?.contactId ?? null,
-        discountAmount: "0",
+        discountAmount: discount.toFixed(4),
       });
     } catch (e) {
       console.error(`[placeOrder] coupon "${code}" not redeemed:`, e instanceof Error ? e.message : e);

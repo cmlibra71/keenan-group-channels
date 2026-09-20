@@ -7,6 +7,7 @@ import { getCart } from "@/lib/actions/cart";
 import { CartItemsList, type CartItemRow } from "@/components/cart/CartItemsList";
 import { CartSummary } from "@/components/cart/CartSummary";
 import { MembershipCartUpsell } from "@/components/cart/MembershipCartUpsell";
+import { CartOffers } from "@/components/cart/CartOffers";
 import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
 import {
   matchBrandSpecial,
@@ -23,6 +24,13 @@ import {
 type CartData = {
   items: CartItemRow[];
   cart_amount: string | null;
+  /** Promotion codes on the cart (card p6YVxc4P). */
+  coupon_codes?: string[] | null;
+  /** What the shared offer engine made of this basket (card p6YVxc4P). */
+  offers?: {
+    totalDiscount: number;
+    messages: { kind: string; text: string }[];
+  } | null;
 } | null;
 
 export function CartPageClient({
@@ -94,8 +102,12 @@ export function CartPageClient({
     (sum, i) => sum + (i.list_price ? parseFloat(i.list_price) : 0) * i.quantity,
     0
   );
-  const total = parseFloat(cart?.cart_amount ?? "0");
-  const discount = Math.max(0, Math.round((subtotal - total) * 100) / 100);
+  const charged = parseFloat(cart?.cart_amount ?? "0");
+  const discount = Math.max(0, Math.round((subtotal - charged) * 100) / 100);
+  // Offers come OFF what is charged, on top of any member pricing already inside
+  // `cart_amount` (card p6YVxc4P). This is the same figure `placeOrder` bills.
+  const offerDiscount = Math.max(0, Math.round(((cart?.offers?.totalDiscount ?? 0)) * 100) / 100);
+  const total = Math.max(0, Math.round((charged - offerDiscount) * 100) / 100);
 
   // Re-decided from the CURRENT items, not fixed at first render: taking the last
   // promoted line out of the basket has to take the free delivery with it.
@@ -113,9 +125,15 @@ export function CartPageClient({
           <CartItemsList items={items} onMutate={onMutate} />
         </div>
         <div className="space-y-4">
+          <CartOffers
+            messages={cart?.offers?.messages ?? []}
+            couponCodes={(cart?.coupon_codes ?? []) as string[]}
+            onMutate={onMutate}
+          />
           <CartSummary
             subtotal={subtotal}
             discount={discount}
+            offerDiscount={offerDiscount}
             total={total}
             isMember={isMember}
             pricesIncludeTax={pricesIncludeTax}

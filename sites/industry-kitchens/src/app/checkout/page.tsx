@@ -114,7 +114,17 @@ export default async function CheckoutPage() {
     .filter((m) => m.id !== "net_terms" || !!netTerms)
     .map((m) => (m.id === "net_terms" && netTerms ? { ...m, netTermsDays: netTerms.netTermsDays } : m));
 
-  const subtotal = parseFloat(cart.cart_amount ?? "0");
+  // GOODS TOTAL, NET OF OFFERS (card p6YVxc4P). `subtotal` drives the delivery
+  // rate lookup, the finance floor, the GST split and the Total, and `placeOrder`
+  // bills the same figure — so the offer is subtracted ONCE, here, rather than at
+  // each of those call sites where one of them would eventually be missed. The
+  // gross figure is kept only to print the "Offers" row underneath it.
+  const grossSubtotal = parseFloat(cart.cart_amount ?? "0");
+  const cartOffers =
+    (cart as { offers?: { totalDiscount: number; messages: { kind: string; text: string }[] } } | null)
+      ?.offers ?? null;
+  const offerDiscount = Math.max(0, Math.round((cartOffers?.totalDiscount ?? 0) * 100) / 100);
+  const subtotal = Math.max(0, Math.round((grossSubtotal - offerDiscount) * 100) / 100);
 
   // Brand free-shipping special (card 88Ay7UGA): any line from a promoted brand
   // makes the whole order's delivery free, for everyone, with no minimum spend.
@@ -563,6 +573,9 @@ export default async function CheckoutPage() {
       <CheckoutForm
         items={summaryItems}
         subtotal={subtotal}
+        grossSubtotal={grossSubtotal}
+        offerDiscount={offerDiscount}
+        offerMessages={cartOffers?.messages ?? []}
         gstAmount={gstAmount}
         isMember={isMember}
         membership={membership}

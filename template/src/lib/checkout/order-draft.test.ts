@@ -11,6 +11,8 @@ import {
   withBackorderedQuantities,
   memberSavings,
   forOrderInsert,
+  withPromotionDiscounts,
+  lineGoodsExTax,
   type CartLineInput,
 } from "./order-draft.ts";
 
@@ -399,4 +401,101 @@ test("the draft-only surcharge never reaches the insert", () => {
   // Everything else survives untouched.
   assert.equal(rows[0].sku, "RG-100");
   assert.equal(rows[0].quantity, 1);
+});
+
+
+// ── Offers on the order draft (card p6YVxc4P) ───────────────────────────────
+
+test("withPromotionDiscounts records the discount on the LINE and nets the subtotal", () => {
+  const items = [
+    line({ product_id: 1, product_sku: "CAP-A", quantity: 4, list_price: "100" }),
+    line({ product_id: 2, product_sku: "OVEN-9", quantity: 1, list_price: "900" }),
+  ];
+  const built = buildLineItems(items, false);
+  const out = withPromotionDiscounts(
+    built.lineItems,
+    built.subtotal,
+    [{ discount: 16, promotionId: 7, promotionName: "Carton tiers" }, null],
+    false
+  );
+
+  // The line keeps the CATALOGUE's extended value; the reduction sits beside it,
+  // which is the shape order_items carries everywhere else and what "margin by
+  // SKU" needs.
+  assert.equal(out.lineItems[0].totalExTax, "400");
+  assert.equal(out.lineItems[0].discountAmount, "16.0000");
+  assert.equal(out.lineItems[0].promotionId, 7);
+  // An undiscounted line is untouched — not "0", which would make an order placed
+  // before this shipped indistinguishable from one that was offered nothing.
+  assert.equal(out.lineItems[1].discountAmount, undefined);
+  assert.equal(out.lineItems[1].promotionId, undefined);
+
+  // The SUBTOTAL is net, because the subtotal is what the customer is billed.
+  assert.equal(out.subtotal.exTax, 1284);
+  assert.equal(out.totalDiscount, 16);
+});
+
+test("withPromotionDiscounts with nothing to apply returns the draft untouched", () => {
+  const built = buildLineItems([line({ quantity: 2 })], false);
+  const out = withPromotionDiscounts(built.lineItems, built.subtotal, [null], false);
+  assert.equal(out.lineItems, built.lineItems);
+  assert.equal(out.subtotal, built.subtotal);
+  assert.equal(out.totalDiscount, 0);
+});
+
+test("a GST-inclusive channel splits the discount the one way GST is ever split", () => {
+  const built = buildLineItems([line({ quantity: 1, list_price: "110" })], true);
+  const out = withPromotionDiscounts(
+    built.lineItems,
+    built.subtotal,
+    [{ discount: 11, promotionId: 1, promotionName: "x" }],
+    true
+  );
+  assert.equal(out.subtotal.incTax, 99);
+  assert.equal(out.subtotal.exTax, 90);
+  assert.equal(out.subtotal.tax, 9);
+});
+
+test("the goods value the freight engine reads is NET of the offer, and sums to the subtotal", () => {
+  // The identity placeOrder's comment asserts: Σ lineGoodsExTax === subtotal.exTax.
+  // Break it and a percentage surcharge stacked at `order` and the same one
+  // stacked at `line` price the same basket two ways.
+  const items = [
+    line({ product_id: 1, product_sku: "CAP-A", quantity: 4, list_price: "100" }),
+    line({ product_id: 2, product_sku: "CAP-B", quantity: 2, list_price: "50" }),
+  ];
+  const built = buildLineItems(items, false);
+  const out = withPromotionDiscounts(
+    built.lineItems,
+    built.subtotal,
+    [
+      { discount: 16, promotionId: 7, promotionName: "Carton tiers" },
+      { discount: 4, promotionId: 7, promotionName: "Carton tiers" },
+    ],
+    false
+  );
+  const summed = out.lineItems.reduce((n, l) => n + lineGoodsExTax(l, false), 0);
+  assert.equal(Math.round(summed * 100) / 100, Math.round(out.subtotal.exTax * 100) / 100);
+  assert.equal(summed, 480);
+});
+
+test("cartLineGoodsExTax takes the same offer off, so the estimate still matches the charge", () => {
+  const l = line({ list_price: "100", quantity: 4 });
+  assert.equal(cartLineGoodsExTax(l, false), 400);
+  assert.equal(cartLineGoodsExTax(l, false, 16), 384);
+  // A discount bigger than the line can never make the goods negative.
+  assert.equal(cartLineGoodsExTax(l, false, 100000), 0);
+});
+
+test("forOrderInsert strips promotionId — order_items has no such column yet", () => {
+  const built = buildLineItems([line({ quantity: 1 })], false);
+  const out = withPromotionDiscounts(
+    built.lineItems,
+    built.subtotal,
+    [{ discount: 5, promotionId: 3, promotionName: "x" }],
+    false
+  );
+  const rows = forOrderInsert(out.lineItems);
+  assert.equal("promotionId" in rows[0], false);
+  assert.equal(rows[0].discountAmount, "5.0000");
 });

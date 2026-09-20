@@ -59,7 +59,13 @@ export default async function CartPage() {
     }
   }
 
-  const total = parseFloat(cart?.cart_amount ?? "0");
+  // Offers come off what the lines charge (card p6YVxc4P), so the GA4 value and
+  // the summary both read the figure the checkout will actually bill.
+  const offers = (cart as { offers?: { totalDiscount: number; messages: { kind: string; text: string }[] } } | null)?.offers ?? null;
+  const total = Math.max(
+    0,
+    Math.round((parseFloat(cart?.cart_amount ?? "0") - (offers?.totalDiscount ?? 0)) * 100) / 100
+  );
 
   return (
     <>
@@ -72,6 +78,8 @@ export default async function CartPage() {
             ? {
                 items: items as never,
                 cart_amount: (cart.cart_amount as string | null) ?? null,
+                coupon_codes: ((cart as { coupon_codes?: string[] | null }).coupon_codes ?? []) as string[],
+                offers,
               }
             : null
         }

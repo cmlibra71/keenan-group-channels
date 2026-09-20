@@ -7,6 +7,7 @@ import type { RenderContext } from "@keenan/services";
 import { getMemberContext, getListingPricing, applyAccountPrices } from "@/lib/member";
 import { assertProductVisible, applyCatalogScope } from "@/lib/catalog-scope";
 import { ChevronRight } from "lucide-react";
+import { ProductOfferTiers } from "@/components/product/ProductOfferTiers";
 import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { renderProductNodeBranch } from "@/builder/product-node-branch";
@@ -510,6 +511,10 @@ export default async function ProductPage({
             return <BlockRenderer key={i} blocks={[b]} draft={draft} />;
         }
       })}
+
+      {/* Carton tiers this product is in (card p6YVxc4P). Draws nothing when it is
+          in no banded offer, and reads the same live promotions the cart applies. */}
+      <ProductOfferTiers sku={product.sku} />
     </div>
   );
 }

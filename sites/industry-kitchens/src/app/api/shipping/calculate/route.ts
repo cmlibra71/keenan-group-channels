@@ -3,6 +3,7 @@ import { summariseLinesFreight, cartService, channelSettingsService } from "@kee
 import { gstSplit } from "@keenan/services/calc";
 import { calculateShipping, CHANNEL_ID } from "@/lib/store";
 import { cartLineGoodsExTax } from "@/lib/checkout/order-draft";
+import { resolveCartOffers, type OfferCartLine } from "@/lib/promotions/cart-offers";
 import { getCartUuid } from "@/lib/cart";
 
 export async function POST(request: NextRequest) {
@@ -66,6 +67,14 @@ export async function POST(request: NextRequest) {
         } catch {
           // Default: prices are ex-tax, same fallback the checkout uses.
         }
+        // Offers come off the goods value here exactly as they do at checkout
+        // (card p6YVxc4P), so the estimate and the charge still agree.
+        const offers = await resolveCartOffers(full.items as unknown as OfferCartLine[], {
+          channelId: CHANNEL_ID,
+          couponCodes: ((cart as { coupon_codes?: string[] | null } | null)?.coupon_codes ?? []) as string[],
+          pricesIncludeTax,
+        });
+        const offerByItemId = new Map(offers.lines.map((l) => [l.itemId, l.discount]));
         const summary = await summariseLinesFreight(
           (full.items as Array<Record<string, unknown>>).map((i) => ({
             product_id: Number(i.product_id),
@@ -81,7 +90,8 @@ export async function POST(request: NextRequest) {
                 list_price: String(i.list_price ?? "0"),
                 quantity: Number(i.quantity) || 0,
               },
-              pricesIncludeTax
+              pricesIncludeTax,
+              offerByItemId.get(Number(i.id)) ?? 0
             ),
           }))
         );

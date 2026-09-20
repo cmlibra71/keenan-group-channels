@@ -62,6 +62,16 @@ export type CartItemRow = {
    */
   pack_size?: number | null;
   pack_unit?: string | null;
+  /**
+   * What this line took from a promotion, resolved server-side in `readCart`
+   * (card p6YVxc4P). The line's own unit price is UNTOUCHED — the offer is a
+   * separate reduction, exactly as it lands on `order_items.discount_amount` —
+   * so the row shows the price the catalogue charges and the saving beside it.
+   * Null on a line that took nothing.
+   */
+  offer_discount?: number | null;
+  offer_name?: string | null;
+  offer_percent?: number | null;
 };
 
 /** The picked extras on a cart line, read defensively — the column is jsonb. */
@@ -210,6 +220,13 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
   }
 
   const addonLabels = lineAddonLabels(item.modifier_selections);
+  // The offer is resolved against the SAVED quantity, so while a +/- click is in
+  // flight the saving would be a round trip stale. Hide it for that beat rather
+  // than print a figure that belongs to the previous quantity.
+  const offerDiscount =
+    !isPending && displayQty === item.quantity && item.offer_discount != null
+      ? Number(item.offer_discount)
+      : 0;
 
   return (
     <div className={`py-4 flex items-center gap-4 ${isPending ? "opacity-50" : ""}`}>
@@ -244,6 +261,12 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
             {packNote} {"\u00b7 "}
             <Price amount={packPrice(unitPrice, packSize)} />
             {` per ${packUnit.toLowerCase()}`}
+          </p>
+        )}
+        {offerDiscount > 0 && item.offer_name && (
+          <p className="mt-1 text-xs font-medium text-brand">
+            {item.offer_name}
+            {item.offer_percent ? ` — ${item.offer_percent}% off` : ""}
           </p>
         )}
         {backorderNote && (
@@ -288,9 +311,17 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
         </button>
       </div>
 
-      {/* Line total */}
+      {/* Line total. An offer is shown as a REDUCTION under the line rather than
+          folded into the unit price, because that is exactly how it lands on the
+          order (`order_items.discount_amount`) — the price is the catalogue's,
+          the saving is the offer's. (Card p6YVxc4P.) */}
       <div className="w-24 text-right">
         <Price amount={lineTotal} className="text-sm font-semibold text-text-primary" />
+        {offerDiscount > 0 && (
+          <p className="mt-0.5 text-xs font-medium text-brand">
+            −<Price amount={offerDiscount} />
+          </p>
+        )}
       </div>
 
       {/* Remove */}

@@ -153,6 +153,9 @@ type SavedAddress = {
 export function CheckoutForm({
   items,
   subtotal,
+  grossSubtotal,
+  offerDiscount = 0,
+  offerMessages = [],
   gstAmount,
   isMember,
   pricesIncludeTax,
@@ -180,7 +183,14 @@ export function CheckoutForm({
   membership = null,
 }: {
   items: CartItem[];
+  /** The goods total NET of offers — what every downstream figure is computed from. */
   subtotal: number;
+  /** The goods total BEFORE offers; display only (card p6YVxc4P). */
+  grossSubtotal?: number;
+  /** What the offers took off, 2dp. */
+  offerDiscount?: number;
+  /** The engine's own sentences, so the checkout cannot paraphrase the cart. */
+  offerMessages?: { kind: string; text: string }[];
   gstAmount: number;
   isMember?: boolean;
   /**
@@ -1673,8 +1683,29 @@ export function CheckoutForm({
             <div className="mt-4 pt-4 border-t border-steel-200">
               <div className="flex justify-between text-sm">
                 <span className="text-steel-500">Subtotal</span>
-                <Price amount={subtotal} className="font-medium" />
+                <Price
+                  amount={offerDiscount > 0 ? (grossSubtotal ?? subtotal) : subtotal}
+                  className="font-medium"
+                />
               </div>
+              {/* Card p6YVxc4P: the offer is its own row, and the sentence naming
+                  it is the SHARED engine's, so the cart and the checkout cannot
+                  word the same offer two ways. */}
+              {offerDiscount > 0 && (
+                <div className="flex justify-between text-sm mt-2">
+                  <span className="text-steel-500">Offers</span>
+                  <span className="font-medium text-brand">
+                    -<Price amount={offerDiscount} />
+                  </span>
+                </div>
+              )}
+              {offerMessages
+                .filter((m) => m.kind === "applied" || m.kind === "cross_range")
+                .map((m) => (
+                  <p key={m.text} className="mt-1 text-xs text-brand">
+                    {m.text}
+                  </p>
+                ))}
               <div className="flex justify-between text-sm mt-2">
                 <span className="text-steel-500">GST {pricesIncludeTax ? "(included)" : "(10%)"}</span>
                 {pricesIncludeTax ? (

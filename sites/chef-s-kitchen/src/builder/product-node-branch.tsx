@@ -13,6 +13,7 @@ import { CHANNEL_ID } from "@/lib/channel";
 import { loadJsSandbox, computeCallResults, guardBuyControls, guardBuyControlsInComponents } from "@keenan/services/builder";
 import { cmsFunctionService } from "@keenan/services/services";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
+import { ProductOfferTiers } from "@/components/product/ProductOfferTiers";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { withSilverChefNode } from "@/builder/silverchef-node";
 import { withAddonsNode } from "@/builder/product-addons-node";
@@ -345,6 +346,14 @@ export async function renderProductNodeBranch({
         callResults={callResults}
         nativeData={{ ...(nativeData ?? {}), cdMembership }}
       />
+      {/* Carton tiers this product is in (card p6YVxc4P). The node tree is the
+          path the LIVE Industry Kitchens product page takes, so the table has to
+          render here as well as on the CMS-template and legacy branches — it is
+          the same component reading the same live promotions the cart applies,
+          and it draws nothing when the product is in no banded offer. */}
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <ProductOfferTiers sku={(viewedProduct?.sku as string | null) ?? null} />
+      </div>
     </div>
   );
 }

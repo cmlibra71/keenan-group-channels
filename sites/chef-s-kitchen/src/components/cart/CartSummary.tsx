@@ -10,6 +10,7 @@ import { Price } from "@/components/ui/Price";
 export function CartSummary({
   subtotal,
   discount,
+  offerDiscount = 0,
   total,
   isMember,
   pricesIncludeTax,
@@ -19,6 +20,8 @@ export function CartSummary({
 }: {
   subtotal: number;
   discount: number;
+  /** What the carton bands, the cross-range kicker or a bundle took off (card p6YVxc4P). */
+  offerDiscount?: number;
   total: number;
   isMember?: boolean;
   pricesIncludeTax?: boolean;
@@ -57,6 +60,16 @@ export function CartSummary({
           <p className="text-xs text-brand mt-1">
             You saved ${discount.toFixed(2)} with your membership!
           </p>
+        )}
+        {/* An offer is its own row, never folded into "Discount": the two are
+            different money and the order records them separately — member pricing
+            is inside the line price, an offer is order_items.discount_amount.
+            (Card p6YVxc4P.) */}
+        {offerDiscount > 0 && (
+          <div className="flex justify-between text-sm">
+            <span className="text-steel-500">Offers</span>
+            <span className="font-medium text-brand">-<Price amount={offerDiscount} /></span>
+          </div>
         )}
         <div className="flex justify-between text-sm">
           <span className="text-steel-500">GST {pricesIncludeTax ? "(included)" : "(10%)"}</span>
