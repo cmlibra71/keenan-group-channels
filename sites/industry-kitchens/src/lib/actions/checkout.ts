@@ -18,7 +18,7 @@ import {
 } from "@keenan/services/product-addons";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, forOrderInsert, withPromotionDiscounts, lineGoodsExTax, type BelowCostLine, type LinePromotionDraft } from "@/lib/checkout/order-draft";
 import { resolveCartOffers, NO_OFFERS, type CartOffers, type OfferCartLine } from "@/lib/promotions/cart-offers";
-import { stampOrderLinePromotions } from "@keenan/services";
+import { stampOrderLinePromotions, stampOrderItemPromotionsById } from "@keenan/services";
 import { backorderFactsForProducts } from "@/lib/cart/backorder-facts";
 import { canPurchaseQuantity } from "@keenan/services/backorder";
 import {
@@ -1209,8 +1209,15 @@ export async function placeOrder(
   }) as { id: number; order_number: string; contact_id?: number | null };
 
   // Create order items (line items precomputed by buildLineItems above)
+  // The inserted rows come back in the order they were given, which is what lets
+  // the promotion stamp below key on the ORDER LINE's own id rather than on
+  // product+variant — see the note there.
+  let insertedItems: Array<Record<string, unknown>> = [];
   try {
-    await orderItemService.createManyForParent(order.id, forOrderInsert(lineItems));
+    insertedItems = (await orderItemService.createManyForParent(
+      order.id,
+      forOrderInsert(lineItems)
+    )) as unknown as Array<Record<string, unknown>>;
   } catch (err) {
     // Compensate so we never leave an order with no line items. The delete can itself fail
     // (e.g. a DB blip mid-checkout) — don't swallow it: retry once, and if it still fails,
@@ -1241,18 +1248,44 @@ export async function placeOrder(
   // (services CONTEXT.md D10). Non-fatal by construction: the discount is already
   // on the line and the applied promotions are on the order's metafields, so a
   // stamp that cannot be written costs provenance, never money and never the order.
+  //
+  // KEYED ON THE ORDER LINE'S OWN ID, NOT ON PRODUCT+VARIANT. `withPromotionDiscounts`
+  // keeps cart lines separate on purpose — two lines can hold the same product with
+  // different paid add-ons, and only one of them may have been the offer's — so a
+  // product+variant match would stamp both of them identically and the control-group
+  // reporting would credit an offer with a line it never touched. The insert returns
+  // its rows in the order they were given, so the id beside each draft line is the
+  // row that line became. The by-product path stays available for callers that have
+  // no ids; here we have them.
   if (lineItems.some((l) => l.promotionId != null)) {
     try {
-      await stampOrderLinePromotions(
-        order.id,
-        lineItems
-          .filter((l) => l.promotionId != null)
-          .map((l) => ({
-            productId: l.productId,
-            variantId: l.variantId,
-            promotionId: l.promotionId as number,
-          }))
-      );
+      const byId = insertedItems
+        .map((row, i) => ({ row, draft: lineItems[i] }))
+        .filter(
+          (pair) =>
+            pair.draft?.promotionId != null && Number.isFinite(Number(pair.row?.id))
+        )
+        .map((pair) => ({
+          orderItemId: Number(pair.row.id),
+          promotionId: pair.draft.promotionId as number,
+        }));
+      if (byId.length > 0 && insertedItems.length === lineItems.length) {
+        await stampOrderItemPromotionsById(byId);
+      } else {
+        // The insert did not hand back a row per draft line (an older service, a
+        // partial return): fall back to the product+variant match rather than
+        // losing the provenance entirely.
+        await stampOrderLinePromotions(
+          order.id,
+          lineItems
+            .filter((l) => l.promotionId != null)
+            .map((l) => ({
+              productId: l.productId,
+              variantId: l.variantId,
+              promotionId: l.promotionId as number,
+            }))
+        );
+      }
     } catch (e) {
       console.error("[placeOrder] promotion stamp failed (non-fatal):", e);
     }

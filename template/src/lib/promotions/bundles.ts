@@ -35,6 +35,14 @@
 //
 // The SKU lookup that precedes all that is used for ONE thing — finding the slug
 // — and nothing it returns is ever shown or priced.
+//
+// WHEN A BUNDLE IS ON SALE AT ALL is decided upstream, in
+// `loadBundlePromotions` -> `loadPromotionsForChannel`, whose SQL filters the
+// status, the channel AND the date window. That last one is not decoration: this
+// page never reaches `evaluatePromotions`, so without the window a bundle past
+// its end date kept serving "Bundle price (ex GST) $X" with a live Add button
+// while the cart charged full component prices. A bundle outside its window now
+// simply does not exist here — `/bundles/[slug]` 404s and the index omits it.
 // ============================================================================
 
 import { loadBundlePromotions, parseOfferRule, type FixedBundleRule } from "@keenan/services";
@@ -50,7 +58,17 @@ export type BundleComponentView = {
   /** The per-unit price this storefront charges, ex GST, or null when unknown. */
   unitPrice: number | null;
   slug: string | null;
-  /** True when the SKU is not in this storefront's catalogue, or not for this viewer. */
+  /**
+   * True when this component cannot be sold here as advertised: the SKU is not
+   * in this storefront's catalogue, it is not for this viewer, OR it resolves
+   * with no usable price.
+   *
+   * THE PRICE CASE MATTERS AS MUCH AS THE OTHER TWO. A component with no price
+   * contributes nothing to `componentTotal`, so a bundle that kept it addable
+   * would print a "Bundle price" BELOW what the cart is going to charge — a page
+   * quoting a figure we will not honour, which is the one thing this page may
+   * never do (see the module header and the `sf-bundle-page` register entry).
+   */
   missing: boolean;
 };
 
@@ -189,7 +207,10 @@ async function resolveBundle(
       name: resolved?.name ?? component.sku,
       unitPrice: resolved?.unitPrice ?? null,
       slug: resolved?.slug ?? null,
-      missing: !resolved,
+      // No price is as disqualifying as no product: an unpriced component is
+      // left out of `componentTotal`, so keeping it addable would advertise a
+      // bundle price below the one the cart will charge.
+      missing: !resolved || resolved.unitPrice == null,
     });
   }
 

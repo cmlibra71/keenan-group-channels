@@ -352,7 +352,10 @@ export async function renderProductNodeBranch({
           the same component reading the same live promotions the cart applies,
           and it draws nothing when the product is in no banded offer. */}
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <ProductOfferTiers sku={(viewedProduct?.sku as string | null) ?? null} />
+        <ProductOfferTiers
+          sku={(viewedProduct?.sku as string | null) ?? null}
+          productId={(viewedProduct?.id as number | null) ?? null}
+        />
       </div>
     </div>
   );

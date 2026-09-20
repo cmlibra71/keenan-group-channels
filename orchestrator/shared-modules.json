@@ -91,6 +91,7 @@
     "components/product/CdMemberPricingPanel.tsx",
     "components/product/ProductAddons.tsx",
     "components/product/ProductInstructionsPanel.tsx",
+    "components/product/ProductOfferTiers.tsx",
     "components/quote/quote-reprice-notice.test.ts",
     "components/search/use-search-suggestions.ts",
     "components/ui/Price.tsx",
