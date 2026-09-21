@@ -7,6 +7,7 @@ import type { RenderContext } from "@keenan/services";
 import { getMemberContext, getListingPricing, applyAccountPrices } from "@/lib/member";
 import { assertProductVisible, applyCatalogScope } from "@/lib/catalog-scope";
 import { ChevronRight } from "lucide-react";
+import { ProductOfferTiers } from "@/components/product/ProductOfferTiers";
 import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { renderProductNodeBranch } from "@/builder/product-node-branch";
@@ -449,6 +450,12 @@ export default async function ProductPage({
             draft={draft}
             context={context}
           />
+          {/* Carton tiers this product is in (card p6YVxc4P). Rendered on the
+              CMS-template path as well as the fallback below and the node-tree
+              branch above: 149 of the CAP-/SC- products sit on THIS storefront,
+              so an insert on only one branch leaves the table on a page nobody
+              sees the day `cms_product_template_enabled` is switched on. */}
+          <ProductOfferTiers sku={product.sku} productId={product.id} />
         </div>
       );
     }
@@ -510,6 +517,10 @@ export default async function ProductPage({
             return <BlockRenderer key={i} blocks={[b]} draft={draft} />;
         }
       })}
+
+      {/* Carton tiers this product is in (card p6YVxc4P). Draws nothing when it is
+          in no banded offer, and reads the same live promotions the cart applies. */}
+      <ProductOfferTiers sku={product.sku} productId={product.id} />
     </div>
   );
 }

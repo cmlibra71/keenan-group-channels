@@ -86,12 +86,22 @@ export function lineUnitPrice(item: { sale_price: string | null; list_price: str
  */
 export function cartLineGoodsExTax(
   item: { sale_price: string | null; list_price: string; quantity: number },
-  pricesIncludeTax: boolean
+  pricesIncludeTax: boolean,
+  /**
+   * What a PROMOTION took off this line (card p6YVxc4P), in the cart's own tax
+   * basis. The goods are worth what they are SOLD for, so the offer comes off
+   * here too — otherwise the estimate route and the checkout would disagree with
+   * `subtotalExTax` (which is net of offers) about the value of the same basket,
+   * which is the one thing this function exists to prevent.
+   */
+  offerDiscount = 0
 ): number {
   const unit = lineUnitPrice(item);
   if (!Number.isFinite(unit)) return 0;
   const qty = Number(item.quantity) || 0;
-  return gstSplit(unit * qty, pricesIncludeTax).exTax;
+  const gross = gstSplit(unit * qty, pricesIncludeTax).exTax;
+  const off = offerDiscount > 0 ? gstSplit(offerDiscount, pricesIncludeTax).exTax : 0;
+  return Math.max(0, gross - off);
 }
 
 /** Snake_case cart-line shape consumed here (a subset of cartService.getWithItems items). */
@@ -161,6 +171,23 @@ export type OrderLineDraft = {
    * altogether. Subtracting this puts the machine's price back beside the machine's cost.
    */
   addonSurchargeExTax?: number;
+  /**
+   * What a PROMOTION took off this line (card p6YVxc4P), in the order's own tax
+   * basis. It is a separate reduction, NOT a lower price: `total_ex_tax` stays the
+   * catalogue's extended value and the discount sits beside it, which is exactly
+   * how a converted quote writes its lines (`src/lib/quotes/convert.ts`) and what
+   * the portal's order lines table already renders in its Discount column.
+   * Omitted (never "0") on a line that took nothing, so an order placed before
+   * this shipped is indistinguishable from one that was offered nothing.
+   */
+  discountAmount?: string;
+  /**
+   * Which promotion did it — DRAFT-ONLY, never inserted. `order_items` has no such
+   * column until migration 0100 is applied everywhere (CONTEXT.md D10), so
+   * `placeOrder` stamps it by raw SQL after the insert and records it on the
+   * order's metafields regardless.
+   */
+  promotionId?: number;
 };
 
 export type MoneySplit = { exTax: number; incTax: number; tax: number };
@@ -288,9 +315,104 @@ export function findBelowCostLines(
  * which is exactly the kind of "it happens to work" this file should not rely on, so it comes
  * off here, in one place, on the way to the table.
  */
+/**
+ * What an ORDER LINE's goods are worth ex GST, net of any promotion on it. The
+ * freight engine's `goods` basis reads this, and it must sum to `subtotal.exTax`
+ * (which `withPromotionDiscounts` leaves net) or a percentage surcharge stacked
+ * at `order` and the same one stacked at `line` would price the same basket two
+ * ways. The cart's own estimate route computes the identical figure through
+ * `cartLineGoodsExTax`.
+ */
+export function lineGoodsExTax(line: OrderLineDraft, pricesIncludeTax: boolean): number {
+  const gross = Number(line.totalExTax);
+  if (!Number.isFinite(gross)) return 0;
+  const discount = line.discountAmount ? Number(line.discountAmount) : 0;
+  const off = Number.isFinite(discount) && discount > 0 ? gstSplit(discount, pricesIncludeTax).exTax : 0;
+  return Math.max(0, gross - off);
+}
+
+/** One line's promotion outcome, as the shared engine returns it. */
+export type LinePromotionDraft = {
+  discount: number;
+  promotionId: number;
+  promotionName: string;
+};
+
+/**
+ * Apply the promotion engine's per-line discounts to the order draft, and take
+ * them off the subtotal.
+ *
+ * `discounts` is INDEX-ALIGNED with `lineItems`, which is index-aligned with the
+ * cart items `buildLineItems` was handed — the same correspondence the freight
+ * estimate already relies on. Aligning by index rather than by product id is
+ * deliberate: two cart lines can hold the same product with different paid
+ * extras, and they must be able to take different discounts.
+ *
+ * The line's own totals are left GROSS and the reduction is recorded in
+ * `discountAmount`, because that is the shape `order_items` carries everywhere
+ * else and the shape "margin by SKU" needs — the card's acceptance criterion is
+ * "discount on the line, not just the header". The SUBTOTAL is net, because the
+ * subtotal is what the customer is billed.
+ *
+ * Pure — returns new drafts, mutates nothing.
+ */
+export function withPromotionDiscounts(
+  lineItems: OrderLineDraft[],
+  subtotal: MoneySplit,
+  discounts: (LinePromotionDraft | null | undefined)[],
+  pricesIncludeTax: boolean
+): {
+  lineItems: OrderLineDraft[];
+  subtotal: MoneySplit;
+  totalDiscount: number;
+  /**
+   * The same reduction EX GST, which is the basis `orders.discount_amount` is
+   * written in (the portal's Totals card subtracts it from Subtotal + Shipping to
+   * reach Grand Total Excl. Tax). Identical to `totalDiscount` on a channel that
+   * prices ex GST, which both live channels do — it exists so a GST-inclusive
+   * channel cannot quietly write an inclusive figure into an exclusive column.
+   */
+  totalDiscountExTax: number;
+} {
+  let discountExTax = 0;
+  let discountIncTax = 0;
+  let discountTax = 0;
+  let totalDiscount = 0;
+
+  const next = lineItems.map((line, index) => {
+    const promotion = discounts[index];
+    if (!promotion || !(promotion.discount > 0)) return line;
+    const split = gstSplit(promotion.discount, pricesIncludeTax);
+    discountExTax += split.exTax;
+    discountIncTax += split.incTax;
+    discountTax += split.tax;
+    totalDiscount += promotion.discount;
+    return {
+      ...line,
+      discountAmount: promotion.discount.toFixed(4),
+      promotionId: promotion.promotionId,
+    };
+  });
+
+  if (totalDiscount === 0) {
+    return { lineItems, subtotal, totalDiscount: 0, totalDiscountExTax: 0 };
+  }
+
+  return {
+    lineItems: next,
+    subtotal: {
+      exTax: Math.max(0, subtotal.exTax - discountExTax),
+      incTax: Math.max(0, subtotal.incTax - discountIncTax),
+      tax: Math.max(0, subtotal.tax - discountTax),
+    },
+    totalDiscount: Math.round(totalDiscount * 100) / 100,
+    totalDiscountExTax: Math.round(discountExTax * 100) / 100,
+  };
+}
+
 export function forOrderInsert(lineItems: OrderLineDraft[]): Record<string, unknown>[] {
   return lineItems.map((line) => {
-    const { addonSurchargeExTax: _draftOnly, ...row } = line;
+    const { addonSurchargeExTax: _draftOnly, promotionId: _notAColumnYet, ...row } = line;
     return row as Record<string, unknown>;
   });
 }

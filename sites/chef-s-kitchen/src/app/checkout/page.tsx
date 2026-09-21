@@ -114,7 +114,17 @@ export default async function CheckoutPage() {
     .filter((m) => m.id !== "net_terms" || !!netTerms)
     .map((m) => (m.id === "net_terms" && netTerms ? { ...m, netTermsDays: netTerms.netTermsDays } : m));
 
-  const subtotal = parseFloat(cart.cart_amount ?? "0");
+  // GOODS TOTAL, NET OF OFFERS (card p6YVxc4P). `subtotal` drives the delivery
+  // rate lookup, the finance floor, the GST split and the Total, and `placeOrder`
+  // bills the same figure — so the offer is subtracted ONCE, here, rather than at
+  // each of those call sites where one of them would eventually be missed. The
+  // gross figure is kept only to print the "Offers" row underneath it.
+  const grossSubtotal = parseFloat(cart.cart_amount ?? "0");
+  const cartOffers =
+    (cart as { offers?: { totalDiscount: number; messages: { kind: string; text: string }[] } } | null)
+      ?.offers ?? null;
+  const offerDiscount = Math.max(0, Math.round((cartOffers?.totalDiscount ?? 0) * 100) / 100);
+  const subtotal = Math.max(0, Math.round((grossSubtotal - offerDiscount) * 100) / 100);
 
   // Brand free-shipping special (card 88Ay7UGA): any line from a promoted brand
   // makes the whole order's delivery free, for everyone, with no minimum spend.
@@ -447,7 +457,12 @@ export default async function CheckoutPage() {
         (sum, i) => sum + (i.list_price ? parseFloat(i.list_price) : 0) * i.quantity,
         0
       );
-      memberSavings = Math.max(0, Math.round((listValue - subtotal) * 100) / 100);
+      // MEASURED AGAINST THE GROSS SUBTOTAL, not the discounted one. `subtotal` is net of any
+      // promotion, so measuring from it credited the offer to the membership: a shopper saving
+      // $74.40 by being a member was told "$130.40 with your membership" because a $56.00 carton
+      // offer had been folded in. The order record computes its own member saving offer-free
+      // (order-draft.ts), so the two disagreed about one sale. Card p6YVxc4P.
+      memberSavings = Math.max(0, Math.round((listValue - grossSubtotal) * 100) / 100);
       memberNumber = await getMembershipNumber(session.contactId).catch(() => null);
     } else if (!isMember) {
       const plans = await getSubscriptionPlans();
@@ -563,6 +578,9 @@ export default async function CheckoutPage() {
       <CheckoutForm
         items={summaryItems}
         subtotal={subtotal}
+        grossSubtotal={grossSubtotal}
+        offerDiscount={offerDiscount}
+        offerMessages={cartOffers?.messages ?? []}
         gstAmount={gstAmount}
         isMember={isMember}
         membership={membership}

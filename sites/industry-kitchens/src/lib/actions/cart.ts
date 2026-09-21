@@ -14,6 +14,8 @@ import { availableUnits, canPurchaseQuantity, resolveBackorderPolicy } from "@ke
 import { resolvePackSize, resolvePackUnit, snapToPack } from "@keenan/services/pack";
 import { getSession } from "@/lib/auth";
 import { pickBestBulkUnit, layerCartPrice, memberPricingGroupId } from "@/lib/pricing/cart-pricing";
+import { resolveCartOffers, couponCapRefusal, type OfferCartLine } from "@/lib/promotions/cart-offers";
+import { channelPricesIncludeTax } from "@/lib/promotions/tax-basis";
 import {
   addonPanelShown,
   readProductAddons,
@@ -711,8 +713,25 @@ const readCart = cache(async () => {
   // what makes "2 of the items will be backordered" follow a click instead of lagging a round
   // trip behind it. `available_units` is null for an untracked product — no ceiling, not zero.
   const stock = await backorderFactsForProducts(visible.map((i) => i.product_id));
+
+  // OFFERS (card p6YVxc4P). The carton bands, the cross-range kicker and the fixed
+  // bundles are worked out from the lines that will actually be charged — the same
+  // call `placeOrder` makes before it bills, so the cart, the checkout summary and
+  // the order can never name three different numbers. Never throws: a promotion
+  // that cannot be read leaves the basket at full price.
+  const offers = await resolveCartOffers(visible as unknown as OfferCartLine[], {
+    channelId: CHANNEL_ID,
+    couponCodes: ((full as { coupon_codes?: string[] | null }).coupon_codes ?? []) as string[],
+    pricesIncludeTax: await channelPricesIncludeTax(),
+    // A coupon's per-customer cap is judged against THIS shopper, so a code past
+    // it stops discounting the basket the moment it is read — not at the till.
+    contactId: (await getSession())?.contactId ?? null,
+  });
+  const offerByItem = new Map(offers.lines.map((l) => [l.itemId, l]));
+
   return {
     ...full,
+    offers,
     items: visible.map((i) => {
       const facts = stock.get(i.product_id);
       return {
@@ -729,10 +748,98 @@ const readCart = cache(async () => {
         // by a whole pack and say what a pack holds without a second lookup or a second opinion.
         pack_size: resolvePackSize(facts),
         pack_unit: resolvePackUnit(facts),
+        // What this line took from an offer, so the row can show it without a
+        // second evaluation (card p6YVxc4P). Absent on a line that took nothing.
+        offer_discount: offerByItem.get(i.id)?.discount ?? null,
+        offer_name: offerByItem.get(i.id)?.promotionName ?? null,
+        offer_percent: offerByItem.get(i.id)?.percent ?? null,
       };
     }),
   };
 });
+
+/**
+ * Put a coupon code on the cart.
+ *
+ * THE CAPS ARE JUDGED HERE, not only at redemption. `max_uses` and
+ * `max_uses_per_customer` are read while the offer is evaluated
+ * (`evaluateBasketPromotions`), so a shopper past "one use per customer" is
+ * refused the code now instead of being billed the discounted total and having
+ * the redemption fail into a server log afterwards — which is what used to
+ * happen, and which made the card's "one use per customer" true nowhere that
+ * moved money. `couponService.redeem` still re-reads them under a row lock,
+ * because only the lock can settle two tabs racing for the last use.
+ *
+ * A code that discounts nothing is REFUSED rather than stored, so the shopper is
+ * told now instead of discovering at the till that it did nothing. This is the
+ * missing half of the coupon path the register recorded as a conflict: the cart
+ * carried codes and `placeOrder` redeemed them with a $0 discount, because no
+ * screen could set one and nothing evaluated them.
+ */
+export async function applyCouponCode(rawCode: string): Promise<{ success?: true; error?: string; discount?: number }> {
+  const code = (rawCode ?? "").trim().toUpperCase();
+  if (!code) return { error: "Enter a promotion code." };
+  try {
+    const uuid = await getCartUuid();
+    if (!uuid) return { error: "Your cart is empty." };
+    const cart = await cartService.getByUuid(uuid);
+    if (!cart) return { error: "Your cart is empty." };
+
+    const existing = (((cart as { coupon_codes?: string[] | null }).coupon_codes ?? []) as string[])
+      .map((c) => (c ?? "").toUpperCase())
+      .filter((c) => c !== "");
+    if (existing.includes(code)) return { error: "That code is already applied." };
+
+    const full = await cartService.getWithItems(cart.id);
+    const items = (full?.items ?? []) as unknown as OfferCartLine[];
+    const pricesIncludeTax = await channelPricesIncludeTax();
+    const contactId = (await getSession())?.contactId ?? null;
+
+    const before = await resolveCartOffers(items, {
+      channelId: CHANNEL_ID,
+      couponCodes: existing,
+      pricesIncludeTax,
+      contactId,
+    });
+    const after = await resolveCartOffers(items, {
+      channelId: CHANNEL_ID,
+      couponCodes: [...existing, code],
+      pricesIncludeTax,
+      contactId,
+    });
+    if (after.totalDiscount <= before.totalDiscount || !after.appliedCouponCodes.includes(code)) {
+      // Say the true reason where there is one: a code the shopper has already
+      // used is not a code that "doesn't apply to what's in your cart".
+      const capped = await couponCapRefusal(code, { contactId });
+      return { error: capped ?? "That code doesn't apply to what's in your cart." };
+    }
+
+    await cartService.update(cart.id, { couponCodes: [...existing, code] });
+    return { success: true, discount: after.totalDiscount - before.totalDiscount };
+  } catch (e) {
+    console.error("[applyCouponCode] failed:", e);
+    return { error: "We couldn't apply that code. Please try again." };
+  }
+}
+
+/** Take a coupon code back off the cart. Removing one that isn't there is a no-op success. */
+export async function removeCouponCode(rawCode: string): Promise<{ success?: true; error?: string }> {
+  const code = (rawCode ?? "").trim().toUpperCase();
+  try {
+    const uuid = await getCartUuid();
+    if (!uuid) return { success: true };
+    const cart = await cartService.getByUuid(uuid);
+    if (!cart) return { success: true };
+    const existing = (((cart as { coupon_codes?: string[] | null }).coupon_codes ?? []) as string[])
+      .map((c) => (c ?? "").toUpperCase())
+      .filter((c) => c !== "");
+    await cartService.update(cart.id, { couponCodes: existing.filter((c) => c !== code) });
+    return { success: true };
+  } catch (e) {
+    console.error("[removeCouponCode] failed:", e);
+    return { error: "We couldn't remove that code. Please try again." };
+  }
+}
 
 export async function getCart() {
   return readCart();

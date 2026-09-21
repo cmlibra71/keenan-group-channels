@@ -43,7 +43,21 @@ export function CartPanel() {
   }, []);
 
   const items = cart?.items ?? [];
-  const subtotal = parseFloat(cart?.base_amount ?? "0");
+  // THE DRAWER'S SUBTOTAL IS WHAT WILL BE CHARGED — the rule this surface has
+  // always carried (`sf-cart`, "Do not break"). `base_amount` is the effective
+  // (member / sale) line money, and an OFFER comes off on top of it (card
+  // p6YVxc4P), so it has to come off here too: the mini-cart and the /cart page
+  // quoting two different figures for one basket is exactly what that rule
+  // exists to prevent. Shown as its own row, the same way the page shows it.
+  const offerDiscount = Math.max(
+    0,
+    Math.round(
+      ((cart as { offers?: { totalDiscount?: number } | null } | null)?.offers?.totalDiscount ?? 0) *
+        100
+    ) / 100
+  );
+  const charged = parseFloat(cart?.base_amount ?? "0");
+  const subtotal = Math.max(0, Math.round((charged - offerDiscount) * 100) / 100);
 
   if (isPending) {
     return (
@@ -96,6 +110,14 @@ export function CartPanel() {
             </button>{" "}
             to check out with your saved details and your account pricing.
           </p>
+        )}
+        {offerDiscount > 0 && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-text-secondary">Offers</span>
+            <span className="font-medium text-brand">
+              -<Price amount={offerDiscount} />
+            </span>
+          </div>
         )}
         <div className="flex items-center justify-between text-sm">
           <span className="font-medium text-text-secondary">Subtotal</span>
