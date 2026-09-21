@@ -457,7 +457,12 @@ export default async function CheckoutPage() {
         (sum, i) => sum + (i.list_price ? parseFloat(i.list_price) : 0) * i.quantity,
         0
       );
-      memberSavings = Math.max(0, Math.round((listValue - subtotal) * 100) / 100);
+      // MEASURED AGAINST THE GROSS SUBTOTAL, not the discounted one. `subtotal` is net of any
+      // promotion, so measuring from it credited the offer to the membership: a shopper saving
+      // $74.40 by being a member was told "$130.40 with your membership" because a $56.00 carton
+      // offer had been folded in. The order record computes its own member saving offer-free
+      // (order-draft.ts), so the two disagreed about one sale. Card p6YVxc4P.
+      memberSavings = Math.max(0, Math.round((listValue - grossSubtotal) * 100) / 100);
       memberNumber = await getMembershipNumber(session.contactId).catch(() => null);
     } else if (!isMember) {
       const plans = await getSubscriptionPlans();
