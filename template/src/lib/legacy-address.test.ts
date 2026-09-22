@@ -83,3 +83,14 @@ test("categorySlugCandidates: every legacy spelling of one slug, best first", ()
   ]);
   assert.deepEqual(categorySlugCandidates(""), []);
 });
+
+test("an old /Blog/<slug>/ address probes the blog, whatever the case", () => {
+  assert.deepEqual(legacyProbes("/Blog/cups-to-grams"), [{ kind: "blog", slug: "cups-to-grams" }]);
+  assert.deepEqual(legacyProbes("/blog/cups-to-grams"), [{ kind: "blog", slug: "cups-to-grams" }]);
+  assert.deepEqual(legacyProbes("/index.php/Blog/warranty-tips"), [{ kind: "blog", slug: "warranty-tips" }]);
+  assert.equal(newStyleAddress({ kind: "blog", slug: "cups-to-grams" }), "/blog/cups-to-grams");
+});
+
+test("a blog CATEGORY listing is not a post and gets the ordinary probes", () => {
+  assert.ok(legacyProbes("/Blog/cat/Recipies").every((p) => p.kind !== "blog"));
+});

@@ -1,5 +1,5 @@
 import { notFound, permanentRedirect } from "next/navigation";
-import { getCategoryBySlug, getCmsPage, getProductBySlug } from "@/lib/store";
+import { getBlogPostBySlug, getCategoryBySlug, getCmsPage, getProductBySlug } from "@/lib/store";
 import { isReservedCatchAllPath, normalizeLookupPath } from "@/lib/redirect-path";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import { legacyProbes, newStyleAddress } from "@/lib/legacy-address";
@@ -55,7 +55,9 @@ export default async function LegacyAddress({
           ? await getProductBySlug(probe.slug)
           : probe.kind === "category"
             ? await getCategoryBySlug(probe.slug)
-            : await getCmsPage(probe.slug);
+            : probe.kind === "blog"
+              ? await getBlogPostBySlug(probe.slug)
+              : await getCmsPage(probe.slug);
       // A relative Location, always — never rebuild it from a request header or an env
       // var, or production hands the shopper the container's hostname (card KVBIakGf).
       if (found) permanentRedirect(newStyleAddress(probe));
