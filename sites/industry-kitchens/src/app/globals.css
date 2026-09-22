@@ -331,3 +331,40 @@ html, body {
     color: #18181b;
   }
 }
+
+/* ============================================================================
+   Button classes — the shared vocabulary every storefront is expected to have.
+
+   `makeForm` in @keenan/services builds a form's submit button as
+   `.btn-primary`, and the portal's components and named styles use `.btn` and
+   `.btn-secondary` the same way. Chefs Depot has defined all three since the
+   design system landed; Industry Kitchens never did, so every enquiry form on
+   this site drew an UNSTYLED browser button. The rules below are Chefs Depot's,
+   resolved through IK's own token contract — so the button comes out amber on
+   zinc here and teal on steel there, from one definition.
+   ========================================================================= */
+.btn {
+  @apply inline-flex items-center justify-center gap-2
+         font-semibold text-sm
+         px-[22px] py-3 rounded-btn
+         transition-all duration-200;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2
+         font-semibold text-sm px-[22px] py-3 rounded-btn
+         transition-all duration-200
+         bg-accent text-white
+         hover:bg-accent-hover hover:shadow-md hover:-translate-y-px
+         disabled:bg-surface-secondary disabled:text-text-muted
+         disabled:shadow-none disabled:translate-y-0
+         disabled:cursor-not-allowed;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center gap-2
+         font-semibold text-sm px-[22px] py-3 rounded-btn
+         transition-all duration-200
+         bg-white border border-border-strong text-text-primary
+         hover:border-text-primary hover:bg-surface-secondary;
+}
