@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import type { Metadata } from "next";
 import { ChevronRight } from "lucide-react";
@@ -62,6 +62,13 @@ export default async function BlogPostPage({
   } | null;
 
   if (!post) {
+    // Slugs are stored lower-case, but the old site's links were not: the IK
+    // blog links "/blog/How-to-load-a-commercial-dishwasher" from 12 posts. A
+    // case-only miss is the same post — send the shopper to the canonical
+    // address rather than a 404.
+    // Next hands us the slug already decoded; decoding again throws on a stray "%".
+    const lower = slug.toLowerCase();
+    if (lower !== slug && (await getBlogPostBySlug(lower))) permanentRedirect(`/blog/${lower}`);
     // A renamed or retired post address redirects rather than bare-404ing. (card EVvRDnZt)
     await redirectIfMapped(`/blog/${slug}`);
     notFound();
