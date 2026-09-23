@@ -1,5 +1,5 @@
 import { notFound, permanentRedirect } from "next/navigation";
-import { getCategoryBySlug, getCmsPage, getProductBySlug } from "@/lib/store";
+import { getBlogPostBySlug, getCategoryBySlug, getCmsPage, getProductBySlug } from "@/lib/store";
 import { isReservedCatchAllPath, normalizeLookupPath } from "@/lib/redirect-path";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import { legacyProbes, newStyleAddress } from "@/lib/legacy-address";
@@ -43,9 +43,23 @@ export default async function LegacyAddress({
   const { path } = await params;
   const pathname = `/${(path ?? []).join("/")}`;
 
-  if (isReservedCatchAllPath(pathname)) notFound();
+  // Zoey sometimes emitted the same address behind `/index.php/`
+  // (`/index.php/Blog/warranty-tips/`). It IS the same address — drop the
+  // prefix and let the rest go through the ordinary probes.
+  const segments = pathname.split("/").filter(Boolean);
+  if (segments[0]?.toLowerCase() === "index.php" && segments.length > 1) {
+    permanentRedirect(`/${segments.slice(1).join("/")}`);
+  }
 
+  // An explicit redirect row ALWAYS wins, even under a reserved segment. The
+  // reserved check used to run first, so rows for the old site's
+  // `/customer/account/login` and `/customer/account/create` could never fire —
+  // the shopper got a 404 that a stored redirect was sitting there to prevent.
+  // The reserved list still spares the legacy PROBES (a DB round trip per stray
+  // crawler hit); the redirect lookup is cached and filters asset-like paths.
   await redirectIfMapped(pathname);
+
+  if (isReservedCatchAllPath(pathname)) notFound();
 
   const normalized = normalizeLookupPath(pathname);
   if (normalized && normalized !== "/") {
@@ -55,7 +69,9 @@ export default async function LegacyAddress({
           ? await getProductBySlug(probe.slug)
           : probe.kind === "category"
             ? await getCategoryBySlug(probe.slug)
-            : await getCmsPage(probe.slug);
+            : probe.kind === "blog"
+              ? await getBlogPostBySlug(probe.slug)
+              : await getCmsPage(probe.slug);
       // A relative Location, always — never rebuild it from a request header or an env
       // var, or production hands the shopper the container's hostname (card KVBIakGf).
       if (found) permanentRedirect(newStyleAddress(probe));
