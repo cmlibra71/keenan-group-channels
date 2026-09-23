@@ -17,7 +17,7 @@
  * Pure: it only says WHAT to look up and in what order. The route does the looking up.
  */
 
-export type LegacyProbeKind = "product" | "category" | "page";
+export type LegacyProbeKind = "product" | "category" | "page" | "blog";
 
 export interface LegacyProbe {
   kind: LegacyProbeKind;
@@ -82,6 +82,19 @@ export function legacyProbes(pathname: string): LegacyProbe[] {
   const last = segments[segments.length - 1];
   if (!last) return [];
 
+  // The old site's blog lived at /Blog/<slug>/ — capital B, trailing slash —
+  // and Next's routing is case-sensitive, so every one of those links 404ed
+  // even where the post had been migrated to /blog/<slug>. Measured on the
+  // Industry Kitchens cutover: 22 blog links on the migrated information pages,
+  // 5 of them to posts that already existed. A blog probe redirects the
+  // existing ones; the rest are a migration job, not a routing one.
+  if (segments.length >= 2 && segments[0].toLowerCase() === "blog" && segments[1].toLowerCase() !== "cat") {
+    return [{ kind: "blog", slug: last }];
+  }
+  if (segments.length >= 3 && segments[0].toLowerCase() === "index.php" && segments[1].toLowerCase() === "blog") {
+    return [{ kind: "blog", slug: last }];
+  }
+
   const probes: LegacyProbe[] =
     segments.length === 1
       ? [
@@ -122,5 +135,7 @@ export function newStyleAddress(probe: LegacyProbe): string {
       return `/categories/${probe.slug}`;
     case "page":
       return `/pages/${probe.slug}`;
+    case "blog":
+      return `/blog/${probe.slug}`;
   }
 }
