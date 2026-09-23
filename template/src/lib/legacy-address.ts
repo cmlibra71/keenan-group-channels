@@ -88,10 +88,8 @@ export function legacyProbes(pathname: string): LegacyProbe[] {
   // Industry Kitchens cutover: 22 blog links on the migrated information pages,
   // 5 of them to posts that already existed. A blog probe redirects the
   // existing ones; the rest are a migration job, not a routing one.
+  // (`/index.php/Blog/…` is stripped to `/Blog/…` by the catch-all first.)
   if (segments.length >= 2 && segments[0].toLowerCase() === "blog" && segments[1].toLowerCase() !== "cat") {
-    return [{ kind: "blog", slug: last }];
-  }
-  if (segments.length >= 3 && segments[0].toLowerCase() === "index.php" && segments[1].toLowerCase() === "blog") {
     return [{ kind: "blog", slug: last }];
   }
 
