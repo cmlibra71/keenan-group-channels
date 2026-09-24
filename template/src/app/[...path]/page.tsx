@@ -51,6 +51,11 @@ export default async function LegacyAddress({
     permanentRedirect(`/${segments.slice(1).join("/")}`);
   }
 
+  // The old blog's front page was /Blog (capital B). /blog is its own route, so only another
+  // spelling reaches here — and a url_redirects row can't carry it: redirectIfMapped compares
+  // paths case-blind and drops "/Blog -> /blog" as a loop to itself.
+  if (segments.length === 1 && segments[0].toLowerCase() === "blog") permanentRedirect("/blog");
+
   // An explicit redirect row ALWAYS wins, even under a reserved segment. The
   // reserved check used to run first, so rows for the old site's
   // `/customer/account/login` and `/customer/account/create` could never fire —
