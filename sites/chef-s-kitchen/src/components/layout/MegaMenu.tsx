@@ -3,13 +3,17 @@ import Image from "next/image";
 import { Menu, ChevronDown, Star } from "lucide-react";
 import type { MegaMenuFeatured } from "@/lib/store";
 import {
+  ALL_BRANDS_HREF,
   flattenTree,
   itemHref,
+  panelBrandColumn,
   panelColumns,
   panelExtras,
   resolveNavItems,
   shortNavLabel,
   splitNavItems,
+  subcategoryColumnCount,
+  type MegaBrandLike,
   type MegaMenuNodeLike,
   type MegaNavItem,
 } from "@/lib/mega-menu";
@@ -36,11 +40,14 @@ export function MegaMenu({
   featured,
   items,
   hiddenCategoryIds,
+  brandColumns = {},
 }: {
   departments: MegaMenuNodeLike[];
   featured: Record<string, MegaMenuFeatured>;
   items?: MegaNavItem[];
   hiddenCategoryIds?: number[];
+  /** Each Brands column's brands, keyed by department id (`getMegaMenuBrandColumns`). */
+  brandColumns?: Record<number, MegaBrandLike[]>;
 }) {
   const navItems = resolveNavItems({ departments, items, hiddenCategoryIds });
   const byId = flattenTree(departments);
@@ -50,7 +57,7 @@ export function MegaMenu({
     <MegaMenuShell className="hidden lg:block bg-brand-deep relative">
       <div className="container-page">
         <ul data-nav-bar className="flex flex-nowrap items-stretch gap-0.5 overflow-hidden">
-          {left.map((item, i) => renderItem(item, i, byId, featured))}
+          {left.map((item, i) => renderItem(item, i, byId, featured, brandColumns))}
 
           {/* Overflow — shown by MegaMenuShell only when the bar runs out of row */}
           <li
@@ -108,7 +115,8 @@ function renderItem(
   item: MegaNavItem,
   i: number,
   byId: Map<number, MegaMenuNodeLike>,
-  featured: Record<string, MegaMenuFeatured>
+  featured: Record<string, MegaMenuFeatured>,
+  brandColumns: Record<number, MegaBrandLike[]>
 ) {
   if (item.type === "categories") {
     return (
@@ -128,6 +136,8 @@ function renderItem(
     const dept = byId.get(item.categoryId);
     if (!dept) return null; // hidden/deleted category — drop the item
     const extras = panelExtras(item);
+    const brandColumn = panelBrandColumn(item);
+    const hasPanel = dept.children.length > 0 || extras.length > 0 || !!brandColumn;
     return (
       <li key={`l-${i}`} data-nav-item className="group/nav shrink-0">
         <Link
@@ -135,13 +145,20 @@ function renderItem(
           className="flex h-full items-center gap-1.5 whitespace-nowrap px-4 py-[13px] text-[13.5px] font-semibold text-[#EAF2EC] transition-colors duration-200 group-hover/nav:bg-black/20 group-hover/nav:text-white group-focus-within/nav:bg-black/20"
         >
           {shortNavLabel(item.label || dept.name)}
-          {(dept.children.length > 0 || extras.length > 0) && (
+          {hasPanel && (
             <ChevronDown className="h-[11px] w-[11px] opacity-70" strokeWidth={2} />
           )}
         </Link>
 
-        {(dept.children.length > 0 || extras.length > 0) && (
-          <MegaPanel dept={dept} feat={featured[String(dept.id)]} extras={extras} byId={byId} />
+        {hasPanel && (
+          <MegaPanel
+            dept={dept}
+            feat={featured[String(dept.id)]}
+            extras={extras}
+            byId={byId}
+            brandHeading={brandColumn ? brandColumn.label || "Brands" : null}
+            brands={brandColumn ? brandColumns[dept.id] ?? [] : []}
+          />
         )}
       </li>
     );
@@ -184,15 +201,21 @@ function MegaPanel({
   feat,
   extras,
   byId,
+  brandHeading,
+  brands,
 }: {
   dept: MegaMenuNodeLike;
   feat?: MegaMenuFeatured;
   extras: MegaNavItem[];
   byId: Map<number, MegaMenuNodeLike>;
+  /** The Brands column's heading, or null when this department has none. */
+  brandHeading: string | null;
+  brands: MegaBrandLike[];
 }) {
   // 3 link columns: depth-1 children become column groups, balanced across
   // columns; their children are the links (the group itself when childless).
-  const columns = panelColumns(dept.children);
+  // A Brands column (card HaWBvySC) takes the last of the three.
+  const columns = panelColumns(dept.children, subcategoryColumnCount(brandHeading !== null));
 
   // The panel is full-bleed and drops straight over the page below the bar (the
   // breadcrumb sits ~50px under it), so two guards keep it from stealing clicks
@@ -250,6 +273,37 @@ function MegaPanel({
               ))}
             </div>
           ))}
+
+          {/* Brands column — words only, no logos (Steve: no pictures in a
+              drop-down). Staff's chosen brands, else this department's busiest
+              brands on this storefront (card HaWBvySC). */}
+          {brandHeading !== null && (
+            <div className="space-y-5">
+              <div>
+                <Link
+                  href={ALL_BRANDS_HREF}
+                  className="mb-2 block border-b border-border pb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-accent-dark hover:text-accent"
+                >
+                  {brandHeading}
+                </Link>
+                {brands.map((brand) => (
+                  <Link
+                    key={brand.id}
+                    href={`/brands/${brand.slug}`}
+                    className="block py-[5px] text-[13px] text-ink-700 transition-colors duration-200 hover:text-accent"
+                  >
+                    {brand.name}
+                  </Link>
+                ))}
+                <Link
+                  href={ALL_BRANDS_HREF}
+                  className="block py-[5px] text-[13px] font-semibold text-accent hover:text-accent-hover"
+                >
+                  View all brands →
+                </Link>
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-col gap-4 self-start">
             {/* Featured panel — self-start so it stays a compact card (image + copy)
