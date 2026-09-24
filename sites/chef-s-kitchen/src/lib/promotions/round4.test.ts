@@ -88,3 +88,21 @@ test("the bundle page is priced by the cart's engine", () => {
   assert.match(src, /addable: allResolved && applies && saving > 0/);
   assert.doesNotMatch(src, /componentTotal \* \(1 - rule\.percent \/ 100\)/);
 });
+
+test("checkout never charges more than the offer discount the page showed", () => {
+  const src = read("../actions/checkout.ts");
+  assert.match(src, /formData\.get\("shown_offer_discount"\)/);
+  assert.match(src, /cartOffers\.totalDiscount < shownOfferDiscount - 0\.005/);
+  const form = read("../../components/checkout/CheckoutForm.tsx");
+  assert.match(form, /name="shown_offer_discount" value=\{offerDiscount\.toFixed\(2\)\}/);
+});
+
+test("the order records the customer group its offers were priced at", () => {
+  const src = read("../actions/checkout.ts");
+  assert.match(src, /customerGroupId: pricedGroupId,/);
+  assert.match(src, /\{ customerGroupId: pricedGroupId \}/);
+});
+
+test("the coupon box judges a code's total cap by live uses", () => {
+  assert.match(read("cart-offers.ts"), /couponService\.countLiveRedemptions\(coupon\.id\)/);
+});

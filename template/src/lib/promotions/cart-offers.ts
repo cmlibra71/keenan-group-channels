@@ -220,7 +220,8 @@ export async function couponCapRefusal(
       | null;
     // An unknown code is not a cap problem; the caller's own wording is right.
     if (!coupon) return null;
-    if (coupon.max_uses != null && (coupon.current_uses ?? 0) >= coupon.max_uses) {
+    // Live uses (non-cancelled orders), the same count the cart and the till judge by.
+    if (coupon.max_uses != null && (await couponService.countLiveRedemptions(coupon.id)) >= coupon.max_uses) {
       return "That code has been fully redeemed.";
     }
     if (

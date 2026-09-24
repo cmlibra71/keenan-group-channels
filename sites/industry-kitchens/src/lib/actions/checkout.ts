@@ -20,6 +20,7 @@ import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLine
 import { resolveCartOffers, NO_OFFERS, type CartOffers, type OfferCartLine } from "@/lib/promotions/cart-offers";
 import { reserveOffersForOrder, discardUnchargedOrder, OfferNoLongerAvailableError } from "@keenan/services";
 import { currentShopperForOffers } from "@/lib/promotions/shopper";
+import { resolveOrderPricingGroupId } from "@keenan/services";
 import { backorderFactsForProducts } from "@/lib/cart/backorder-facts";
 import { canPurchaseQuantity } from "@keenan/services/backorder";
 import {
@@ -486,6 +487,14 @@ export async function placeOrder(
   // their identity for a coupon's per-customer cap. (Card p6YVxc4P, round 4.)
   const shopper = await currentShopperForOffers();
   const buyerEmail = shopper.email ?? (email || null);
+  // The group the offers are PRICED at is also the group the order RECORDS — stamped explicitly,
+  // because `OrderService` would otherwise resolve it from the contact alone and 252 contacts carry
+  // a different group from their account's (card p6YVxc4P, round 5).
+  const pricedGroupId = await resolveOrderPricingGroupId({
+    channelId: CHANNEL_ID,
+    accountId: shopper.accountId,
+    contactId: shopper.contactId ?? session?.contactId ?? null,
+  }).catch(() => null);
   const cartCouponCodes = ((cartWithItems as { coupon_codes?: string[] | null }).coupon_codes ?? []) as string[];
   try {
     cartOffers = await resolveCartOffers(fullCart.items as unknown as OfferCartLine[], {
@@ -495,6 +504,7 @@ export async function placeOrder(
       contactId: shopper.contactId ?? session?.contactId ?? null,
       accountId: shopper.accountId,
       email: buyerEmail,
+      customerGroupId: pricedGroupId,
     });
     // A GUEST PAST A COUPON'S PER-CUSTOMER CAP. The cart could not know their email, so it SHOWED
     // the code's discount; priced for them, the code gives nothing. Never charge a total the
@@ -508,6 +518,7 @@ export async function placeOrder(
         contactId: shopper.contactId ?? null,
         accountId: shopper.accountId,
         email: null,
+        customerGroupId: pricedGroupId,
       });
       const dropped = shown.appliedCouponCodes.filter((c) => !cartOffers.appliedCouponCodes.includes(c));
       if (dropped.length > 0 && shown.totalDiscount > cartOffers.totalDiscount + 0.005) {
@@ -521,6 +532,18 @@ export async function placeOrder(
     }
   } catch (e) {
     console.error("[placeOrder] offer evaluation failed (non-fatal):", e);
+  }
+  // NEVER CHARGE MORE THAN THE PAGE SHOWED. The checkout page states the offer discount it priced
+  // (`shown_offer_discount`); the basket is re-priced here. If an offer lapsed in between — its last
+  // use taken by someone else, its end date passed, switched off or sent back to approval — the
+  // order is NOT placed (nothing written, nothing charged) and the shopper sees the new price
+  // first. It used to bill the higher total straight to the card. (Card p6YVxc4P, round 5.)
+  const shownOfferDiscount = parseFloat(String(formData.get("shown_offer_discount") ?? ""));
+  if (Number.isFinite(shownOfferDiscount) && cartOffers.totalDiscount < shownOfferDiscount - 0.005) {
+    const rise = Math.round((shownOfferDiscount - cartOffers.totalDiscount) * 100) / 100;
+    return {
+      error: `An offer in your cart has just ended or run out, so your total is $${rise.toFixed(2)} (ex GST) more than shown. Nothing was charged — please review your cart and place your order again.`,
+    };
   }
   const offerByItemId = new Map(cartOffers.lines.map((l) => [l.itemId, l]));
   const perLinePromotions: (LinePromotionDraft | null)[] = (
@@ -1189,6 +1212,8 @@ export async function placeOrder(
   const order = await orderService.create({
     channelId: CHANNEL_ID,
     contactId: session?.contactId ?? null,
+    // The group the offers were priced at (see `pricedGroupId`), so the order records it.
+    ...(pricedGroupId != null ? { customerGroupId: pricedGroupId } : {}),
     // Link the order to the B2B account when the shopper belongs to one, so the
     // backoffice can reconcile it (esp. net-terms invoices).
     ...(netTerms ? { accountId: netTerms.accountId } : {}),
