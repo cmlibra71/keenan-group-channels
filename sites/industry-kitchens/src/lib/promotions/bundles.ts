@@ -45,7 +45,8 @@
 // simply does not exist here — `/bundles/[slug]` 404s and the index omits it.
 // ============================================================================
 
-import { loadBundlePromotions, parseOfferRule, type FixedBundleRule } from "@keenan/services";
+import { evaluateBasketPromotions, loadBundlePromotions, parseOfferRule, type FixedBundleRule } from "@keenan/services";
+import { channelPricesIncludeTax } from "@/lib/promotions/tax-basis";
 import { productService, CHANNEL_ID, getProductBySlug } from "@/lib/store";
 import { isProductVisibleToViewer } from "@/lib/catalog-scope";
 
@@ -214,18 +215,51 @@ async function resolveBundle(
     });
   }
 
-  const bundleTotal = round2(componentTotal * (1 - rule.percent / 100));
+  // PRICED BY THE CART'S OWN ENGINE, not by `componentTotal × (1 − percent)`. That formula knew
+  // nothing of the floor clamp or the offer's use cap, so the page could quote a bundle price below
+  // what the cart then charged, and keep offering a bundle whose uses were spent. The components go
+  // through `evaluateBasketPromotions` exactly as a cart holding them would; the saving is what
+  // THIS bundle took, and a bundle the engine would not apply cannot be added. (Card p6YVxc4P, r4.)
+  const allResolved = components.length > 0 && components.every((c) => !c.missing);
+  let saving = 0;
+  let applies = false;
+  if (allResolved) {
+    try {
+      const evaluation = await evaluateBasketPromotions(
+        components.map((c, i) => ({
+          key: String(i),
+          productId: c.productId,
+          variantId: null,
+          sku: c.sku,
+          quantity: c.quantity,
+          unitPrice: c.unitPrice ?? 0,
+        })),
+        { channelId: CHANNEL_ID, taxInclusive: await channelPricesIncludeTax().catch(() => false) }
+      );
+      applies = evaluation.appliedPromotionIds.includes(promotionId);
+      saving = round2(
+        evaluation.lines.filter((l) => l.promotionId === promotionId).reduce((a, l) => a + l.discount, 0)
+      );
+    } catch {
+      applies = false;
+    }
+  }
+  const total = round2(componentTotal);
+  const bundleTotal = round2(total - saving);
+  // The percentage the page states is what the shopper actually saves, rounded DOWN — never the
+  // rule's figure when the floor held the bundle short of it.
+  const percent = total > 0 ? Math.min(rule.percent, Math.floor((saving / total) * 1000) / 10) : rule.percent;
   return {
     promotionId,
     promotionName,
     slug: rule.slug,
     headline: rule.headline ?? promotionName,
     description: rule.description,
-    percent: rule.percent,
+    percent: applies ? percent : 0,
     components,
-    componentTotal: round2(componentTotal),
+    componentTotal: total,
     bundleTotal,
-    saving: round2(componentTotal - bundleTotal),
-    addable: components.length > 0 && components.every((c) => !c.missing),
+    saving,
+    addable: allResolved && applies && saving > 0,
   };
 }

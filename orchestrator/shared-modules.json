@@ -296,6 +296,8 @@
     "lib/promo-tag-wiring.test.ts",
     "lib/promotions/bundles.ts",
     "lib/promotions/cart-offers.ts",
+    "lib/promotions/round4.test.ts",
+    "lib/promotions/shopper.ts",
     "lib/promotions/tax-basis.ts",
     "lib/quote.ts",
     "lib/quotes/acknowledgement-url.test.ts",

@@ -24,8 +24,10 @@ import {
   couponService,
   evaluateBasketPromotions,
   loadCouponCustomerUses,
+  resolveOrderPricingGroupId,
   type PromotionEvaluation,
 } from "@keenan/services";
+import { addonSurcharge, readStoredAddons } from "@keenan/services/product-addons";
 
 /** The cart-line shape this module needs (a subset of cartService.getWithItems). */
 export type OfferCartLine = {
@@ -37,6 +39,8 @@ export type OfferCartLine = {
   sale_price: string | null;
   product_sku: string | null;
   variant_sku?: string | null;
+  /** The line's paid add-ons (warranty, install…), whose price is already inside `sale_price`. */
+  modifier_selections?: unknown;
 };
 
 /** What one line took, as the cart, the checkout and the order all read it. */
@@ -86,6 +90,22 @@ export function lineUnitCharge(item: OfferCartLine): number {
   return Number.isFinite(list) ? list : 0;
 }
 
+/**
+ * The per-unit price an OFFER may discount: the charge LESS the line's paid add-ons.
+ *
+ * `withAddonSurcharge` puts the add-ons' price inside `sale_price` / `list_price`, and the whole
+ * figure used to go to the engine — so a percentage came off the warranty and the installation
+ * too, and the add-ons' price counted as room above a floor that was built from the machine's cost
+ * alone, letting the machine itself go under its floor unclamped. Offers are on products; the
+ * extras are charged in full, the same rule the bulk break follows (`cart.ts`). The order line
+ * still charges the full price: the discount is an absolute amount taken off it.
+ * (Card p6YVxc4P, round 4.)
+ */
+export function lineOfferBase(item: OfferCartLine): number {
+  const extras = addonSurcharge(readStoredAddons(item.modifier_selections as never));
+  return Math.max(0, lineUnitCharge(item) - (Number.isFinite(extras) ? extras : 0));
+}
+
 function toOffers(evaluation: PromotionEvaluation): CartOffers {
   return {
     lines: evaluation.lines.map((l) => ({
@@ -122,14 +142,32 @@ export async function resolveCartOffers(
      * WHO is buying. A coupon's `max_uses_per_customer` is judged against this
      * shopper's live redemptions before any discount is shown, so the cart
      * refuses a code the till would refuse (card p6YVxc4P, requirement 5). A
-     * guest has no contact, so only the total cap can bind for them — which is
-     * the position a guest checkout is in anyway.
+     * guest has no contact, so they are matched by their billing email instead
+     * (`email`, normalised the way guest orders are).
      */
     contactId?: number | null;
+    /** The shopper's trade account, when they have one — resolves their customer group. */
+    accountId?: number | null;
+    /** The buyer's email — a guest's identity for a coupon's per-customer cap. */
+    email?: string | null;
+    /**
+     * The shopper's customer group. Left out, it is resolved exactly as an order is stamped
+     * (`resolveOrderPricingGroupId`: account → contact → the channel's guest tier), so an offer
+     * limited to customer groups reaches the customers it names and nobody else.
+     */
+    customerGroupId?: number | null;
   }
 ): Promise<CartOffers> {
   if (!items || items.length === 0) return NO_OFFERS;
   try {
+    const customerGroupId =
+      options.customerGroupId !== undefined
+        ? options.customerGroupId
+        : await resolveOrderPricingGroupId({
+            channelId: options.channelId,
+            accountId: options.accountId ?? null,
+            contactId: options.contactId ?? null,
+          });
     const evaluation = await evaluateBasketPromotions(
       items.map((item) => ({
         key: String(item.id),
@@ -137,13 +175,15 @@ export async function resolveCartOffers(
         variantId: item.variant_id,
         sku: lineSku(item),
         quantity: item.quantity,
-        unitPrice: lineUnitCharge(item),
+        unitPrice: lineOfferBase(item),
       })),
       {
         channelId: options.channelId,
         couponCodes: options.couponCodes ?? [],
         taxInclusive: options.pricesIncludeTax === true,
         contactId: options.contactId ?? null,
+        email: options.email ?? null,
+        customerGroupId,
       }
     );
     return toOffers(evaluation);
@@ -167,7 +207,7 @@ export async function resolveCartOffers(
  */
 export async function couponCapRefusal(
   code: string,
-  who: { contactId?: number | null; customerId?: number | null }
+  who: { contactId?: number | null; customerId?: number | null; email?: string | null }
 ): Promise<string | null> {
   try {
     const coupon = (await couponService.getByCode(code)) as
@@ -180,12 +220,13 @@ export async function couponCapRefusal(
       | null;
     // An unknown code is not a cap problem; the caller's own wording is right.
     if (!coupon) return null;
-    if (coupon.max_uses != null && (coupon.current_uses ?? 0) >= coupon.max_uses) {
+    // Live uses (non-cancelled orders), the same count the cart and the till judge by.
+    if (coupon.max_uses != null && (await couponService.countLiveRedemptions(coupon.id)) >= coupon.max_uses) {
       return "That code has been fully redeemed.";
     }
     if (
       coupon.max_uses_per_customer != null &&
-      (who.contactId != null || who.customerId != null)
+      (who.contactId != null || who.customerId != null || !!who.email)
     ) {
       const uses = await loadCouponCustomerUses([coupon.id], who);
       if ((uses.get(coupon.id) ?? 0) >= coupon.max_uses_per_customer) {
