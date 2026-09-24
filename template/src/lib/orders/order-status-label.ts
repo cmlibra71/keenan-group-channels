@@ -65,11 +65,22 @@ const ORDER_STAGE_BY_STATUS: Record<string, OrderStage> = {
   // here, so nothing the customer reads moved. See FINANCE_PAYMENT_METHODS.
   pending: "Placed",
   pending_payment: "Placed",
+  // A DEPOSIT is in and the balance is still owing (portal card EPbyYKv8). The status
+  // lifecycle now moves an unpaid order to Zoey's `deposit_paid` BY ITSELF the moment a
+  // deposit lands — before that card the order stayed on `pending_payment` and read
+  // "Placed". The customer reads the same word they read a minute earlier: paying part
+  // of an order is not us starting on it, and the Product Brief's rule is that an order
+  // still owed for does not read "Being prepared". Their Payment panel beside this word
+  // already says what was paid and what is still owing. Zoey's own bucket agrees: it
+  // files Deposit Paid under its Pending Payment state, beside `pending_payment`.
+  //
+  // `deposit_paid___backordered` is deliberately NOT moved with it: only a person sets
+  // that one, and "backordered" means we have already started acting on the stock.
+  deposit_paid: "Placed",
 
   // --- we have it and we are working on it ---
   awaiting_fulfillment: "Being prepared",
   processing: "Being prepared",
-  deposit_paid: "Being prepared",
   deposit_paid___backordered: "Being prepared",
   backorder: "Being prepared",
   po_sent_ordered: "Being prepared",

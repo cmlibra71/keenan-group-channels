@@ -16,7 +16,6 @@ test("everything mid-pipeline reads as Being prepared", () => {
   for (const status of [
     "awaiting_fulfillment",
     "processing",
-    "deposit_paid",
     "deposit_paid___backordered",
     "backorder",
     "po_sent_ordered",
@@ -39,6 +38,17 @@ test("an unpaid new order reads Placed, not Being prepared", () => {
   // nothing that we are "preparing" their order would be a lie.
   assert.equal(customerOrderStage("pending_payment"), "Placed");
   assert.equal(customerOrderStage("pending"), "Placed");
+});
+
+test("a deposit paid with the balance still owing reads Placed, not Being prepared", () => {
+  // Portal card EPbyYKv8: the status lifecycle moves an unpaid order from
+  // pending_payment to deposit_paid on its own when a deposit lands. The customer
+  // read "Placed" before that move and must read the same word after it.
+  assert.equal(customerOrderStage("deposit_paid"), "Placed");
+  assert.equal(customerOrderStage("Deposit_Paid "), "Placed");
+  assert.equal(customerOrderStage("deposit_paid", "bank_transfer"), customerOrderStage("pending_payment", "bank_transfer"));
+  // the hand-set backordered twin is a different signal and keeps its word
+  assert.equal(customerOrderStage("deposit_paid___backordered"), "Being prepared");
 });
 
 test("finance-company statuses read as Being prepared and never name the financier", () => {
