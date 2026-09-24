@@ -1,6 +1,8 @@
 "use client";
 import { addToCart } from "@/lib/actions/cart";
 import { addToQuote } from "@/lib/actions/quote";
+import { useRouter } from "next/navigation";
+import { tileRefusalDestination } from "@/lib/product/addon-panel";
 import { useCartQuoteCounts, useHeaderPanels } from "@/lib/cart-quote-counts";
 import { trackAddedToCart } from "@/components/analytics/klaviyo";
 import { ga4SelectItem, ga4AddToCart, ga4ViewPromotion, ga4SelectPromotion, ga4ViewItemList } from "@/components/analytics/ga4";
@@ -147,6 +149,7 @@ export function enquireHandler(router: { push: (to: string) => void }) {
 export function useAddToCartHandler() {
   const { setCartCount } = useCartQuoteCounts();
   const { open } = useHeaderPanels();
+  const router = useRouter();
   return async (args: Record<string, unknown>) => {
     const id = num(args.productId);
     if (id == null) return { success: false, error: "no product" };
@@ -154,6 +157,12 @@ export function useAddToCartHandler() {
     // Nothing was added, so nothing is reported and no panel pops out. The
     // master's onError follow-up carries the refusal to the shopper.
     if (res && "error" in res && typeof res.error === "string") {
+      // A product that asks a REQUIRED question (Gas Type — card tkvntxsq) cannot be
+      // answered from a tile, and this authored tile shows a refusal to nobody (the
+      // sf-catalog-browse LIVE DEFECT). So the refusal carries the product page and the
+      // shopper is taken there to choose. The add is still never made without an answer.
+      const destination = tileRefusalDestination(res);
+      if (destination) router.push(destination);
       return { success: false, error: res.error };
     }
     // Fresh count from the action → badge updates without a route re-render,
@@ -191,10 +200,15 @@ export function useAddToCartHandler() {
 export function useAddToQuoteHandler() {
   const { setQuoteCount } = useCartQuoteCounts();
   const { open } = useHeaderPanels();
+  const router = useRouter();
   return async (args: Record<string, unknown>) => {
     const id = num(args.productId);
     if (id == null) return { success: false, error: "no product" };
     const res = await addToQuote(id, null);
+    // Same as the cart handler above (card tkvntxsq): a required question the tile cannot
+    // answer sends the shopper to the product page to answer it.
+    const destination = tileRefusalDestination(res);
+    if (destination) router.push(destination);
     // Fresh count from the action → badge updates without a route re-render,
     // and the quote panel pops out — parity with AddToQuoteButton.
     if (res && "quoteCount" in res && typeof res.quoteCount === "number") {

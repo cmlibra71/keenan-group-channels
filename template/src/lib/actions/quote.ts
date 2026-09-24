@@ -30,6 +30,7 @@ import {
 } from "@keenan/services/product-addons";
 import {
   buyableAddons,
+  productPageForRefusal,
   customisationDefinition,
   extrasDefinition,
 } from "@/lib/product/addon-panel";
@@ -129,6 +130,7 @@ export async function addToQuote(
     sale_price: string | null;
     metafields?: unknown;
     hide_price?: boolean | null;
+    url_path?: string | null;
     restrict_add_to_quote?: boolean | null;
     sell_pack_size?: number | null;
     sell_pack_unit?: string | null;
@@ -230,19 +232,23 @@ export async function addToQuote(
     extrasDefinition(rawAddonDefinition, addonPanelOffered),
     addonsPosted ? addons : {}
   );
+  // A TILE posted nothing, so its refusal also names the page where the question can be answered
+  // (card tkvntxsq — a gas range is never quoted without its gas type) and the tile goes there.
+  const tileDestination = addonsPosted ? null : productPageForRefusal(product.url_path);
   if (unansweredGroups.length > 0) {
-    return {
-      error: addonsPosted
-        ? `Please choose ${unansweredGroups.join(" and ")} before adding this to a quote.`
-        : `Open this product's page to choose ${unansweredGroups.join(" and ")} before adding it to a quote.`,
-    };
+    const error = addonsPosted
+      ? `Please choose ${unansweredGroups.join(" and ")} before adding this to a quote.`
+      : `Open this product's page to choose ${unansweredGroups.join(" and ")} before adding it to a quote.`;
+    return tileDestination ? { error, productPage: tileDestination } : { error };
   }
   const typedRefusal = customisationRefusal(
     customisationDefinition(rawAddonDefinition),
     addonsPosted ? addons : undefined,
     "quote"
   );
-  if (typedRefusal) return { error: typedRefusal };
+  if (typedRefusal) {
+    return tileDestination ? { error: typedRefusal, productPage: tileDestination } : { error: typedRefusal };
+  }
   const addonNote = describeAddonSelection(resolvedAddons);
   if (resolvedAddons.length > 0) {
     lineAttributes = { ...(lineAttributes ?? {}), addon_selection: resolvedAddons };

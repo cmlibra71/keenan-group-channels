@@ -39,6 +39,7 @@ import { filterPaymentMethodsForAccount } from "@/lib/checkout/account-options-p
 import { isFinancePaymentMethod } from "@/lib/checkout/finance";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
 import { determinePaymentStatus } from "@/lib/checkout/order-draft";
+import { chosenOptionLines, quoteLinePicks } from "@/lib/product/addon-panel";
 import { sendStaffNotification } from "@/lib/staff-email";
 import { siteBaseUrl } from "@/lib/seo";
 import { quoteHidesPrices, resolveQuoteTotal } from "@/lib/quotes/price-visibility";
@@ -692,6 +693,9 @@ async function sendQuoteOrderEmails(args: {
       sku: (i.product_sku as string) ?? null,
       imageUrl: imageMap.get(Number(i.product_id)) ?? null,
       url: i.product_slug ? `${siteUrl}/products/${i.product_slug}` : null,
+      // What the customer chose on the quote line (card tkvntxsq) — the same words the order
+      // line it raised now stores (`planOrderFromPaidQuote`).
+      options: chosenOptionLines(quoteLinePicks(i.attributes)),
     })),
     bankDetails: method?.bankDetails ?? null,
     netTermsDays: args.netTermsDays ?? method?.netTermsDays ?? null,
@@ -763,6 +767,8 @@ async function sendQuoteOrderEmails(args: {
       items: items.map((i) => ({
         name: (i.product_name as string) || "Item",
         quantity: (i.quantity as number) ?? 1,
+        // The staff alert tells the warehouse WHICH machine too (card tkvntxsq).
+        options: chosenOptionLines(quoteLinePicks(i.attributes)),
       })),
       testMode: isTestMode,
     });

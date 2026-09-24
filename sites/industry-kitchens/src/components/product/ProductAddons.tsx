@@ -37,7 +37,7 @@
 import { useProductPurchase } from "@keenan/services/product-page";
 import type { ProductAddonGroup } from "@keenan/services/product-addons";
 import { Price } from "@/components/ui/Price";
-import { extrasPanelGroups } from "@/lib/product/addon-panel";
+import { extrasPanelGroups, questionGroups } from "@/lib/product/addon-panel";
 import { useGst, adjustForGst } from "@/lib/gst";
 
 /** "245.00" ex GST, or "269.50" once the storewide toggle says inclusive.
@@ -82,10 +82,14 @@ function OptionLabel({
   label,
   price,
   url,
+  priced = true,
 }: {
   label: string;
   price: string;
   url: string | null;
+  /** False on a no-charge QUESTION (Gas Type, card tkvntxsq): no "+ $0.00" beside an answer
+   *  that never moves the price — Zoey prints nothing there either. */
+  priced?: boolean;
 }) {
   return (
     <span className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
@@ -98,9 +102,11 @@ function OptionLabel({
           </>
         ) : null}
       </span>
-      <span className="shrink-0 text-sm font-semibold text-text-primary">
-        + <Price amount={Number(price)} gst />
-      </span>
+      {priced ? (
+        <span className="shrink-0 text-sm font-semibold text-text-primary">
+          + <Price amount={Number(price)} gst />
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -109,10 +115,16 @@ function AddonGroup({
   group,
   chosen,
   onToggle,
+  priced = true,
+  first = false,
 }: {
   group: ProductAddonGroup;
   chosen: string[];
   onToggle: (optionKey: string, on?: boolean) => void;
+  /** False for a no-charge question — its answers carry no price to print. */
+  priced?: boolean;
+  /** The first group in a box with no heading above it sits flush with the box's padding. */
+  first?: boolean;
 }) {
   const single = group.control !== "checkbox";
   const unanswered = single && group.required && chosen.length === 0;
@@ -123,7 +135,7 @@ function AddonGroup({
   const chosenOption = single ? group.options.find((o) => o.key === chosen[0]) ?? null : null;
 
   return (
-    <fieldset className="mt-4">
+    <fieldset className={first ? "" : "mt-4"}>
       <legend className="text-sm font-semibold text-text-primary">
         {group.label}
         {/* The button greys while a required group is unanswered (the provider folds
@@ -160,7 +172,7 @@ function AddonGroup({
           <option value="">{group.required ? "Please choose…" : "None"}</option>
           {group.options.map((o) => (
             <option key={o.key} value={o.key}>
-              {o.label} (+${money(o.price)})
+              {priced ? `${o.label} (+$${money(o.price)})` : o.label}
             </option>
           ))}
         </select>
@@ -191,7 +203,7 @@ function AddonGroup({
                   onClick={single && isOn && !group.required ? () => onToggle(o.key, false) : undefined}
                   className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-brand,#000)]"
                 />
-                <OptionLabel label={o.label} price={o.price} url={o.url} />
+                <OptionLabel label={o.label} price={o.price} url={o.url} priced={priced} />
               </label>
             );
           })}
@@ -204,9 +216,26 @@ function AddonGroup({
 export function ProductAddons() {
   const purchase = useProductPurchase();
   const addons = purchase.product.addons ?? null;
+  if (!addons) return null;
 
   /**
-   * IS THIS PANEL ON SCREEN? Read from the provider, never re-derived here.
+   * THE QUESTIONS FIRST, AND WHATEVER THE PRICE (card tkvntxsq).
+   *
+   * A no-charge question — Gas Type, Natural Gas or LPG — decides WHICH machine is being bought,
+   * so it is asked before any extra and it is asked on a quote-only or hidden-price product too:
+   * the provider keeps it in `buyableAddons` whatever the price (it moves no money, so none of the
+   * priced panel's reasons to hide reach it), which means a required one greys the buy controls
+   * until it is answered — and this block is the "Choose one" on screen that explains why. Drawn
+   * only while the provider OFFERS it (`addonGroupsOffered`), the same flag the buy controls post
+   * on, so a renderer that asks cannot disagree with one that posts.
+   *
+   * No "Optional extras" heading and no "+ $0.00": a required question is not optional and moves
+   * no price, and saying either over Gas Type told the shopper two untrue things.
+   */
+  const questions = purchase.addonGroupsOffered ? questionGroups(addons) : [];
+
+  /**
+   * IS THE PRICED PANEL ON SCREEN? Read from the provider, never re-derived here.
    *
    * `extrasPanelShown` IS the predicate (`@keenan/services/product-addons` `addonPanelShown`):
    * the product carries groups, its price is not hidden and it is not zero. Re-testing
@@ -220,39 +249,60 @@ export function ProductAddons() {
    * product (card kyMjCmAw). Reading that one here drew "+ $245.00" tick boxes beside a
    * "Contact For Price" panel on a $0 machine, republishing a total the page may not publish.
    * Two questions, two flags.
+   *
+   * WHICH groups are ours is declared in `lib/product/addon-panel.ts`, not filtered inline, so
+   * whoever adds a control type has to say which panel owns it. A `text` group is kyMjCmAw's
+   * free-text customisation box, and a no-charge question is drawn above.
    */
-  if (!addons || !purchase.extrasPanelShown) return null;
-
-  // WHICH groups are ours — declared in `lib/product/addon-panel.ts`, not filtered inline, so
-  // whoever adds a control type has to say which panel owns it. A `text` group is kyMjCmAw's
-  // free-text customisation box, sharing this bag but not this control.
-  const groups = extrasPanelGroups(addons);
-  if (groups.length === 0) return null;
+  const groups = purchase.extrasPanelShown ? extrasPanelGroups(addons) : [];
+  if (questions.length === 0 && groups.length === 0) return null;
 
   return (
-    <div className="mt-5 rounded-[12px] border border-border bg-surface-primary px-4 py-3">
-      <p className="text-sm font-semibold text-text-primary">Optional extras</p>
-      <p className="mt-0.5 text-xs text-text-secondary">
-        Tick what you need — the price updates as you go.
-      </p>
-
-      {groups.map((group) => (
-        <AddonGroup
-          key={group.key}
-          group={group}
-          chosen={purchase.selectedAddons[group.key] ?? []}
-          onToggle={(optionKey, on) => purchase.toggleAddon(group.key, optionKey, on)}
-        />
-      ))}
-
-      {purchase.addonTotal > 0 ? (
-        <p className="mt-4 flex items-baseline justify-between border-t border-border pt-3 text-sm">
-          <span className="text-text-secondary">Extras added</span>
-          <span className="font-semibold text-text-primary">
-            + <Price amount={purchase.addonTotal} gst />
-          </span>
-        </p>
+    <>
+      {questions.length > 0 ? (
+        <div
+          className="mt-5 rounded-[12px] border border-border bg-surface-primary px-4 py-3"
+          data-product-questions=""
+        >
+          {questions.map((group, i) => (
+            <AddonGroup
+              key={group.key}
+              group={group}
+              priced={false}
+              first={i === 0}
+              chosen={purchase.selectedAddons[group.key] ?? []}
+              onToggle={(optionKey, on) => purchase.toggleAddon(group.key, optionKey, on)}
+            />
+          ))}
+        </div>
       ) : null}
-    </div>
+
+      {groups.length > 0 ? (
+        <div className="mt-5 rounded-[12px] border border-border bg-surface-primary px-4 py-3">
+          <p className="text-sm font-semibold text-text-primary">Optional extras</p>
+          <p className="mt-0.5 text-xs text-text-secondary">
+            Tick what you need — the price updates as you go.
+          </p>
+
+          {groups.map((group) => (
+            <AddonGroup
+              key={group.key}
+              group={group}
+              chosen={purchase.selectedAddons[group.key] ?? []}
+              onToggle={(optionKey, on) => purchase.toggleAddon(group.key, optionKey, on)}
+            />
+          ))}
+
+          {purchase.addonTotal > 0 ? (
+            <p className="mt-4 flex items-baseline justify-between border-t border-border pt-3 text-sm">
+              <span className="text-text-secondary">Extras added</span>
+              <span className="font-semibold text-text-primary">
+                + <Price amount={purchase.addonTotal} gst />
+              </span>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </>
   );
 }

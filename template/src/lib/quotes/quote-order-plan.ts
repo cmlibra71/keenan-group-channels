@@ -29,6 +29,8 @@ import { normaliseAddressType } from "@keenan/services/residential";
 import { quoteGstTotals, MONEY_EPSILON, type QuoteGstInput } from "./quote-gst";
 import { resolveQuoteTotal } from "./price-visibility";
 import { quoteFreightStillPending } from "./freight-pending";
+import { addonsAsOrderOptions } from "@keenan/services/product-addons";
+import { quoteLinePicks } from "../product/addon-panel";
 
 /** A snake_case quote row from `quoteService.getWithItems`. */
 export type PlannableQuote = Record<string, unknown> &
@@ -119,6 +121,13 @@ export interface PlannedOrderItem {
     total_inc_tax: string;
     total_tax: string;
     discount_amount: string;
+    /**
+     * What the customer chose on the line — "Gas Type: LPG" (card tkvntxsq), a ticked extra, a
+     * typed instruction — re-shaped from `attributes.addon_selection` exactly as the portal's
+     * `planOrderFromQuote` does it, so a quote the customer pays for themselves raises the SAME
+     * order lines as one a rep converts. Absent when nothing was chosen.
+     */
+    product_options?: Record<string, string>;
   };
 }
 
@@ -357,6 +366,7 @@ export function planOrderFromPaidQuote(
     const extSale = it.extended_sale_price ? String(it.extended_sale_price) : extList;
     const unitT = split(salePrice);
     const extT = split(extSale);
+    const addonOptions = addonsAsOrderOptions(quoteLinePicks(it.attributes));
     return {
       source_item_id: Number(it.id),
       payload: {
@@ -378,6 +388,9 @@ export function planOrderFromPaidQuote(
         total_inc_tax: extT.inc,
         total_tax: extT.tax,
         discount_amount: String(it.discount_amount ?? "0"),
+        // Only where there is something to say — an empty object would stamp `{}` onto every
+        // ordinary line (the portal's conversion draws the same line).
+        ...(Object.keys(addonOptions).length > 0 ? { product_options: addonOptions } : {}),
       },
     };
   });

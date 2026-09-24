@@ -17,6 +17,7 @@ import {
   type ResolvedAddon,
 } from "@keenan/services/product-addons";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, forOrderInsert, withPromotionDiscounts, lineGoodsExTax, type BelowCostLine, type LinePromotionDraft } from "@/lib/checkout/order-draft";
+import { chosenOptionLines } from "@/lib/product/addon-panel";
 import { resolveCartOffers, NO_OFFERS, type CartOffers, type OfferCartLine } from "@/lib/promotions/cart-offers";
 import { stampOrderLinePromotions, stampOrderItemPromotionsById } from "@keenan/services";
 import { backorderFactsForProducts } from "@/lib/cart/backorder-facts";
@@ -1667,10 +1668,14 @@ export async function placeOrder(
   // placeholder box where every product thumbnail should be (and dropped the SKU
   // and the product link with it). Best-effort — if the image/site lookup fails
   // the rows degrade to name + quantity rather than blocking the order.
+  // What the shopper chose on each line ("Gas Type: LPG" — card tkvntxsq) rides both emails, in
+  // the words the order line's own `product_options` stores, so the confirmation names WHICH
+  // machine was bought and the staff alert tells the warehouse the same.
   let emailItems: EmailLineItem[] = fullCart.items.map((i) => ({
     name: i.product_name,
     quantity: i.quantity,
     sku: i.product_sku ?? null,
+    options: chosenOptionLines(readStoredAddons(i.modifier_selections)),
   }));
   try {
     // Resolve the site origin through the shared SEO helper so email links use the exact
@@ -1685,6 +1690,7 @@ export async function placeOrder(
       sku: i.product_sku ?? null,
       imageUrl: imageMap.get(i.product_id) ?? null,
       url: i.product_slug ? `${linkBase}/products/${i.product_slug}` : null,
+      options: chosenOptionLines(readStoredAddons(i.modifier_selections)),
     }));
   } catch (e) {
     console.error("[placeOrder] email product rows degraded (non-fatal):", e);

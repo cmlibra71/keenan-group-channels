@@ -14,7 +14,7 @@ import {
 } from "@keenan/services/product-page";
 import { addToCart } from "@/lib/actions/cart";
 import type { AddonSelectionInput, ProductAddons } from "@keenan/services/product-addons";
-import { missingAnswerSentence } from "@/lib/product/addon-panel";
+import { missingAnswerSentence, tileRefusalDestination } from "@/lib/product/addon-panel";
 import { COMBINATION_UNAVAILABLE_TEXT } from "@/components/product/ProductCombinationNotice";
 import { addToQuote } from "@/lib/actions/quote";
 import { submitReview } from "@/lib/actions/reviews";
@@ -78,9 +78,14 @@ function ActionsBridge({
         setCartCount(res.cartCount);
         open("cart");
       }
+      // A related-rail TILE posted no configuration; if that product asks a required
+      // question (Gas Type — card tkvntxsq) the refusal carries its page, and the shopper is
+      // taken there to answer it. This page's own buy row posts one, so gets no destination.
+      const destination = tileRefusalDestination(res);
+      if (destination) router.push(destination);
       return res;
     },
-    [setCartCount, open]
+    [setCartCount, open, router]
   );
   const countingAddToQuote = React.useCallback(
     async (
@@ -96,9 +101,11 @@ function ActionsBridge({
         setQuoteCount(res.quoteCount);
         open("quote");
       }
+      const destination = tileRefusalDestination(res);
+      if (destination) router.push(destination);
       return res;
     },
-    [setQuoteCount, open]
+    [setQuoteCount, open, router]
   );
   // Configurable product with nothing chosen yet: the quote CTA stays live and
   // this prompt names the option still to pick, instead of the click doing
