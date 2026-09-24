@@ -457,7 +457,7 @@ export default async function ProductPage({
               branch above: 149 of the CAP-/SC- products sit on THIS storefront,
               so an insert on only one branch leaves the table on a page nobody
               sees the day `cms_product_template_enabled` is switched on. */}
-          <ProductOfferTiers sku={product.sku} productId={product.id} />
+          <ProductOfferTiers sku={product.sku} productId={product.id} unitPrice={memberPrice} />
         </div>
       );
     }
@@ -522,7 +522,7 @@ export default async function ProductPage({
 
       {/* Carton tiers this product is in (card p6YVxc4P). Draws nothing when it is
           in no banded offer, and reads the same live promotions the cart applies. */}
-      <ProductOfferTiers sku={product.sku} productId={product.id} />
+      <ProductOfferTiers sku={product.sku} productId={product.id} unitPrice={memberPrice} />
     </div>
   );
 }

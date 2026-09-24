@@ -18,7 +18,8 @@ import {
 } from "@keenan/services/product-addons";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, forOrderInsert, withPromotionDiscounts, lineGoodsExTax, type BelowCostLine, type LinePromotionDraft } from "@/lib/checkout/order-draft";
 import { resolveCartOffers, NO_OFFERS, type CartOffers, type OfferCartLine } from "@/lib/promotions/cart-offers";
-import { reserveOffersForOrder, OfferNoLongerAvailableError } from "@keenan/services";
+import { reserveOffersForOrder, discardUnchargedOrder, OfferNoLongerAvailableError } from "@keenan/services";
+import { currentShopperForOffers } from "@/lib/promotions/shopper";
 import { backorderFactsForProducts } from "@/lib/cart/backorder-facts";
 import { canPurchaseQuantity } from "@keenan/services/backorder";
 import {
@@ -479,17 +480,45 @@ export async function placeOrder(
   // rate lookup, the finance floor and the Total all read the money the customer
   // actually owes.
   let cartOffers: CartOffers = NO_OFFERS;
+  // WHO is buying — the SAME shopper the cart and the coupon box judged offers for
+  // (`currentShopperForOffers`: contact, trade account → customer group, email), so the price
+  // checked here is the price that was shown. A guest has no session email; their billing email is
+  // their identity for a coupon's per-customer cap. (Card p6YVxc4P, round 4.)
+  const shopper = await currentShopperForOffers();
+  const buyerEmail = shopper.email ?? (email || null);
+  const cartCouponCodes = ((cartWithItems as { coupon_codes?: string[] | null }).coupon_codes ?? []) as string[];
   try {
     cartOffers = await resolveCartOffers(fullCart.items as unknown as OfferCartLine[], {
       channelId: CHANNEL_ID,
-      couponCodes: ((cartWithItems as { coupon_codes?: string[] | null }).coupon_codes ?? []) as string[],
+      couponCodes: cartCouponCodes,
       pricesIncludeTax,
-      // WHO is buying, so a coupon's per-customer cap binds on the charge as well
-      // as on the screen: a shopper past the cap is billed full price here rather
-      // than billed the discount and refused the redemption a moment later
-      // (card p6YVxc4P, requirement 5).
-      contactId: session?.contactId ?? null,
+      contactId: shopper.contactId ?? session?.contactId ?? null,
+      accountId: shopper.accountId,
+      email: buyerEmail,
     });
+    // A GUEST PAST A COUPON'S PER-CUSTOMER CAP. The cart could not know their email, so it SHOWED
+    // the code's discount; priced for them, the code gives nothing. Never charge a total the
+    // shopper was not shown: take the code off the cart, say why, and let them place the order
+    // again at the price now on screen.
+    if (!shopper.email && buyerEmail) {
+      const shown = await resolveCartOffers(fullCart.items as unknown as OfferCartLine[], {
+        channelId: CHANNEL_ID,
+        couponCodes: cartCouponCodes,
+        pricesIncludeTax,
+        contactId: shopper.contactId ?? null,
+        accountId: shopper.accountId,
+        email: null,
+      });
+      const dropped = shown.appliedCouponCodes.filter((c) => !cartOffers.appliedCouponCodes.includes(c));
+      if (dropped.length > 0 && shown.totalDiscount > cartOffers.totalDiscount + 0.005) {
+        await cartService.update(cartWithItems.id, {
+          couponCodes: cartCouponCodes.filter((c) => !dropped.includes((c ?? "").toUpperCase())),
+        });
+        return {
+          error: `You've already used the code ${dropped.join(", ")}, so we've removed it from your cart. Please check your total and place your order again.`,
+        };
+      }
+    }
   } catch (e) {
     console.error("[placeOrder] offer evaluation failed (non-fatal):", e);
   }
@@ -1263,7 +1292,7 @@ export async function placeOrder(
         .map((pair) => ({ orderItemId: Number(pair.row.id), promotionId: pair.draft.promotionId as number })),
       coupons: couponsToRedeem,
       contactId: session?.contactId ?? order.contact_id ?? null,
-      email: email || null,
+      email: buyerEmail,
     });
   } catch (err) {
     console.error("[placeOrder] offers could not be reserved — order removed, nothing charged:", err);
@@ -1873,7 +1902,10 @@ async function removeUnchargedOrder(orderId: number): Promise<void> {
   let cleaned = false;
   for (let attempt = 0; attempt < 2 && !cleaned; attempt++) {
     try {
-      await orderService.delete(orderId);
+      // Lines first, then the order — `orderService.delete` refuses an order that still has lines,
+      // so the old plain delete always fell through to cancelling and left the shopper a cancelled
+      // order in their list. Refuses any order money has touched. (Card p6YVxc4P, round 4.)
+      await discardUnchargedOrder(orderId);
       cleaned = true;
     } catch (delErr) {
       console.error(`[placeOrder] compensating delete failed (attempt ${attempt + 1}):`, delErr);
