@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { cartService, cartItemService, orderService, orderItemService, orderShippingAddressService, CHANNEL_ID, getEffectivePrice, productVariantService, productService, channelSettingsService, getCheckoutSettings, paymentService, couponService } from "@/lib/store";
+import { cartService, cartItemService, orderService, orderItemService, orderShippingAddressService, CHANNEL_ID, getEffectivePrice, productVariantService, productService, channelSettingsService, getCheckoutSettings, paymentService } from "@/lib/store";
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
@@ -18,7 +18,7 @@ import {
 } from "@keenan/services/product-addons";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, forOrderInsert, withPromotionDiscounts, lineGoodsExTax, type BelowCostLine, type LinePromotionDraft } from "@/lib/checkout/order-draft";
 import { resolveCartOffers, NO_OFFERS, type CartOffers, type OfferCartLine } from "@/lib/promotions/cart-offers";
-import { stampOrderLinePromotions, stampOrderItemPromotionsById } from "@keenan/services";
+import { reserveOffersForOrder, OfferNoLongerAvailableError } from "@keenan/services";
 import { backorderFactsForProducts } from "@/lib/cart/backorder-facts";
 import { canPurchaseQuantity } from "@keenan/services/backorder";
 import {
@@ -1223,72 +1223,57 @@ export async function placeOrder(
     // (e.g. a DB blip mid-checkout) — don't swallow it: retry once, and if it still fails,
     // cancel the order so it's not an orphaned "pending" order with items_total but no items.
     console.error("[placeOrder] order items failed to persist:", err);
-    let cleaned = false;
-    for (let attempt = 0; attempt < 2 && !cleaned; attempt++) {
-      try {
-        await orderService.delete(order.id);
-        cleaned = true;
-      } catch (delErr) {
-        console.error(`[placeOrder] compensating delete failed (attempt ${attempt + 1}):`, delErr);
-      }
-    }
-    if (!cleaned) {
-      try {
-        await orderService.update(order.id, { status: "cancelled", paymentStatus: "failed" });
-      } catch (cancelErr) {
-        console.error("[placeOrder] cancel fallback also failed — order is orphaned:", cancelErr);
-      }
-    }
+    await removeUnchargedOrder(order.id);
     return { error: err instanceof Error ? err.message : "We couldn't complete your order. Please try again." };
   }
 
-  // Stamp WHICH offer discounted each line (card p6YVxc4P). `order_items.promotion_id`
-  // is written by raw SQL rather than in the insert above, because the column is
-  // deliberately outside the Drizzle model until migration 0100 is everywhere
-  // (services CONTEXT.md D10). Non-fatal by construction: the discount is already
-  // on the line and the applied promotions are on the order's metafields, so a
-  // stamp that cannot be written costs provenance, never money and never the order.
+  // ── RESERVE THE OFFERS, BEFORE ANYTHING IS CHARGED (card p6YVxc4P, round 4) ──────────────────
+  // The basket above was priced without a lock, and so is every other checkout running now. This
+  // is the step that makes a capped offer and a capped coupon hold: in ONE transaction it locks
+  // each applied promotion with a `max_uses` and counts its uses by other orders, stamps
+  // `order_items.promotion_id` on this order's discounted lines (strictly — those stamps ARE the
+  // count), and redeems each applied coupon under its own row lock, per-customer caps included
+  // (a guest by their billing email). If anything has run out, all of it rolls back, the order
+  // just written is removed, and the shopper is told — before any payment is taken. It used to be
+  // priced without a lock, stamped best-effort, and redeemed AFTER billing with a cap failure only
+  // logged: the counter kept the cap, the money did not.
   //
-  // KEYED ON THE ORDER LINE'S OWN ID, NOT ON PRODUCT+VARIANT. `withPromotionDiscounts`
-  // keeps cart lines separate on purpose — two lines can hold the same product with
-  // different paid add-ons, and only one of them may have been the offer's — so a
-  // product+variant match would stamp both of them identically and the control-group
-  // reporting would credit an offer with a line it never touched. The insert returns
-  // its rows in the order they were given, so the id beside each draft line is the
-  // row that line became. The by-product path stays available for callers that have
-  // no ids; here we have them.
-  if (lineItems.some((l) => l.promotionId != null)) {
-    try {
-      const byId = insertedItems
-        .map((row, i) => ({ row, draft: lineItems[i] }))
-        .filter(
-          (pair) =>
-            pair.draft?.promotionId != null && Number.isFinite(Number(pair.row?.id))
-        )
-        .map((pair) => ({
-          orderItemId: Number(pair.row.id),
-          promotionId: pair.draft.promotionId as number,
-        }));
-      if (byId.length > 0 && insertedItems.length === lineItems.length) {
-        await stampOrderItemPromotionsById(byId);
-      } else {
-        // The insert did not hand back a row per draft line (an older service, a
-        // partial return): fall back to the product+variant match rather than
-        // losing the provenance entirely.
-        await stampOrderLinePromotions(
-          order.id,
-          lineItems
-            .filter((l) => l.promotionId != null)
-            .map((l) => ({
-              productId: l.productId,
-              variantId: l.variantId,
-              promotionId: l.promotionId as number,
-            }))
-        );
-      }
-    } catch (e) {
-      console.error("[placeOrder] promotion stamp failed (non-fatal):", e);
+  // KEYED ON THE ORDER LINE'S OWN ID, NOT ON PRODUCT+VARIANT: `withPromotionDiscounts` keeps cart
+  // lines separate on purpose (two lines can hold one product with different add-ons, only one of
+  // them the offer's), and the insert returns its rows in the order they were given.
+  const couponCodesOnCart = ((cartWithItems as { coupon_codes?: string[] | null }).coupon_codes ?? [])
+    .map((c) => (c ?? "").trim().toUpperCase())
+    .filter((c) => c !== "");
+  const couponDiscountByCode = new Map(cartOffers.couponDiscounts.map((c) => [c.code.toUpperCase(), c.discount]));
+  const couponsToRedeem = [...new Set(couponCodesOnCart)]
+    .map((code) => ({ code, discount: couponDiscountByCode.get(code) ?? 0 }))
+    // A code that discounts nothing is not redeemed: it stays usable rather than being burnt.
+    .filter((c) => c.discount > 0);
+  const discountedDrafts = lineItems.filter((l) => l.promotionId != null);
+  try {
+    if (discountedDrafts.length > 0 && insertedItems.length !== lineItems.length) {
+      throw new Error("The order's lines did not come back one per cart line; the offers cannot be recorded.");
     }
+    await reserveOffersForOrder({
+      orderId: order.id,
+      appliedPromotionIds: cartOffers.appliedPromotionIds,
+      lineStamps: insertedItems
+        .map((row, i) => ({ row, draft: lineItems[i] }))
+        .filter((pair) => pair.draft?.promotionId != null && Number.isFinite(Number(pair.row?.id)))
+        .map((pair) => ({ orderItemId: Number(pair.row.id), promotionId: pair.draft.promotionId as number })),
+      coupons: couponsToRedeem,
+      contactId: session?.contactId ?? order.contact_id ?? null,
+      email: email || null,
+    });
+  } catch (err) {
+    console.error("[placeOrder] offers could not be reserved — order removed, nothing charged:", err);
+    await removeUnchargedOrder(order.id);
+    return {
+      error:
+        err instanceof OfferNoLongerAvailableError
+          ? "One of the offers in your cart has just run out, so your order was not placed and nothing was charged. Your cart has been updated with the current prices — please review it and place your order again."
+          : "We couldn't complete your order. Nothing was charged — please try again.",
+    };
   }
 
   // ── Every completed checkout attaches a customer record (card LiuLvc5b) ─────────────────────
@@ -1568,37 +1553,8 @@ export async function placeOrder(
     }
   }
 
-  // Enforce + record coupon usage for any codes carried on the cart. couponService.redeem
-  // checks max_uses / max_uses_per_customer atomically (row lock), records a
-  // coupon_redemptions row, and increments current_uses — so a code past its cap is simply
-  // not redeemed (logged) rather than silently over-used. Runs before the Stripe early-return
-  // so every payment method records redemption.
-  //
-  // The discount recorded is the REAL one the engine worked out for this basket
-  // (card p6YVxc4P). It used to be hardcoded "0" because nothing evaluated a
-  // coupon and no screen could set one — a redemption that said a code had been
-  // used and that it was worth nothing. A code that discounts nothing is not
-  // redeemed at all now: it never reaches `appliedCouponCodes`, so it stays
-  // usable rather than being burnt on an order it did not touch.
-  const couponCodes = (cartWithItems as { coupon_codes?: string[] | null }).coupon_codes ?? [];
-  const couponDiscountByCode = new Map(
-    cartOffers.couponDiscounts.map((c) => [c.code, c.discount])
-  );
-  for (const code of couponCodes) {
-    if (!code) continue;
-    const discount = couponDiscountByCode.get((code ?? "").toUpperCase());
-    if (discount == null || !(discount > 0)) continue;
-    try {
-      await couponService.redeem({
-        code,
-        orderId: order.id,
-        contactId: session?.contactId ?? null,
-        discountAmount: discount.toFixed(4),
-      });
-    } catch (e) {
-      console.error(`[placeOrder] coupon "${code}" not redeemed:`, e instanceof Error ? e.message : e);
-    }
-  }
+  // Coupon usage was recorded when the offers were reserved, above — inside the same transaction as
+  // the cap checks and before any payment (card p6YVxc4P, round 4).
 
   // For Stripe: create PaymentIntent and return client secret for browser confirmation.
   // paymentService resolves the gateway PER CHANNEL (card OHDx84DK): this
@@ -1906,4 +1862,28 @@ export async function confirmStripePayment(
   // the source of truth and marks the order paid once Stripe reports `succeeded`.
   // Returning success here only advances the confirmation UI.
   return { success: true };
+}
+
+/**
+ * Take back an order that was written but must not stand — its lines failed to save, or an offer
+ * on it ran out — before anything was charged. Delete it (retried once); if the delete itself
+ * cannot run, cancel it so it is never left as a live "pending" order.
+ */
+async function removeUnchargedOrder(orderId: number): Promise<void> {
+  let cleaned = false;
+  for (let attempt = 0; attempt < 2 && !cleaned; attempt++) {
+    try {
+      await orderService.delete(orderId);
+      cleaned = true;
+    } catch (delErr) {
+      console.error(`[placeOrder] compensating delete failed (attempt ${attempt + 1}):`, delErr);
+    }
+  }
+  if (!cleaned) {
+    try {
+      await orderService.update(orderId, { status: "cancelled", paymentStatus: "failed" });
+    } catch (cancelErr) {
+      console.error("[placeOrder] cancel fallback also failed — order is orphaned:", cancelErr);
+    }
+  }
 }
