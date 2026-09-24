@@ -24,7 +24,13 @@
  * same values either way.
  */
 import { gstSplit } from "@keenan/services/calc";
-import { withQuoteBillingEmail } from "@keenan/services";
+import {
+  withQuoteBillingEmail,
+  carriedLineMeasurement,
+  carriedConsignmentOverride,
+  ORDER_CONSIGNMENT_OVERRIDE_KEY,
+  type CarriedLineMeasurement,
+} from "@keenan/services";
 import { normaliseAddressType } from "@keenan/services/residential";
 import { quoteGstTotals, MONEY_EPSILON, type QuoteGstInput } from "./quote-gst";
 import { resolveQuoteTotal } from "./price-visibility";
@@ -128,7 +134,7 @@ export interface PlannedOrderItem {
      * order lines as one a rep converts. Absent when nothing was chosen.
      */
     product_options?: Record<string, string>;
-  };
+  } & Partial<CarriedLineMeasurement>;
 }
 
 /** Values for the `order_shipping_addresses` insert (camelCase drizzle columns), sans orderId. */
@@ -330,6 +336,13 @@ export function planOrderFromPaidQuote(
   if (rep?.name && !scalarText(metafields.sales_agent).trim()) {
     metafields.sales_agent = rep.name;
   }
+  // WHAT A PERSON MEASURED travels with the quote (card iEDowior): the whole-shipment
+  // description a rep typed on the portal's freight panel lands where the order's own freight
+  // panel and engine read it. The shared `@keenan/services` rule, the same one the portal's
+  // Convert calls, because both doors must produce the same order from the same quote. Staff
+  // only — no storefront surface reads `orders.metafields` for this key.
+  const consignmentOverride = carriedConsignmentOverride(quote.attributes);
+  if (consignmentOverride) metafields[ORDER_CONSIGNMENT_OVERRIDE_KEY] = consignmentOverride;
 
   const order: PlannedOrder = {
     channel_id: quote.channel_id,
@@ -391,6 +404,10 @@ export function planOrderFromPaidQuote(
         // Only where there is something to say — an empty object would stamp `{}` onto every
         // ordinary line (the portal's conversion draws the same line).
         ...(Object.keys(addonOptions).length > 0 ? { product_options: addonOptions } : {}),
+        // The carton a person measured on the quote line (card iEDowior), via the same shared
+        // rule the portal's Convert uses. A line nobody measured carries nothing — the order
+        // line keeps reading its carton from the product record, and nothing is invented.
+        ...(carriedLineMeasurement(it) ?? {}),
       },
     };
   });

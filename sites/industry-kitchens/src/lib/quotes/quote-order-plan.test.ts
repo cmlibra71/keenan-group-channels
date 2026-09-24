@@ -474,3 +474,58 @@ describe("planOrderFromPaidQuote — what the customer chose travels (card tkvnt
     assert.equal("product_options" in plan.items[0].payload, false);
   });
 });
+
+describe("planOrderFromPaidQuote — what a person measured travels to the order (card iEDowior)", () => {
+  // The same shared rule the portal's Convert applies, so a quote paid on the site becomes the
+  // same order as one a rep converts: the carton measured on the quote line, and the rep's
+  // whole-shipment description, reach the order's freight panel.
+  const measured = {
+    id: 1,
+    product_id: 1677,
+    variant_id: null,
+    product_name: "SKOPE TCE1000N",
+    quantity: 1,
+    list_price: "2000.0000",
+    extended_list_price: "2000.0000",
+    packed_length_m: "0.780",
+    packed_width_m: "1.150",
+    packed_height_m: "2.210",
+    packed_weight_kg: "200.00",
+    packed_dims_source: "staff",
+    packed_dims_entered_by: "Stacey Penjin",
+  };
+
+  test("a measured quote line carries its carton onto the order line", () => {
+    const plan = planOrderFromPaidQuote(baseQuote({ items: [measured] }), CTX);
+    const payload = plan.items[0].payload as Record<string, unknown>;
+    assert.equal(payload.packed_length_m, "0.780");
+    assert.equal(payload.packed_weight_kg, "200.00");
+    assert.equal(payload.packed_dims_source, "staff");
+    assert.equal(payload.packed_dims_entered_by, "Stacey Penjin");
+  });
+
+  test("an unmeasured line carries no packed_* column at all — nothing invented", () => {
+    const plan = planOrderFromPaidQuote(baseQuote(), CTX);
+    const keys = Object.keys(plan.items[0].payload);
+    assert.equal(keys.some((k) => k.startsWith("packed_")), false);
+  });
+
+  test("the whole-shipment description lands on the order's freight key", () => {
+    const pallet = {
+      units: 1,
+      length_m: 1.2,
+      width_m: 1.2,
+      height_m: 0.5,
+      weight_kg: 30,
+      packaging_type: "pallet",
+      entered_by: "Stacey Penjin",
+      entered_at: "2026-09-01T04:40:00.000Z",
+    };
+    const plan = planOrderFromPaidQuote(
+      baseQuote({ attributes: { freight_basis: { consignment_override: pallet } } }),
+      CTX
+    );
+    assert.deepEqual(plan.order.metafields.freight_consignment_override, pallet);
+    assert.equal(plan.order.metafields.freight_basis, undefined);
+  });
+});
