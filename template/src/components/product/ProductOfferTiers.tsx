@@ -3,6 +3,7 @@ import {
   loadPromotionsForChannel,
   loadPromotionUseCounts,
   loadProductPromotionSettings,
+  liveSpecialsForProducts,
   tierTableFor,
 } from "@keenan/services";
 import { floorUnitPrice, DEFAULT_MARGIN_FLOOR_PCT } from "@keenan/services/margin-floor";
@@ -62,13 +63,16 @@ export async function ProductOfferTiers({
   let tables: NonNullable<ReturnType<typeof tierTableFor>>[] = [];
   try {
     const id = typeof productId === "number" && Number.isFinite(productId) ? productId : null;
-    const [loaded, settings, costs, product] = await Promise.all([
+    const [loaded, settings, costs, product, specials] = await Promise.all([
       loadPromotionsForChannel(CHANNEL_ID),
       loadProductPromotionSettings(id == null ? [] : [id]),
       loadLineCosts(id == null ? [] : [{ productId: id, variantId: null }]),
       unitPrice == null && id != null
         ? (productService.getById(id) as Promise<Record<string, unknown> | null>).catch(() => null)
         : Promise.resolve(null),
+      // A product on a PARTNER SPECIAL takes no offer at the cart (card tJ4audbu — the basket
+      // loader marks its line excluded), so it may not advertise a band either.
+      liveSpecialsForProducts(CHANNEL_ID, id == null ? [] : [id]),
     ]);
     // An offer whose use cap is spent gives nothing at the cart, so it advertises nothing here.
     const capped = loaded.filter((p) => p.maxUses != null).map((p) => p.id);
@@ -77,7 +81,8 @@ export async function ProductOfferTiers({
       (p) => p.maxUses == null || (uses.get(p.id) ?? p.currentUses ?? 0) < p.maxUses
     );
     const setting = id != null ? settings.get(id) : undefined;
-    const excluded = setting?.excludedFromPromotions === true;
+    const excluded =
+      setting?.excludedFromPromotions === true || (id != null && specials.has(id));
 
     // The deepest percentage the cart can give this product before its floor stops it.
     const price =

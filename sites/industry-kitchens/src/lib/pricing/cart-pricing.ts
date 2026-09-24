@@ -117,3 +117,27 @@ export function memberPricingGroupId(
   const plan = Number(planMemberGroupId);
   return Number.isFinite(plan) && plan > 0 ? plan : null;
 }
+
+/**
+ * A cart line on a PARTNER SPECIAL (card tJ4audbu): the special IS the price, whoever is buying
+ * and at whatever quantity. Tim, 18 + 21 Sep 2026: a locked price, "No further discounts", and
+ * "Special Price will be the floor" — so no catalogue sale price, member price, quantity break or
+ * account contract price is layered here, and the member scale's band is not applied to it (a
+ * senior manager approved this price on the Offers screen, which is the only way one goes live).
+ *
+ * `regular` is the list price the line would otherwise carry (RRP, or M under the member scale),
+ * stored as the struck-through reference exactly as every other line stores one. A special at or
+ * above it has nothing to strike through, so it becomes the list price and no sale price is
+ * stored — the cart must never show "was $X now $X".
+ */
+export function specialCartPrice(
+  regular: string | null | undefined,
+  specialExTax: number
+): { listPrice: string; salePrice: string | null } {
+  const now = specialExTax.toFixed(2);
+  const reference = regular == null ? NaN : parseFloat(regular);
+  if (Number.isFinite(reference) && reference > specialExTax) {
+    return { listPrice: reference.toFixed(2), salePrice: now };
+  }
+  return { listPrice: now, salePrice: null };
+}

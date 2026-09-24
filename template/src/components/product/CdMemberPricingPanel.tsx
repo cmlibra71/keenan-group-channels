@@ -259,6 +259,25 @@ function ScalePanel({ data }: { data: CdMembershipLadder }) {
   );
 }
 
+/** The member panel on a Partner Special: what is true of it, and nothing that is not. */
+function SpecialDisclosure({ isMember, ladderOn }: { isMember: boolean; ladderOn: boolean }) {
+  return (
+    <section
+      className="mt-4 rounded-[12px] border border-border bg-white p-4"
+      aria-label="Member pricing"
+      data-cdp-member={isMember ? "true" : undefined}
+    >
+      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Member pricing</p>
+      <p className="mt-1 text-sm text-text-secondary">
+        This line is a Partner Special, so everyone pays the same price for it and no further discount applies.
+        {/* The spend claim is about the member price SCALE, so it is only made while the scale runs —
+            the same gate every pricing claim on `/membership` sits behind (sf-membership). */}
+        {ladderOn ? " What you spend on it still counts toward your pricing on everything else." : null}
+      </p>
+    </section>
+  );
+}
+
 export function CdMemberPricingPanel({ data }: { data: CdMembershipData | null }) {
   const purchase = useProductPurchase();
 
@@ -271,6 +290,11 @@ export function CdMemberPricingPanel({ data }: { data: CdMembershipData | null }
   if (!(purchase.displayPrice > 0) && !(purchase.displaySalePrice ?? 0)) return null;
   // Someone on a negotiated contract price is not a join target.
   if (purchase.accountPricing && !data.isMember) return null;
+  // A PARTNER SPECIAL (card tJ4audbu) is one locked price for everybody, members included — Tim:
+  // "Special Price will be the floor". So neither the pitch ("Members buy this line lower") nor any
+  // member figure is true of this line; it gets the same honest disclosure an excluded line gets,
+  // worded for a special, and the spend still counts (Tim 21 Sep: "Yes").
+  if (purchase.product.special) return <SpecialDisclosure isMember={data.isMember} ladderOn={data.ladderEnabled} />;
 
   if (!data.ladderEnabled) return data.isMember ? null : <MembershipPitchPanel data={data} scaleOn={false} />;
   return <ScalePanel data={data} />;

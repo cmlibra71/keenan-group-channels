@@ -1,7 +1,7 @@
 "use server";
 
 import { cache } from "react";
-import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, applyAdvertisedLadderPrices, getMemberLadderShare, boundPricesToMemberScale, getLadderConfig, CHANNEL_ID } from "@/lib/store";
+import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, applyAdvertisedLadderPrices, getMemberLadderShare, boundPricesToMemberScale, getLadderConfig, getLiveSpecials, CHANNEL_ID } from "@/lib/store";
 import { resolveAccountLinePrices, accountLineKey } from "@keenan/services";
 import { getAccountId } from "@/lib/member";
 import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
@@ -14,7 +14,7 @@ import { availableUnits, canPurchaseQuantity, resolveBackorderPolicy } from "@ke
 import { resolvePackSize, resolvePackUnit, snapToPack } from "@keenan/services/pack";
 import { getSession } from "@/lib/auth";
 import { currentShopperForOffers } from "@/lib/promotions/shopper";
-import { pickBestBulkUnit, layerCartPrice, memberPricingGroupId } from "@/lib/pricing/cart-pricing";
+import { pickBestBulkUnit, layerCartPrice, memberPricingGroupId, specialCartPrice } from "@/lib/pricing/cart-pricing";
 import { resolveCartOffers, couponCapRefusal, type OfferCartLine } from "@/lib/promotions/cart-offers";
 import { channelPricesIncludeTax } from "@/lib/promotions/tax-basis";
 import {
@@ -103,6 +103,13 @@ async function resolveItemPricing(
   variantId: number | null | undefined,
   quantity: number
 ): Promise<{ listPrice: string; salePrice: string | null }> {
+  // A PARTNER SPECIAL is the price, for everyone, before any other layer is consulted — the
+  // account's contract price and the member scale's band included (card tJ4audbu). Same cached
+  // read the product page and the tiles overlay from, so shown == charged.
+  const special = (await getLiveSpecials([productId]).catch(() => new Map())).get(productId);
+  if (special) {
+    return specialCartPrice(await regularListPrice(productId, variantId), special.priceExTax);
+  }
   const layered = await layerItemPricing(productId, variantId, quantity);
   // THE MEMBER PRICE SCALE'S BAND (card gk23c1VK). Whatever layer won — the
   // account's contract price included, which returns before any engine call —
@@ -114,6 +121,37 @@ async function resolveItemPricing(
   if ((await getLadderConfig().catch(() => null))?.enabled !== true) return layered;
   const bandVariantId = variantId ?? (await defaultVariantId(productId));
   return boundPricesToMemberScale(bandVariantId, layered).catch(() => layered);
+}
+
+/**
+ * The list price a line would carry with no special on it — the variant's price, else the
+ * product's, run through the advertised-price overlay (M under the member scale) — so a special's
+ * struck-through "was" figure in the cart is the same one the product page and the tile strike
+ * through. No account price: that is a price for one buyer, not the reference a special is shown
+ * against. (Card tJ4audbu.)
+ */
+async function regularListPrice(
+  productId: number,
+  variantId: number | null | undefined
+): Promise<string | null> {
+  const product = (await productService.getById(productId)) as { price: string | null } | null;
+  if (!product) throw new Error("Product not found");
+  let listPrice: string | null = product.price ?? null;
+  if (variantId) {
+    const variant = (await productVariantService.getById(variantId)) as { price: string | null } | null;
+    if (variant?.price) listPrice = variant.price;
+  }
+  const [row] = await applyAdvertisedLadderPrices([
+    {
+      id: productId,
+      price: listPrice,
+      ...(variantId ? { variants: [{ id: variantId, price: listPrice }] } : {}),
+    },
+  ]);
+  const advertised =
+    (row as { variants?: Array<{ price?: unknown }> }).variants?.[0]?.price ??
+    (row as { price?: unknown }).price;
+  return typeof advertised === "string" && parseFloat(advertised) > 0 ? advertised : listPrice;
 }
 
 /** The variant a variant-less line prices from: the product's lowest-id variant. */
