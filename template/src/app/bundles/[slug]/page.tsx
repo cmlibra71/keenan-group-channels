@@ -38,9 +38,15 @@ export default async function BundlePage({ params }: { params: Promise<{ slug: s
       </nav>
 
       <h1 className="text-3xl font-bold text-zinc-900">{bundle.headline}</h1>
-      <p className="mt-2 text-sm font-medium text-green-700">
-        {bundle.percent}% off when you buy the bundle
-      </p>
+      {bundle.percent > 0 ? (
+        <p className="mt-2 text-sm font-medium text-green-700">
+          {bundle.percent}% off when you buy the bundle
+        </p>
+      ) : (
+        <p className="mt-2 text-sm font-medium text-zinc-500">
+          This bundle is not available right now.
+        </p>
+      )}
       {bundle.description && <p className="mt-4 text-zinc-600">{bundle.description}</p>}
 
       <div className="mt-8 overflow-hidden rounded-lg border border-zinc-200">

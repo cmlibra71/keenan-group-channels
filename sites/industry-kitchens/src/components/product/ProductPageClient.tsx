@@ -33,6 +33,14 @@ function ProductOverviewInner({ kit }: { kit?: ProductKit | null }) {
       <div>
         <h1 className="text-3xl font-bold text-zinc-900">{product.name}</h1>
 
+        {/* The group-wide Item ID, directly ABOVE the SKU and in the SKU line's own style
+            (card 59ruI8uJ). The node tree gets the same line from `withItemIdNode`; this is the
+            legacy renderer's copy, so switching the product design off does not lose it. No
+            code, no line — never a bare label. */}
+        {product.itemRef && (
+          <p className="mt-1 text-sm text-zinc-500">Item ID: {product.itemRef}</p>
+        )}
+
         {product.sku && (
           <p className="mt-1 text-sm text-zinc-500">SKU: {product.sku}</p>
         )}

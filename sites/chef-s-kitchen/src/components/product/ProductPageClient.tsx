@@ -46,6 +46,17 @@ function ProductOverviewInner({
         )}
         <h1 className="heading-serif text-[26px] leading-tight text-text-primary sm:text-3xl">{product.name}</h1>
 
+        {/* The group-wide Item ID, directly ABOVE the SKU and in the SKU line's own style
+            (card 59ruI8uJ). Its own copy of the meta row rather than a child of it: inside the
+            flex row it would sit BESIDE the SKU. The node tree gets the same line from
+            `withItemIdNode`; this is the legacy renderer's copy, so switching the product design
+            off does not lose it. No code, no line — never a bare label. */}
+        {product.itemRef && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <p className="spec-mono">Item ID: {product.itemRef}</p>
+          </div>
+        )}
+
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
           {product.sku && <p className="spec-mono">SKU: {product.sku}</p>}
           {reviewSummary && reviewSummary.count > 0 && (
