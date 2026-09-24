@@ -51,6 +51,8 @@
     "builder/cd-member-pricing-node.test.ts",
     "builder/cd-member-pricing-node.ts",
     "builder/home-node-branch.tsx",
+    "builder/item-id-node.test.ts",
+    "builder/item-id-node.ts",
     "builder/live-gst.ts",
     "builder/master-leaves.tsx",
     "builder/member-scale-labels.test.ts",
