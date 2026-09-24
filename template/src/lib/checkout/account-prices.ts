@@ -7,8 +7,8 @@ import {
   storedAddonsAsSelection,
   type ResolvedAddon,
 } from "@keenan/services/product-addons";
-import { cartItemService, productService } from "@/lib/store";
-import { decideAccountPriceWrite } from "./account-prices-policy";
+import { cartItemService, productService, getLiveSpecials } from "@/lib/store";
+import { accountPriceGovernsLine, decideAccountPriceWrite } from "./account-prices-policy";
 import { getAccountId } from "@/lib/member";
 
 /** The cart-line shape checkout works with (snake_case, straight off cartService.getWithItems). */
@@ -48,7 +48,8 @@ async function resolveLineAddons(line: CartLine): Promise<ResolvedAddon[]> {
  * Reconcile cart lines against the shopper's ACCOUNT contract prices, in place, and persist the
  * change to the cart.
  *
- * Per-account product prices override every other price, so the price CHARGED must be the account's
+ * Per-account product prices override every other price EXCEPT a running Partner Special (card
+ * tJ4audbu, which the cart prices first and which is skipped here), so the price CHARGED must be the account's
  * price even when the line was priced earlier (added as a guest, added before the price was set, or
  * added before a bulk tier / member price stopped applying). Lines with no account price are left
  * exactly as they are — guests and accountless shoppers are a no-op (one `getAccountId` call).
@@ -65,9 +66,20 @@ export async function applyAccountPricesToCart(cartId: number, lines: CartLine[]
   );
   if (prices.size === 0) return;
 
+  // A PARTNER SPECIAL beats the contract price (card tJ4audbu): the cart already priced those
+  // lines at the special, so the charge must too. Only the account-priced lines are looked up. A
+  // failed lookup reads as "no special", the same fallback the cart's own pricing takes.
+  const accountPricedIds = lines
+    .filter((l) => prices.has(accountLineKey({ productId: l.product_id, variantId: l.variant_id })))
+    .map((l) => l.product_id);
+  const onSpecial: Map<number, unknown> = await getLiveSpecials([...new Set(accountPricedIds)]).catch(
+    () => new Map()
+  );
+
   for (const line of lines) {
     const record = prices.get(accountLineKey({ productId: line.product_id, variantId: line.variant_id }));
     if (!record) continue;
+    if (!accountPriceGovernsLine(line.product_id, onSpecial)) continue;
     // Only read the product back for a line that actually carries extras — this runs on every
     // order for every account-priced line, and the overwhelming majority carry none.
     const resolvedAddons = await resolveLineAddons(line);
