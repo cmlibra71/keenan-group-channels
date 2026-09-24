@@ -14,6 +14,7 @@ import { loadJsSandbox, computeCallResults, guardBuyControls, guardBuyControlsIn
 import { cmsFunctionService } from "@keenan/services/services";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { ProductOfferTiers } from "@/components/product/ProductOfferTiers";
+import { ProductPromotionBadge } from "@/components/product/ProductPromotionBadge";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { withSilverChefNode } from "@/builder/silverchef-node";
 import { withAddonsNode } from "@/builder/product-addons-node";
@@ -352,6 +353,12 @@ export async function renderProductNodeBranch({
           the same component reading the same live promotions the cart applies,
           and it draws nothing when the product is in no banded offer. */}
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        {/* The Buy X Get Y / free-freight badge (card EIXdjw2s), on this branch for the same
+            reason as the tier table: it is the path the live Industry Kitchens page takes. */}
+        <ProductPromotionBadge
+          sku={(viewedProduct?.sku as string | null) ?? null}
+          productId={(viewedProduct?.id as number | null) ?? null}
+        />
         <ProductOfferTiers
           sku={(viewedProduct?.sku as string | null) ?? null}
           productId={(viewedProduct?.id as number | null) ?? null}

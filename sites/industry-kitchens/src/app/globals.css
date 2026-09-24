@@ -332,6 +332,27 @@ html, body {
   }
 }
 
+/* The Buy X Get Y / free-freight badge (card EIXdjw2s) — on a listing tile, drawn by the
+   render-time `promotion-badge` node on the authored `product-card` master and by the React
+   `ProductCard`, and on a product page by `ProductPromotionBadge`. Per PRODUCT, unlike
+   `.badge-promo`, so it is its own class. Green, the colour the cart and checkout already use for
+   an offer that applies ("FREE", the Offers row), so the tile, the cart and the summary read as
+   one promise. Declared here because a class a render-time node carries must be one the deployed
+   CSS already has. */
+@layer components {
+  .badge-offer {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 10px;
+    border-radius: 0.125rem;
+    font-size: 12.5px;
+    font-weight: 700;
+    line-height: 1.2;
+    background-color: #dcfce7;
+    color: #166534;
+  }
+}
+
 /* ============================================================================
    Button classes — the shared vocabulary every storefront is expected to have.
 

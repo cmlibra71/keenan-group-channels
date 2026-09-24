@@ -18,6 +18,9 @@ import {
 } from "@keenan/services/product-addons";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, forOrderInsert, withPromotionDiscounts, lineGoodsExTax, type BelowCostLine, type LinePromotionDraft } from "@/lib/checkout/order-draft";
 import { resolveCartOffers, NO_OFFERS, type CartOffers, type OfferCartLine } from "@/lib/promotions/cart-offers";
+import { orderPromotionsRecord } from "@/lib/promotions/order-promotions";
+import { syncCartPromotionRewards } from "@/lib/actions/cart";
+import { applyFreightReward, type FreightOutcome } from "@keenan/services";
 import { stampOrderLinePromotions, stampOrderItemPromotionsById } from "@keenan/services";
 import { backorderFactsForProducts } from "@/lib/cart/backorder-facts";
 import { canPurchaseQuantity } from "@keenan/services/backorder";
@@ -202,6 +205,11 @@ export async function placeOrder(
 
   const cartWithItems = await cartService.getByUuid(uuid);
   if (!cartWithItems) return { error: "Cart not found." };
+
+  // Buy X Get Y reward lines follow the basket (card EIXdjw2s). Brought up to date BEFORE the lines
+  // are read, so an order is never billed a reward the basket stopped earning (at full price),
+  // nor missing one it earned. Never throws.
+  await syncCartPromotionRewards();
 
   const fullCart = await cartService.getWithItems(cartWithItems.id);
   if (!fullCart || fullCart.items.length === 0) return { error: "Cart is empty." };
@@ -489,6 +497,9 @@ export async function placeOrder(
       // than billed the discount and refused the redemption a moment later
       // (card p6YVxc4P, requirement 5).
       contactId: session?.contactId ?? null,
+      // The buying account (card EIXdjw2s): account-limited and one-per-account offers, and the
+      // negotiated prices a promotion must say it combines with.
+      accountId: perms.accountId ?? null,
     });
   } catch (e) {
     console.error("[placeOrder] offer evaluation failed (non-fatal):", e);
@@ -664,6 +675,11 @@ export async function placeOrder(
   // Shipping calculation. The rate card states EX-GST figures and GST is added on top of
   // them — a $30 flat rate is $33 inc (Tim, card twwZMnMY). Never back GST out of the rate.
   let shippingRateExTax = 0;
+  /**
+   * A Buy X Get Y FREIGHT reward (card EIXdjw2s): the quoted freight, what is charged and what was
+   * given away. Null when no freight promotion reduced this order's freight.
+   */
+  let freightOutcome: FreightOutcome | null = null;
   /** Staff-only breakdown of what the delivery figure is made of (card Xw9VQmAJ). */
   let freightAttributeBreakdown: unknown[] = [];
   const checkoutSettings = await getCheckoutSettings();
@@ -726,7 +742,19 @@ export async function placeOrder(
         weightIncomplete: cartFreight ? cartFreight.has_unweighed_lines : true,
       });
       if (shippingResult.success) {
-        shippingRateExTax = shippingResult.cost;
+        // A free / reduced freight PROMOTION comes off the quoted rate here and nowhere else — the
+        // same `applyFreightReward` the checkout summary's estimate route runs, from the same
+        // offers, so the Shipping row shown is the one charged. The QUOTED figure is kept on the
+        // order (metafields.promotions.freight); the carrier's own cost is booked on the delivery
+        // exactly as before, because giving freight away changes what the customer pays, never
+        // what the carrier bills us. Never on a bulky order or outside the offer's zones.
+        const outcome = applyFreightReward(shippingResult.cost, cartOffers.freight, {
+          zoneId: shippingResult.zone_id ?? null,
+          hasBulky: bulkyProducts.length > 0,
+          specialised: heldForSpecialised,
+        });
+        shippingRateExTax = outcome.chargedExTax;
+        if (outcome.givenAwayExTax > 0) freightOutcome = outcome;
         // The staff-only working behind the number (card Xw9VQmAJ). The CUSTOMER sees one
         // Delivery total here, on the confirmation, in the email, on the invoice and on their
         // own order page — nothing they read names or itemises a surcharge. This bag is read
@@ -1065,26 +1093,16 @@ export async function placeOrder(
   // are inserted; this is recorded as well because `metafields` exists in every
   // environment, so the reporting requirement holds even before migration 0100 is
   // applied — and it is the only place a bundle's own name survives.
-  if (cartOffers.appliedPromotionIds.length > 0) {
-    orderMetafields.promotions = {
-      total_discount: promotionDiscount.toFixed(2),
-      applied: cartOffers.appliedPromotionIds,
-      coupons: cartOffers.couponDiscounts.map((c) => ({
-        code: c.code,
-        promotion_id: c.promotionId,
-        discount: c.discount.toFixed(2),
-      })),
-      lines: cartOffers.lines.map((l) => ({
-        cart_item_id: l.itemId,
-        promotion_id: l.promotionId,
-        promotion_name: l.promotionName,
-        percent: l.percent,
-        discount: l.discount.toFixed(2),
-        floor_clamped: l.floorClamped,
-        ...(l.bundleSlug ? { bundle: l.bundleSlug } : {}),
-      })),
-    };
-  }
+  // Card EIXdjw2s adds what the promotion report and a refund need: the freight given away (quoted
+  // vs charged), which products earned and took each Buy X Get Y reward, and any line a
+  // Manager-approved promotion took under its margin floor. See `lib/promotions/order-promotions.ts`.
+  const promotionsRecord = orderPromotionsRecord(
+    cartOffers,
+    freightOutcome,
+    fullCart.items as unknown as Parameters<typeof orderPromotionsRecord>[2],
+    promotionDiscount
+  );
+  if (promotionsRecord) orderMetafields.promotions = promotionsRecord;
   if (belowCostLines.length > 0) {
     orderMetafields.below_cost_lines = belowCostLines.map((l) => ({
       product_id: l.productId,

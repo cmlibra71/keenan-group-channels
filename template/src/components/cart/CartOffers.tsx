@@ -62,7 +62,17 @@ export function CartOffers({
     });
   }
 
-  const progress = messages.filter((m) => m.kind === "tier_progress" || m.kind === "cross_range");
+  // Buy X Get Y and free freight speak here too (card EIXdjw2s): "Spend $X more (ex GST) for free
+  // freight", "Add 1 more … to get …", and "add … to your cart to get …" once the reward is earned
+  // but the item that takes it is not in the basket. Engine sentences, never component copy.
+  const progress = messages.filter(
+    (m) =>
+      m.kind === "tier_progress" ||
+      m.kind === "cross_range" ||
+      m.kind === "reward_progress" ||
+      m.kind === "freight_progress"
+  );
+  const earned = messages.filter((m) => m.kind === "reward_available");
   const quoteAsks = messages.filter((m) => m.kind === "request_quote");
   const applied = messages.filter((m) => m.kind === "applied");
 
@@ -74,6 +84,11 @@ export function CartOffers({
 
       {applied.map((m) => (
         <p key={m.text} className="mb-2 text-sm font-medium text-green-700">
+          {m.text}
+        </p>
+      ))}
+      {earned.map((m) => (
+        <p key={m.text} className="mb-2 rounded border border-green-200 bg-green-50 px-2 py-1.5 text-sm text-green-800">
           {m.text}
         </p>
       ))}

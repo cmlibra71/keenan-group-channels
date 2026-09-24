@@ -37,9 +37,11 @@ interface ProductCardProps {
   listId?: string;
   listName?: string;
   listIndex?: number;
+  /** The Buy X Get Y / free-freight badge this product carries (card EIXdjw2s); null = none. */
+  promotionBadge?: string | null;
 }
 
-export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName, brandLogoUrl, brandLogoAlt, memberPricingAvailable, memberPrice, productId, listId, listName, listIndex }: ProductCardProps) {
+export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName, brandLogoUrl, brandLogoAlt, memberPricingAvailable, memberPrice, productId, listId, listName, listIndex, promotionBadge }: ProductCardProps) {
   // A dead image file is invisible to the server — the row exists and the URL is
   // well formed — so the browser is the only place it can be caught. An errored
   // photo drops to the same fallback an imageless product gets; a logo that is
@@ -160,6 +162,13 @@ export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName,
             The block is present so that naming a tag in that one file is the whole opt-in — the
             same wording is placed on the authored `product-card` master by `@/lib/store`, so
             this tile and the tile the Site Builder repeats can never say different things. */}
+        {/* The Buy X Get Y / free-freight badge (card EIXdjw2s): per product, only for a public
+            offer this storefront is running — the same wording the authored tile draws. */}
+        {promotionBadge && (
+          <p className="mt-2">
+            <span className="badge-offer">{promotionBadge}</span>
+          </p>
+        )}
         {PROMO_TAG_LABEL && (
           <p className="mt-3">
             <span className="badge-promo">{PROMO_TAG_LABEL}</span>

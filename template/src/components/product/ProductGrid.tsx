@@ -1,5 +1,6 @@
 import { ProductCard } from "./ProductCard";
 import { applyAccountPrices } from "@/lib/member";
+import { promotionBadgeMap } from "@/lib/promotions/badges";
 import { applyCatalogScope } from "@/lib/catalog-scope";
 import { Ga4ViewItemList } from "@/components/analytics/Ga4ViewItemList";
 
@@ -52,6 +53,11 @@ export async function ProductGrid({
 }) {
   products = await applyCatalogScope(products);
   products = await applyAccountPrices(products);
+  // The Buy X Get Y / free-freight badge each React tile carries (card EIXdjw2s) — the same map the
+  // authored tiles read, for exactly the products still on the page after scope.
+  const promoBadges = await promotionBadgeMap(
+    products as unknown as { id: number; sku?: string | null }[]
+  );
   if (products.length === 0) {
     if (!renderEmpty) return null;
     return (
@@ -85,6 +91,7 @@ export async function ProductGrid({
           imageUrl={product.thumbnailImage?.urlThumbnail || product.thumbnailImage?.urlStandard}
           memberPricingAvailable={memberPricingAvailable}
           memberPrice={memberPriceMap?.[product.id] ?? null}
+          promotionBadge={promoBadges[product.id] ?? null}
           listId={listId}
           listName={listName}
           listIndex={indexOffset + index}

@@ -56,7 +56,7 @@ import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
 import { withBrandLogoFallback, targetsForChannel } from "@/builder/product-card-brand-logo";
 import { withPromoTagInComponents } from "@/builder/promo-tag-node";
-import { guardTileBuyControlsInComponents } from "@keenan/services/builder";
+import { guardTileBuyControlsInComponents, withPromotionBadgeInComponents } from "@keenan/services/builder";
 import { withMemberScaleLabels } from "@/builder/member-scale-labels";
 import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
 import type { NodeTree } from "@keenan/services/builder";
@@ -196,13 +196,20 @@ const BRAND_LOGO_TARGETS = targetsForChannel(CHANNEL_ID);
 const withTileBuyGuard = (components: ComponentMap): ComponentMap =>
   guardTileBuyControlsInComponents(components as Record<string, NodeTree>) as ComponentMap;
 
+/**
+ * Card EIXdjw2s — the Buy X Get Y / free-freight badge on the authored listing tile: a node bound
+ * to the card row's `promo_badge`, present only when the row carries one (the category and brand
+ * branches put it there from `promotionBadgeMap`). Nothing stored.
+ */
 const withMasterTransforms = (components: ComponentMap): ComponentMap =>
-  withTileBuyGuard(
-    withPromoTagInComponents(
-      withBrandLogoFallback(components, BRAND_LOGO_TARGETS) as Record<string, NodeTree>,
-      PROMO_TAG_LABEL
-    ) as ComponentMap
-  );
+  withPromotionBadgeInComponents(
+    withTileBuyGuard(
+      withPromoTagInComponents(
+        withBrandLogoFallback(components, BRAND_LOGO_TARGETS) as Record<string, NodeTree>,
+        PROMO_TAG_LABEL
+      ) as ComponentMap
+    ) as Record<string, NodeTree>
+  ) as ComponentMap;
 
 /**
 /**
