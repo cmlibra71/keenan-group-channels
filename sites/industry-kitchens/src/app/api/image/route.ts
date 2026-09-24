@@ -7,6 +7,7 @@ import {
   CopyObjectCommand,
 } from "@aws-sdk/client-s3";
 import {
+  CACHE_SOURCE_VERSION_META,
   createSourceProbeMemo,
   probeSource,
   serveOptimizedImage,
@@ -27,8 +28,13 @@ const s3 = new S3Client({ region: S3_REGION });
  */
 const probes = createSourceProbeMemo({ probe: (u) => probeSource(u), ttlMs: 60_000, max: 5000 });
 
-/** Stored copies ARE immutable: their key carries the original's version. */
+/**
+ * Versioned copies ARE immutable: their key carries the original's version. The legacy URL-only key
+ * is rewritten on every render (it is what the degraded path finds after a restart), so it is not.
+ * Nothing serves these objects straight from S3 today; the headers only have to be true.
+ */
 const STORED_CACHE_CONTROL = "public, max-age=31536000, immutable";
+const MUTABLE_STORED_CACHE_CONTROL = "public, no-cache";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -62,19 +68,23 @@ export async function GET(request: NextRequest) {
           return {
             body: await cached.Body.transformToByteArray(),
             lastModified: cached.LastModified ?? null,
+            // S3 returns user metadata keys lowercased, without the x-amz-meta- prefix.
+            sourceVersion: cached.Metadata?.[CACHE_SOURCE_VERSION_META] ?? null,
           };
         } catch {
           return null; // cache miss
         }
       },
-      putCached(key, body) {
+      putCached(key, body, opts) {
         s3.send(
           new PutObjectCommand({
             Bucket: S3_BUCKET,
             Key: key,
             Body: body,
             ContentType: "image/webp",
-            CacheControl: STORED_CACHE_CONTROL,
+            CacheControl: opts?.mutable ? MUTABLE_STORED_CACHE_CONTROL : STORED_CACHE_CONTROL,
+            // The version these bytes were resized from (US-ASCII: an ETag, or a date + length).
+            ...(opts?.sourceVersion ? { Metadata: { [CACHE_SOURCE_VERSION_META]: opts.sourceVersion } } : {}),
           })
         ).catch((err) => {
           console.error("[image-optimizer] S3 cache write failed:", err.message);
