@@ -17,6 +17,7 @@ import { ProductOfferTiers } from "@/components/product/ProductOfferTiers";
 import { ProductPromotionBadge } from "@/components/product/ProductPromotionBadge";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { withSilverChefNode } from "@/builder/silverchef-node";
+import { withItemIdNode } from "@/builder/item-id-node";
 import { withAddonsNode } from "@/builder/product-addons-node";
 import { withProductInstructionsNode } from "@/builder/product-instructions-node";
 import { withImageNoticeNode } from "@/builder/product-image-notice";
@@ -228,6 +229,14 @@ export async function renderProductNodeBranch({
   // on the component masters (`lib/store.ts` does those). With the scale off the
   // percentage still goes where the channel's `HIDE_MEMBER_SAVING_PCT` says so
   // (Chefs Depot), "RRP" stays; elsewhere the tree is returned untouched.
+  //
+  // The group-wide Item ID (card 59ruI8uJ; Tim 2026-09-21, Steve 2026-09-24) is PLACED here
+  // too: a line directly ABOVE the SKU line, cloned from the tree's own SKU line so it wears
+  // that site's style, bound to `product.itemRef` and absent when the product has no code. It
+  // runs INNERMOST — it anchors on the SKU line, which no other pass touches — and it never
+  // enters a repeat, so the related/upsell tiles keep their SKU line alone. The legacy
+  // `ProductPageClient.tsx` prints the same line itself, so switching the design off does NOT
+  // take it away (which is why `offWarning` does not name it).
   const scaleOn = (await getLadderConfig().catch(() => null))?.enabled === true;
   const scaleWording = <T extends typeof SEED_PRODUCT_TREE>(tree: T): T =>
     scaleOn || HIDE_MEMBER_SAVING_PCT ? withMemberScaleLabelsInTree(tree, { relabelRrp: scaleOn }) : tree;
@@ -259,7 +268,7 @@ export async function renderProductNodeBranch({
                 withPackNoteNode(
                   withModularNoticeNode(
                     withReviewsBlock(
-                      withImageNoticeNode(withSilverChefNode(scaleWording(storedTree ?? SEED_PRODUCT_TREE)))
+                      withImageNoticeNode(withSilverChefNode(withItemIdNode(scaleWording(storedTree ?? SEED_PRODUCT_TREE))))
                     )
                   )
                 )

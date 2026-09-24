@@ -1,3 +1,4 @@
+import { currentShopperForOffers } from "@/lib/promotions/shopper";
 import { NextRequest, NextResponse } from "next/server";
 import {
   summariseLinesFreight,
@@ -11,7 +12,6 @@ import { calculateShipping, CHANNEL_ID } from "@/lib/store";
 import { cartLineGoodsExTax } from "@/lib/checkout/order-draft";
 import { resolveCartOffers, type OfferCartLine } from "@/lib/promotions/cart-offers";
 import { getCartUuid } from "@/lib/cart";
-import { getAccountId } from "@/lib/member";
 
 export async function POST(request: NextRequest) {
   try {
@@ -85,7 +85,9 @@ export async function POST(request: NextRequest) {
           channelId: CHANNEL_ID,
           couponCodes: ((cart as { coupon_codes?: string[] | null } | null)?.coupon_codes ?? []) as string[],
           pricesIncludeTax,
-          accountId: await getAccountId(),
+          // The same shopper the cart and checkout judge offers for, so the freight is quoted
+          // on the goods value they will actually be charged (card p6YVxc4P, round 4).
+          ...(await currentShopperForOffers()),
         });
         freightGrant = offers.freight;
         const offerByItemId = new Map(offers.lines.map((l) => [l.itemId, l.discount]));

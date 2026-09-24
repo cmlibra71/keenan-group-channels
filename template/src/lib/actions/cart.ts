@@ -13,6 +13,7 @@ import { backorderFactsForProducts, backorderFactsForProduct, type ProductBackor
 import { availableUnits, canPurchaseQuantity, resolveBackorderPolicy } from "@keenan/services/backorder";
 import { resolvePackSize, resolvePackUnit, snapToPack } from "@keenan/services/pack";
 import { getSession } from "@/lib/auth";
+import { currentShopperForOffers } from "@/lib/promotions/shopper";
 import { pickBestBulkUnit, layerCartPrice, memberPricingGroupId } from "@/lib/pricing/cart-pricing";
 import {
   resolveCartOffers,
@@ -653,13 +654,12 @@ async function syncRewardLines(cartId: number): Promise<number> {
     const visible = blocked.length === 0 ? items : items.filter((i) => !blocked.includes(i.product_id));
     const flagged = visible.filter((i) => rewardPromotionIdOf(i) != null);
 
-    const session = await getSession();
     const offers = await resolveCartOffers(visible, {
       channelId: CHANNEL_ID,
       couponCodes: ((full as { coupon_codes?: string[] | null } | null)?.coupon_codes ?? []) as string[],
       pricesIncludeTax: await channelPricesIncludeTax(),
-      contactId: session?.contactId ?? null,
-      accountId: await getAccountId(),
+      // The same shopper the cart read and the checkout judge offers for.
+      ...(await currentShopperForOffers()),
     });
     // Nothing to hold and nothing held: the ordinary basket costs no more than the offer read.
     if (offers.rewardLines.length === 0 && flagged.length === 0) return 0;
@@ -873,11 +873,9 @@ const readCart = cache(async () => {
     channelId: CHANNEL_ID,
     couponCodes: ((full as { coupon_codes?: string[] | null }).coupon_codes ?? []) as string[],
     pricesIncludeTax: await channelPricesIncludeTax(),
-    // A coupon's per-customer cap is judged against THIS shopper, so a code past
-    // it stops discounting the basket the moment it is read — not at the till.
-    contactId: (await getSession())?.contactId ?? null,
-    // The account, for Buy X Get Y offers limited to accounts or capped per account (EIXdjw2s).
-    accountId: await getAccountId(),
+    // WHO is buying: the coupon per-customer cap and customer-group offers are judged against
+    // THIS shopper, so the basket shows exactly what the till will charge.
+    ...(await currentShopperForOffers()),
   });
   const offerByItem = new Map(offers.lines.map((l) => [l.itemId, l]));
 
@@ -948,24 +946,24 @@ export async function applyCouponCode(rawCode: string): Promise<{ success?: true
     const full = await cartService.getWithItems(cart.id);
     const items = (full?.items ?? []) as unknown as OfferCartLine[];
     const pricesIncludeTax = await channelPricesIncludeTax();
-    const contactId = (await getSession())?.contactId ?? null;
+    const shopper = await currentShopperForOffers();
 
     const before = await resolveCartOffers(items, {
       channelId: CHANNEL_ID,
       couponCodes: existing,
       pricesIncludeTax,
-      contactId,
+      ...shopper,
     });
     const after = await resolveCartOffers(items, {
       channelId: CHANNEL_ID,
       couponCodes: [...existing, code],
       pricesIncludeTax,
-      contactId,
+      ...shopper,
     });
     if (after.totalDiscount <= before.totalDiscount || !after.appliedCouponCodes.includes(code)) {
       // Say the true reason where there is one: a code the shopper has already
       // used is not a code that "doesn't apply to what's in your cart".
-      const capped = await couponCapRefusal(code, { contactId });
+      const capped = await couponCapRefusal(code, { contactId: shopper.contactId, email: shopper.email });
       return { error: capped ?? "That code doesn't apply to what's in your cart." };
     }
 

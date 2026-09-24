@@ -961,6 +961,11 @@ export function CheckoutForm({
         firePaymentInfo(selectedPaymentMethod);
       }}
     >
+      {/* THE OFFER DISCOUNT THIS PAGE SHOWED (card p6YVxc4P, round 5). placeOrder re-prices at
+          submit; if an offer lapsed in between (its last use taken, its end date passed, switched
+          off), the total would silently rise. The server compares against this and refuses to
+          charge more than the shopper saw. */}
+      <input type="hidden" name="shown_offer_discount" value={offerDiscount.toFixed(2)} />
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
         <div className="lg:col-span-3 space-y-6">
           {/* Contact */}

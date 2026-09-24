@@ -11,7 +11,9 @@ export const metadata = { title: "Bundles" };
  * them. Empty until the business authors a bundle promotion.
  */
 export default async function BundlesPage() {
-  const bundles = await loadBundles().catch(() => []);
+  // Only bundles the cart would actually give: a spent or floor-held bundle is not advertised
+  // (card p6YVxc4P, round 4).
+  const bundles = (await loadBundles().catch(() => [])).filter((b) => b.addable);
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">

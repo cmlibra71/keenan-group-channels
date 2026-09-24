@@ -217,7 +217,7 @@ export default async function ProductPage({
               page takes THIS branch, so an insert on only one of them shows the
               table on a page nobody sees. */}
           <ProductPromotionBadge sku={product.sku} productId={product.id} />
-          <ProductOfferTiers sku={product.sku} productId={product.id} />
+          <ProductOfferTiers sku={product.sku} productId={product.id} unitPrice={memberPrice} />
         </div>
       );
     }
@@ -265,6 +265,8 @@ export default async function ProductPage({
           id: product.id,
           name: product.name,
           sku: product.sku,
+          // Card 59ruI8uJ — the group-wide Item ID, printed above the SKU. Null = no line.
+          itemRef: (product.itemRef as string | null | undefined) ?? null,
           price: product.price,
           salePrice: product.salePrice,
           inventoryLevel: product.inventoryLevel ?? 0,
@@ -312,7 +314,7 @@ export default async function ProductPage({
       {/* Carton tiers this product is in (card p6YVxc4P). Draws nothing when it is
           in no banded offer, and reads the same live promotions the cart applies. */}
       <ProductPromotionBadge sku={product.sku} productId={product.id} />
-      <ProductOfferTiers sku={product.sku} productId={product.id} />
+      <ProductOfferTiers sku={product.sku} productId={product.id} unitPrice={memberPrice} />
 
       {/* Brand-specific warranty / installation notes (conditional) */}
       <BrandWarrantyNotes

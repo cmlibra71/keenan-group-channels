@@ -1,5 +1,12 @@
-import { loadPromotionsForChannel, loadProductPromotionSettings, tierTableFor } from "@keenan/services";
-import { CHANNEL_ID } from "@/lib/store";
+import {
+  loadLineCosts,
+  loadPromotionsForChannel,
+  loadPromotionUseCounts,
+  loadProductPromotionSettings,
+  tierTableFor,
+} from "@keenan/services";
+import { floorUnitPrice, DEFAULT_MARGIN_FLOOR_PCT } from "@keenan/services/margin-floor";
+import { CHANNEL_ID, productService } from "@/lib/store";
 
 /**
  * The carton-tier table on a product page (card p6YVxc4P, display requirement 6).
@@ -24,6 +31,13 @@ import { CHANNEL_ID } from "@/lib/store";
  *    thing that can reach them — and a flagged dispenser advertising 4%/7% and
  *    then getting nothing at the cart is precisely the case the card names.
  *
+ *  • USE CAP — an offer whose `max_uses` is spent gives nothing at the cart, so it
+ *    prints nothing here (live uses counted the way the cart counts them).
+ *  • FLOOR — the cart clamps a band at this product's floor (its supplied floor,
+ *    else 8.5% on cost). A band deeper than the floor allows is printed at what
+ *    the cart will actually give, rounded DOWN, never at the advertised depth.
+ *    The cost itself is never rendered. (Card p6YVxc4P, round 4.)
+ *
  * Draws nothing at all when this product is not in a banded offer, so it is safe
  * to render on every product page.
  *
@@ -36,21 +50,62 @@ import { CHANNEL_ID } from "@/lib/store";
 export async function ProductOfferTiers({
   sku,
   productId,
+  unitPrice,
 }: {
   sku: string | null;
   productId?: number | null;
+  /** The per-unit price this shopper is shown (member price where they have one). */
+  unitPrice?: number | null;
 }) {
   if (!sku) return null;
 
-  let tables: ReturnType<typeof tierTableFor>[] = [];
+  let tables: NonNullable<ReturnType<typeof tierTableFor>>[] = [];
   try {
     const id = typeof productId === "number" && Number.isFinite(productId) ? productId : null;
-    const [promotions, settings] = await Promise.all([
+    const [loaded, settings, costs, product] = await Promise.all([
       loadPromotionsForChannel(CHANNEL_ID),
       loadProductPromotionSettings(id == null ? [] : [id]),
+      loadLineCosts(id == null ? [] : [{ productId: id, variantId: null }]),
+      unitPrice == null && id != null
+        ? (productService.getById(id) as Promise<Record<string, unknown> | null>).catch(() => null)
+        : Promise.resolve(null),
     ]);
-    const excluded = id != null && settings.get(id)?.excludedFromPromotions === true;
-    tables = promotions.map((p) => tierTableFor(p, sku, { excluded })).filter((t) => t !== null);
+    // An offer whose use cap is spent gives nothing at the cart, so it advertises nothing here.
+    const capped = loaded.filter((p) => p.maxUses != null).map((p) => p.id);
+    const uses = capped.length > 0 ? await loadPromotionUseCounts(capped) : new Map<number, number>();
+    const promotions = loaded.filter(
+      (p) => p.maxUses == null || (uses.get(p.id) ?? p.currentUses ?? 0) < p.maxUses
+    );
+    const setting = id != null ? settings.get(id) : undefined;
+    const excluded = setting?.excludedFromPromotions === true;
+
+    // The deepest percentage the cart can give this product before its floor stops it.
+    const price =
+      unitPrice ??
+      (() => {
+        const sale = Number(product?.sale_price ?? NaN);
+        const list = Number(product?.price ?? NaN);
+        return Number.isFinite(sale) && sale > 0 ? sale : Number.isFinite(list) ? list : null;
+      })();
+    const cost = id != null ? costs.get(`${id}:0`) : undefined;
+    const floor =
+      setting?.floorPriceExTax ??
+      (cost != null ? floorUnitPrice(cost, DEFAULT_MARGIN_FLOOR_PCT) : null);
+    const maxPercent =
+      price != null && price > 0 && floor != null
+        ? Math.max(0, Math.floor(((price - floor) / price) * 1000) / 10)
+        : null;
+
+    tables = promotions
+      .map((p) => tierTableFor(p, sku, { excluded }))
+      .filter((t): t is NonNullable<typeof t> => t !== null)
+      .map((t) => ({
+        ...t,
+        rows: t.rows.map((r) => ({
+          ...r,
+          percent: maxPercent != null ? Math.min(r.percent, maxPercent) : r.percent,
+        })),
+      }));
   } catch {
     return null;
   }
@@ -59,8 +114,8 @@ export async function ProductOfferTiers({
   return (
     <div className="mt-8">
       {tables.map((table) => (
-        <div key={table!.label} className="mb-4">
-          <h3 className="mb-2 text-sm font-semibold text-zinc-700">{table!.label}</h3>
+        <div key={table.label} className="mb-4">
+          <h3 className="mb-2 text-sm font-semibold text-zinc-700">{table.label}</h3>
           <div className="overflow-hidden rounded-lg border border-zinc-200">
             <table className="w-full text-sm">
               <thead>
@@ -70,7 +125,7 @@ export async function ProductOfferTiers({
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {table!.rows.map((row) => (
+                {table.rows.map((row) => (
                   <tr key={row.label} className="text-zinc-700">
                     <td className="px-3 py-2">{row.label}</td>
                     <td className="px-3 py-2 text-right">
