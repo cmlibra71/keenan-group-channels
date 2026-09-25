@@ -33,6 +33,7 @@ import {
   buyableAddons,
   customisationDefinition,
   extrasDefinition,
+  productPageForRefusal,
 } from "@/lib/product/addon-panel";
 import { customisationRefusal } from "@/lib/product-customisation";
 
@@ -282,9 +283,15 @@ async function readAddonsForAdd(
   productId: number,
   variantId: number | null | undefined,
   selection: AddonSelectionInput | null | undefined
-): Promise<{ resolved: ResolvedAddon[]; refusal: string | null }> {
+): Promise<{ resolved: ResolvedAddon[]; refusal: string | null; productPage?: string | null }> {
   const product = (await productService.getById(productId)) as
-    | { metafields?: unknown; price?: string | null; sale_price?: string | null; hide_price?: boolean | null }
+    | {
+        metafields?: unknown;
+        price?: string | null;
+        sale_price?: string | null;
+        hide_price?: boolean | null;
+        url_path?: string | null;
+      }
     | null;
   const definition = readProductAddons(product?.metafields);
   if (!definition) return { resolved: [], refusal: null };
@@ -322,6 +329,10 @@ async function readAddonsForAdd(
   const buyable = buyableAddons(definition, panelShown);
   if (!buyable) return { resolved: [], refusal: null };
   const posted = selection != null;
+  // A TILE posted nothing, so a refusal also names the page where the question can be answered
+  // (card tkvntxsq) and the tile takes the shopper there. Never from the product page itself:
+  // it posted a configuration, and sending a shopper to the page they are on is a reload.
+  const productPage = posted ? null : productPageForRefusal(product?.url_path);
   // Refused SEPARATELY by kind, because the sentence has to fit the control: you CHOOSE a
   // hopper and you FILL IN an instruction, and both sentences reach a customer. Priced first,
   // so 0CDcCYmO's own wording is unchanged on every product that carries one.
@@ -335,6 +346,7 @@ async function readAddonsForAdd(
       refusal: posted
         ? `Please choose ${missing.join(" and ")} before adding this to your cart.`
         : `Open this product's page to choose ${missing.join(" and ")} before adding it to your cart.`,
+      productPage,
     };
   }
   const typedRefusal = customisationRefusal(
@@ -342,7 +354,7 @@ async function readAddonsForAdd(
     posted ? selection : undefined,
     "cart"
   );
-  if (typedRefusal) return { resolved: [], refusal: typedRefusal };
+  if (typedRefusal) return { resolved: [], refusal: typedRefusal, productPage };
   return {
     resolved: posted ? resolveAddonSelection(buyable, selection) : [],
     refusal: null,
@@ -387,12 +399,18 @@ export async function addToCart(
 
   // The picks and the required-group refusal come out of ONE product read (Product Brief §3
   // refuses in the action, not only in the page; speed on this path is stakeholder-visible).
-  const { resolved: resolvedAddons, refusal: addonRefusal } = await readAddonsForAdd(
-    productId,
-    variantId,
-    addons
-  );
-  if (addonRefusal) return { error: addonRefusal };
+  const {
+    resolved: resolvedAddons,
+    refusal: addonRefusal,
+    productPage: addonProductPage,
+  } = await readAddonsForAdd(productId, variantId, addons);
+  // `productPage` rides a TILE's refusal only (card tkvntxsq): the tile sends the shopper to the
+  // page to answer the question, rather than leaving a button that did nothing visible.
+  if (addonRefusal) {
+    return addonProductPage
+      ? { error: addonRefusal, productPage: addonProductPage }
+      : { error: addonRefusal };
+  }
   const selectionKey = addonSelectionKey(resolvedAddons);
 
   // Is this product/variant WITH THESE EXTRAS already in the cart?

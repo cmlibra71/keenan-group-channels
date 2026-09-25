@@ -433,6 +433,48 @@ describe("planOrderFromPaidQuote — an order is never born unmailable (card 35O
   });
 });
 
+describe("planOrderFromPaidQuote — what the customer chose travels (card tkvntxsq)", () => {
+  test("a quote line's Gas Type lands on the order line's product_options", () => {
+    const quote = baseQuote();
+    const items = quote.items as Record<string, unknown>[];
+    items[0] = {
+      ...items[0],
+      attributes: {
+        addon_selection: [
+          {
+            groupKey: "gas_type",
+            groupLabel: "Gas Type",
+            optionKey: "lpg",
+            optionLabel: "LPG",
+            price: "0.00",
+            url: null,
+          },
+        ],
+      },
+    };
+    const plan = planOrderFromPaidQuote(quote, CTX);
+    assert.deepEqual(plan.items[0].payload.product_options, { "Gas Type": "LPG" });
+  });
+
+  test("a double-encoded attributes bag is read too", () => {
+    const quote = baseQuote();
+    const items = quote.items as Record<string, unknown>[];
+    items[0] = {
+      ...items[0],
+      attributes: JSON.stringify({
+        addon_selection: [{ groupKey: "gas_type", groupLabel: "Gas Type", optionKey: "natural_gas", optionLabel: "Natural Gas", price: "0.00" }],
+      }),
+    };
+    const plan = planOrderFromPaidQuote(quote, CTX);
+    assert.deepEqual(plan.items[0].payload.product_options, { "Gas Type": "Natural Gas" });
+  });
+
+  test("a line with no picks carries no product_options key at all", () => {
+    const plan = planOrderFromPaidQuote(baseQuote(), CTX);
+    assert.equal("product_options" in plan.items[0].payload, false);
+  });
+});
+
 describe("planOrderFromPaidQuote — what a person measured travels to the order (card iEDowior)", () => {
   // The same shared rule the portal's Convert applies, so a quote paid on the site becomes the
   // same order as one a rep converts: the carton measured on the quote line, and the rep's
