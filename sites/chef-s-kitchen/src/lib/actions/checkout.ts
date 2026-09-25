@@ -1088,7 +1088,12 @@ export async function placeOrder(
   // below-cost sentry: a reporting figure must never cost a customer their order.
   if (memberSubscription) {
     try {
-      const savings = memberSavings(fullCart.items, pricesIncludeTax);
+      // A Partner Special line is not a membership saving (card tJ4audbu): the special is
+      // every shopper's price, so its gap to list is left out of what the order records.
+      const specialIds = await getLiveSpecials(
+        fullCart.items.map((i) => i.product_id).filter((id): id is number => id != null)
+      ).catch(() => new Map());
+      const savings = memberSavings(fullCart.items, pricesIncludeTax, new Set(specialIds.keys()));
       if (savings.savedExTax > 0) {
         orderMetafields.member_savings = {
           subscription_id: memberSubscription.id,

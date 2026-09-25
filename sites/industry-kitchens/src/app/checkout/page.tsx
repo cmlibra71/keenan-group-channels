@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getMembershipNumber, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, getLadderConfig, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getMembershipNumber, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, getLadderConfig, getLiveSpecials, CHANNEL_ID } from "@/lib/store";
+import { partnerSpecialSaving } from "@/lib/pricing/special-saving";
 import { resolveFreeTrialOffer } from "@/lib/membership/free-trial";
 import {
   checkoutOfferCopy,
@@ -462,7 +463,15 @@ export default async function CheckoutPage() {
       // $74.40 by being a member was told "$130.40 with your membership" because a $56.00 carton
       // offer had been folded in. The order record computes its own member saving offer-free
       // (order-draft.ts), so the two disagreed about one sale. Card p6YVxc4P.
-      memberSavings = Math.max(0, Math.round((listValue - grossSubtotal) * 100) / 100);
+      // A PARTNER SPECIAL line's gap to list is the special's, not the membership's (card
+      // tJ4audbu: every shopper pays it, "No further discounts") — never "saved with your
+      // membership". Same cached read that priced the line.
+      const specialLines = cart.items as { product_id: number | null; list_price: string | null; sale_price: string | null; quantity: number }[];
+      const onSpecial = await getLiveSpecials(
+        specialLines.map((i) => i.product_id).filter((id): id is number => id != null)
+      ).catch(() => new Map());
+      const specialSaving = partnerSpecialSaving(specialLines, new Set(onSpecial.keys()));
+      memberSavings = Math.max(0, Math.round((listValue - grossSubtotal - specialSaving) * 100) / 100);
       memberNumber = await getMembershipNumber(session.contactId).catch(() => null);
     } else if (!isMember) {
       const plans = await getSubscriptionPlans();
