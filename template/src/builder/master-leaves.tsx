@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 import { addToCart } from "@/lib/actions/cart";
 import { addToQuote } from "@/lib/actions/quote";
 import { useCartQuoteCounts, useHeaderPanels } from "@/lib/cart-quote-counts";
@@ -144,9 +145,18 @@ export function enquireHandler(router: { push: (to: string) => void }) {
  *  reason and the register records it as a rule on `sf-catalog-browse`; the two
  *  paths must agree, because the LIVE Chefs Depot category page draws the
  *  authored master, not the React tile. */
+/** A BUNDLE refused from a tile comes back with its product page (card Tc5ekvD6): a tile cannot
+ *  build one, and the authored tile has nowhere to print the refusal, so the button takes the
+ *  shopper to the page that draws the pickers instead of silently doing nothing. */
+function refusedToProductPage(res: unknown): string | null {
+  const path = (res as { productPath?: unknown } | null)?.productPath;
+  return typeof path === "string" && path.startsWith("/products/") ? path : null;
+}
+
 export function useAddToCartHandler() {
   const { setCartCount } = useCartQuoteCounts();
   const { open } = useHeaderPanels();
+  const router = useRouter();
   return async (args: Record<string, unknown>) => {
     const id = num(args.productId);
     if (id == null) return { success: false, error: "no product" };
@@ -154,6 +164,8 @@ export function useAddToCartHandler() {
     // Nothing was added, so nothing is reported and no panel pops out. The
     // master's onError follow-up carries the refusal to the shopper.
     if (res && "error" in res && typeof res.error === "string") {
+      const productPage = refusedToProductPage(res);
+      if (productPage) router.push(productPage);
       return { success: false, error: res.error };
     }
     // Fresh count from the action → badge updates without a route re-render,
@@ -191,10 +203,13 @@ export function useAddToCartHandler() {
 export function useAddToQuoteHandler() {
   const { setQuoteCount } = useCartQuoteCounts();
   const { open } = useHeaderPanels();
+  const router = useRouter();
   return async (args: Record<string, unknown>) => {
     const id = num(args.productId);
     if (id == null) return { success: false, error: "no product" };
     const res = await addToQuote(id, null);
+    const productPage = refusedToProductPage(res);
+    if (productPage) router.push(productPage);
     // Fresh count from the action → badge updates without a route re-render,
     // and the quote panel pops out — parity with AddToQuoteButton.
     if (res && "quoteCount" in res && typeof res.quoteCount === "number") {

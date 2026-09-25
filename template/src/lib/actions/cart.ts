@@ -11,7 +11,7 @@ import { availableUnits, canPurchaseQuantity, resolveBackorderPolicy } from "@ke
 import { resolvePackSize, resolvePackUnit, snapToPack } from "@keenan/services/pack";
 import { currentShopperForOffers } from "@/lib/promotions/shopper";
 import { resolveItemPricing } from "@/lib/pricing/item-pricing";
-import { readProductKit, resolveKitChoices, kitQuestions, type KitChoice, type ProductKit } from "@/lib/product-kit";
+import { bundleParts, bundleProductPath, readProductKit, resolveKitChoices, kitQuestions, type KitChoice, type ProductKit } from "@/lib/product-kit";
 import { priceKitComponents } from "@/lib/pricing/kit-components";
 import { resolveCartOffers, couponCapRefusal, type OfferCartLine } from "@/lib/promotions/cart-offers";
 import { channelPricesIncludeTax } from "@/lib/promotions/tax-basis";
@@ -34,13 +34,16 @@ import {
 } from "@/lib/product/addon-panel";
 import { customisationRefusal } from "@/lib/product-customisation";
 
-async function getOrCreateCart() {
+/** This shopper's cart when they already have one — never creates one. */
+async function findCart(): Promise<{ id: number } | null> {
   const uuid = await getCartUuid();
+  if (!uuid) return null;
+  return ((await cartService.getByUuid(uuid)) as { id: number } | null) ?? null;
+}
 
-  if (uuid) {
-    const cart = await cartService.getByUuid(uuid);
-    if (cart) return cart;
-  }
+async function getOrCreateCart() {
+  const existing = await findCart();
+  if (existing) return existing as { id: number; uuid: string; [key: string]: unknown };
 
   const cart = await cartService.create({
     channelId: CHANNEL_ID,
@@ -106,6 +109,7 @@ async function resolveAddonsForProduct(
  */
 type AddProductRow = {
   metafields?: unknown;
+  url_path?: string | null;
   price?: string | null;
   sale_price?: string | null;
   hide_price?: boolean | null;
@@ -258,7 +262,44 @@ async function writeCartLine(
   quantity: number,
   resolvedAddons: ResolvedAddon[]
 ): Promise<string | null> {
-  const cart = { id: cartId };
+  const plan = await planCartLine(cartId, productId, variantId, quantity, resolvedAddons);
+  if (typeof plan === "string") return plan;
+  await commitCartLine(cartId, plan);
+  return null;
+}
+
+type CartLineRow = {
+  id: number;
+  product_id: number;
+  variant_id: number | null;
+  quantity: number;
+  modifier_selections?: unknown;
+};
+
+/** Everything `writeCartLine` decides before it writes: which line (if any) it adds to, the
+ *  final quantity and the price for it. Split out so a BUNDLE can plan every one of its lines
+ *  against the cart as it stands — refusing on the MERGED quantity — before it writes any. */
+interface CartLinePlan {
+  productId: number;
+  variantId: number | null | undefined;
+  resolvedAddons: ResolvedAddon[];
+  existing: CartLineRow | undefined;
+  finalQty: number;
+  pricing: { listPrice: string; salePrice: string | null };
+}
+
+/**
+ * Plan ONE product line — or the addition to the matching line already there. Returns the
+ * sentence the shopper reads when it is refused. `cartId` null means the shopper has no cart yet,
+ * so nothing is already in it. Writes nothing.
+ */
+async function planCartLine(
+  cartId: number | null,
+  productId: number,
+  variantId: number | null | undefined,
+  quantity: number,
+  resolvedAddons: ResolvedAddon[]
+): Promise<CartLinePlan | string> {
   const selectionKey = addonSelectionKey(resolvedAddons);
 
   // Is this product/variant WITH THESE EXTRAS already in the cart?
@@ -267,13 +308,6 @@ async function writeCartLine(
   // with different blades are two lines, and adding the same configuration twice is one line
   // of two. Matching on product+variant alone (which is all `findByProductVariant` can do)
   // would fold a second configuration into the first and charge the first one's extras twice.
-  type CartLineRow = {
-    id: number;
-    product_id: number;
-    variant_id: number | null;
-    quantity: number;
-    modifier_selections?: unknown;
-  };
   const matchesThisConfiguration = (i: CartLineRow) =>
     i.product_id === productId &&
     (i.variant_id ?? null) === (variantId ?? null) &&
@@ -286,7 +320,10 @@ async function writeCartLine(
   // `findByProductVariant` is LIMIT 1 with no ordering, so if the row it happens to return is a
   // CONFIGURED line, a plain line of the same product may still be sitting behind it.
   let existing: CartLineRow | undefined;
-  if (selectionKey === "") {
+  if (cartId === null) {
+    existing = undefined;
+  } else if (selectionKey === "") {
+    const cart = { id: cartId };
     const cheap = (await cartItemService.findByProductVariant(
       cart.id,
       productId,
@@ -299,7 +336,7 @@ async function writeCartLine(
       existing = ((full?.items ?? []) as CartLineRow[]).find(matchesThisConfiguration);
     }
   } else {
-    const full = await cartService.getWithItems(cart.id);
+    const full = await cartService.getWithItems(cartId);
     existing = ((full?.items ?? []) as CartLineRow[]).find(matchesThisConfiguration);
   }
 
@@ -329,6 +366,13 @@ async function writeCartLine(
     return "Product not found";
   }
 
+  return { productId, variantId, resolvedAddons, existing, finalQty, pricing };
+}
+
+/** Write a planned line. */
+async function commitCartLine(cartId: number, plan: CartLinePlan): Promise<void> {
+  const { productId, variantId, resolvedAddons, existing, finalQty, pricing } = plan;
+  const cart = { id: cartId };
   if (existing) {
     await cartItemService.updateForParent(cart.id, existing.id, {
       quantity: finalQty,
@@ -351,8 +395,6 @@ async function writeCartLine(
       modifierSelections: resolvedAddons,
     });
   }
-
-  return null;
 }
 
 /** A bundle build that cannot go through the cart, in words the shopper can act on. */
@@ -370,8 +412,10 @@ const BUNDLE_QUOTE_ONLY = "This configuration is priced by our team — please a
  * promotion bundles — and each is charged exactly what the same product costs this shopper on
  * its own, which is the figure the product page printed.
  *
- * EVERY component is checked BEFORE the first line is written, so a build that cannot be sold
- * leaves the basket as it was rather than half-added (Product Brief: no record from a failed save).
+ * EVERY line is PLANNED against the cart as it stands — so a part already in the basket is
+ * stock-checked at the quantity it will actually reach — before the first line is written, so a
+ * build that cannot be sold leaves the basket as it was rather than half-added (Product Brief: no
+ * record from a failed save).
  */
 async function addBundleToCart(args: {
   productId: number;
@@ -380,7 +424,7 @@ async function addBundleToCart(args: {
   quantity: number;
   baseAddons: ResolvedAddon[];
   kitChoices: KitChoice[] | null | undefined;
-}): Promise<{ error: string } | { success: true; cartCount: number }> {
+}): Promise<{ error: string; productPath?: string } | { success: true; cartCount: number }> {
   const { productId, product, kit, baseAddons, kitChoices } = args;
   const quantity = Math.max(1, Math.floor(Number(args.quantity) || 1));
 
@@ -388,10 +432,13 @@ async function addBundleToCart(args: {
   // choose in, so the sentence sends the shopper to the page that has the pickers.
   if (kitChoices == null) {
     const questions = kitQuestions(kit);
+    const productPath = bundleProductPath(product?.url_path);
     return {
       error: questions.length
         ? `Open this product's page to choose ${questions.join(" and ")} before adding it to your cart.`
         : "Open this product's page to choose your options before adding it to your cart.",
+      // The tile button takes the shopper there (builder/master-leaves.tsx).
+      ...(productPath ? { productPath } : {}),
     };
   }
   const build = resolveKitChoices(kit, kitChoices);
@@ -411,7 +458,7 @@ async function addBundleToCart(args: {
     return { error: "Product not found" };
   }
 
-  const components = build.map((c) => ({ productId: c.product_id, name: c.name, quantity: c.quantity * quantity }));
+  const components = bundleParts(build, quantity);
   if (!basePriced && components.length === 0) {
     return { error: "Choose at least one item before adding this bundle to your cart." };
   }
@@ -422,28 +469,32 @@ async function addBundleToCart(args: {
   for (const c of components) {
     if (prices[c.productId] == null) return { error: BUNDLE_QUOTE_ONLY };
   }
-  const facts = await backorderFactsForProducts(components.map((c) => c.productId));
   for (const c of components) {
-    const f = facts.get(c.productId) ?? null;
-    const snapped = snapToPack(c.quantity, resolvePackSize(f ?? {}));
-    const refused = await refuseCartQuantity(c.productId, snapped, f);
-    if (refused === CART_RESTRICTED_ERROR) return { error: BUNDLE_QUOTE_ONLY };
-    if (refused) return { error: `${c.name}: ${refused}` };
     // A component that asks its OWN question (a required extras group) cannot be answered from
     // this page; the bundle goes to a rep instead of arriving without the answer.
     const own = await readAddonsForAdd(c.productId, null, undefined);
     if (own.refusal) return { error: BUNDLE_QUOTE_ONLY };
   }
 
-  const cart = await getOrCreateCart();
+  // Plan every line against the basket AS IT STANDS — a part already there is refused on the
+  // quantity it would reach (a deny-backorder product with 1 on the shelf and 1 already in the
+  // cart cannot take another), not on the kit quantity alone — and only then write.
+  const existingCart = await findCart();
+  const plans: CartLinePlan[] = [];
   if (basePriced) {
-    const err = await writeCartLine(cart.id, productId, null, quantity, baseAddons);
-    if (err) return { error: err };
+    const plan = await planCartLine(existingCart?.id ?? null, productId, null, quantity, baseAddons);
+    if (typeof plan === "string") return { error: plan };
+    plans.push(plan);
   }
   for (const c of components) {
-    const err = await writeCartLine(cart.id, c.productId, null, c.quantity, []);
-    if (err) return { error: `${c.name}: ${err}` };
+    const plan = await planCartLine(existingCart?.id ?? null, c.productId, null, c.quantity, []);
+    if (plan === CART_RESTRICTED_ERROR) return { error: BUNDLE_QUOTE_ONLY };
+    if (typeof plan === "string") return { error: `${c.name}: ${plan}` };
+    plans.push(plan);
   }
+
+  const cart = existingCart ?? (await getOrCreateCart());
+  for (const plan of plans) await commitCartLine(cart.id, plan);
   return { success: true, cartCount: await countCartItems(cart.id) };
 }
 

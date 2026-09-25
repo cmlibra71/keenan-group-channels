@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { getSession } from "@/lib/auth";
+import { bundleListingTotals, withBundleListingPrices, withBundleMemberPrices } from "@/lib/pricing/bundle-listing";
 import { resolveMemberPricing } from "@/lib/member-policy";
 import {
   getFeatureFlag,
@@ -88,8 +89,22 @@ export const getAccountId = cache(async (): Promise<number | null> => {
  * called from a dozen surfaces, and one funnel is what stops a rail, a grid and a search page
  * quoting three prices for one product.
  */
-export async function applyAccountPrices<T extends { id: number }[]>(products: T): Promise<T> {
+export async function applyAccountPrices<T extends { id: number }[]>(
+  products: T,
+  /**
+   * `bundleBuild: false` is for the ONE caller that prices a bundle's build itself — the product
+   * page's own product, where `KitPurchaseProvider` adds the live build. Every listing row (tile,
+   * search hit, rail) takes the default: a bundle priced at the build its page opens on, so the
+   * tile and the page state one figure (card Tc5ekvD6, `lib/pricing/bundle-listing.ts`).
+   */
+  opts: { bundleBuild?: boolean } = {}
+): Promise<T> {
   if (products.length === 0) return products;
+  const priced = await applyAccountPricesOnly(products);
+  return opts.bundleBuild === false ? priced : withBundleListingPrices(priced);
+}
+
+async function applyAccountPricesOnly<T extends { id: number }[]>(products: T): Promise<T> {
   const advertised = (await applyAdvertisedLadderPrices(products as never)) as T;
   const accountId = await getAccountId();
   if (!accountId) return advertised;
@@ -165,7 +180,9 @@ export async function getListingMemberPrices(
   if (products.length === 0) return {};
   const { customerGroupId, accountId, ladderShare } = await getMemberContext();
   if (!customerGroupId && !accountId) return {};
-  return getMemberPriceMap(products.map((p) => p.id), customerGroupId, accountId, ladderShare);
+  const ids = products.map((p) => p.id);
+  // A bundle's member / contract price carries its opening build, as its page's does (Tc5ekvD6).
+  return withBundleMemberPrices(await getMemberPriceMap(ids, customerGroupId, accountId, ladderShare), ids);
 }
 
 export interface ListingPricing {
@@ -188,9 +205,12 @@ export async function getListingPricing(products: { id: number }[]): Promise<Lis
   const ids = products.map((p) => p.id);
   const has = products.length > 0;
 
-  const [memberPriceMap, savingsPctMap] = await Promise.all([
+  const [memberPriceMap, savingsPctMapRaw, bundleTotals] = await Promise.all([
     (ctx.customerGroupId || ctx.accountId) && has
-      ? getMemberPriceMap(ids, ctx.customerGroupId, ctx.accountId, ctx.ladderShare)
+      ? getMemberPriceMap(ids, ctx.customerGroupId, ctx.accountId, ctx.ladderShare).then((map) =>
+          // A bundle's member / contract price carries its opening build, as its page's does.
+          withBundleMemberPrices(map, ids)
+        )
       : Promise.resolve({} as Record<number, number>),
     // Non-members: percentage only, so the cards can still sell membership.
     !ctx.isMember && ctx.teaserCustomerGroupId && has
@@ -199,7 +219,15 @@ export async function getListingPricing(products: { id: number }[]): Promise<Lis
           ctx.teaserCustomerGroupId
         )
       : Promise.resolve({} as Record<number, number>),
+    has ? bundleListingTotals(ids).catch(() => new Map<number, number>()) : Promise.resolve(new Map<number, number>()),
   ]);
+  // The join teaser's percentage is worked out on the bundle SKU's own price, not on its build, so
+  // on a bundle tile it would state a saving the build does not carry — a bundle shows none
+  // (card Tc5ekvD6).
+  const savingsPctMap =
+    bundleTotals.size === 0
+      ? savingsPctMapRaw
+      : Object.fromEntries(Object.entries(savingsPctMapRaw).filter(([id]) => !bundleTotals.has(Number(id))));
 
   return {
     memberPriceMap,

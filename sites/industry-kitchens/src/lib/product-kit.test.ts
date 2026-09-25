@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  bundlePartNote,
+  bundleParts,
+  bundleProductPath,
+  defaultBuildTotal,
   defaultKitSelection,
   describeKitChoices,
   describeKitContents,
@@ -237,4 +241,77 @@ test("the member / contract price carries the build too, and no member price sta
   assert.deepEqual(memberPriceMapWithKit({ 7: 10, 8: 20 }, 5), { 7: 15, 8: 25 });
   const map = { 7: 10 };
   assert.equal(memberPriceMapWithKit(map, null), map);
+});
+
+// ── Tc5ekvD6 revision: a bundle written as its lines, and its listing price ──────────────────────
+
+const hoshizaki = readProductKit({
+  product_kind: "bundle",
+  kit: {
+    items: [
+      { product_id: 203198, sku: "HOS-91000025", name: "B-301-SA", quantity: 1, group: "Storage Group" },
+      { product_id: 203197, sku: "HOS-91000026", name: "B-501-SA", quantity: 1, group: "Storage Group" },
+      { product_id: 203161, sku: "HOS-96000007", name: "TOP KIT 8D", quantity: 1, group: "Accessories" },
+      { product_id: 203156, sku: "HOS-96000008", name: "TOP KIT 4DM", quantity: 1, group: "Accessories" },
+    ],
+  },
+})!;
+
+test("a build becomes one line per part, at the kit quantity times the bundles asked for", () => {
+  const build = resolveKitChoices(hoshizaki, [
+    { group: "Storage Group", product_id: 203198 },
+    { group: "Accessories", product_id: 203161 },
+  ])!;
+  assert.deepEqual(bundleParts(build, 2), [
+    { productId: 203198, sku: "HOS-91000025", name: "B-301-SA", quantity: 2, groups: ["Storage Group"] },
+    { productId: 203161, sku: "HOS-96000007", name: "TOP KIT 8D", quantity: 2, groups: ["Accessories"] },
+  ]);
+  // A nonsense quantity is one bundle, never zero parts.
+  assert.equal(bundleParts(build, 0)[0].quantity, 1);
+});
+
+test("two groups that picked the same product are ONE line of the summed quantity", () => {
+  const kit = readProductKit({
+    product_kind: "bundle",
+    kit: {
+      items: [
+        { product_id: 5, name: "Shelf", quantity: 2, group: "Left" },
+        { product_id: 6, name: "Door", quantity: 1, group: "Left" },
+        { product_id: 5, name: "Shelf", quantity: 3, group: "Right" },
+      ],
+    },
+  })!;
+  const build = resolveKitChoices(kit, [
+    { group: "Left", product_id: 5 },
+    { group: "Right", product_id: 5 },
+  ])!;
+  assert.deepEqual(bundleParts(build, 1), [
+    { productId: 5, sku: null, name: "Shelf", quantity: 5, groups: ["Left", "Right"] },
+  ]);
+});
+
+test("a part's quote Comment names the bundle it was chosen for", () => {
+  assert.equal(bundlePartNote("Hoshizaki KMD-270AB  Ice Maker - BUNDLE"), "Part of Hoshizaki KMD-270AB Ice Maker - BUNDLE");
+  assert.equal(bundlePartNote("  "), "Part of a bundle");
+});
+
+test("a listing prices a bundle at the build its page opens on — default else first, per required group", () => {
+  const prices = { 203198: 1313.14, 203197: 1665.56, 203161: 159.35, 203156: 144.14 };
+  // Both groups required, no defaults: first bin + first top kit — exactly the page's first paint.
+  assert.equal(defaultBuildTotal(hoshizaki, prices), 1472.49);
+  // A part of that opening build with no price online: no total, so the tile keeps the bundle's own.
+  assert.equal(defaultBuildTotal(hoshizaki, { ...prices, 203161: undefined as unknown as number }), null);
+  // Not a bundle: nothing to add.
+  assert.equal(defaultBuildTotal(null, prices), null);
+  assert.equal(defaultBuildTotal(readProductKit(groupedMeta), prices), null);
+});
+
+test("a refused tile add sends the shopper to the bundle's own page — and never off the site", () => {
+  assert.equal(bundleProductPath("hoshizaki-kmd-270ab-crescent-ice-maker-255kgday"), "/products/hoshizaki-kmd-270ab-crescent-ice-maker-255kgday");
+  assert.equal(bundleProductPath("/products/x-bundle"), "/products/x-bundle");
+  assert.equal(bundleProductPath("//evil.com"), "/products/evil.com");
+  assert.equal(bundleProductPath("https://evil.com/x"), null);
+  assert.equal(bundleProductPath("a\\b"), null);
+  assert.equal(bundleProductPath(""), null);
+  assert.equal(bundleProductPath(null), null);
 });

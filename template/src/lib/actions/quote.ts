@@ -14,11 +14,15 @@ import { getSession } from "@/lib/auth";
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
 import { resolvePackSize, snapToPack } from "@keenan/services/pack";
 import {
+  bundlePartNote,
+  bundleProductPath,
+  bundleParts,
   describeKitChoices,
   describeKitContents,
   kitQuestions,
   readProductKit,
   resolveKitChoices,
+  type BundlePart,
   type KitChoice,
 } from "@/lib/product-kit";
 import {
@@ -126,6 +130,8 @@ export async function addToQuote(
   if (!(await isProductVisibleToViewer(productId))) return { error: RESTRICTED_PRODUCT_ERROR };
 
   const product = await productService.getById(productId) as {
+    name?: string | null;
+    url_path?: string | null;
     price: string;
     sale_price: string | null;
     metafields?: unknown;
@@ -144,23 +150,35 @@ export async function addToQuote(
   }
 
   // ── Kit products (Zoey grouped / bundle, authored in the portal) ──────────────────────────
-  // A BUNDLE is a modular configuration: it is not priced live, its picks come through as a
-  // quote request (Steve, card 7bmpuqei). The choices arrive as group names + product ids and are
-  // re-resolved against the product's OWN kit here, so nothing a browser sends can invent a line.
+  // A BUNDLE is Zoey's bundled product with a dynamic price (card Tc5ekvD6, Tim 2026-09-21): the
+  // page prices the build live, so the quote must carry that SAME money. The choices arrive as
+  // group names + product ids and are re-resolved against the product's OWN kit here, so nothing
+  // a browser sends can invent a line; the build is then written exactly as `addBundleToCart`
+  // writes it — the bundle's own line only when it has a price, then ONE customer-sourced line per
+  // part at that part's own catalogue price (`bundleParts` below). Each part line keeps following
+  // the catalogue like any line a customer added (`price_source = "customer"`), so no rep has to
+  // type a price to make the quote match the page. A bundle whose price staff HID is the one
+  // exception: its parts' prices would add up to the hidden figure, so it travels as ONE line with
+  // the build in its Comment for a rep to price (7vu2iEEZ).
   // A GROUPED kit has no choices — its contents ride along so the rep can see what the one price
   // covers without opening the product.
   const kit = readProductKit(product.metafields);
   let lineAttributes: Record<string, unknown> | null = null;
   let lineNotes: string | null = null;
+  /** The bundle's parts, written as their own lines after the bundle's own line. */
+  let bundlePartsToWrite: BundlePart[] | null = null;
   if (kit?.kind === "bundle") {
     // No picks at all means the caller drew no picker (a listing tile, a rail): say where the
     // choices are, rather than "choose" about controls that are not on that screen (Tc5ekvD6).
     if (kitChoices == null) {
       const questions = kitQuestions(kit);
+      const productPath = bundleProductPath(product.url_path);
       return {
         error: questions.length
           ? `Open this product's page to choose ${questions.join(" and ")} before adding it to a quote.`
           : "Open this product's page to choose your options before adding it to a quote.",
+        // The tile button takes the shopper there (builder/master-leaves.tsx).
+        ...(productPath ? { productPath } : {}),
       };
     }
     const resolved = resolveKitChoices(kit, kitChoices);
@@ -168,9 +186,13 @@ export async function addToQuote(
       return { error: "Choose an option in every required group before adding this to a quote." };
     }
     lineAttributes = { kit_kind: "bundle", kit_selection: resolved };
-    // An optional group answered "None" is simply absent from the build, so a bundle built from
-    // optional groups alone can carry nothing to describe — no Comment is written then.
-    lineNotes = describeKitChoices(resolved) || null;
+    if (product.hide_price === true) {
+      // An optional group answered "None" is simply absent from the build, so a bundle built from
+      // optional groups alone can carry nothing to describe — no Comment is written then.
+      lineNotes = describeKitChoices(resolved) || null;
+    } else {
+      bundlePartsToWrite = bundleParts(resolved, 1);
+    }
   } else if (kit?.kind === "grouped") {
     lineAttributes = {
       kit_kind: "grouped",
@@ -285,6 +307,19 @@ export async function addToQuote(
     bulkUnit: null,
   });
 
+  // A bundle's OWN line exists only when the bundle carries a price of its own (the Hoshizaki
+  // KMD-270AB carries its ice maker's price on the bundle SKU); a $0 bundle is its parts alone —
+  // the same rule the cart applies.
+  const writesOwnLine =
+    bundlePartsToWrite === null || (parseFloat(salePrice ?? listPrice) || 0) > 0;
+  if (bundlePartsToWrite !== null && !writesOwnLine && bundlePartsToWrite.length === 0) {
+    return { error: "Choose at least one item before adding this bundle to a quote." };
+  }
+  // EVERY part is read, checked and priced BEFORE the first write, so a build that cannot be
+  // quoted leaves the quote as it was (Product Brief: no record from a failed save).
+  const partLines = bundlePartsToWrite ? await priceBundlePartsForQuote(bundlePartsToWrite, suppress) : [];
+  if ("error" in partLines) return { error: partLines.error };
+
   const quote = await getOrCreateQuote();
 
   // Pre-link quote to the contact if logged in. Best-effort convenience only — it
@@ -312,14 +347,18 @@ export async function addToQuote(
     sellPackUnit: product.sell_pack_unit ?? null,
   });
 
-  const existing = await quoteItemService.findByProductVariant(quote.id, productId, variantId) as {
-    id: number;
-    quantity: number;
-    customer_notes?: string | null;
-    attributes?: unknown;
-  } | null;
+  const existing = writesOwnLine
+    ? (await quoteItemService.findByProductVariant(quote.id, productId, variantId) as {
+        id: number;
+        quantity: number;
+        customer_notes?: string | null;
+        attributes?: unknown;
+      } | null)
+    : null;
 
-  if (existing) {
+  if (!writesOwnLine) {
+    // A $0 bundle: nothing of its own to quote — its parts below are the whole build.
+  } else if (existing) {
     // A quote may hold only ONE line per product+variant, so re-configuring a line REPLACES the
     // captured configuration on the one the customer already has (and does not stack a second
     // quantity onto a different build). That now covers the paid extras as well as a bundle
@@ -342,7 +381,9 @@ export async function addToQuote(
       addonsPosted,
       hadAddons,
       resolvedAddonCount: resolvedAddons.length,
-      isBundleBuild: kit?.kind === "bundle",
+      // Only the hidden-price bundle still carries its build on this ONE line; a priced bundle's
+      // build is its part lines, so pressing the button again is simply one more bundle.
+      isBundleBuild: kit?.kind === "bundle" && bundlePartsToWrite === null,
       lineNotes,
       existingNote: existing.customer_notes ?? null,
       ownedNote:
@@ -398,7 +439,87 @@ export async function addToQuote(
     });
   }
 
+  // The bundle's parts, one line each. A part already on the quote (on its own, or from an earlier
+  // build) counts UP by what this build needs, pack-snapped, and keeps whatever Comment and price
+  // it has — a rep may have written that Comment. A new part line records which bundle it came
+  // from, on the line and in its Comment.
+  for (const part of partLines) {
+    const existingPart = (await quoteItemService.findByProductVariant(quote.id, part.productId, null)) as {
+      id: number;
+      quantity: number;
+    } | null;
+    if (existingPart) {
+      await quoteItemService.updateForParent(quote.id, existingPart.id, {
+        quantity: snapToPack(existingPart.quantity + part.quantity, part.packSize),
+      });
+    } else {
+      const note = bundlePartNote(product.name ?? "");
+      await quoteItemService.createForParent(quote.id, {
+        productId: part.productId,
+        variantId: null,
+        quantity: snapToPack(part.quantity, part.packSize),
+        listPrice: part.listPrice,
+        salePrice: part.salePrice,
+        // The customer put this part here, off the catalogue — it keeps following the catalogue
+        // exactly like the bundle's own line (card laFQveZT).
+        priceSource: "customer",
+        attributes: {
+          kit_kind: "bundle_part",
+          bundle: { product_id: productId, name: product.name ?? null, groups: part.groups },
+          storefront_note: note,
+        },
+        customerNotes: note,
+      });
+    }
+  }
+
   return { success: true, quoteCount: await countQuoteItems(quote.id) };
+}
+
+/**
+ * A bundle's parts as quote lines, checked and priced before anything is written (card Tc5ekvD6).
+ * Each part is priced exactly as `addToQuote` prices that product added on its own — catalogue
+ * price with this channel's sale-price suppression, no member or quantity tier (ADR 0001) — and
+ * each is held to the same two switches: this shopper may see it, and staff have not restricted
+ * it from quotes. One refusal refuses the whole build, in words that name the part.
+ */
+async function priceBundlePartsForQuote(
+  parts: BundlePart[],
+  suppress: boolean
+): Promise<
+  | Array<BundlePart & { listPrice: string; salePrice: string | null; packSize: number }>
+  | { error: string }
+> {
+  const out: Array<BundlePart & { listPrice: string; salePrice: string | null; packSize: number }> = [];
+  for (const part of parts) {
+    const refusal = `${part.name} can't be added to a quote online. Please contact us about this configuration.`;
+    if (!(await isProductVisibleToViewer(part.productId))) return { error: refusal };
+    const row = (await productService.getById(part.productId)) as {
+      price: string;
+      sale_price: string | null;
+      restrict_add_to_quote?: boolean | null;
+      sell_pack_size?: number | null;
+      sell_pack_unit?: string | null;
+    } | null;
+    if (!row || row.restrict_add_to_quote === true) return { error: refusal };
+    const { salePrice } = layerCartPrice({
+      listPrice: row.price,
+      catalogSalePrice: row.sale_price,
+      suppress,
+      memberSalePrice: null,
+      bulkUnit: null,
+    });
+    out.push({
+      ...part,
+      listPrice: row.price,
+      salePrice,
+      packSize: resolvePackSize({
+        sellPackSize: row.sell_pack_size ?? null,
+        sellPackUnit: row.sell_pack_unit ?? null,
+      }),
+    });
+  }
+  return out;
 }
 
 export async function updateQuoteItem(itemId: number, quantity: number) {

@@ -24,7 +24,10 @@
 // component at the price THIS shopper would pay for it on its own, which is what the cart then
 // charges, because Add to Cart writes each chosen component as its own cart line (reporting keeps
 // the component SKUs — the same reasoning as the promotion bundles on `sf-bundle-page`). Add to
-// Quote records the build on the one quote line for a rep to price, as it always has.
+// Quote writes the build the same way — the bundle's own line when it has a price, then one
+// customer-sourced quote line per part at its catalogue price — so the quote carries the money the
+// page stated. Listing tiles, search hits and rails price a bundle at the build its page opens on
+// (`defaultBuildTotal`, applied in `lib/pricing/bundle-listing.ts`).
 //
 // Everything below is pure and defensive — a hand-edited metafields blob must never 500 a product
 // page, so anything unreadable simply reads as "not a kit".
@@ -224,6 +227,55 @@ export function resolveKitChoices(
   return resolved;
 }
 
+/** One bundle part as it is written to a cart or a quote: a product, the total quantity of it
+ *  the build needs, and the groups that asked for it. */
+export interface BundlePart {
+  productId: number;
+  sku: string | null;
+  name: string;
+  quantity: number;
+  groups: string[];
+}
+
+/**
+ * The resolved build as the LINES it becomes — one per product, at the kit quantity times the
+ * number of bundles asked for. Two groups that picked the same product are ONE line of the summed
+ * quantity, so the pre-write checks (stock, pack size) test the amount that is actually written.
+ */
+export function bundleParts(build: ResolvedKitChoice[], bundles: number): BundlePart[] {
+  const times = Math.max(1, Math.floor(Number(bundles) || 1));
+  const parts: BundlePart[] = [];
+  for (const c of build) {
+    const hit = parts.find((p) => p.productId === c.product_id);
+    if (hit) {
+      hit.quantity += c.quantity * times;
+      if (!hit.groups.includes(c.group)) hit.groups.push(c.group);
+    } else {
+      parts.push({ productId: c.product_id, sku: c.sku, name: c.name, quantity: c.quantity * times, groups: [c.group] });
+    }
+  }
+  return parts;
+}
+
+/** The Comment a bundle part's quote line carries, so the rep and the customer can see which
+ *  bundle it was chosen for. */
+export function bundlePartNote(bundleName: string): string {
+  const name = bundleName.replace(/\s+/g, " ").trim();
+  return name ? `Part of ${name}` : "Part of a bundle";
+}
+
+/**
+ * Where a refused tile add sends the shopper: the bundle's own product page, the only screen that
+ * draws its pickers. A tile cannot build a bundle, and the authored Chefs Depot tile has nowhere to
+ * print the refusal (`sf-catalog-browse`), so the tile button navigates instead of doing nothing.
+ */
+export function bundleProductPath(urlPath: string | null | undefined): string | null {
+  if (typeof urlPath !== "string") return null;
+  const slug = urlPath.trim().replace(/^\/+/, "").replace(/^products\//, "");
+  if (!slug || slug.includes("//") || slug.includes("\\") || /^[a-z]+:/i.test(slug)) return null;
+  return `/products/${slug}`;
+}
+
 /** The required groups a shopper actually CHOOSES in (two or more products) — what a refusal from
  *  a page with no picker has to name. */
 export function kitQuestions(kit: ProductKit): string[] {
@@ -276,6 +328,17 @@ export function kitBuildTotal(
     total += unit * item.quantity;
   }
   return Math.round(total * 100) / 100;
+}
+
+/**
+ * The build a bundle's page OPENS on (`defaultKitSelection`), priced — the figure a listing tile,
+ * a search hit or a rail adds to the bundle's own price, so the tile states exactly the headline
+ * the page first paints. Null when a part of that build has no price online here: the page then
+ * prints no configured price either, and the tile keeps the bundle's own price.
+ */
+export function defaultBuildTotal(kit: ProductKit | null, prices: KitPrices | null | undefined): number | null {
+  if (!kit || kit.kind !== "bundle") return null;
+  return kitBuildTotal(kit, defaultKitSelection(kit.groups), prices);
 }
 
 /** A stored money string with `add` on top, to 2dp. An unreadable value is returned untouched. */

@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { getSession } from "@/lib/auth";
+import { withBundleListingPrices, withBundleMemberPrices } from "@/lib/pricing/bundle-listing";
 import {
   getFeatureFlag,
   getActiveSubscriptionForContact,
@@ -101,8 +102,22 @@ export async function getMemberContext(): Promise<MemberContext> {
  * hold a per-account price without leaking it to everyone. The override is applied HERE, per
  * request, to a copy of the rows; the cache/index is never written to. Guests are a no-op.
  */
-export async function applyAccountPrices<T extends { id: number }[]>(products: T): Promise<T> {
+export async function applyAccountPrices<T extends { id: number }[]>(
+  products: T,
+  /**
+   * `bundleBuild: false` is for the ONE caller that prices a bundle's build itself — the product
+   * page's own product, where `KitPurchaseProvider` adds the live build. Every listing row (tile,
+   * search hit, rail) takes the default: a bundle priced at the build its page opens on, so the
+   * tile and the page state one figure (card Tc5ekvD6, `lib/pricing/bundle-listing.ts`).
+   */
+  opts: { bundleBuild?: boolean } = {}
+): Promise<T> {
   if (products.length === 0) return products;
+  const priced = await applyAccountPricesOnly(products);
+  return opts.bundleBuild === false ? priced : withBundleListingPrices(priced);
+}
+
+async function applyAccountPricesOnly<T extends { id: number }[]>(products: T): Promise<T> {
   // The buying-group ADVERTISED price first (card gk23c1VK) — a no-op on a
   // channel with no ladder — then the account's contract prices over the top.
   const advertised = (await applyAdvertisedLadderPrices(products as never)) as T;
@@ -122,5 +137,7 @@ export async function getListingMemberPrices(
   if (products.length === 0) return {};
   const { customerGroupId, accountId, ladderShare } = await getMemberContext();
   if (!customerGroupId && !accountId) return {};
-  return getMemberPriceMap(products.map((p) => p.id), customerGroupId, accountId, ladderShare);
+  const ids = products.map((p) => p.id);
+  // A bundle's member / contract price carries its opening build, as its page's does (Tc5ekvD6).
+  return withBundleMemberPrices(await getMemberPriceMap(ids, customerGroupId, accountId, ladderShare), ids);
 }

@@ -4,6 +4,7 @@ import { shouldSuppressCatalogSalePrice } from "@/lib/store";
 import { CHANNEL_ID } from "@/lib/channel";
 import { applyCatalogScope } from "@/lib/catalog-scope";
 import { parsePublicSearchParams } from "@/lib/search-params";
+import { bundleListingTotals } from "@/lib/pricing/bundle-listing";
 
 /**
  * Fields this PUBLIC endpoint may serialise, as an ALLOWLIST.
@@ -108,6 +109,28 @@ export async function GET(request: NextRequest) {
       result.hits = result.hits.map((hit) =>
         "salePrice" in hit ? { ...hit, salePrice: null } : hit
       ) as typeof result.hits;
+    }
+
+    // A BUNDLE's suggestion states the price its page opens on — its own price plus its opening
+    // build — like every other listing surface (card Tc5ekvD6, `lib/pricing/bundle-listing.ts`).
+    const bundleTotals = await bundleListingTotals(
+      result.hits.map((hit) => Number((hit as { id?: unknown }).id))
+    ).catch(() => new Map<number, number>());
+    if (bundleTotals.size > 0) {
+      const addTo = (value: unknown, add: number) => {
+        const n = typeof value === "number" ? value : parseFloat(String(value ?? ""));
+        return Number.isFinite(n) ? Math.round((n + add) * 100) / 100 : value;
+      };
+      result.hits = result.hits.map((hit) => {
+        const h = hit as unknown as Record<string, unknown>;
+        const add = bundleTotals.get(Number(h.id));
+        if (add == null) return hit;
+        return {
+          ...h,
+          price: addTo(h.price ?? 0, add),
+          ...(h.salePrice != null ? { salePrice: addTo(h.salePrice, add) } : {}),
+        };
+      }) as unknown as typeof result.hits;
     }
 
     // Narrow to the public field set LAST, so nothing added above can widen it.

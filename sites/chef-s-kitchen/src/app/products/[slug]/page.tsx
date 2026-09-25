@@ -75,7 +75,7 @@ export default async function ProductPage({
 
   // Per-account product prices override EVERY other price. The cached product row is SHARED by all
   // shoppers, so the account's price is overlaid onto a copy at read time (never into the cache).
-  const [product] = await applyAccountPrices([cachedProduct]);
+  const [product] = await applyAccountPrices([cachedProduct], { bundleBuild: false });
 
   // Reviews are PROJECTED BEFORE THEY ARE AWAITED. `getProductReviews` returns the
   // whole `product_reviews` row — `author_email` (stamped on every signed-in

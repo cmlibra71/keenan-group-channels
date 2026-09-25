@@ -299,6 +299,11 @@ export async function renderProductNodeBranch({
     accountId: member.accountId,
     planPrice: member.planPrice,
     ladderShare,
+    // A BUNDLE's headline is its own price plus the build (card Tc5ekvD6), while the scale's
+    // M / W / R rows are the bundle SKU's own — so on a bundle the panel pitches membership
+    // without stating prices, rather than put "best member price" for the bundle SKU alone
+    // beside a headline for the whole build.
+    isBundle: (nativeData?.kit as { kind?: string } | null | undefined)?.kind === "bundle",
     // No RRP is passed: the panel reads the page's OWN headline base amount for
     // the active variant off the purchase provider, so a product-level price can
     // never sit beside per-variant ladder figures (card Nyp8bkPm, review fix).
