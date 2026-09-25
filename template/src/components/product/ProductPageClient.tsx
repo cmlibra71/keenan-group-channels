@@ -10,11 +10,11 @@ import { ProductImageGallery, type ProductImage } from "./ProductImageGallery";
 import { ProductDetail } from "./ProductDetail";
 import { RichContent } from "@/components/content/RichContent";
 import {
-  ProductPurchaseProvider,
   useProductPurchase,
   type PurchaseProduct,
 } from "./ProductPurchaseProvider";
-import type { ProductKit } from "@/lib/product-kit";
+import { KitPurchaseProvider } from "./KitSelection";
+import type { KitPrices, ProductKit } from "@/lib/product-kit";
 
 function ProductOverviewInner({ kit }: { kit?: ProductKit | null }) {
   const { product, variantImageUrl } = useProductPurchase();
@@ -68,6 +68,7 @@ export function ProductPageClient({
   isMember,
   membershipTeaser,
   kit,
+  kitPrices,
 }: {
   product: PurchaseProduct;
   memberPrice?: number | null;
@@ -76,9 +77,13 @@ export function ProductPageClient({
   membershipTeaser?: { fromPrice: string | null } | null;
   /** Grouped / bundle contents, read off products.metafields by the route. */
   kit?: ProductKit | null;
+  /** A bundle's components at this shopper's price, ex GST (card Tc5ekvD6). */
+  kitPrices?: KitPrices | null;
 }) {
   return (
-    <ProductPurchaseProvider
+    <KitPurchaseProvider
+      kit={kit}
+      kitPrices={kitPrices}
       product={product}
       memberPrice={memberPrice ?? null}
       memberPriceMap={memberPriceMap ?? {}}
@@ -86,7 +91,7 @@ export function ProductPageClient({
       membershipTeaser={membershipTeaser ?? null}
     >
       <ProductOverviewInner kit={kit} />
-    </ProductPurchaseProvider>
+    </KitPurchaseProvider>
   );
 }
 

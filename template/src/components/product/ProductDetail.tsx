@@ -7,7 +7,6 @@
 // the pre-provider version — pixel parity is the contract.
 // ============================================================================
 
-import { useState } from "react";
 import Link from "next/link";
 import { AddToCartButton } from "./AddToCartButton";
 import { ProductAddons } from "./ProductAddons";
@@ -18,7 +17,8 @@ import { Price } from "@/components/ui/Price";
 import { GstToggle } from "@/components/layout/GstToggle";
 import { useProductPurchase } from "./ProductPurchaseProvider";
 import { ProductKitBlock } from "./ProductKitBlock";
-import { defaultKitSelection, toKitChoices, type ProductKit } from "@/lib/product-kit";
+import type { ProductKit } from "@/lib/product-kit";
+import { useKitSelection } from "./KitSelection";
 import { ProductInstructionsPanel } from "./ProductInstructionsPanel";
 import { buyAreaSuppressed } from "@/lib/product-customisation";
 import { postsConfiguration } from "@/lib/product/addon-panel";
@@ -57,12 +57,9 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
 
   const { id: productId, options, bulkPricing } = product;
 
-  // A bundle's configuration lives here rather than in the purchase provider: it never becomes a
-  // cart price (it is quoted), so it has no business in the pricing state the two storefronts and
-  // the portal editor share.
-  const [kitSelection, setKitSelection] = useState<Record<string, number>>(() =>
-    kit?.kind === "bundle" ? defaultKitSelection(kit.groups) : {}
-  );
+  // A bundle's build lives in `KitPurchaseProvider`, ABOVE the purchase provider, so the provider
+  // prices it into the headline (Zoey's dynamic price, card Tc5ekvD6) and both buy buttons send it.
+  const kitLive = useKitSelection();
   // Free-text customisation (card kyMjCmAw) rides the SAME provider state the ticked
   // extras do — `setAddonText` writes into `selectedAddons`, so one bag reaches whichever
   // buy button is pressed and no renderer has to know which control produced an answer.
@@ -74,7 +71,9 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
   // priced panel's rule would have made the box unreachable on the one product that needs it.
   const buyPostsConfiguration = postsConfiguration(addonGroupsOffered, product.addons);
   const isBundle = kit?.kind === "bundle";
-  const kitReady = !isBundle || kit.groups.every((g) => kitSelection[g.name] != null);
+  // Every required group starts answered (its default, else its first product) and an optional
+  // group may be left at "None", so a bundle is always ready to send; the build rides both buttons.
+  const kitChoices = isBundle ? (kitLive?.choices ?? null) : null;
 
   return (
     <div>
@@ -197,11 +196,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
 
       {/* Kit contents (grouped) / choice groups (bundle) */}
       {kit && (
-        <ProductKitBlock
-          kit={kit}
-          selection={kitSelection}
-          onSelect={(group, id) => setKitSelection((prev) => ({ ...prev, [group]: id }))}
-        />
+        <ProductKitBlock kit={kit} />
       )}
 
       {/* Free-text customisation — Zoey puts it directly above the buy row on the Custom
@@ -242,16 +237,18 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
 
       {/* Add to Cart / Quote */}
       <div className="mt-8 space-y-3">
-        {/* A bundle is never bought straight off the page — the configuration goes to a rep. */}
+        {/* A bundle is bought like any priced product (card Tc5ekvD6): its build is priced into
+            displayPrice by `KitPurchaseProvider`, and Add to Cart sends the build. */}
         {/* Card 7vu2iEEZ: a product staff switched off for cart, set to hide its price, or set to
             refuse out-of-stock buys shows NO cart button rather than a greyed one — this site
             carries no availability wording that could explain a dead control (CXnP1lrL). A product
             with no price at all takes the same exit, which is what Chefs Depot's fork of this file
             has always done; `hidePrice` reaches here as a zero price through the provider, and is
             named as well so the reason is readable. */}
-        {displayPrice > 0 && !isBundle && !hidePrice && !restrictAddToCart && !purchaseBlockedByStock && (
+        {displayPrice > 0 && !hidePrice && !restrictAddToCart && !purchaseBlockedByStock && (
           <AddToCartButton
             productId={productId}
+            kitChoices={kitChoices}
             variantId={cartVariantId}
             productName={product.name}
             sku={product.sku}
@@ -272,14 +269,14 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
             variantId={cartVariantId}
             // A required extras group greys this button too (it folds into `allOptionsSelected`),
             // and the group carries its own "Choose one" so the reason is on screen.
-            disabled={(useGroupedMode && !allOptionsSelected) || !kitReady || addonGroupsUnanswered.length > 0}
-            kitChoices={isBundle ? toKitChoices(kitSelection) : null}
+            disabled={(useGroupedMode && !allOptionsSelected) || addonGroupsUnanswered.length > 0}
+            kitChoices={kitChoices}
             // Card 0CDcCYmO. The extras panel sits above BOTH buttons: pressing this one keeps
             // the configuration, so the rep prices what the customer was actually looking at.
             // Posted only where the panel was OFFERED — an empty object is a deliberate
             // clear-down, `undefined` leaves the line's configuration alone.
             addons={buyPostsConfiguration ? selectedAddons : undefined}
-            label={isBundle ? "Add to Quote — request pricing" : undefined}
+            label={isBundle && !(displayPrice > 0) ? "Add to Quote — request pricing" : undefined}
           />
         )}
       </div>

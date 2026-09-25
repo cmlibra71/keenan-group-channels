@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import BuilderImage from "./builder-image";
 import type { NodeTree, ProductPagePayload } from "@keenan/services/builder";
 import {
-  ProductPurchaseProvider,
   useProductPurchase,
   useProductPageScope,
   useProductPageHandlers,
@@ -26,6 +25,8 @@ import { BuilderTree, type NativeComponents } from "@keenan/services/builder-rea
 import { BuilderActionsProvider } from "@keenan/services/builder-react";
 import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 import { productNatives } from "./product-natives";
+import { KitPurchaseProvider, useKitSelection } from "@/components/product/KitSelection";
+import type { KitPrices, ProductKit } from "@/lib/product-kit";
 
 // ============================================================================
 // The product page rendered from a node tree. Thin wrapper over the SHARED
@@ -64,6 +65,16 @@ function ActionsBridge({
   // add pops the matching panel out — parity with AddToCart/AddToQuoteButton.
   const { setCartCount, setQuoteCount } = useCartQuoteCounts();
   const { open } = useHeaderPanels();
+  // A BUNDLE's build (card Tc5ekvD6), read at PRESS time through a ref so a pick made a moment ago
+  // is the one sent. Only THIS page's product carries it: a related or upsell card buying its own
+  // product goes through the same wrappers and must never be handed this bundle's picks.
+  const kitSelection = useKitSelection();
+  const kitRef = React.useRef(kitSelection);
+  kitRef.current = kitSelection;
+  const kitChoicesFor = React.useCallback(
+    (pid: number) => (pid === productId && kitRef.current?.isBundle ? kitRef.current.choices : undefined),
+    [productId]
+  );
   const countingAddToCart = React.useCallback(
     async (
       pid: number,
@@ -73,14 +84,14 @@ function ActionsBridge({
       // back from the product's own definition inside the action.
       addons?: AddonSelectionInput
     ) => {
-      const res = await addToCart(pid, variantId, quantity, addons);
+      const res = await addToCart(pid, variantId, quantity, addons, kitChoicesFor(pid));
       if (res && "cartCount" in res && typeof res.cartCount === "number") {
         setCartCount(res.cartCount);
         open("cart");
       }
       return res;
     },
-    [setCartCount, open]
+    [setCartCount, open, kitChoicesFor]
   );
   const countingAddToQuote = React.useCallback(
     async (
@@ -91,14 +102,14 @@ function ActionsBridge({
       // the same way a bundle build does.
       addons?: AddonSelectionInput
     ) => {
-      const res = await addToQuote(pid, variantId, null, addons);
+      const res = await addToQuote(pid, variantId, kitChoicesFor(pid) ?? null, addons);
       if (res && "quoteCount" in res && typeof res.quoteCount === "number") {
         setQuoteCount(res.quoteCount);
         open("quote");
       }
       return res;
     },
-    [setQuoteCount, open]
+    [setQuoteCount, open, kitChoicesFor]
   );
   // Configurable product with nothing chosen yet: the quote CTA stays live and
   // this prompt names the option still to pick, instead of the click doing
@@ -289,8 +300,16 @@ export function BuilderProductPage({
     [payload]
   );
   const enriched = React.useMemo(() => enrichProductPayload(payload, { sanitizeHtml }), [payload]);
+  // The kit and what its components cost THIS shopper ride the route's own `nativeData` bag
+  // (`kit`, `kitPrices`), resolved server-side once per request. `KitPurchaseProvider` is the
+  // purchase provider with a bundle's build priced into it — for any other product it is the
+  // provider, untouched (card Tc5ekvD6).
+  const kit = (nativeData?.kit ?? null) as ProductKit | null;
+  const kitPrices = (nativeData?.kitPrices ?? null) as KitPrices | null;
   return (
-    <ProductPurchaseProvider
+    <KitPurchaseProvider
+      kit={kit}
+      kitPrices={kitPrices}
       product={product}
       memberPrice={payload.pricing.memberPrice}
       memberPriceMap={payload.pricing.memberPriceMap}
@@ -302,6 +321,6 @@ export function BuilderProductPage({
       membershipTeaser={payload.pricing.membershipTeaser}
     >
       <ActionsBridge productId={payload.product.id} tree={tree} payload={enriched} namedStyles={namedStyles} components={components} jsFunctions={jsFunctions} callResults={callResults} nativeData={nativeData} />
-    </ProductPurchaseProvider>
+    </KitPurchaseProvider>
   );
 }

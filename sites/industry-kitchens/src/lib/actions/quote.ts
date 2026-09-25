@@ -16,6 +16,7 @@ import { resolvePackSize, snapToPack } from "@keenan/services/pack";
 import {
   describeKitChoices,
   describeKitContents,
+  kitQuestions,
   readProductKit,
   resolveKitChoices,
   type KitChoice,
@@ -152,12 +153,24 @@ export async function addToQuote(
   let lineAttributes: Record<string, unknown> | null = null;
   let lineNotes: string | null = null;
   if (kit?.kind === "bundle") {
+    // No picks at all means the caller drew no picker (a listing tile, a rail): say where the
+    // choices are, rather than "choose" about controls that are not on that screen (Tc5ekvD6).
+    if (kitChoices == null) {
+      const questions = kitQuestions(kit);
+      return {
+        error: questions.length
+          ? `Open this product's page to choose ${questions.join(" and ")} before adding it to a quote.`
+          : "Open this product's page to choose your options before adding it to a quote.",
+      };
+    }
     const resolved = resolveKitChoices(kit, kitChoices);
     if (!resolved) {
-      return { error: "Choose an option in every group before adding this to a quote." };
+      return { error: "Choose an option in every required group before adding this to a quote." };
     }
     lineAttributes = { kit_kind: "bundle", kit_selection: resolved };
-    lineNotes = describeKitChoices(resolved);
+    // An optional group answered "None" is simply absent from the build, so a bundle built from
+    // optional groups alone can carry nothing to describe — no Comment is written then.
+    lineNotes = describeKitChoices(resolved) || null;
   } else if (kit?.kind === "grouped") {
     lineAttributes = {
       kit_kind: "grouped",

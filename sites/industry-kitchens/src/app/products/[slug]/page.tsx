@@ -13,6 +13,7 @@ import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductOfferTiers } from "@/components/product/ProductOfferTiers";
 import { readProductKit } from "@/lib/product-kit";
+import { priceKitComponents } from "@/lib/pricing/kit-components";
 import { readProductAddons } from "@keenan/services/product-addons";
 import { readOptionValueOrder } from "@keenan/services/product-option-order";
 import { ProductTabs } from "@/components/product/ProductTabs";
@@ -148,6 +149,12 @@ export default async function ProductPage({
     fileSize: number | null;
   }[];
 
+  // A kit, read ONCE, and — for a bundle — what each component costs THIS shopper, ex GST,
+  // through the cart's own pricing (card Tc5ekvD6), so the page prints what the cart charges.
+  // Both renderers below read the same pair; every other product costs one no-op parse.
+  const productKit = readProductKit(product.metafields);
+  const kitPrices = await priceKitComponents(productKit);
+
   // Editable CMS zones on every product page (global product template) — empty
   // unless set, so the page renders exactly as before.
   // `x-kg-json` is the parity surface: /json/products/<slug> forces the node
@@ -210,7 +217,8 @@ export default async function ProductPage({
         warranty: brandMeta.warranty_text ?? null,
         customFields: (product.metafields as Record<string, unknown> | null) ?? null,
         // Grouped / bundle contents, for the sealed `product-kit` leaf.
-        kit: readProductKit(product.metafields),
+        kit: productKit,
+        kitPrices,
         productId: product.id,
       },
     });
@@ -361,7 +369,8 @@ export default async function ProductPage({
         }}
         // Grouped / bundle contents (Zoey product types, authored in the portal — they ride
         // products.metafields, which is portal-owned). Null for every other product.
-        kit={readProductKit(product.metafields)}
+        kit={productKit}
+        kitPrices={kitPrices}
         memberPrice={memberPrice}
         memberPriceMap={memberPriceMap}
         isMember={isMember}

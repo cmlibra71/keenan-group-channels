@@ -13,6 +13,7 @@ import { BackButton } from "@/components/ui/BackButton";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductOfferTiers } from "@/components/product/ProductOfferTiers";
 import { readProductKit } from "@/lib/product-kit";
+import { priceKitComponents } from "@/lib/pricing/kit-components";
 import { readProductAddons } from "@keenan/services/product-addons";
 import { readOptionValueOrder } from "@keenan/services/product-option-order";
 import { ProductTabs } from "@/components/product/ProductTabs";
@@ -155,6 +156,12 @@ export default async function ProductPage({
     fileType: string | null;
     fileSize: number | null;
   }[];
+
+  // A kit, read ONCE, and — for a bundle — what each component costs THIS shopper, ex GST,
+  // through the cart's own pricing (card Tc5ekvD6), so the page prints what the cart charges.
+  // Every other product costs one no-op parse.
+  const productKit = readProductKit(product.metafields);
+  const kitPrices = await priceKitComponents(productKit);
 
   // ═══ CMS product TEMPLATE path (kill switch: flag off → legacy) ═══
   // The whole page as a block document; this route stays the data owner — the
@@ -302,7 +309,8 @@ export default async function ProductPage({
         }}
         // Grouped / bundle contents (Zoey product types, authored in the portal — they ride
         // products.metafields, which is portal-owned). Null for every other product.
-        kit={readProductKit(product.metafields)}
+        kit={productKit}
+        kitPrices={kitPrices}
         memberPrice={memberPrice}
         memberPriceMap={memberPriceMap}
         isMember={isMember}
