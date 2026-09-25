@@ -43,6 +43,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
     selectOption,
     quantity,
     setQuantity,
+    boxQuantity,
     packSize,
     useGroupedMode,
     orderedOptionValues,
@@ -237,7 +238,11 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
         {/* The +/- step by ONE WHOLE PACK on a product sold by the carton, and by 1 on every
             other product. This must stay in step with the provider: `setQuantity` snaps every
             value UP to a whole pack, so a plain `quantity - 1` here would be snapped straight
-            back and the minus button would do nothing (cards O108e4jH / zeMPVcA3). */}
+            back and the minus button would do nothing (cards O108e4jH / zeMPVcA3).
+            The box SHOWS `boxQuantity` — whole cartons where Zoey's Enable Packaging is on, the
+            pieces otherwise — exactly what the node tree binds through the bridge, so the number
+            beside "2 Cartons = 4 Pcs" reads 2 here as well (sf-product-page: the two renderers
+            agree about the selling unit). Add to Cart still posts `quantity`, in pieces. */}
         {canBuyNow && (
           <div className="flex items-center rounded-btn border border-border-strong bg-white">
             <button
@@ -248,7 +253,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
             >
               <Minus className="h-3.5 w-3.5" />
             </button>
-            <span className="min-w-8 px-1 text-center text-sm font-semibold">{quantity}</span>
+            <span className="min-w-8 px-1 text-center text-sm font-semibold">{boxQuantity}</span>
             <button
               type="button"
               onClick={() => setQuantity(stepPackQuantity(quantity, packSize, 1))}

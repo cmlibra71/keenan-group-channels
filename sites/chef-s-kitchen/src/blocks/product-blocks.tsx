@@ -26,6 +26,8 @@ import {
   getCmsPage,
 } from "@/lib/store";
 import { getMemberContext, getListingPricing } from "@/lib/member";
+import { hasGroupIncrements } from "@keenan/services/pack";
+import { purchasePackFields } from "@/lib/product/purchase-pack";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductTabs } from "@/components/product/ProductTabs";
 import { ProductGrid } from "@/components/product/ProductGrid";
@@ -120,6 +122,17 @@ async function BreadcrumbsBlock({ ctx }: BlockProps) {
 
 // ── Product overview (gallery + buy box — ONE client component) ─────────────
 
+/**
+ * The selling unit for this renderer's purchase provider (card O108e4jH) — the same resolution the
+ * node tree's payload makes, so a carton product is a carton product on every renderer
+ * (`sf-product-page`, "They agree about the SELLING UNIT too"). The shopper's customer group is only
+ * looked up for a product that carries per-group rows; every other product costs no extra read.
+ */
+async function packFieldsFor(product: Parameters<typeof purchasePackFields>[0]) {
+  const groupId = hasGroupIncrements(product) ? (await getMemberContext()).customerGroupId : null;
+  return purchasePackFields(product, groupId);
+}
+
 async function ProductBuyboxBlock({ ctx }: BlockProps) {
   const product = productOf(ctx);
   if (!product) return null;
@@ -190,6 +203,7 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
   // whichever buy control is pressed, so a renderer that leaves this out greys Add to
   // Cart with nothing beside it to fill in (`sf-product-page`, 7vu2iEEZ x CXnP1lrL).
   const productAddons = readProductAddons(product.metafields);
+  const pack = await packFieldsFor(product);
 
   return (
     <div className={CONTAINER}>
@@ -227,6 +241,8 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
           // Authored customisation groups — priced extras and free-text questions
           // (cards 0CDcCYmO + kyMjCmAw). Null for every product that carries none.
           addons: productAddons,
+          // Card O108e4jH — the selling unit, resolved as the node tree resolves it.
+          ...pack,
         }}
         memberPrice={memberPrice}
         memberPriceMap={memberPriceMap}
@@ -562,6 +578,9 @@ async function ProductOverviewBlock({ props, ctx }: BlockProps) {
     // out is not a missing panel, it is a question that is never asked and a bare
     // line arriving at the rep. Null for every product that carries none.
     addons: readProductAddons(product.metafields),
+    // Card O108e4jH — the selling unit, resolved as the node tree resolves it, so this renderer's
+    // `QuantityWidget` counts cartons beside the same "2 Cartons = 4 Pcs" line.
+    ...(await packFieldsFor(product)),
   };
 
   const def = BLOCK_REGISTRY.product_overview;

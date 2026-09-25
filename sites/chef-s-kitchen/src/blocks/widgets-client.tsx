@@ -22,7 +22,7 @@ import { ProductCombinationNotice } from "@/components/product/ProductCombinatio
 import { Price } from "@/components/ui/Price";
 import { PriceBlock } from "@/components/ui/PriceBlock";
 import { useProductPurchaseOptional } from "@/components/product/ProductPurchaseProvider";
-import { packPrice } from "@keenan/services/pack";
+import { packPrice, stepPackQuantity } from "@keenan/services/pack";
 import { postsConfiguration } from "@/lib/product/addon-panel";
 import { ProductInstructionsPanel } from "@/components/product/ProductInstructionsPanel";
 import { buyAreaSuppressed } from "@/lib/product-customisation";
@@ -234,25 +234,28 @@ export const OptionSelectorWidget: WidgetComponent = () => {
 export const QuantityWidget: WidgetComponent = () => {
   const purchase = useProductPurchaseOptional();
   if (!purchase) return null;
-  const { displayPrice, quantity, setQuantity, packSize } = purchase;
+  const { displayPrice, quantity, setQuantity, boxQuantity, packSize } = purchase;
   if (displayPrice <= 0) return null;
   // A product sold by the carton steps a whole carton at a time and never drops below one, the
   // way Zoey's own quantity box does (cards O108e4jH / zeMPVcA3). packSize is 1 on everything
-  // else, so this is the same one-at-a-time control it has always been.
+  // else, so this is the same one-at-a-time control it has always been. The steps are the bridge's
+  // own (`stepPackQuantity` on the piece quantity) and the box SHOWS `boxQuantity` — cartons where
+  // Enable Packaging is on — so this renderer and the node tree agree about the selling unit
+  // (sf-product-page). Add to Cart still posts `quantity`, in pieces.
   return (
     <div className="flex items-center rounded-btn border border-border-strong bg-white">
       <button
         type="button"
-        onClick={() => setQuantity(Math.max(packSize, quantity - packSize))}
+        onClick={() => setQuantity(stepPackQuantity(quantity, packSize, -1))}
         aria-label="Decrease quantity"
         className="px-3 py-3 text-text-secondary transition-colors hover:text-text-primary"
       >
         <Minus className="h-3.5 w-3.5" />
       </button>
-      <span className="min-w-8 px-1 text-center text-sm font-semibold">{quantity}</span>
+      <span className="min-w-8 px-1 text-center text-sm font-semibold">{boxQuantity}</span>
       <button
         type="button"
-        onClick={() => setQuantity(quantity + packSize)}
+        onClick={() => setQuantity(stepPackQuantity(quantity, packSize, 1))}
         aria-label="Increase quantity"
         className="px-3 py-3 text-text-secondary transition-colors hover:text-text-primary"
       >
