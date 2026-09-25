@@ -62,6 +62,11 @@ export type CartItemRow = {
    */
   pack_size?: number | null;
   pack_unit?: string | null;
+  /** Zoey's wording for this line, resolved server-side (card O108e4jH): "Case contains 6
+   *  Bottles", or "Sold in multiples of 12" where Enable Packaging is off. */
+  pack_note?: string | null;
+  /** Enable Packaging — false means there is no package to price on this line. */
+  pack_packaging?: boolean | null;
   /**
    * What this line took from a promotion, resolved server-side in `readCart`
    * (card p6YVxc4P). The line's own unit price is UNTOUCHED — the offer is a
@@ -166,10 +171,16 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
   // refresh to re-sync the cart from the server instead.
   // 1 on everything that is not sold by the carton, so this row behaves exactly as it always has.
   const packSize = resolvePackSize({ sellPackSize: item.pack_size ?? null });
-  const packNote = packNoteFor({
-    sellPackSize: item.pack_size ?? null,
-    sellPackUnit: item.pack_unit ?? null,
-  });
+  // The server's sentence wins (it knows Enable Packaging, the Unit Label and the shopper's
+  // group row); the local one covers a line object from before those fields existed.
+  const packNote =
+    item.pack_note !== undefined
+      ? item.pack_note
+      : packNoteFor({
+          sellPackSize: item.pack_size ?? null,
+          sellPackUnit: item.pack_unit ?? null,
+        });
+  const packPriced = item.pack_packaging !== false;
   const packUnit = resolvePackUnit({ sellPackUnit: item.pack_unit ?? null });
 
   function handleQuantity(newQty: number) {
@@ -258,9 +269,14 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
         <p className="text-sm text-zinc-600 mt-1"><Price amount={unitPrice} /> each</p>
         {packNote && (
           <p className="text-xs text-zinc-600 mt-0.5">
-            {packNote} {"\u00b7 "}
-            <Price amount={packPrice(unitPrice, packSize)} />
-            {` per ${packUnit.toLowerCase()}`}
+            {packNote}
+            {packPriced && (
+              <>
+                {" \u00b7 "}
+                <Price amount={packPrice(unitPrice, packSize)} />
+                {` per ${packUnit.toLowerCase()}`}
+              </>
+            )}
           </p>
         )}
         {offerDiscount > 0 && item.offer_name && (

@@ -128,6 +128,33 @@ export function minimumOrderError(
   return null;
 }
 
+/**
+ * What the minimum-order gate MEASURES, after Zoey's per-product "Ignore From Minimum Order
+ * Quantity / Amount" (card O108e4jH): a line whose product says Yes is left out of that measure —
+ * its value does not count toward the minimum amount, its pieces not toward the minimum quantity.
+ * A cart with no such line is returned untouched, so every cart today is measured exactly as it
+ * was. Pure; the product facts come from the same batched read the checkout already makes.
+ */
+export function minimumOrderMeasure(
+  cart: { subtotalIncTax: number; itemCount: number },
+  lines: { productId: number; quantity: number; totalIncTax: string | number }[],
+  facts: Map<number, { ignoreMinOrderQty?: boolean | null; ignoreMinOrderAmount?: boolean | null }>
+): { subtotalIncTax: number; itemCount: number } {
+  let amountOut = 0;
+  let qtyOut = 0;
+  for (const line of lines) {
+    const f = facts.get(line.productId);
+    if (!f) continue;
+    if (f.ignoreMinOrderAmount === true) amountOut += Number(line.totalIncTax) || 0;
+    if (f.ignoreMinOrderQty === true) qtyOut += Number(line.quantity) || 0;
+  }
+  if (amountOut === 0 && qtyOut === 0) return cart;
+  return {
+    subtotalIncTax: Math.max(0, Math.round((cart.subtotalIncTax - amountOut) * 100) / 100),
+    itemCount: Math.max(0, cart.itemCount - qtyOut),
+  };
+}
+
 /** The rejection message for a payment method the account isn't allowed to use. */
 export function disallowedPaymentMethodError(): string {
   return "That payment method isn't available on your account. Please choose one of the payment methods shown at checkout.";

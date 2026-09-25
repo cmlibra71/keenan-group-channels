@@ -53,7 +53,9 @@ export function ProductPackNote() {
   return (
     <p className="mt-3 text-sm text-zinc-700">
       <span className="font-semibold text-zinc-900">{packNote}</span>
-      {unit > 0 && (
+      {/* Zoey's Enable Packaging off (card O108e4jH): the sentence is "Sold in multiples of 12"
+          and there is no package to price. */}
+      {unit > 0 && purchase.packagingOn && (
         <>
           {" · "}
           <Price amount={packPrice(unit, packSize)} gst /> per {packUnit.toLowerCase()}

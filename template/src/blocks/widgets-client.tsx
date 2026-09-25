@@ -58,8 +58,13 @@ function PackLine({ unitPrice }: { unitPrice: number }) {
   return (
     <p className="mt-2 text-sm text-zinc-600">
       <span className="font-semibold text-zinc-900">{packNote}</span>
-      {" \u00b7 "}
-      <Price amount={packPrice(unitPrice, packSize)} gst /> per {packUnit.toLowerCase()}
+      {/* Zoey's Enable Packaging off (card O108e4jH): "Sold in multiples of 12" — no package to price. */}
+      {purchase.packagingOn && (
+        <>
+          {" \u00b7 "}
+          <Price amount={packPrice(unitPrice, packSize)} gst /> per {packUnit.toLowerCase()}
+        </>
+      )}
     </p>
   );
 }

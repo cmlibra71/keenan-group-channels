@@ -3,7 +3,7 @@
 import { cache } from "react";
 import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, applyAdvertisedLadderPrices, getMemberLadderShare, boundPricesToMemberScale, getLadderConfig, CHANNEL_ID } from "@/lib/store";
 import { resolveAccountLinePrices, accountLineKey } from "@keenan/services";
-import { getAccountId } from "@/lib/member";
+import { getAccountId, getMemberContext } from "@/lib/member";
 import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { CART_RESTRICTED_ERROR } from "@/lib/cart/restricted-message";
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice, subscriptionPlanService } from "@/lib/store";
@@ -11,7 +11,31 @@ import { getCartUuid, setCartUuid } from "@/lib/cart";
 import { brandIdsForProducts } from "@/lib/checkout/free-shipping-brands";
 import { backorderFactsForProducts, backorderFactsForProduct, type ProductBackorderFacts } from "@/lib/cart/backorder-facts";
 import { availableUnits, canPurchaseQuantity, resolveBackorderPolicy } from "@keenan/services/backorder";
-import { resolvePackSize, resolvePackUnit, snapToPack } from "@keenan/services/pack";
+import {
+  hasGroupIncrements,
+  isPackagingOn,
+  packNote,
+  resolvePackSize,
+  resolvePackUnit,
+  snapToPack,
+  type PackFacts,
+} from "@keenan/services/pack";
+
+/**
+ * The customer group a per-group package row (Zoey's "Customer Group | Qty Increment | Package
+ * Label", card O108e4jH) is matched against: the group this shopper is PRICED in — the same
+ * `getMemberContext` group the product page's pack is resolved with, so the page and the cart
+ * cannot step by different packs. Asked ONLY when the product actually carries a group row, so an
+ * ordinary add or quantity change costs no extra query. Null (guest, non-member) = the Default row.
+ */
+async function packGroupFor(facts: PackFacts | null | undefined): Promise<number | null> {
+  if (!hasGroupIncrements(facts)) return null;
+  try {
+    return (await getMemberContext()).customerGroupId;
+  } catch {
+    return null;
+  }
+}
 import { getSession } from "@/lib/auth";
 import { currentShopperForOffers } from "@/lib/promotions/shopper";
 import { pickBestBulkUnit, layerCartPrice, memberPricingGroupId } from "@/lib/pricing/cart-pricing";
@@ -444,7 +468,7 @@ export async function addToCart(
   // O108e4jH / zeMPVcA3). The product page already steps in whole packs; this covers the listing
   // tile, a stale form and a direct call — snapping UP, so a shopper is never handed less than
   // they asked for. On everything else `snapToPack` returns the quantity untouched.
-  const packSize = resolvePackSize(facts);
+  const packSize = resolvePackSize(facts, await packGroupFor(facts));
   const finalQty = snapToPack(wantedQty, packSize);
 
   const refusal = await refuseCartQuantity(productId, finalQty, facts);
@@ -532,7 +556,10 @@ export async function updateCartItem(itemId: number, quantity: number) {
     // removed the line above, so a pack product can still be emptied out of the cart; anything
     // that survives to here is rounded up to a whole pack.
     const packFacts = await backorderFactsForProduct(item.product_id);
-    const nextQuantity = snapToPack(quantity, resolvePackSize(packFacts));
+    const nextQuantity = snapToPack(
+      quantity,
+      resolvePackSize(packFacts, await packGroupFor(packFacts))
+    );
 
     // Same refusal as the add, so a "+" cannot walk past a limit the add refused (card 7vu2iEEZ).
     // Only an INCREASE is judged: a line already in the basket when staff changed the setting must
@@ -729,6 +756,10 @@ const readCart = cache(async () => {
     ...(await currentShopperForOffers()),
   });
   const offerByItem = new Map(offers.lines.map((l) => [l.itemId, l]));
+  // One group lookup for the whole cart, and only when some line carries a per-group pack row.
+  const packGroup = [...stock.values()].some((f) => hasGroupIncrements(f))
+    ? await packGroupFor([...stock.values()].find((f) => hasGroupIncrements(f)))
+    : null;
 
   return {
     ...full,
@@ -747,8 +778,12 @@ const readCart = cache(async () => {
         restrict_add_to_cart: facts?.restrictAddToCart === true,
         // The SELLING UNIT, resolved once here (cards O108e4jH / zeMPVcA3), so the row can step
         // by a whole pack and say what a pack holds without a second lookup or a second opinion.
-        pack_size: resolvePackSize(facts),
-        pack_unit: resolvePackUnit(facts),
+        pack_size: resolvePackSize(facts, packGroup),
+        pack_unit: resolvePackUnit(facts, packGroup),
+        // Zoey's wording for the line (card O108e4jH): "Case contains 6 Bottles", or "Sold in
+        // multiples of 12" where Enable Packaging is off — then there is no package to price.
+        pack_note: packNote(facts, packGroup),
+        pack_packaging: isPackagingOn(facts, packGroup),
         // What this line took from an offer, so the row can show it without a
         // second evaluation (card p6YVxc4P). Absent on a line that took nothing.
         offer_discount: offerByItem.get(i.id)?.discount ?? null,

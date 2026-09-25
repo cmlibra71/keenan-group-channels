@@ -5,6 +5,7 @@ import {
   filterPaymentMethodsForAccount,
   isPaymentMethodAllowed,
   minimumOrderError,
+  minimumOrderMeasure,
   type ChannelMinimums,
   isPaymentMethodOnChannel,
 } from "./account-options-policy.ts";
@@ -192,4 +193,30 @@ test("an order taken with NO payment method is still allowed through", () => {
   // A specialised delivery held for a human freight quote (card Wxjp8wpg) has
   // an empty method and must not be gated here.
   assert.equal(isPaymentMethodOnChannel("", [{ id: "bank_transfer" }]), true);
+});
+
+
+// Zoey's per-product "Ignore From Minimum Order Quantity / Amount" (card O108e4jH).
+test("minimumOrderMeasure: a cart with no ignored line is measured exactly as before", () => {
+  const cart = { subtotalIncTax: 120, itemCount: 5 };
+  const lines = [{ productId: 1, quantity: 5, totalIncTax: "120.00" }];
+  assert.equal(minimumOrderMeasure(cart, lines, new Map()), cart);
+  assert.equal(minimumOrderMeasure(cart, lines, new Map([[1, { ignoreMinOrderAmount: false }]])), cart);
+});
+
+test("minimumOrderMeasure: an ignored line counts toward neither minimum it is excluded from", () => {
+  const cart = { subtotalIncTax: 150, itemCount: 7 };
+  const lines = [
+    { productId: 1, quantity: 5, totalIncTax: "100.00" },
+    { productId: 2, quantity: 2, totalIncTax: "50.00" },
+  ];
+  const facts = new Map([[2, { ignoreMinOrderAmount: true, ignoreMinOrderQty: true }]]);
+  assert.deepEqual(minimumOrderMeasure(cart, lines, facts), { subtotalIncTax: 100, itemCount: 5 });
+  // Amount only: the pieces still count.
+  const amountOnly = new Map([[2, { ignoreMinOrderAmount: true }]]);
+  assert.deepEqual(minimumOrderMeasure(cart, lines, amountOnly), { subtotalIncTax: 100, itemCount: 7 });
+  // So a $120 minimum that the whole cart clears is NOT cleared once the ignored line is out.
+  const minimums = { minOrderAmount: 120, minOrderQty: null };
+  assert.equal(minimumOrderError(cart, minimums), null);
+  assert.match(minimumOrderError(minimumOrderMeasure(cart, lines, facts), minimums) ?? "", /minimum order amount/);
 });

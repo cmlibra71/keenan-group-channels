@@ -86,6 +86,7 @@ import {
   isPaymentMethodOnChannel,
   unavailablePaymentMethodError,
   minimumOrderError,
+  minimumOrderMeasure,
   disallowedPaymentMethodError,
 } from "@/lib/checkout/account-options-policy";
 import { enforceLimit } from "@/lib/security/rate-limits";
@@ -608,8 +609,13 @@ export async function placeOrder(
   // per line for the rest of that line's life (card 7vu2iEEZ, Tim 2026-08-11). Read once, here:
   // stock moves nightly, so anything derived later would rewrite what the customer was told.
   // Non-fatal on the same terms as the cost read — an order must never fail to place over it.
+  // The same read carries Zoey's "Ignore From Minimum Order Quantity / Amount" (card O108e4jH),
+  // kept for the minimum-order gate below so it costs no second query. Empty on a failed read,
+  // which measures the cart exactly as before.
+  let lineProductFacts: Awaited<ReturnType<typeof backorderFactsForProducts>> = new Map();
   try {
     const stock = await backorderFactsForProducts(lineItems.map((l) => l.productId));
+    lineProductFacts = stock;
     lineItems = withBackorderedQuantities(lineItems, stock);
   } catch (e) {
     console.error("[placeOrder] back-order stamp failed (non-fatal):", e);
@@ -936,7 +942,7 @@ export async function placeOrder(
     return { error: PAY_UNAVAILABLE_ACCOUNT_ORDER };
   }
   const minError = minimumOrderError(
-    { subtotalIncTax, itemCount: totalItems },
+    minimumOrderMeasure({ subtotalIncTax, itemCount: totalItems }, lineItems, lineProductFacts),
     effectiveMinimums(accountOptions, checkoutSettings)
   );
   if (minError) {
