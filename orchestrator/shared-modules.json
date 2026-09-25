@@ -240,6 +240,7 @@
     "lib/legacy-address.ts",
     "lib/listing-sort.test.ts",
     "lib/listing-sort.ts",
+    "lib/mega-menu-brands.ts",
     "lib/mega-menu.test.ts",
     "lib/mega-menu.ts",
     "lib/membership/activation-server.ts",
