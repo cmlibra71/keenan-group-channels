@@ -185,6 +185,7 @@
     "lib/checkout/last-order.ts",
     "lib/checkout/net-terms-policy.test.ts",
     "lib/checkout/net-terms-policy.ts",
+    "lib/checkout/net-terms-wiring.test.ts",
     "lib/checkout/net-terms.ts",
     "lib/checkout/order-draft.test.ts",
     "lib/checkout/order-draft.ts",
