@@ -12,7 +12,8 @@ import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductOfferTiers } from "@/components/product/ProductOfferTiers";
-import { readProductKit } from "@/lib/product-kit";
+import { offeredKit, readProductKit } from "@/lib/product-kit";
+import { priceKitComponents } from "@/lib/pricing/kit-components";
 import { readProductAddons } from "@keenan/services/product-addons";
 import { readOptionValueOrder } from "@keenan/services/product-option-order";
 import { ProductTabs } from "@/components/product/ProductTabs";
@@ -52,7 +53,7 @@ export default async function ProductPage({
   // Per-account product prices override EVERY other price. The cached product row is shared by all
   // shoppers, so the account's price is overlaid onto a copy at read time (never into the cache).
   const accountId = await getAccountId();
-  const [product] = await applyAccountPrices([cachedProduct]);
+  const [product] = await applyAccountPrices([cachedProduct], { bundleBuild: false });
 
   // Reviews are PROJECTED BEFORE THEY ARE AWAITED. `getProductReviews` returns the
   // whole `product_reviews` row — `author_email` (stamped on every signed-in
@@ -148,6 +149,15 @@ export default async function ProductPage({
     fileSize: number | null;
   }[];
 
+  // A kit, read ONCE, and — for a bundle — what each component costs THIS shopper, ex GST,
+  // through the cart's own pricing (card Tc5ekvD6), so the page prints what the cart charges.
+  // Both renderers below read the same pair; every other product costs one no-op parse.
+  // The picker OFFERS only the choices that can be bought here (`offeredKit` — Zoey hides a
+  // disabled selection), so a retired or other-site part never opens the bundle unpriced.
+  const rawKit = readProductKit(product.metafields);
+  const kitPrices = await priceKitComponents(rawKit);
+  const productKit = offeredKit(rawKit, kitPrices, product.hidePrice === true);
+
   // Editable CMS zones on every product page (global product template) — empty
   // unless set, so the page renders exactly as before.
   // `x-kg-json` is the parity surface: /json/products/<slug> forces the node
@@ -210,7 +220,8 @@ export default async function ProductPage({
         warranty: brandMeta.warranty_text ?? null,
         customFields: (product.metafields as Record<string, unknown> | null) ?? null,
         // Grouped / bundle contents, for the sealed `product-kit` leaf.
-        kit: readProductKit(product.metafields),
+        kit: productKit,
+        kitPrices,
         productId: product.id,
       },
     });
@@ -361,7 +372,8 @@ export default async function ProductPage({
         }}
         // Grouped / bundle contents (Zoey product types, authored in the portal — they ride
         // products.metafields, which is portal-owned). Null for every other product.
-        kit={readProductKit(product.metafields)}
+        kit={productKit}
+        kitPrices={kitPrices}
         memberPrice={memberPrice}
         memberPriceMap={memberPriceMap}
         isMember={isMember}

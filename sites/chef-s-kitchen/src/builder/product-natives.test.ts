@@ -76,7 +76,9 @@ test("a parsed kit in data.kit RENDERS — the payload has no metafields to re-p
   const el = await kitNative({ kit: parsedKit });
   assert.notEqual(el, null, "kit contents must render for a kit product");
   assert.deepEqual(el?.props?.kit, parsedKit, "the native receives the parsed kit untouched");
-  assert.equal(el?.props?.productId, 7);
+  // No product id and no buy button of its own (card Tc5ekvD6): the page's ordinary Add to Cart
+  // and Add to Quote send the build, read from `KitPurchaseProvider` above the page.
+  assert.equal(el?.props?.productId, undefined);
 });
 
 test("a product that is not a kit renders nothing", async () => {

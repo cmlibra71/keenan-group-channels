@@ -100,6 +100,11 @@ export interface CdMembershipInput {
    * Kitchens out (it has no `subscription_plans` row).
    */
   planPrice: string | null;
+  /**
+   * The product is a BUNDLE (card Tc5ekvD6): its page headline carries the chosen build, which
+   * the scale's per-SKU rows know nothing about, so it gets the pitch without prices.
+   */
+  isBundle?: boolean;
   product: {
     id: number;
     variants: Array<{ id: number }>;
@@ -126,6 +131,10 @@ export async function buildCdMembershipData(input: CdMembershipInput): Promise<C
     joinHref: JOIN_HREF,
   };
   const pitch: CdMembershipPitch | null = input.isMember ? null : { ...base, ladderEnabled: false };
+
+  // A bundle states no scale prices: its rows would price the bundle SKU alone beside a headline
+  // for the whole build (Tc5ekvD6). Same pitch as a channel with the scale off.
+  if (input.isBundle) return pitch;
 
   const config = await ladderConfig().catch(() => null);
   // THE SCALE SWITCH — unwritten on both live channels, so this is the branch

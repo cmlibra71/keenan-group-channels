@@ -19,6 +19,7 @@ import { withSilverChefNode } from "@/builder/silverchef-node";
 import { withItemIdNode } from "@/builder/item-id-node";
 import { withAddonsNode } from "@/builder/product-addons-node";
 import { withProductInstructionsNode } from "@/builder/product-instructions-node";
+import { withProductKitNode } from "@/builder/product-kit-node";
 import { withImageNoticeNode } from "@/builder/product-image-notice";
 import { withCombinationNoticeNode } from "@/builder/product-combination-notice";
 import { withReviewsBlock, withReviewsBlockInComponents } from "@/builder/product-reviews-node";
@@ -243,7 +244,7 @@ export async function renderProductNodeBranch({
   const nodeTree = guardBuyControls(
     withCdMemberPricingNode(
       withUpsellBlock(
-        // FOUR passes share the `actions-row` anchor and each one inserts BEFORE it, so
+        // FIVE passes share the `actions-row` anchor and each one inserts BEFORE it, so
         // whichever runs LAST ends up nearest the buy buttons. The order is decided, not
         // accidental:
         //   * the UNMADE-COMBINATION sentence (card VNh9DdYd) is outermost, and therefore the
@@ -254,20 +255,28 @@ export async function renderProductNodeBranch({
         //     will charge, and a priced control belongs beside the button it moves.
         //   * the free-text INSTRUCTIONS box (kyMjCmAw) sits above them — it describes what to
         //     build and moves no money, so the priced control keeps the nearer place.
+        //   * the KIT BLOCK (Tc5ekvD6) sits above those: the bundle build is what the product is,
+        //     and it moves the headline price, so it comes straight after the price facts.
         //   * the PACK NOTE (O108e4jH / zeMPVcA3) is innermost: a fact about the price, which
         //     belongs with the price panel.
-        // Page order is therefore price -> pack sentence -> Instructions -> extras -> "we do
-        // not make that combination" -> buy row. `ProductDetail.tsx` (the non-node fallback
+        // Page order is therefore price -> pack sentence -> build -> Instructions -> extras -> "we
+        // do not make that combination" -> buy row. `ProductDetail.tsx` (the non-node fallback
         // renderer) is hand-ordered to match so the two renderers cannot disagree, and if any
         // of these anchors moves they all move together (catalogue.md `sf-product-page`).
         withCombinationNoticeNode(
           withResidentialNoticeNode(
             withAddonsNode(
               withProductInstructionsNode(
-                withPackNoteNode(
-                  withModularNoticeNode(
-                    withReviewsBlock(
-                      withImageNoticeNode(withSilverChefNode(withItemIdNode(scaleWording(storedTree ?? SEED_PRODUCT_TREE))))
+                // The kit block (card Tc5ekvD6) — "What's included" on a grouped kit, the bundle
+                // pickers on a bundle. Inside the Instructions pass and outside the pack note,
+                // so the build sits between the pack sentence and the Instructions box: it is
+                // what the product IS, and the Instructions and extras qualify it.
+                withProductKitNode(
+                  withPackNoteNode(
+                    withModularNoticeNode(
+                      withReviewsBlock(
+                        withImageNoticeNode(withSilverChefNode(withItemIdNode(scaleWording(storedTree ?? SEED_PRODUCT_TREE))))
+                      )
                     )
                   )
                 )
@@ -290,6 +299,11 @@ export async function renderProductNodeBranch({
     accountId: member.accountId,
     planPrice: member.planPrice,
     ladderShare,
+    // A BUNDLE's headline is its own price plus the build (card Tc5ekvD6), while the scale's
+    // M / W / R rows are the bundle SKU's own — so on a bundle the panel pitches membership
+    // without stating prices, rather than put "best member price" for the bundle SKU alone
+    // beside a headline for the whole build.
+    isBundle: (nativeData?.kit as { kind?: string } | null | undefined)?.kind === "bundle",
     // No RRP is passed: the panel reads the page's OWN headline base amount for
     // the active variant off the purchase provider, so a product-level price can
     // never sit beside per-variant ladder figures (card Nyp8bkPm, review fix).

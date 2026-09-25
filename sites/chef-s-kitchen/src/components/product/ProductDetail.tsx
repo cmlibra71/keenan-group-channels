@@ -10,7 +10,6 @@
 // the contract; do not restyle here without a parity gate.
 // ============================================================================
 
-import { useState } from "react";
 import Link from "next/link";
 import { AddToCartButton } from "./AddToCartButton";
 import { ProductAddons } from "./ProductAddons";
@@ -28,7 +27,8 @@ import { ProductKitBlock } from "./ProductKitBlock";
 import { ProductInstructionsPanel } from "./ProductInstructionsPanel";
 import { buyAreaSuppressed } from "@/lib/product-customisation";
 import { postsConfiguration } from "@/lib/product/addon-panel";
-import { defaultKitSelection, toKitChoices, type ProductKit } from "@/lib/product-kit";
+import type { ProductKit } from "@/lib/product-kit";
+import { useKitSelection } from "./KitSelection";
 
 /**
  * `kit` is present only for the two Zoey kit types (grouped / bundle). Every other caller — the
@@ -70,12 +70,9 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
   // which was only ever invisible because CD phones had no way to switch.
   const { inclusive } = useGst();
 
-  // A bundle's configuration lives here rather than in the purchase provider: it never becomes a
-  // cart price (it is quoted), so it has no business in the pricing state the two storefronts and
-  // the portal editor share.
-  const [kitSelection, setKitSelection] = useState<Record<string, number>>(() =>
-    kit?.kind === "bundle" ? defaultKitSelection(kit.groups) : {}
-  );
+  // A bundle's build lives in `KitPurchaseProvider`, ABOVE the purchase provider, so the provider
+  // prices it into the headline (Zoey's dynamic price, card Tc5ekvD6) and both buy buttons send it.
+  const kitLive = useKitSelection();
   // Free-text customisation (card kyMjCmAw) rides the SAME provider state the ticked extras
   // do — `setAddonText` writes into `selectedAddons`, so one bag reaches whichever buy button
   // is pressed and no renderer has to know which control produced an answer.
@@ -87,16 +84,18 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
   // rule would have made the box unreachable on the one product that needs it.
   const buyPostsConfiguration = postsConfiguration(addonGroupsOffered, product.addons);
   const isBundle = kit?.kind === "bundle";
-  const kitReady = !isBundle || kit.groups.every((g) => kitSelection[g.name] != null);
-  const kitChoices = isBundle ? toKitChoices(kitSelection) : null;
-  // A bundle is never bought straight off the page — its configuration goes to a rep, so the
-  // quantity stepper, Add to Cart and the mobile buy bar are all out.
+  // Every required group starts answered (its default, else its first product) and an optional
+  // group may be left at "None", so a bundle is always ready to send; the build rides both buttons.
+  const kitChoices = isBundle ? (kitLive?.choices ?? null) : null;
+  // A bundle is bought like any priced product (card Tc5ekvD6): its build is priced into
+  // displayPrice by `KitPurchaseProvider`, and Add to Cart sends the build, which the cart writes
+  // as the chosen components. A $0 bundle whose build has no price online stays quote-only below.
   // Card 7vu2iEEZ: a product staff set to hide its price, refuse out-of-stock buys, or keep out of
   // the cart drops straight into the quote-only branch below — no greyed button, and nothing on
   // this page to explain one (CXnP1lrL removed every availability line). `hidePrice` already
   // arrives as displayPrice 0 through the provider on the node path; this covers the React path.
   const canBuyNow =
-    displayPrice > 0 && !isBundle && !hidePrice && !restrictAddToCart && !purchaseBlockedByStock;
+    displayPrice > 0 && !hidePrice && !restrictAddToCart && !purchaseBlockedByStock;
 
   return (
     <div>
@@ -182,11 +181,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
 
       {/* Kit contents (grouped) / choice groups (bundle) */}
       {kit && (
-        <ProductKitBlock
-          kit={kit}
-          selection={kitSelection}
-          onSelect={(group, id) => setKitSelection((prev) => ({ ...prev, [group]: id }))}
-        />
+        <ProductKitBlock kit={kit} />
       )}
 
       {/* The pack sentence, on THIS renderer too. The live page places it on the authored node
@@ -264,6 +259,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
             <>
               <AddToCartButton
                 productId={productId}
+                kitChoices={kitChoices}
                 // Card 0CDcCYmO — this renderer is the fallback if the product design is switched
                 // off, so it carries the ticked extras too; dropping them would charge the bare
                 // product price for a configuration the shopper priced on screen. Posted only
@@ -280,6 +276,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
                 <AddToQuoteButton
                   productId={productId}
                   variantId={cartVariantId}
+                  kitChoices={kitChoices}
                   // A required extras group greys this button too (the provider folds it into
                   // allOptionsSelected) and the group carries its own "Choose one".
                   disabled={(useGroupedMode && !allOptionsSelected) || addonGroupsUnanswered.length > 0}
@@ -295,7 +292,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
             <AddToQuoteButton
               productId={productId}
               variantId={cartVariantId}
-              disabled={(useGroupedMode && !allOptionsSelected) || !kitReady || addonGroupsUnanswered.length > 0}
+              disabled={(useGroupedMode && !allOptionsSelected) || addonGroupsUnanswered.length > 0}
               kitChoices={kitChoices}
               // Card 0CDcCYmO — the picks travel with whichever button is pressed. Posted only
               // where the panel was OFFERED: an empty object is a deliberate clear-down,
@@ -334,6 +331,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
           </div>
           <AddToCartButton
             productId={productId}
+            kitChoices={kitChoices}
             // Card 0CDcCYmO — this renderer is the fallback if the product design is switched
             // off, so it carries the ticked extras too; dropping them would charge the bare
             // product price for a configuration the shopper priced on screen. Posted only where

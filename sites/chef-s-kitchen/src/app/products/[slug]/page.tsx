@@ -11,7 +11,8 @@ import { ProductOfferTiers } from "@/components/product/ProductOfferTiers";
 import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { renderProductNodeBranch } from "@/builder/product-node-branch";
-import { readProductKit } from "@/lib/product-kit";
+import { offeredKit, readProductKit } from "@/lib/product-kit";
+import { priceKitComponents } from "@/lib/pricing/kit-components";
 import { readProductAddons } from "@keenan/services/product-addons";
 import { readOptionValueOrder } from "@keenan/services/product-option-order";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
@@ -74,7 +75,7 @@ export default async function ProductPage({
 
   // Per-account product prices override EVERY other price. The cached product row is SHARED by all
   // shoppers, so the account's price is overlaid onto a copy at read time (never into the cache).
-  const [product] = await applyAccountPrices([cachedProduct]);
+  const [product] = await applyAccountPrices([cachedProduct], { bundleBuild: false });
 
   // Reviews are PROJECTED BEFORE THEY ARE AWAITED. `getProductReviews` returns the
   // whole `product_reviews` row — `author_email` (stamped on every signed-in
@@ -244,6 +245,15 @@ export default async function ProductPage({
     fileSize: number | null;
   }[];
 
+  // A kit, read ONCE, and — for a bundle — what each component costs THIS shopper, ex GST,
+  // through the cart's own pricing (card Tc5ekvD6), so the page prints what the cart charges.
+  // Both renderers below read the same pair; every other product costs one no-op parse.
+  // The picker OFFERS only the choices that can be bought here (`offeredKit` — Zoey hides a
+  // disabled selection), so a retired or other-site part never opens the bundle unpriced.
+  const rawKit = readProductKit(product.metafields);
+  const kitPrices = await priceKitComponents(rawKit);
+  const productKit = offeredKit(rawKit, kitPrices, product.hidePrice === true);
+
   // Editable CMS content zones shown on every product page (global product
   // template). Empty unless set — so the page renders exactly as before.
   const { isEnabled } = await draftMode();
@@ -312,7 +322,8 @@ export default async function ProductPage({
       reviewSummary,
       // Grouped / bundle contents (Zoey product types, authored in the portal — they ride
       // products.metafields, which is portal-owned). Null for every other product.
-      kit: readProductKit(product.metafields),
+      kit: productKit,
+      kitPrices,
     },
     links: {
       brandRow:
@@ -369,7 +380,7 @@ export default async function ProductPage({
       },
       draft,
       // Grouped / bundle contents, for the sealed `product-kit` leaf.
-      nativeData: { kit: readProductKit(product.metafields) },
+      nativeData: { kit: productKit, kitPrices },
     });
     if (nodeRendered) return nodeRendered;
   }

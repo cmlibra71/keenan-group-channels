@@ -6,24 +6,27 @@
 // GROUPED: "What's included" — the fixed contents, for information. The kit is bought at its own
 // single price and goes through as ONE line, so the normal buy buttons apply unchanged.
 //
-// BUNDLE: the choice groups the customer picks from. A modular configuration is deliberately NOT
-// priced live (Steve, card 7bmpuqei) — the picks are captured and sent through as a quote request,
-// so this block owns the selection and the parent hands it to Add to Quote.
+// BUNDLE (card Tc5ekvD6 — Zoey's bundled product, support.zoey.com/docs/bundled-product): one
+// picker per choice group, starting on the author's defaults; an optional group offers "None"; a
+// required group of ONE product is a part that is always included and is shown, not asked. Each
+// choice carries its price for THIS shopper and the page's headline moves as they choose (Zoey's
+// dynamic price, "Price as configured") — the money is the purchase provider's, handed the build
+// by `KitPurchaseProvider`, so this block prints the same figure the buy box and the cart use.
+// The block has NO buy button of its own: the page's ordinary Add to Cart and Add to Quote carry
+// the build (two identical CTAs is what the first cut of 7bmpuqei shipped and it read as a bug).
 // ============================================================================
 
 import { Package } from "lucide-react";
-import type { KitGroup, ProductKit } from "@/lib/product-kit";
+import { useProductPurchaseOptional } from "@keenan/services/product-page";
+import { Price } from "@/components/ui/Price";
+import { isFixedGroup, type KitGroup, type KitPrices, type ProductKit } from "@/lib/product-kit";
+import { useKitSelection } from "./KitSelection";
+import { bundleMoney } from "./bundle-money";
 
-export function ProductKitBlock({
-  kit,
-  selection,
-  onSelect,
-}: {
-  kit: ProductKit;
-  /** Bundle only: chosen product id per group name. */
-  selection: Record<string, number>;
-  onSelect: (group: string, productId: number) => void;
-}) {
+export function ProductKitBlock({ kit }: { kit: ProductKit }) {
+  const live = useKitSelection();
+  const purchase = useProductPurchaseOptional();
+
   if (kit.kind === "grouped") {
     return (
       <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-5">
@@ -46,6 +49,10 @@ export function ProductKitBlock({
     );
   }
 
+  const selection = live?.selection ?? {};
+  const money = bundleMoney({ purchase, total: live?.total ?? null });
+  const prices: KitPrices = money.showPrices ? (live?.prices ?? {}) : {};
+
   return (
     <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-5">
       <h3 className="mb-4 text-sm font-semibold text-zinc-900">Build your configuration</h3>
@@ -54,55 +61,122 @@ export function ProductKitBlock({
           <KitGroupPicker
             key={group.name}
             group={group}
+            prices={prices}
             selectedId={selection[group.name] ?? null}
-            onSelect={onSelect}
+            onSelect={(id) => live?.select(group.name, id)}
           />
         ))}
       </div>
-      <p className="mt-4 text-xs text-zinc-500">
-        Configurations like this are priced by our team. Your choices are sent through with the
-        quote request.
-      </p>
+      {money.configured != null ? (
+        <div className="mt-4 border-t border-zinc-200 pt-3">
+          <p className="flex items-baseline justify-between text-sm">
+            <span className="text-zinc-600">Price as configured</span>
+            <Price amount={money.configured} gst className="font-semibold text-zinc-900" />
+          </p>
+          {money.cartOffered && (
+            <p className="mt-1 text-xs text-zinc-500">
+              Each item is added to your cart as its own line, at its own price.
+            </p>
+          )}
+        </div>
+      ) : (
+        <p className="mt-4 text-xs text-zinc-500">
+          Configurations like this are priced by our team. Your choices are sent through with the
+          quote request.
+        </p>
+      )}
     </div>
   );
 }
 
 function KitGroupPicker({
   group,
+  prices,
   selectedId,
   onSelect,
 }: {
   group: KitGroup;
+  prices: KitPrices;
   selectedId: number | null;
-  onSelect: (group: string, productId: number) => void;
+  onSelect: (productId: number | null) => void;
 }) {
+  const priceOf = (productId: number, quantity: number) =>
+    prices[productId] != null ? prices[productId] * quantity : null;
+
+  // A required group of one product is a part of the bundle, not a question.
+  if (isFixedGroup(group)) {
+    const item = group.items[0];
+    const amount = priceOf(item.productId, item.quantity);
+    return (
+      <div>
+        <p className="mb-2 text-sm font-medium text-zinc-900">{group.name}</p>
+        <div className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm">
+          <Package className="h-4 w-4 shrink-0 text-zinc-400" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-zinc-900">
+              {item.quantity > 1 && <span className="font-medium">{item.quantity} × </span>}
+              {item.name}
+            </span>
+            {item.sku && <span className="block truncate text-xs text-zinc-500">{item.sku}</span>}
+          </span>
+          <span className="shrink-0 text-xs text-zinc-500">Included</span>
+          {amount != null && <Price amount={amount} gst className="shrink-0 text-sm text-zinc-900" />}
+        </div>
+      </div>
+    );
+  }
+
+  const row = (active: boolean) =>
+    `flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-colors ${
+      active ? "border-zinc-900 bg-white" : "border-zinc-200 bg-white hover:border-zinc-400"
+    }`;
+
   return (
     <fieldset>
-      <legend className="mb-2 text-sm font-medium text-zinc-900">{group.name}</legend>
+      <legend className="mb-2 text-sm font-medium text-zinc-900">
+        {group.name}
+        {group.optional && <span className="ml-1 text-xs font-normal text-zinc-500">(optional)</span>}
+      </legend>
       <div className="space-y-2">
-        {group.items.map((item) => (
-          <label
-            key={item.productId}
-            className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-colors ${
-              selectedId === item.productId
-                ? "border-zinc-900 bg-white"
-                : "border-zinc-200 bg-white hover:border-zinc-400"
-            }`}
-          >
+        {group.optional && (
+          <label className={row(selectedId == null)}>
             <input
               type="radio"
               name={`kit-${group.name}`}
-              value={item.productId}
-              checked={selectedId === item.productId}
-              onChange={() => onSelect(group.name, item.productId)}
+              checked={selectedId == null}
+              onChange={() => onSelect(null)}
               className="h-4 w-4 border-zinc-300 text-zinc-900 focus:ring-zinc-500"
             />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-zinc-900">{item.name}</span>
-              {item.sku && <span className="block truncate text-xs text-zinc-500">{item.sku}</span>}
-            </span>
+            <span className="min-w-0 flex-1 text-zinc-900">None</span>
           </label>
-        ))}
+        )}
+        {group.items.map((item) => {
+          const amount = priceOf(item.productId, item.quantity);
+          return (
+            <label key={item.productId} className={row(selectedId === item.productId)}>
+              <input
+                type="radio"
+                name={`kit-${group.name}`}
+                value={item.productId}
+                checked={selectedId === item.productId}
+                onChange={() => onSelect(item.productId)}
+                className="h-4 w-4 border-zinc-300 text-zinc-900 focus:ring-zinc-500"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-zinc-900">
+                  {item.quantity > 1 && <span className="font-medium">{item.quantity} × </span>}
+                  {item.name}
+                </span>
+                {item.sku && <span className="block truncate text-xs text-zinc-500">{item.sku}</span>}
+              </span>
+              {amount != null && (
+                <span className="shrink-0 text-sm text-zinc-900">
+                  + <Price amount={amount} gst />
+                </span>
+              )}
+            </label>
+          );
+        })}
       </div>
     </fieldset>
   );

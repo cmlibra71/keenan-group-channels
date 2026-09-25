@@ -74,9 +74,10 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // the GST cookie, flips a site-wide React context). It sits in normal flow
     // with no `hidden md:` gating, so phones get it too.
     "gst-toggle": () => <GstToggle className="mt-3" />,
-    // Grouped / bundle contents (card 7bmpuqei). Sealed, not exploded: it holds the customer's
-    // picks and sends them through with Add to Quote. Renders nothing for a product that is not a
-    // kit, so the node is safe to leave in the template for every product.
+    // Grouped / bundle contents (cards 7bmpuqei, Tc5ekvD6). Sealed, not exploded: it draws the
+    // customer's picks, which live in `KitPurchaseProvider` above the page so the page's own Add to
+    // Cart and Add to Quote send them and the headline prices them. Placed on every product page by
+    // `builder/product-kit-node.ts`; renders nothing for a product that is not a kit.
     "product-kit": () => {
       // `data.kit` is ALREADY parsed: the product route parses metafields exactly
       // once (`nativeData: { kit: readProductKit(product.metafields) }`) — the
@@ -85,7 +86,7 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
       // contents never rendered (release-review blocker).
       const kit = (data.kit ?? null) as ProductKit | null;
       if (!kit) return null;
-      return <ProductKitNative kit={kit} productId={Number(product.id)} />;
+      return <ProductKitNative kit={kit} />;
     },
     // SilverChef / Skope Funding weekly rental panel (card 6f47rFeT). Sealed
     // because the figure follows the LIVE purchase state — variant choice,
