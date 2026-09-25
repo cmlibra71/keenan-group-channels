@@ -4,10 +4,13 @@ import { useState } from "react";
 import Link from "next/link";
 import { Menu, X, ChevronDown, Star } from "lucide-react";
 import {
+  ALL_BRANDS_HREF,
   flattenTree,
   itemHref,
+  panelBrandColumn,
   panelExtras,
   resolveNavItems,
+  type MegaBrandLike,
   type MegaMenuNodeLike,
   type MegaNavItem,
 } from "@/lib/mega-menu";
@@ -25,10 +28,13 @@ export function MobileNavDrawer({
   departments,
   items,
   hiddenCategoryIds,
+  brandColumns = {},
 }: {
   departments: MegaMenuNodeLike[];
   items?: MegaNavItem[];
   hiddenCategoryIds?: number[];
+  /** Each department's Brands column, as the desktop bar shows it (card HaWBvySC). */
+  brandColumns?: Record<number, MegaBrandLike[]>;
 }) {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -68,8 +74,24 @@ export function MobileNavDrawer({
 
                 const extras = panelExtras(item);
                 const groups = dept?.children ?? [];
-                const childLinks: { key: string; href: string; label: string; newTab?: boolean }[] = [
+                // The same Brands column the desktop drop-down carries: a heading,
+                // the brands, then View all brands (card HaWBvySC).
+                const brandColumn = dept ? panelBrandColumn(item) : null;
+                const brandLinks: { key: string; href: string; label: string; heading?: boolean }[] =
+                  brandColumn && dept
+                    ? [
+                        { key: "bh", href: ALL_BRANDS_HREF, label: brandColumn.label || "Brands", heading: true },
+                        ...(brandColumns[dept.id] ?? []).map((b) => ({
+                          key: `b${b.id}`,
+                          href: `/brands/${b.slug}`,
+                          label: b.name,
+                        })),
+                        { key: "ba", href: ALL_BRANDS_HREF, label: "View all brands" },
+                      ]
+                    : [];
+                const childLinks: { key: string; href: string; label: string; newTab?: boolean; heading?: boolean }[] = [
                   ...groups.map((g) => ({ key: `g${g.id}`, href: `/categories/${g.slug}`, label: g.name })),
+                  ...brandLinks,
                   ...extras.map((e, j) => ({
                     key: `e${j}`,
                     href: itemHref(e, byId),
@@ -123,7 +145,11 @@ export function MobileNavDrawer({
                             href={child.href}
                             target={child.newTab ? "_blank" : undefined}
                             onClick={close}
-                            className="block px-6 py-2.5 text-sm text-zinc-700 hover:text-teal-600"
+                            className={
+                              child.heading
+                                ? "block px-6 pb-1 pt-3 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-500"
+                                : "block px-6 py-2.5 text-sm text-zinc-700 hover:text-teal-600"
+                            }
                           >
                             {child.label}
                           </Link>

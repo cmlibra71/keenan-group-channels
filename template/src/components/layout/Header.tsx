@@ -8,6 +8,7 @@ import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, getHeader
 import { HeaderClient } from "./HeaderClient";
 import { HeaderPanels } from "./HeaderPanels";
 import { MegaMenu } from "./MegaMenu";
+import { getMegaMenuBrandColumns } from "@/lib/mega-menu-brands";
 import { MobileNavDrawer } from "./MobileNavDrawer";
 
 type NavCategory = { id: number; name: string; slug: string };
@@ -36,6 +37,12 @@ export async function Header({
     getMegaMenuNav().catch(() => []),
     getMegaMenuHidden().catch(() => []),
   ]);
+  // The drop-downs' Brands columns (card HaWBvySC). Free unless somebody has
+  // added one in Storefront > Navigation; a failure drops the brands, never the
+  // header.
+  const brandColumns = await getMegaMenuBrandColumns(megaNav, megaMenu.departments).catch(
+    () => ({})
+  );
   const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   // QuoteService.getWithItems types its items loosely (Record<string,unknown>) unlike
   // CartService — precise typing there is a separate cleanup. quantity is runtime-correct.
@@ -164,6 +171,7 @@ export async function Header({
                 departments={megaMenu.departments}
                 items={megaNav}
                 hiddenCategoryIds={hiddenDepartments}
+                brandColumns={brandColumns}
               />
             </div>
           </div>
@@ -175,6 +183,7 @@ export async function Header({
           featured={megaMenu.featured}
           items={megaNav}
           hiddenCategoryIds={hiddenDepartments}
+          brandColumns={brandColumns}
         />
       </header>
 

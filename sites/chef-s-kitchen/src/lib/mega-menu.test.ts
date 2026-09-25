@@ -1,14 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  ALL_BRANDS_HREF,
+  BRAND_COLUMN_LIMIT,
   adoptDepartmentLinks,
+  brandColumnRequests,
   flattenTree,
   itemHref,
+  normalizeNavItems,
+  panelBrandColumn,
   panelColumns,
   panelExtras,
+  resolveBrandColumn,
   resolveNavItems,
   shortNavLabel,
   splitNavItems,
+  subcategoryColumnCount,
   type MegaMenuNodeLike,
   type MegaNavItem,
 } from "./mega-menu.ts";
@@ -267,4 +274,110 @@ test("a department is still added when a custom link carries the same word", () 
     resolveNavItems({ departments, items, hiddenCategoryIds: [2] }).map((i) => i.label),
     ["All Departments", "Cooking Equipment", "Food Preparation", "Refrigeration & Ice"]
   );
+});
+
+// ── Brands column (card HaWBvySC) ────────────────────────────────────────────
+
+const channelBrands = [
+  { id: 1, name: "Rational", slug: "rational" },
+  { id: 2, name: "Unox", slug: "unox" },
+  { id: 3, name: "Robot Coupe", slug: "robot-coupe" },
+  { id: 4, name: "No Slug", slug: "" },
+];
+
+test("a Brands column is not an extra, and is the department's brand column", () => {
+  const item: MegaNavItem = {
+    type: "category",
+    label: "Cooking",
+    categoryId: 1,
+    children: [
+      { type: "page", label: "Buying guide", pageSlug: "guide" },
+      { type: "brands", label: "Brands" },
+      { type: "brands", label: "Second one is ignored" },
+    ],
+  };
+  assert.deepEqual(panelExtras(item).map((c) => c.label), ["Buying guide"]);
+  assert.equal(panelBrandColumn(item)?.label, "Brands");
+  assert.equal(panelBrandColumn({ type: "category", label: "x", categoryId: 1 }), null);
+  // Only a department's drop-down has link columns to put it in.
+  assert.equal(
+    panelBrandColumn({ type: "link", label: "x", url: "/x", children: [{ type: "brands", label: "B" }] }),
+    null
+  );
+});
+
+test("a Brands column takes one of the panel's three link columns", () => {
+  assert.equal(subcategoryColumnCount(false), 3);
+  assert.equal(subcategoryColumnCount(true), 2);
+});
+
+test("a Brands item anywhere else is a link to the brands index", () => {
+  assert.equal(itemHref({ type: "brands", label: "Brands" }, new Map()), ALL_BRANDS_HREF);
+  assert.equal(ALL_BRANDS_HREF, "/brands");
+});
+
+test("automatic column: the department's busiest brands, busiest first, only ones this site sells", () => {
+  const out = resolveBrandColumn({
+    topBrands: [{ id: 2 }, { id: 99 }, { id: 1 }, { id: 4 }],
+    channelBrands,
+  });
+  assert.deepEqual(out.map((b) => b.slug), ["unox", "rational"]);
+});
+
+test("chosen brands win over the automatic list and keep the order staff gave them", () => {
+  const out = resolveBrandColumn({
+    brandIds: [3, 1, 3],
+    topBrands: [{ id: 2 }],
+    channelBrands,
+  });
+  assert.deepEqual(out.map((b) => b.name), ["Robot Coupe", "Rational"]);
+});
+
+test("an empty choice means automatic", () => {
+  const out = resolveBrandColumn({ brandIds: [], topBrands: [{ id: 1 }], channelBrands });
+  assert.deepEqual(out.map((b) => b.id), [1]);
+});
+
+test("a column never lists more than the limit", () => {
+  const many = Array.from({ length: 20 }, (_, i) => ({ id: i + 1, name: `B${i}`, slug: `b${i}` }));
+  const out = resolveBrandColumn({ topBrands: many, channelBrands: many });
+  assert.equal(out.length, BRAND_COLUMN_LIMIT);
+});
+
+test("brandColumnRequests finds each department's column once, links adopted", () => {
+  const depts = [dept(1, "Cooking Equipment"), dept(2, "Refrigeration & Ice")];
+  const requests = brandColumnRequests(
+    [
+      { type: "category", label: "Cooking", categoryId: 1, children: [{ type: "brands", label: "Brands", brandIds: [5, 6] }] },
+      // Industry Kitchens saves departments as /categories/<slug> links.
+      { type: "link", label: "Fridges", url: "/categories/refrigeration-ice", children: [{ type: "brands", label: "Brands" }] },
+      { type: "category", label: "Cooking again", categoryId: 1, children: [{ type: "brands", label: "Brands" }] },
+      { type: "link", label: "Clearance", url: "/clearance" },
+    ],
+    depts
+  );
+  assert.deepEqual(requests, [
+    { categoryId: 1, brandIds: [5, 6] },
+    { categoryId: 2, brandIds: [] },
+  ]);
+  assert.deepEqual(brandColumnRequests([], depts), []);
+  assert.deepEqual(brandColumnRequests(null, depts), []);
+});
+
+test("normalizeNavItems keeps a Brands column and its chosen brands, reads unknown types as links", () => {
+  const items = normalizeNavItems([
+    {
+      type: "category",
+      label: "Cooking",
+      categoryId: 1,
+      children: [{ type: "brands", label: "Brands", brandIds: [3, "x", 1.5, 1], url: "/brands" }],
+    },
+    { type: "mystery", label: "Odd", url: "/odd" },
+    { type: "link", label: "" },
+    null,
+  ]);
+  assert.equal(items.length, 2);
+  assert.deepEqual(items[0].children?.[0].brandIds, [3, 1]);
+  assert.equal(items[0].children?.[0].type, "brands");
+  assert.equal(items[1].type, "link");
 });

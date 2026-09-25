@@ -58,7 +58,7 @@ import {
 } from "@keenan/services";
 import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
-import type { MegaNavItem } from "./mega-menu";
+import { normalizeNavItems, type MegaNavItem } from "./mega-menu";
 import {
   STOREFRONT_FILTERS_SETTING_KEY,
   normalizeStorefrontFilters,
@@ -696,24 +696,6 @@ export const getMegaMenuHidden = unstable_cache(
   [`mega-menu-hidden-${CHANNEL_ID}`],
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
 );
-
-/** Saved items carry a type; anything hand-written or older is read as a link
- *  so one odd row cannot take the header down. */
-function normalizeNavItems(value: unknown): MegaNavItem[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((i): i is Record<string, unknown> => !!i && typeof i === "object")
-    .map((i) => ({
-      type: (i.type as MegaNavItem["type"]) ?? "link",
-      label: typeof i.label === "string" ? i.label : "",
-      url: typeof i.url === "string" ? i.url : undefined,
-      categoryId: typeof i.categoryId === "number" ? i.categoryId : undefined,
-      pageSlug: typeof i.pageSlug === "string" ? i.pageSlug : undefined,
-      newTab: i.newTab === true,
-      children: normalizeNavItems(i.children),
-    }))
-    .filter((i) => i.label);
-}
 
 export const getHomepageSpotlights = unstable_cache(
   async (): Promise<HomepageSpotlight[]> => {
