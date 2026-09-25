@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import { draftMode, headers } from "next/headers";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getMemberSavingsPctMap, brandService, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice, getCmsPage, getCmsTemplate } from "@/lib/store";
+import { getProductBySlug, getProductChannelSeo, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getMemberSavingsPctMap, brandService, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice, getCmsPage, getCmsTemplate } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
 import { getMemberContext, getListingPricing, applyAccountPrices } from "@/lib/member";
 import { assertProductVisible, applyCatalogScope } from "@/lib/catalog-scope";
@@ -25,6 +25,7 @@ import {
   type ProductPageCtx,
 } from "@/blocks/product-page-blocks";
 import type { Metadata } from "next";
+import { productPageSeo } from "@/lib/product-seo";
 
 export async function generateMetadata({
   params,
@@ -34,12 +35,10 @@ export async function generateMetadata({
   const { slug } = await params;
   const product = await getProductBySlug(slug);
   if (!product) return { title: "Product not found" };
-  const name = (product.name as string) || "Product";
-  const descRaw =
-    (product.metaDescription as string) ||
-    (product.descriptionShort as string) ||
-    `${name} — professional kitchen equipment at Chefs Depot.`;
-  const description = descRaw.replace(/<[^>]*>/g, "").trim().slice(0, 160);
+  // Chefs Depot's OWN title and description first (card CfnjZikj), then the fallbacks —
+  // never the shared wording that names Industry Kitchens. See lib/product-seo.ts.
+  const own = await getProductChannelSeo(product.id as number);
+  const { title: name, description } = productPageSeo(product, own);
   const imgs = product.images as Array<{ url?: string | null }> | undefined;
   const image = Array.isArray(imgs) && imgs[0]?.url ? imgs[0].url : undefined;
   return {
