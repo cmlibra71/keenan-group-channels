@@ -9,6 +9,8 @@ import { Minus, Plus, Trash2 } from "lucide-react";
 import { backorderMessage } from "@keenan/services/backorder";
 import {
   packNote as packNoteFor,
+  boxQuantity,
+  packCountSentence,
   packPrice,
   resolvePackSize,
   resolvePackUnit,
@@ -67,6 +69,8 @@ export type CartItemRow = {
   pack_note?: string | null;
   /** Enable Packaging — false means there is no package to price on this line. */
   pack_packaging?: boolean | null;
+  /** Zoey's Unit Label ("Pcs" / "Bottles"), for the "2 Cartons = 48 Pcs" line (card O108e4jH). */
+  pack_unit_label?: string | null;
   /**
    * What this line took from a promotion, resolved server-side in `readCart`
    * (card p6YVxc4P). The line's own unit price is UNTOUCHED — the offer is a
@@ -182,6 +186,15 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
         });
   const packPriced = item.pack_packaging !== false;
   const packUnit = resolvePackUnit({ sellPackUnit: item.pack_unit ?? null });
+  // Card O108e4jH (Tim 2026-09-21, "copy Zoey"): with Enable Packaging on, the shopper counts
+  // PACKAGES, as Zoey's cart does — the box reads 2 and the line under the name "2 Cartons = 48
+  // Pcs". The line itself, its price and every write stay in PIECES; only what is SHOWN is
+  // translated, and it follows the optimistic quantity so +/- recounts instantly.
+  const countsPacks = packSize > 1 && packPriced;
+  const shownQty = boxQuantity(displayQty, packSize, countsPacks);
+  const packLine = countsPacks
+    ? packCountSentence(displayQty, packSize, item.pack_unit ?? null, item.pack_unit_label ?? null)
+    : packNote;
 
   function handleQuantity(newQty: number) {
     startTransition(async () => {
@@ -267,9 +280,9 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
           </ul>
         )}
         <p className="text-sm text-text-secondary mt-1"><Price amount={unitPrice} /> each</p>
-        {packNote && (
+        {packLine && (
           <p className="text-xs text-text-secondary mt-0.5">
-            {packNote}
+            {packLine}
             {packPriced && (
               <>
                 {" \u00b7 "}
@@ -313,7 +326,7 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
         >
           <Minus className="h-3 w-3" />
         </button>
-        <span className="min-w-8 px-1 text-center text-sm font-medium">{displayQty}</span>
+        <span className="min-w-8 px-1 text-center text-sm font-medium">{shownQty}</span>
         <button
           onClick={() => handleQuantity(item.quantity + packSize)}
           // A restricted line may be reduced and removed, never increased — the

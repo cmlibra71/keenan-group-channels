@@ -65,11 +65,12 @@ export const ProductGalleryWidget: WidgetComponent = () => {
 function PackLine({ unitPrice }: { unitPrice: number }) {
   const purchase = useProductPurchaseOptional();
   if (!purchase) return null;
-  const { packSize, packNote } = purchase;
+  const { packSize, packNote, packLine } = purchase;
+  // Card O108e4jH — Zoey's live "1 Carton = 24 Pcs" where the provider has it.
   if (packSize <= 1 || !packNote || unitPrice <= 0) return null;
   return (
     <p className="mt-2 text-[13px] text-text-secondary">
-      <span className="font-semibold text-text-primary">{packNote}</span>
+      <span className="font-semibold text-text-primary">{packLine ?? packNote}</span>
       {/* Zoey's Enable Packaging off (card O108e4jH): "Sold in multiples of 12" — no package to price. */}
       {purchase.packagingOn && (
         <>

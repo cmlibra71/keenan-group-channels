@@ -17,6 +17,7 @@ import {
   packNote,
   resolvePackSize,
   resolvePackUnit,
+  resolveUnitLabel,
   snapToPack,
   type PackFacts,
 } from "@keenan/services/pack";
@@ -784,6 +785,9 @@ const readCart = cache(async () => {
         // multiples of 12" where Enable Packaging is off — then there is no package to price.
         pack_note: packNote(facts, packGroup),
         pack_packaging: isPackagingOn(facts, packGroup),
+        // Zoey's Unit Label, so the row can say "2 Cartons = 48 Pcs" beside a box that counts
+        // cartons (card O108e4jH) and recount it on every +/- without a round trip.
+        pack_unit_label: resolveUnitLabel(facts),
         // What this line took from an offer, so the row can show it without a
         // second evaluation (card p6YVxc4P). Absent on a line that took nothing.
         offer_discount: offerByItem.get(i.id)?.discount ?? null,

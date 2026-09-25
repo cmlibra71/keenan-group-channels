@@ -2,6 +2,7 @@ import { unstable_cache } from "next/cache";
 import { cache } from "react";
 import type { NodeTree } from "@keenan/services/builder";
 import { withPromoTagInComponents } from "@/builder/promo-tag-node";
+import { withTilePackLineInComponents } from "@/builder/tile-pack-line";
 import { guardTileBuyControlsInComponents } from "@keenan/services/builder";
 import { withMemberScaleLabels } from "@/builder/member-scale-labels";
 import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
@@ -212,11 +213,17 @@ const withScaleWording = async (components: ComponentMap): Promise<ComponentMap>
   }) as ComponentMap;
 };
 
+/** Card O108e4jH — "1 Carton = 24 Pcs" before the tile's buy row (`builder/tile-pack-line.ts`). */
+const withTilePackLine = (components: ComponentMap): ComponentMap =>
+  withTilePackLineInComponents(components as Record<string, NodeTree>) as ComponentMap;
+
 export const getComponents = async (): Promise<ComponentMap> =>
-  withScaleWording(withTileBuyGuard(withPromoTag(await _store.getComponents())));
+  withScaleWording(withTileBuyGuard(withTilePackLine(withPromoTag(await _store.getComponents()))));
 
 export const getDraftComponents = async (): Promise<ComponentMap> =>
-  withScaleWording(withTileBuyGuard(withPromoTag((await _store.getDraftComponents()) as ComponentMap)));
+  withScaleWording(
+    withTileBuyGuard(withTilePackLine(withPromoTag((await _store.getDraftComponents()) as ComponentMap)))
+  );
 
 // ============================================================================
 // Channel settings (raw accessor)

@@ -12,7 +12,16 @@ import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
 import { readAcquisitionUtm } from "@/lib/acquisition";
 import { getSession } from "@/lib/auth";
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
-import { resolvePackSize, snapToPack } from "@keenan/services/pack";
+import {
+  hasGroupIncrements,
+  isPackagingOn,
+  resolvePackSize,
+  resolvePackUnit,
+  resolveUnitLabel,
+  snapToPack,
+  type PackFacts,
+} from "@keenan/services/pack";
+import { getMemberContext } from "@/lib/member";
 import {
   describeKitChoices,
   describeKitContents,
@@ -104,6 +113,33 @@ async function countQuoteItems(quoteId: number): Promise<number> {
   return (full?.items ?? []).reduce((sum, i) => sum + (i.quantity ?? 0), 0);
 }
 
+/**
+ * The customer group a per-customer-group package row (Zoey's "Customer Group | Qty Increment |
+ * Package Label", card O108e4jH) is matched against — the group this shopper is PRICED in, the
+ * same `getMemberContext` group the product page and the cart (`packGroupFor`) resolve with, so a
+ * member who reads "Case contains 6" on the page is not handed the Default 24 on their quote.
+ * Asked ONLY when the product carries a group row, so an ordinary add costs no extra query.
+ */
+async function quotePackGroupFor(facts: PackFacts | null | undefined): Promise<number | null> {
+  if (!hasGroupIncrements(facts)) return null;
+  try {
+    return (await getMemberContext()).customerGroupId;
+  } catch {
+    return null;
+  }
+}
+
+/** A quote line's product pack columns (selected by `QuoteService.getWithItems`) as PackFacts. */
+function quoteLinePackFacts(line: Record<string, unknown> | null | undefined): PackFacts {
+  return {
+    sellPackSize: (line?.product_sell_pack_size as number | null | undefined) ?? null,
+    sellPackUnit: (line?.product_sell_pack_unit as string | null | undefined) ?? null,
+    qtyPackagingEnabled: (line?.product_qty_packaging_enabled as boolean | null | undefined) ?? null,
+    qtyUnitLabel: (line?.product_qty_unit_label as string | null | undefined) ?? null,
+    qtyIncrementGroups: line?.product_qty_increment_groups ?? null,
+  };
+}
+
 export async function addToQuote(
   productId: number,
   variantId?: number | null,
@@ -132,6 +168,9 @@ export async function addToQuote(
     restrict_add_to_quote?: boolean | null;
     sell_pack_size?: number | null;
     sell_pack_unit?: string | null;
+    qty_packaging_enabled?: boolean | null;
+    qty_unit_label?: string | null;
+    qty_increment_groups?: unknown;
   } | null;
   if (!product) return { error: "Product not found" };
 
@@ -293,11 +332,16 @@ export async function addToQuote(
   // A product sold by the carton is quoted by the carton (cards O108e4jH / zeMPVcA3), the same
   // rule the cart applies — a quote the customer built must not ask for two pieces of something
   // that only ships in twelves. `resolvePackSize` returns 1 for everything else, so an ordinary
-  // product still goes on one at a time.
-  const packSize = resolvePackSize({
+  // product still goes on one at a time. The package is the SHOPPER'S — their customer group's
+  // row where the product has one — exactly as the product page and the cart resolve it.
+  const packFacts: PackFacts = {
     sellPackSize: product.sell_pack_size ?? null,
     sellPackUnit: product.sell_pack_unit ?? null,
-  });
+    qtyPackagingEnabled: product.qty_packaging_enabled ?? null,
+    qtyUnitLabel: product.qty_unit_label ?? null,
+    qtyIncrementGroups: product.qty_increment_groups ?? null,
+  };
+  const packSize = resolvePackSize(packFacts, await quotePackGroupFor(packFacts));
 
   const existing = await quoteItemService.findByProductVariant(quote.id, productId, variantId) as {
     id: number;
@@ -408,11 +452,7 @@ export async function updateQuoteItem(itemId: number, quantity: number) {
     } | null;
     const items = full?.items ?? [];
     const line = items.find((i) => Number(i.id) === itemId) as
-      | {
-          quantity?: number | null;
-          product_sell_pack_size?: number | null;
-          product_sell_pack_unit?: string | null;
-        }
+      | (Record<string, unknown> & { quantity?: number | null })
       | undefined;
     // The snapshot's own total is exactly what `countQuoteItems` would report — it is the same
     // read — so the badge is authoritative even when we return without writing.
@@ -429,13 +469,13 @@ export async function updateQuoteItem(itemId: number, quantity: number) {
     if (quantity <= 0) {
       await quoteItemService.deleteForParent(quote.id, itemId);
     } else {
-      // Whole packs here too — the size is read off the line in hand, never fetched again.
+      // Whole packs here too — the size is read off the line in hand, never fetched again, and
+      // it is the shopper's own group package where the product has one (card O108e4jH), the
+      // one the basket row and the product page both state.
+      const packFacts = quoteLinePackFacts(line);
       nextQuantity = snapToPack(
         quantity,
-        resolvePackSize({
-          sellPackSize: line?.product_sell_pack_size ?? null,
-          sellPackUnit: line?.product_sell_pack_unit ?? null,
-        })
+        resolvePackSize(packFacts, await quotePackGroupFor(packFacts))
       );
       await quoteItemService.updateForParent(quote.id, itemId, { quantity: nextQuantity });
     }
@@ -461,7 +501,29 @@ export async function getQuote() {
   const quote = (await quoteService.getByUuid(uuid)) as QuoteRow | null;
   if (!quote) return null;
 
-  return quoteService.getWithItems(quote.id);
+  const full = (await quoteService.getWithItems(quote.id)) as
+    | (Record<string, unknown> & { items?: Record<string, unknown>[] })
+    | null;
+  if (!full) return full;
+  // The SELLING UNIT per line, resolved for THIS shopper (card O108e4jH) so the basket counts in
+  // the package the product page and the cart use — their group row where there is one. One
+  // group lookup for the whole basket, and none unless a line carries a group row.
+  const items = full.items ?? [];
+  const facts = items.map((i) => quoteLinePackFacts(i));
+  const withGroups = facts.find((f) => hasGroupIncrements(f));
+  const group = withGroups ? await quotePackGroupFor(withGroups) : null;
+  return {
+    ...full,
+    items: items.map(
+      (i, n): Record<string, unknown> => ({
+        ...i,
+        pack_size: resolvePackSize(facts[n], group),
+        pack_unit: resolvePackUnit(facts[n], group),
+        pack_packaging: isPackagingOn(facts[n], group),
+        pack_unit_label: resolveUnitLabel(facts[n]),
+      })
+    ),
+  };
 }
 
 /**

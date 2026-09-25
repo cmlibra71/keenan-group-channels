@@ -6,7 +6,12 @@ import { updateQuoteItem, removeQuoteItem } from "@/lib/actions/quote";
 import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { Price } from "@/components/ui/Price";
-import { packNote as packNoteFor, resolvePackSize } from "@keenan/services/pack";
+import {
+  boxQuantity,
+  packCountSentence,
+  packNote as packNoteFor,
+  resolvePackSize,
+} from "@keenan/services/pack";
 
 // QuoteService returns snake_case rows (transformRow convention).
 export type QuoteItemRow = {
@@ -36,6 +41,16 @@ export type QuoteItemRow = {
   /** Zoey's Enable Packaging + Unit Label (card O108e4jH), so the sentence matches the product page. */
   product_qty_packaging_enabled?: boolean | null;
   product_qty_unit_label?: string | null;
+  /**
+   * The same selling unit resolved for THIS shopper by `getQuote` (card O108e4jH) — their customer
+   * group's package where the product has one, so the basket steps and counts exactly as their
+   * product page and cart do. Absent on a row from an older reader: the product columns above
+   * are used instead.
+   */
+  pack_size?: number | null;
+  pack_unit?: string | null;
+  pack_packaging?: boolean | null;
+  pack_unit_label?: string | null;
 };
 
 export function QuoteItemsList({ items, onMutate }: { items: QuoteItemRow[]; onMutate?: () => void }) {
@@ -57,13 +72,29 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
   const [displayQty, setDisplayQty] = useOptimistic(item.quantity);
   // 1 on everything nobody has marked as sold by the carton, which is the +1 / -1 this row has
   // always done.
-  const packSize = resolvePackSize({ sellPackSize: item.product_sell_pack_size ?? null });
-  const packNote = packNoteFor({
-    sellPackSize: item.product_sell_pack_size ?? null,
-    sellPackUnit: item.product_sell_pack_unit ?? null,
-    qtyPackagingEnabled: item.product_qty_packaging_enabled ?? null,
-    qtyUnitLabel: item.product_qty_unit_label ?? null,
+  const packSize = resolvePackSize({
+    sellPackSize: item.pack_size !== undefined ? item.pack_size : (item.product_sell_pack_size ?? null),
   });
+  const packUnit = item.pack_unit ?? item.product_sell_pack_unit ?? null;
+  const unitLabel = item.pack_unit_label ?? item.product_qty_unit_label ?? null;
+  const packagingOn =
+    item.pack_packaging !== undefined && item.pack_packaging !== null
+      ? item.pack_packaging
+      : item.product_qty_packaging_enabled !== false;
+  // Card O108e4jH (Tim 2026-09-21, "copy Zoey"): with Enable Packaging on the customer counts
+  // PACKAGES here as on the product page and in the cart — the box reads 2 and the line "2
+  // Cartons = 48 Pcs". The quote line itself is still stored in pieces; only the display is
+  // translated, and it follows the optimistic quantity.
+  const countsPacks = packSize > 1 && packagingOn;
+  const shownQty = boxQuantity(displayQty, packSize, countsPacks);
+  const packNote = countsPacks
+    ? packCountSentence(displayQty, packSize, packUnit, unitLabel)
+    : packNoteFor({
+        sellPackSize: packSize,
+        sellPackUnit: packUnit,
+        qtyPackagingEnabled: packagingOn,
+        qtyUnitLabel: unitLabel,
+      });
 
   const unitPrice = item.sale_price
     ? parseFloat(item.sale_price)
@@ -140,7 +171,7 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
         >
           <Minus className="h-3 w-3" />
         </button>
-        <span className="min-w-8 px-1 text-center text-sm font-medium">{displayQty}</span>
+        <span className="min-w-8 px-1 text-center text-sm font-medium">{shownQty}</span>
         <button
           onClick={() => handleQuantity(item.quantity + packSize)}
           disabled={isPending}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { ProductCard, type ProductCardProps } from "@/components/product/ProductCard";
+import { tilePackLine } from "@keenan/services/pack";
 
 type RowProduct = {
   id: number;
@@ -84,6 +85,7 @@ export function ClearanceSpotlight({
                 planPrice={pricing?.planPrice}
                 restrictAddToCart={product.restrictAddToCart}
                 restrictAddToQuote={product.restrictAddToQuote}
+                packLine={tilePackLine(product)}
                 clearance
               />
             </div>
@@ -125,6 +127,7 @@ export function ClearanceRail({
             planPrice={pricing?.planPrice}
             restrictAddToCart={product.restrictAddToCart}
             restrictAddToQuote={product.restrictAddToQuote}
+            packLine={tilePackLine(product)}
             clearance
           />
         </div>
