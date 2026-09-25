@@ -96,6 +96,8 @@ export const {
   sanitizeCatalogProducts,
   getProducts,
   getProductBySlug,
+  // This site's own product search title + meta description (card CfnjZikj).
+  getProductChannelSeo,
   getRedirectForPath,
   getTopCategories,
   // Wrapped below so a pictureless category borrows a product photograph (InEoeMZh).

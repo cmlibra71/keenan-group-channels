@@ -1,3 +1,4 @@
+import { currentShopperForOffers } from "@/lib/promotions/shopper";
 import { NextRequest, NextResponse } from "next/server";
 import { summariseLinesFreight, cartService, channelSettingsService } from "@keenan/services";
 import { gstSplit } from "@keenan/services/calc";
@@ -73,6 +74,9 @@ export async function POST(request: NextRequest) {
           channelId: CHANNEL_ID,
           couponCodes: ((cart as { coupon_codes?: string[] | null } | null)?.coupon_codes ?? []) as string[],
           pricesIncludeTax,
+          // The same shopper the cart and checkout judge offers for, so the freight is quoted
+          // on the goods value they will actually be charged (card p6YVxc4P, round 4).
+          ...(await currentShopperForOffers()),
         });
         const offerByItemId = new Map(offers.lines.map((l) => [l.itemId, l.discount]));
         const summary = await summariseLinesFreight(

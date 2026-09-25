@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import { draftMode, headers } from "next/headers";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getMemberSavingsPctMap, brandService, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice, getCmsPage, getCmsTemplate } from "@/lib/store";
+import { getProductBySlug, getProductChannelSeo, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getMemberSavingsPctMap, brandService, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice, getCmsPage, getCmsTemplate } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
 import { getMemberContext, getListingPricing, applyAccountPrices } from "@/lib/member";
 import { assertProductVisible, applyCatalogScope } from "@/lib/catalog-scope";
@@ -24,6 +24,7 @@ import {
   type ProductPageCtx,
 } from "@/blocks/product-page-blocks";
 import type { Metadata } from "next";
+import { productPageSeo } from "@/lib/product-seo";
 
 export async function generateMetadata({
   params,
@@ -33,12 +34,10 @@ export async function generateMetadata({
   const { slug } = await params;
   const product = await getProductBySlug(slug);
   if (!product) return { title: "Product not found" };
-  const name = (product.name as string) || "Product";
-  const descRaw =
-    (product.metaDescription as string) ||
-    (product.descriptionShort as string) ||
-    `${name} — professional kitchen equipment at Chefs Depot.`;
-  const description = descRaw.replace(/<[^>]*>/g, "").trim().slice(0, 160);
+  // Chefs Depot's OWN title and description first (card CfnjZikj), then the fallbacks —
+  // never the shared wording that names Industry Kitchens. See lib/product-seo.ts.
+  const own = await getProductChannelSeo(product.id as number);
+  const { title: name, description } = productPageSeo(product, own);
   const imgs = product.images as Array<{ url?: string | null }> | undefined;
   const image = Array.isArray(imgs) && imgs[0]?.url ? imgs[0].url : undefined;
   return {
@@ -265,6 +264,8 @@ export default async function ProductPage({
         id: product.id,
         name: product.name,
         sku: product.sku,
+        // Card 59ruI8uJ — the group-wide Item ID, printed above the SKU. Null = no line.
+        itemRef: (product.itemRef as string | null | undefined) ?? null,
         price: product.price,
         salePrice: product.salePrice,
         inventoryLevel: product.inventoryLevel ?? 0,
@@ -455,7 +456,7 @@ export default async function ProductPage({
               branch above: 149 of the CAP-/SC- products sit on THIS storefront,
               so an insert on only one branch leaves the table on a page nobody
               sees the day `cms_product_template_enabled` is switched on. */}
-          <ProductOfferTiers sku={product.sku} productId={product.id} />
+          <ProductOfferTiers sku={product.sku} productId={product.id} unitPrice={memberPrice} />
         </div>
       );
     }
@@ -520,7 +521,7 @@ export default async function ProductPage({
 
       {/* Carton tiers this product is in (card p6YVxc4P). Draws nothing when it is
           in no banded offer, and reads the same live promotions the cart applies. */}
-      <ProductOfferTiers sku={product.sku} productId={product.id} />
+      <ProductOfferTiers sku={product.sku} productId={product.id} unitPrice={memberPrice} />
     </div>
   );
 }
