@@ -41,3 +41,21 @@ export function decideAccountPriceWrite(input: {
     (input.currentSalePrice ?? null) !== (priced.salePrice ?? null);
   return { listPrice: priced.listPrice, salePrice: priced.salePrice, changed };
 }
+
+/**
+ * Does the account's contract price govern this cart line at checkout? Not when the product is on a
+ * running PARTNER SPECIAL (card tJ4audbu). Tim, 18 + 21 Sep 2026: a special is a locked price,
+ * "No further discounts", and "Special Price will be the floor" — so it sits above the account
+ * contract price in BOTH directions, exactly as `resolveItemPricing` and `repriceCartForSession`
+ * already price the line in the cart. Without this the page, the tile and the cart show the
+ * special while `placeOrder` charges the contract price, which breaks "shown == charged".
+ *
+ * A special that has ENDED is not in `liveSpecialProductIds`, so the contract price takes the line
+ * back — the account then pays its own price, which is what the product page shows it again.
+ */
+export function accountPriceGovernsLine(
+  productId: number,
+  liveSpecialProductIds: { has(id: number): boolean }
+): boolean {
+  return !liveSpecialProductIds.has(productId);
+}

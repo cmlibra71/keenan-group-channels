@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { cartService, cartItemService, orderService, orderItemService, orderShippingAddressService, CHANNEL_ID, getEffectivePrice, productVariantService, productService, channelSettingsService, getCheckoutSettings, paymentService } from "@/lib/store";
-import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
+import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice, getSiteConfig, getLiveSpecials } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { hasTestCheckoutSession } from "@/lib/checkout/test-session";
@@ -76,6 +76,8 @@ import {
 } from "@/lib/role-permissions";
 import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import { applyAccountPricesToCart } from "@/lib/checkout/account-prices";
+import { refreshSpecialPricesInCart } from "@/lib/actions/cart";
+import { SPECIAL_PRICES_MOVED } from "@/lib/pricing/special-line";
 import { saveCheckoutAddressForContact } from "@/lib/contact-addresses";
 import { blockedProductIds } from "@/lib/catalog-scope";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
@@ -204,6 +206,14 @@ export async function placeOrder(
 
   const cartWithItems = await cartService.getByUuid(uuid);
   if (!cartWithItems) return { error: "Cart not found." };
+
+  // ── PARTNER SPECIALS are re-judged at the moment of charging (card tJ4audbu). A line priced by a
+  // special that has since ended goes back to its normal price, and a line added before one
+  // started takes it — persisted to the cart, then the order stops so the shopper sees the new
+  // figure before paying it, the same way a lapsed membership does below. The retry succeeds.
+  if ((await refreshSpecialPricesInCart()).repriced > 0) {
+    return { error: SPECIAL_PRICES_MOVED };
+  }
 
   const fullCart = await cartService.getWithItems(cartWithItems.id);
   if (!fullCart || fullCart.items.length === 0) return { error: "Cart is empty." };
@@ -385,7 +395,15 @@ export async function placeOrder(
       const addonsBeforeReprice = new Map<number, unknown>(
         fullCart.items.map((i) => [i.id, i.modifier_selections])
       );
+      // A line on a PARTNER SPECIAL is not a member price and is not repriced here: the special
+      // is every shopper's price, members and non-members alike (card tJ4audbu), so a lapsed
+      // membership changes nothing about it — resetting it to RRP would charge more than the page
+      // this shopper was just shown.
+      const onSpecial = await getLiveSpecials(
+        fullCart.items.map((i) => i.product_id).filter((id): id is number => id != null)
+      ).catch(() => new Map());
       for (const item of fullCart.items) {
+        if (item.product_id != null && onSpecial.has(item.product_id)) continue;
         if (item.sale_price && item.list_price) {
           const oldPrice = item.sale_price;
           if (suppressCatalogSale) {
@@ -1080,7 +1098,12 @@ export async function placeOrder(
   // below-cost sentry: a reporting figure must never cost a customer their order.
   if (memberSubscription) {
     try {
-      const savings = memberSavings(fullCart.items, pricesIncludeTax);
+      // A Partner Special line is not a membership saving (card tJ4audbu): the special is
+      // every shopper's price, so its gap to list is left out of what the order records.
+      const specialIds = await getLiveSpecials(
+        fullCart.items.map((i) => i.product_id).filter((id): id is number => id != null)
+      ).catch(() => new Map());
+      const savings = memberSavings(fullCart.items, pricesIncludeTax, new Set(specialIds.keys()));
       if (savings.savedExTax > 0) {
         orderMetafields.member_savings = {
           subscription_id: memberSubscription.id,

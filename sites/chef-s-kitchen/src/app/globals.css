@@ -476,6 +476,60 @@ body {
          bg-member text-ink-900;
 }
 
+/* ═══ PARTNER SPECIAL (card tJ4audbu) ══════════════════════════════════
+   Tim's "Partner Special - No further discounts" and the was/now it sits beside. These class
+   NAMES are shared: `@keenan/services/builder` special-price.ts places them on the authored
+   tile, tile-price and product-price masters at render time, and the React tile/price block use
+   the same names — so every renderer of a special looks the same. Each site gives them its own
+   look here. Rust, because on this site rust is the clearance colour (`.badge-save`,
+   `.badge-clearance` family), and a Partner Special is a clearance / end-of-line price.
+
+   The tile badge is a strip across the foot of the picture — an IMAGE OVERLAY, Tim's words —
+   so it never collides with the Save/Clearance corner stack (top-left) or the brand mark
+   (top-right). The tile's picture layer is `relative` on both renderers. */
+.special-badge {
+  @apply absolute inset-x-0 bottom-0 z-[2] block
+         px-2 py-1.5 text-center leading-tight
+         text-[10.5px] font-bold uppercase tracking-[0.03em]
+         bg-sale text-white;
+}
+.special-price-row,
+.special-panel-row {
+  @apply flex flex-wrap items-baseline gap-x-2 gap-y-1;
+}
+.special-price-now {
+  @apply text-lg font-bold leading-none tracking-[-0.02em] text-sale;
+}
+.special-price-gst,
+.special-panel-gst {
+  @apply text-xs font-semibold text-steel-500;
+}
+.special-price-was {
+  @apply mt-1 text-xs text-steel-500;
+}
+.special-panel-now {
+  @apply text-[33px] font-bold leading-none tracking-[-0.02em] text-sale;
+}
+.special-panel-was {
+  @apply mt-1 text-[13px] text-steel-500;
+}
+.special-price-was s,
+.special-panel-was s {
+  @apply text-steel-400;
+}
+.special-panel-badge {
+  @apply mt-3 inline-flex items-center font-bold uppercase
+         px-[9px] py-1 rounded-sm leading-tight
+         text-[11px] tracking-[0.03em]
+         bg-sale text-white;
+}
+.special-panel-meta {
+  @apply mt-2 flex flex-wrap gap-x-3 text-[12.5px] text-text-secondary;
+}
+.special-panel-label {
+  @apply font-semibold text-text-primary;
+}
+
 /* ═══ ALERTS ════════════════════════════════════════ */
 
 .alert-error {

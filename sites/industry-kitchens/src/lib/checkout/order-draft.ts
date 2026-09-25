@@ -498,16 +498,23 @@ export type MemberSavings = {
  * above list saved nothing and is left out rather than counted as zero, so the
  * stamped lines are only the ones the saving is made of.
  *
+ * A line on a running PARTNER SPECIAL is left out (card tJ4audbu). Its gap to list is the
+ * special's, not the membership's — every shopper pays the special, members included, and
+ * Tim's badge says "No further discounts" — so counting it would tell a member their
+ * membership saved them money it did not. Pass the product ids on a live special.
+ *
  * Pure — the caller decides whether this shopper is a member at all.
  */
 export function memberSavings(
   items: CartLineInput[],
-  pricesIncludeTax: boolean
+  pricesIncludeTax: boolean,
+  onSpecial: ReadonlySet<number> = new Set()
 ): MemberSavings {
   const lines: MemberSavingLine[] = [];
   let savedRaw = 0;
 
   for (const item of items) {
+    if (onSpecial.has(item.product_id)) continue;
     const list = parseFloat(item.list_price);
     const charged = lineUnitPrice(item);
     if (!Number.isFinite(list) || !Number.isFinite(charged)) continue;

@@ -111,7 +111,11 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
           </div>
         ) : (
           <PriceBlock
-            rrp={displaySalePrice ?? displayPrice}
+            // A Partner Special (card tJ4audbu) is drawn as itself — was/now with Tim's badge —
+            // never as the "RRP" this slot shows for an ordinary sale price.
+            rrp={product.special ? displayPrice : (displaySalePrice ?? displayPrice)}
+            specialPrice={product.special ? (displaySalePrice ?? displayPrice) : null}
+            specialBadge={product.special?.badge ?? null}
             memberPrice={memberPrice}
             isMember={isMember}
             planPrice={membershipTeaser?.fromPrice}
