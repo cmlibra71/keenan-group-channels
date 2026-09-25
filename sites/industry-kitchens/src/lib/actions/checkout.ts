@@ -76,6 +76,8 @@ import {
 } from "@/lib/role-permissions";
 import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import { applyAccountPricesToCart } from "@/lib/checkout/account-prices";
+import { refreshSpecialPricesInCart } from "@/lib/actions/cart";
+import { SPECIAL_PRICES_MOVED } from "@/lib/pricing/special-line";
 import { saveCheckoutAddressForContact } from "@/lib/contact-addresses";
 import { blockedProductIds } from "@/lib/catalog-scope";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
@@ -204,6 +206,14 @@ export async function placeOrder(
 
   const cartWithItems = await cartService.getByUuid(uuid);
   if (!cartWithItems) return { error: "Cart not found." };
+
+  // ── PARTNER SPECIALS are re-judged at the moment of charging (card tJ4audbu). A line priced by a
+  // special that has since ended goes back to its normal price, and a line added before one
+  // started takes it — persisted to the cart, then the order stops so the shopper sees the new
+  // figure before paying it, the same way a lapsed membership does below. The retry succeeds.
+  if ((await refreshSpecialPricesInCart()).repriced > 0) {
+    return { error: SPECIAL_PRICES_MOVED };
+  }
 
   const fullCart = await cartService.getWithItems(cartWithItems.id);
   if (!fullCart || fullCart.items.length === 0) return { error: "Cart is empty." };
