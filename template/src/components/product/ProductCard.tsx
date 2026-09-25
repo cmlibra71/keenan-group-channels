@@ -17,6 +17,11 @@ interface ProductCardProps {
   memberPricingAvailable?: boolean;
   /** Active member's price for this product — renders the member layout. */
   memberPrice?: number | null;
+  /**
+   * Card tJ4audbu — the PARTNER SPECIAL on this product. `price` / `salePrice` already carry its
+   * was/now, which the sale branch below draws; this puts Tim's badge over the picture.
+   */
+  special?: { badge: string; label: string | null } | null;
   /** GA4 select_item context (all optional — card works without analytics). */
   productId?: number;
   listId?: string;
@@ -26,11 +31,13 @@ interface ProductCardProps {
   promotionBadge?: string | null;
 }
 
-export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName, memberPricingAvailable, memberPrice, productId, listId, listName, listIndex, promotionBadge }: ProductCardProps) {
+export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName, memberPricingAvailable, memberPrice, special, productId, listId, listName, listIndex, promotionBadge }: ProductCardProps) {
   const displayPrice = parseFloat(price);
   const displaySalePrice = salePrice ? parseFloat(salePrice) : null;
+  // Never a member layout on a special: members pay the special too (Tim: "Special Price will
+  // be the floor"), and the upstream member map leaves special products out already.
   const showMemberPrice =
-    memberPrice != null && displayPrice > 0 && memberPrice < (displaySalePrice ?? displayPrice);
+    !special && memberPrice != null && displayPrice > 0 && memberPrice < (displaySalePrice ?? displayPrice);
 
   // Non-blocking: gtag queues the event; navigation proceeds immediately.
   function handleSelect() {
@@ -73,6 +80,10 @@ export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName,
             <Package className="h-12 w-12" />
           </div>
         )}
+        {/* Card tJ4audbu — Tim's "Partner Special - No further discounts" image overlay. The
+            class is this site's own (globals.css), shared with the badge `@/lib/store` places on
+            the authored tile, so the two tiles cannot look different. */}
+        {special && <span className="special-badge">{special.badge}</span>}
       </div>
       <div className="mt-3">
         {brandName && (
@@ -127,12 +138,14 @@ export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName,
             `template/` holds null, so nothing renders here today. */}
         {/* The Buy X Get Y / free-freight badge (card EIXdjw2s): per product, only for a public
             offer this storefront is running — the same wording the authored tile draws. */}
-        {promotionBadge && (
+        {promotionBadge && !special && (
           <p className="mt-2">
             <span className="badge-offer">{promotionBadge}</span>
           </p>
         )}
-        {PROMO_TAG_LABEL && (
+        {/* Not on a Partner Special: "Buy more & save" beside "No further discounts" contradicts
+            it (card tJ4audbu). The authored tile follows the same rule. */}
+        {PROMO_TAG_LABEL && !special && (
           <p className="mt-3">
             <span className="badge-promo">{PROMO_TAG_LABEL}</span>
           </p>

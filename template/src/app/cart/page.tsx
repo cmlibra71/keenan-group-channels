@@ -1,6 +1,6 @@
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, getLadderConfig, channelSettingsService, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getCheckoutSettings, getLadderConfig, getLiveSpecials, channelSettingsService, CHANNEL_ID } from "@/lib/store";
 import { CartPageClient } from "@/components/cart/CartPageClient";
 import { activeBrandFreeShippingSpecials } from "@/lib/checkout/free-shipping-brands";
 import { Ga4ViewCart } from "@/components/analytics/Ga4ViewCart";
@@ -31,7 +31,7 @@ export default async function CartPage() {
   let billingInterval = "month";
   let isMember = false;
 
-  const [subscriptionsEnabled, checkoutSettings, brandSpecials, ladder] = await Promise.all([
+  const [subscriptionsEnabled, checkoutSettings, brandSpecials, ladder, liveSpecials] = await Promise.all([
     getFeatureFlag("subscriptions_enabled"),
     getCheckoutSettings(),
     // Brand free-shipping specials running today (card 88Ay7UGA). Handed to the
@@ -42,6 +42,14 @@ export default async function CartPage() {
     // actually runs one. Memoised settings read; DISABLED on a channel that has
     // never been given a ladder (card gk23c1VK).
     getLadderConfig().catch(() => null),
+    // Which lines are on a running PARTNER SPECIAL (card tJ4audbu), so the summary prints that
+    // saving on its own row and never credits it to a membership. Same cached read that priced
+    // the line; a failed read just folds the gap back into the ordinary Discount row.
+    getLiveSpecials(
+      (items as { product_id: number | null }[])
+        .map((i) => i.product_id)
+        .filter((id): id is number => id != null)
+    ).catch(() => new Map()),
   ]);
   if (subscriptionsEnabled && items.length > 0) {
     const session = await getSession();
@@ -88,6 +96,7 @@ export default async function CartPage() {
         freeShippingEnabled={checkoutSettings.freeShippingEnabled}
         freeShippingThreshold={checkoutSettings.freeShippingThreshold}
         brandSpecials={brandSpecials}
+        specialProductIds={[...liveSpecials.keys()] as number[]}
         upsell={
           showUpsell
             ? {

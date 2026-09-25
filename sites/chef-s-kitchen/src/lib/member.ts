@@ -11,6 +11,7 @@ import {
   accountService,
   applyAccountPricesToProducts,
   applyAdvertisedLadderPrices,
+  applySpecialPrices,
   getMemberLadderShare,
 } from "@/lib/store";
 
@@ -92,8 +93,13 @@ export async function applyAccountPrices<T extends { id: number }[]>(products: T
   if (products.length === 0) return products;
   const advertised = (await applyAdvertisedLadderPrices(products as never)) as T;
   const accountId = await getAccountId();
-  if (!accountId) return advertised;
-  return applyAccountPricesToProducts(advertised as never, accountId) as Promise<T>;
+  const accountPriced = accountId
+    ? ((await applyAccountPricesToProducts(advertised as never, accountId)) as T)
+    : advertised;
+  // A PARTNER SPECIAL goes on LAST, over both layers above (card tJ4audbu): it is a locked price
+  // for every shopper, so it strikes through whatever the row was advertising and beats the
+  // account's own contract price in both directions. Identity for a row with no special.
+  return applySpecialPrices(accountPriced as never) as Promise<T>;
 }
 
 /** The plan's base member group — what a new subscriber would be priced at. */

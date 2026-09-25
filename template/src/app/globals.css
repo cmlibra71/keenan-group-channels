@@ -173,3 +173,92 @@ html, body {
     color: #166534;
   }
 }
+
+/* ═══ PARTNER SPECIAL (card tJ4audbu) ═══════════════════════════════════════
+   Tim's "Partner Special - No further discounts" and the was/now beside it. The class NAMES are
+   shared: `@keenan/services/builder` special-price.ts places them on the authored tile,
+   tile-price and product-price masters at render time and the React tile uses the same names, so
+   every renderer of a special looks the same; each site styles them here. Plain properties, in
+   the COMPONENTS layer, like `.badge-promo` above. The tile badge is a strip across the foot of
+   the picture — an image overlay, Tim's words; the picture layer is `relative` on both tiles. */
+@layer components {
+  .special-badge {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2;
+    display: block;
+    padding: 6px 8px;
+    text-align: center;
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    background-color: #dc2626;
+    color: #ffffff;
+  }
+  .special-price-row,
+  .special-panel-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 0.5rem;
+    row-gap: 0.25rem;
+  }
+  .special-price-row {
+    margin-top: 0.25rem;
+  }
+  .special-price-now {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #dc2626;
+  }
+  .special-panel-now {
+    font-size: 1.875rem;
+    line-height: 2.25rem;
+    font-weight: 700;
+    color: #dc2626;
+  }
+  .special-price-gst,
+  .special-panel-gst {
+    font-size: 0.75rem;
+    color: #71717a;
+  }
+  .special-price-was,
+  .special-panel-was {
+    margin-top: 0.125rem;
+    font-size: 0.875rem;
+    color: #71717a;
+  }
+  .special-price-was s,
+  .special-panel-was s {
+    color: #a1a1aa;
+  }
+  .special-panel-badge {
+    display: inline-flex;
+    margin-top: 0.75rem;
+    padding: 4px 9px;
+    border-radius: 0.125rem;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    background-color: #dc2626;
+    color: #ffffff;
+  }
+  .special-panel-meta {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 0.75rem;
+    margin-top: 0.5rem;
+    font-size: 0.8125rem;
+    color: #52525b;
+  }
+  .special-panel-label {
+    font-weight: 600;
+    color: #18181b;
+  }
+}

@@ -8,6 +8,7 @@ import {
   accountService,
   applyAccountPricesToProducts,
   applyAdvertisedLadderPrices,
+  applySpecialPrices,
   getMemberLadderShare,
 } from "@/lib/store";
 
@@ -107,8 +108,13 @@ export async function applyAccountPrices<T extends { id: number }[]>(products: T
   // channel with no ladder — then the account's contract prices over the top.
   const advertised = (await applyAdvertisedLadderPrices(products as never)) as T;
   const accountId = await getAccountId();
-  if (!accountId) return advertised;
-  return applyAccountPricesToProducts(advertised as never, accountId) as Promise<T>;
+  const accountPriced = accountId
+    ? ((await applyAccountPricesToProducts(advertised as never, accountId)) as T)
+    : advertised;
+  // A PARTNER SPECIAL goes on LAST, over both layers above (card tJ4audbu): it is a locked price
+  // for every shopper, so it strikes through whatever the row was advertising and beats the
+  // account's own contract price in both directions. Identity for a row with no special.
+  return applySpecialPrices(accountPriced as never) as Promise<T>;
 }
 
 /**

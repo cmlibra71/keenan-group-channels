@@ -1,7 +1,7 @@
 "use server";
 
 import { cache } from "react";
-import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, applyAdvertisedLadderPrices, getMemberLadderShare, boundPricesToMemberScale, getLadderConfig, CHANNEL_ID } from "@/lib/store";
+import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, applyAdvertisedLadderPrices, getMemberLadderShare, boundPricesToMemberScale, getLadderConfig, getLiveSpecials, CHANNEL_ID } from "@/lib/store";
 import {
   resolveAccountLinePrices,
   accountLineKey,
@@ -20,7 +20,8 @@ import { availableUnits, canPurchaseQuantity, resolveBackorderPolicy } from "@ke
 import { resolvePackSize, resolvePackUnit, snapToPack } from "@keenan/services/pack";
 import { getSession } from "@/lib/auth";
 import { currentShopperForOffers } from "@/lib/promotions/shopper";
-import { pickBestBulkUnit, layerCartPrice, memberPricingGroupId } from "@/lib/pricing/cart-pricing";
+import { pickBestBulkUnit, layerCartPrice, memberPricingGroupId, specialCartPrice } from "@/lib/pricing/cart-pricing";
+import { specialLineIsStale, withSpecialMarker } from "@/lib/pricing/special-line";
 import {
   resolveCartOffers,
   couponCapRefusal,
@@ -111,7 +112,34 @@ async function bestBulkUnitPrice(productId: number, quantity: number, listPrice:
  *   3. bulk quantity-break tiers (only on channels that don't suppress the
  *      catalog — e.g. Industry Kitchens; these match the legacy site's tier pricing).
  */
-async function resolveItemPricing(
+/** The special that priced a line, as the line's marker records it (`lib/pricing/special-line.ts`). */
+type LineSpecial = { promotionId: number; priceExTax: number } | null;
+
+/**
+ * The prices for a line, plus WHICH Partner Special priced it (null when none did), so every write
+ * of a line's price also writes its marker and the cart can tell later whether the special has
+ * since started, ended or changed (card tJ4audbu; `refreshSpecialLines`).
+ */
+async function resolveItemPricingAndSpecial(
+  productId: number,
+  variantId: number | null | undefined,
+  quantity: number
+): Promise<{ pricing: { listPrice: string; salePrice: string | null }; special: LineSpecial }> {
+  // A PARTNER SPECIAL is the price, for everyone, before any other layer is consulted — the
+  // account's contract price and the member scale's band included (card tJ4audbu). Same cached
+  // read the product page and the tiles overlay from, so shown == charged.
+  const special = (await getLiveSpecials([productId]).catch(() => new Map())).get(productId);
+  if (special) {
+    return {
+      pricing: specialCartPrice(await regularListPrice(productId, variantId), special.priceExTax),
+      special: { promotionId: special.promotionId, priceExTax: special.priceExTax },
+    };
+  }
+  return { pricing: await resolveUnspecialPricing(productId, variantId, quantity), special: null };
+}
+
+/** Every layer below a special: the account's contract price, the catalogue, member, bulk. */
+async function resolveUnspecialPricing(
   productId: number,
   variantId: number | null | undefined,
   quantity: number
@@ -127,6 +155,37 @@ async function resolveItemPricing(
   if ((await getLadderConfig().catch(() => null))?.enabled !== true) return layered;
   const bandVariantId = variantId ?? (await defaultVariantId(productId));
   return boundPricesToMemberScale(bandVariantId, layered).catch(() => layered);
+}
+
+/**
+ * The list price a line would carry with no special on it — the variant's price, else the
+ * product's, run through the advertised-price overlay (M under the member scale) — so a special's
+ * struck-through "was" figure in the cart is the same one the product page and the tile strike
+ * through. No account price: that is a price for one buyer, not the reference a special is shown
+ * against. (Card tJ4audbu.)
+ */
+async function regularListPrice(
+  productId: number,
+  variantId: number | null | undefined
+): Promise<string | null> {
+  const product = (await productService.getById(productId)) as { price: string | null } | null;
+  if (!product) throw new Error("Product not found");
+  let listPrice: string | null = product.price ?? null;
+  if (variantId) {
+    const variant = (await productVariantService.getById(variantId)) as { price: string | null } | null;
+    if (variant?.price) listPrice = variant.price;
+  }
+  const [row] = await applyAdvertisedLadderPrices([
+    {
+      id: productId,
+      price: listPrice,
+      ...(variantId ? { variants: [{ id: variantId, price: listPrice }] } : {}),
+    },
+  ]);
+  const advertised =
+    (row as { variants?: Array<{ price?: unknown }> }).variants?.[0]?.price ??
+    (row as { price?: unknown }).price;
+  return typeof advertised === "string" && parseFloat(advertised) > 0 ? advertised : listPrice;
 }
 
 /** The variant a variant-less line prices from: the product's lowest-id variant. */
@@ -474,11 +533,11 @@ export async function addToCart(
   // extras on top — a bulk break is a discount off the PRODUCT and must never discount the
   // accessories with it.
   let pricing: { listPrice: string; salePrice: string | null };
+  let lineSpecial: LineSpecial = null;
   try {
-    pricing = withAddonSurcharge(
-      await resolveItemPricing(productId, variantId, finalQty),
-      resolvedAddons
-    );
+    const resolved = await resolveItemPricingAndSpecial(productId, variantId, finalQty);
+    pricing = withAddonSurcharge(resolved.pricing, resolvedAddons);
+    lineSpecial = resolved.special;
   } catch {
     return { error: "Product not found" };
   }
@@ -488,6 +547,8 @@ export async function addToCart(
       quantity: finalQty,
       listPrice: pricing.listPrice,
       salePrice: pricing.salePrice,
+      // Which Partner Special (if any) priced it — the cart re-judges it later (card tJ4audbu).
+      appliedCoupons: withSpecialMarker(existing.applied_coupons, lineSpecial),
       // Same guard as `updateCartItem` and the reprice: a line that never carried extras is left
       // alone, because `modifier_selections` also holds the variant-modifier OBJECT the REST API
       // writes and this card does not own it. Stamping `[]` here on a plain re-add would erase it.
@@ -503,6 +564,7 @@ export async function addToCart(
       listPrice: pricing.listPrice,
       salePrice: pricing.salePrice,
       modifierSelections: resolvedAddons,
+      appliedCoupons: withSpecialMarker([], lineSpecial),
     });
   }
 
@@ -585,6 +647,7 @@ export async function updateCartItem(itemId: number, quantity: number) {
     // Re-pricing can throw (product lookup); never let it block the quantity
     // change — fall back to updating just the quantity, matching addToCart.
     let pricing: { listPrice: string; salePrice: string | null } | null = null;
+    let lineSpecial: LineSpecial = null;
     // The re-resolved picks, which are written back with the price they produced — see below.
     let lineAddons: ResolvedAddon[] = [];
     // Whether this line has anything to do with paid extras AT ALL. A line that never carried
@@ -604,10 +667,9 @@ export async function updateCartItem(itemId: number, quantity: number) {
         item.product_id,
         storedAddonsAsSelection(storedAddons)
       );
-      pricing = withAddonSurcharge(
-        await resolveItemPricing(item.product_id, item.variant_id, nextQuantity),
-        lineAddons
-      );
+      const resolved = await resolveItemPricingAndSpecial(item.product_id, item.variant_id, nextQuantity);
+      pricing = withAddonSurcharge(resolved.pricing, lineAddons);
+      lineSpecial = resolved.special;
     } catch {
       pricing = null;
     }
@@ -620,6 +682,7 @@ export async function updateCartItem(itemId: number, quantity: number) {
             quantity: nextQuantity,
             listPrice: pricing.listPrice,
             salePrice: pricing.salePrice,
+            appliedCoupons: withSpecialMarker(item.applied_coupons, lineSpecial),
             // The RECORD moves with the money. An extra staff withdrew leaves the price here,
             // and leaving the stored pick behind would print "+ Slicers: Slicer 4mm" on a cart
             // row that was not charged for it — and stamp it onto `order_items.product_options`
@@ -728,7 +791,9 @@ async function syncRewardLinesOnce(cartId: number): Promise<{ changed: number; a
       }
       want.held = true;
       if (line.quantity !== want.quantity) {
-        const pricing = await resolveItemPricing(line.product_id, line.variant_id, want.quantity).catch(() => null);
+        const pricing = await resolveItemPricingAndSpecial(line.product_id, line.variant_id, want.quantity)
+          .then((r) => r.pricing)
+          .catch(() => null);
         await cartItemService.updateForParent(cartId, line.id, {
           quantity: want.quantity,
           ...(pricing ? { listPrice: pricing.listPrice, salePrice: pricing.salePrice } : {}),
@@ -749,9 +814,9 @@ async function syncRewardLinesOnce(cartId: number): Promise<{ changed: number; a
         const facts = await backorderFactsForProduct(product.productId);
         if (facts?.restrictAddToCart) continue;
         if (facts && !canPurchaseQuantity(facts, want.quantity)) continue;
-        const pricing = await resolveItemPricing(product.productId, product.variantId, want.quantity).catch(
-          () => null
-        );
+        const pricing = await resolveItemPricingAndSpecial(product.productId, product.variantId, want.quantity)
+          .then((r) => r.pricing)
+          .catch(() => null);
         if (!pricing) continue;
         await cartItemService.createForParent(cartId, {
           productId: product.productId,
@@ -826,6 +891,7 @@ export async function repriceCartForSession(): Promise<{ repriced: number }> {
       list_price: string | null;
       sale_price: string | null;
       modifier_selections?: unknown;
+      applied_coupons?: unknown;
     }[];
 
     let repriced = 0;
@@ -838,10 +904,9 @@ export async function repriceCartForSession(): Promise<{ repriced: number }> {
           item.product_id,
           storedAddonsAsSelection(readStoredAddons(item.modifier_selections))
         );
-        const pricing = withAddonSurcharge(
-          await resolveItemPricing(item.product_id, item.variant_id, item.quantity),
-          lineAddons
-        );
+        const resolved = await resolveItemPricingAndSpecial(item.product_id, item.variant_id, item.quantity);
+        const pricing = withAddonSurcharge(resolved.pricing, lineAddons);
+        const specialMoved = specialLineIsStale(item.applied_coupons, resolved.special);
         const sameList = pricing.listPrice === item.list_price;
         const sameSale = (pricing.salePrice ?? null) === (item.sale_price ?? null);
         // The picks are compared too, not only the two amounts: an extra staff withdrew and one
@@ -850,10 +915,11 @@ export async function repriceCartForSession(): Promise<{ repriced: number }> {
         // checkout stamps onto the order line.
         const storedAddons = readStoredAddons(item.modifier_selections);
         const sameAddons = addonSelectionKey(lineAddons) === addonSelectionKey(storedAddons);
-        if (sameList && sameSale && sameAddons) continue;
+        if (sameList && sameSale && sameAddons && !specialMoved) continue;
         await cartItemService.updateForParent(cart.id, item.id, {
           listPrice: pricing.listPrice,
           salePrice: pricing.salePrice,
+          appliedCoupons: withSpecialMarker(item.applied_coupons, resolved.special),
           // Left alone on a line that never carried extras — the column also holds the
           // variant-modifier object the REST API writes, which is not ours to overwrite.
           ...(storedAddons.length > 0 || lineAddons.length > 0
@@ -870,6 +936,86 @@ export async function repriceCartForSession(): Promise<{ repriced: number }> {
     return { repriced };
   } catch (e) {
     console.error("[repriceCartForSession] failed (non-fatal):", e);
+    return { repriced: 0 };
+  }
+}
+
+/**
+ * THE SPECIAL WINDOW IS RE-JUDGED ON THE CART, NOT ONLY ON THE PAGE (card tJ4audbu).
+ *
+ * Cart lines store their price at ADD time and a cart lives for 30 days, so without this a line
+ * added on a special's last day was charged the special days after it ended — and, once ended,
+ * its saving fell back into "Member Discount … You saved $X with your membership!" — while a line
+ * added the day before a special started never took the price the page now advertised.
+ *
+ * Only lines a special touches move: a line with no marker and no live special keeps its
+ * add-time price exactly as before. A line is re-priced through the SAME resolver the add uses
+ * (quantity, extras, account price, member price all as an add would price it now), and its marker
+ * is rewritten. Never throws; a line that cannot be re-priced is left as it was. Returns how many
+ * lines moved.
+ */
+async function refreshSpecialLines(
+  cartId: number,
+  items: ReadonlyArray<{
+    id: number;
+    product_id: number | null;
+    variant_id: number | null;
+    quantity: number;
+    list_price?: string | null;
+    sale_price?: string | null;
+    modifier_selections?: unknown;
+    applied_coupons?: unknown;
+  }>
+): Promise<number> {
+  const ids = items.map((i) => i.product_id).filter((id): id is number => id != null);
+  if (ids.length === 0) return 0;
+  const live = await getLiveSpecials(ids).catch(() => null);
+  if (live === null) return 0; // could not read: leave every price where it is
+  let moved = 0;
+  for (const item of items) {
+    if (item.product_id == null) continue;
+    const special = live.get(item.product_id);
+    const now = special ? { promotionId: special.promotionId, priceExTax: special.priceExTax } : null;
+    if (!specialLineIsStale(item.applied_coupons, now)) continue;
+    try {
+      const lineAddons = await resolveAddonsForProduct(
+        item.product_id,
+        storedAddonsAsSelection(readStoredAddons(item.modifier_selections))
+      );
+      const resolved = await resolveItemPricingAndSpecial(item.product_id, item.variant_id, item.quantity);
+      const pricing = withAddonSurcharge(resolved.pricing, lineAddons);
+      const storedAddons = readStoredAddons(item.modifier_selections);
+      await cartItemService.updateForParent(cartId, item.id, {
+        listPrice: pricing.listPrice,
+        salePrice: pricing.salePrice,
+        appliedCoupons: withSpecialMarker(item.applied_coupons, resolved.special),
+        ...(storedAddons.length > 0 || lineAddons.length > 0 ? { modifierSelections: lineAddons } : {}),
+      });
+      if (pricing.listPrice !== (item.list_price ?? null) || (pricing.salePrice ?? null) !== (item.sale_price ?? null)) {
+        moved++;
+      }
+    } catch (e) {
+      console.error("[refreshSpecialLines] line skipped (non-fatal):", e);
+    }
+  }
+  return moved;
+}
+
+/**
+ * `placeOrder`'s half of the rule above: re-judge THIS shopper's own cart (never one named by the
+ * caller) against today's specials, persist any move, and report how many line prices changed so
+ * checkout can stop and show them instead of charging a figure nobody saw.
+ */
+export async function refreshSpecialPricesInCart(): Promise<{ repriced: number }> {
+  try {
+    const uuid = await getCartUuid();
+    if (!uuid) return { repriced: 0 };
+    const cart = await cartService.getByUuid(uuid);
+    if (!cart) return { repriced: 0 };
+    const full = await cartService.getWithItems(cart.id);
+    return { repriced: await refreshSpecialLines(cart.id, full?.items ?? []) };
+  } catch (e) {
+    console.error("[refreshSpecialPricesInCart] failed (non-fatal):", e);
     return { repriced: 0 };
   }
 }
@@ -916,8 +1062,15 @@ async function readCartOnce(allowRewardSync: boolean) {
   const cart = await cartService.getByUuid(uuid);
   if (!cart) return null;
 
-  const full = await cartService.getWithItems(cart.id);
+  let full = await cartService.getWithItems(cart.id);
   if (!full) return full;
+
+  // A PARTNER SPECIAL that started, ended or changed since a line was priced re-prices that line
+  // now, so the cart shows what the till will charge (card tJ4audbu). One cached read on a cart
+  // with no special in sight; a re-read only when a line actually moved.
+  if ((await refreshSpecialLines(cart.id, full.items ?? [])) > 0) {
+    full = (await cartService.getWithItems(cart.id)) ?? full;
+  }
 
   // A line may have been added before a restriction was applied (or before the shopper logged in
   // as a different account). Such a line is DROPPED from what we render — and rejected outright at

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decideAccountPriceWrite } from "./account-prices-policy";
+import { accountPriceGovernsLine, decideAccountPriceWrite } from "./account-prices-policy";
 import type { ResolvedAddon } from "@keenan/services/product-addons";
 
 const blade = (price: string): ResolvedAddon => ({
@@ -72,4 +72,24 @@ test("a null sale price on the record stays null even with extras", () => {
   });
   assert.equal(out.listPrice, "1245.00");
   assert.equal(out.salePrice, null);
+});
+
+// ── Card tJ4audbu: a Partner Special beats the contract price at the charge ─────────────
+// The cart prices a special line at the special for everyone, the account included. The
+// checkout reconciler must leave that line alone, or the shopper is charged the contract price
+// after being shown the special (higher or lower — both are wrong money).
+
+test("a line on a running Partner Special is not overwritten by the account's contract price", () => {
+  const live = new Map<number, unknown>([[816, { priceExTax: 1150 }]]);
+  assert.equal(accountPriceGovernsLine(816, live), false);
+});
+
+test("a line with no special still takes the account's contract price", () => {
+  const live = new Map<number, unknown>([[816, { priceExTax: 1150 }]]);
+  assert.equal(accountPriceGovernsLine(817, live), true);
+  assert.equal(accountPriceGovernsLine(817, new Map()), true);
+});
+
+test("once the special has ended (no longer live) the contract price takes the line back", () => {
+  assert.equal(accountPriceGovernsLine(816, new Set<number>()), true);
 });

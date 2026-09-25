@@ -27,6 +27,13 @@ export interface GridProduct {
    */
   restrictAddToCart?: boolean | null;
   restrictAddToQuote?: boolean | null;
+  /**
+   * Card tJ4audbu — the PARTNER SPECIAL pricing this product, put on the row by the storefront's
+   * price funnel (`lib/member.ts` `applyAccountPrices` → `applySpecialPrices`). Its `price` /
+   * `salePrice` already carry the was/now; this is what puts Tim's badge on the tile. Absent =
+   * no special.
+   */
+  special?: { badge: string; label: string | null } | null;
   thumbnailImage?: { urlStandard: string; urlThumbnail: string | null } | null;
   /**
    * Card tSrCcnvx: the brand's logo, which the tile shows instead of the grey
@@ -134,6 +141,7 @@ export function ProductGridClient({
           inventoryTracking={product.inventoryTracking}
           restrictAddToCart={product.restrictAddToCart}
           restrictAddToQuote={product.restrictAddToQuote}
+          special={product.special ?? null}
           listId={listId}
           listName={listName}
           listIndex={indexOffset + index}

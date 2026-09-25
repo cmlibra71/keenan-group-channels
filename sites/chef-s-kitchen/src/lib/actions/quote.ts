@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath, refresh } from "next/cache";
-import { quoteService, quoteItemService, productService, productVariantService, CHANNEL_ID, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
+import { quoteService, quoteItemService, productService, productVariantService, CHANNEL_ID, shouldSuppressCatalogSalePrice, getSiteConfig, getLiveSpecials } from "@/lib/store";
 import {
   wantsStripeTestMode,
   resolveChannelStaffNotificationRecipients,
@@ -11,7 +11,7 @@ import {
 import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
 import { readAcquisitionUtm } from "@/lib/acquisition";
 import { getSession } from "@/lib/auth";
-import { layerCartPrice } from "@/lib/pricing/cart-pricing";
+import { layerCartPrice, specialCartPrice } from "@/lib/pricing/cart-pricing";
 import { resolvePackSize, snapToPack } from "@keenan/services/pack";
 import {
   describeKitChoices,
@@ -264,13 +264,24 @@ export async function addToQuote(
   // Reuse the shared best-price-wins layerer with those two sources disabled so the
   // suppression semantics match the cart exactly (one tested definition).
   const suppress = await shouldSuppressCatalogSalePrice();
-  const { salePrice } = layerCartPrice({
-    listPrice,
-    catalogSalePrice,
-    suppress,
-    memberSalePrice: null,
-    bulkUnit: null,
-  });
+  // A PARTNER SPECIAL is the price on a quote too, exactly as the cart stores it (card tJ4audbu):
+  // one locked price for every shopper, nothing else layered. The line is `customer`-sourced, so
+  // the rep's reprice follows the catalogue — and the engine prices the same special.
+  const special = (await getLiveSpecials([productId]).catch(() => new Map())).get(productId);
+  let salePrice: string | null;
+  if (special) {
+    const priced = specialCartPrice(listPrice, special.priceExTax);
+    listPrice = priced.listPrice;
+    salePrice = priced.salePrice;
+  } else {
+    salePrice = layerCartPrice({
+      listPrice,
+      catalogSalePrice,
+      suppress,
+      memberSalePrice: null,
+      bulkUnit: null,
+    }).salePrice;
+  }
 
   const quote = await getOrCreateQuote();
 
