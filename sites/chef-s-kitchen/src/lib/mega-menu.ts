@@ -13,6 +13,11 @@
  * the editor never mentions is still added automatically, so adding a category
  * in the portal is enough to put it in the menu.
  *
+ * A department's drop-down can also carry a BRANDS column (card HaWBvySC): a
+ * `brands` item the editor put inside the department, listing either the
+ * brands staff chose or, by default, the department's busiest brands on this
+ * storefront, plus "View all brands". Words only, no logos.
+ *
  * Deliberately free of storefront imports so template/ and every site share one
  * byte-identical copy (orchestrator/shared-modules.json).
  */
@@ -28,7 +33,7 @@ export type MegaMenuNodeLike = {
 
 /** One entry of the department bar (an editor item, or an auto-added department). */
 export type MegaNavItem = {
-  type: "categories" | "category" | "page" | "blog" | "link";
+  type: "categories" | "category" | "page" | "blog" | "link" | "brands";
   label: string;
   url?: string;
   categoryId?: number;
@@ -37,7 +42,24 @@ export type MegaNavItem = {
   children?: MegaNavItem[];
   /** True when the bar added this department itself rather than the editor. */
   auto?: boolean;
+  /**
+   * A `brands` item's CHOSEN brands, in the order staff put them. Absent or
+   * empty = automatic: the brands with the most products in that department on
+   * this storefront (card HaWBvySC).
+   */
+  brandIds?: number[];
 };
+
+/** A brand as a drop-down's Brands column lists it — words and an address, no
+ *  logo (Steve, 2026-08-10: no pictures in a drop-down). */
+export type MegaBrandLike = { id: number; name: string; slug: string };
+
+/** How many brands a Brands column lists — the same twelve the department
+ *  page's own Brand filter shows, and the most the editor lets staff choose. */
+export const BRAND_COLUMN_LIMIT = 12;
+
+/** Where "View all brands" (and a Brands item anywhere else) goes. */
+export const ALL_BRANDS_HREF = "/brands";
 
 /** The editable promo card at the right of a department's panel. */
 export type MegaMenuFeaturedLike = {
@@ -79,7 +101,52 @@ export function itemHref(item: MegaNavItem, byId: Map<number, MegaMenuNodeLike>)
   }
   if (item.type === "page" && item.pageSlug) return `/pages/${item.pageSlug}`;
   if (item.type === "blog") return "/blog";
+  // A Brands item that is not a department's column (dragged onto the bar, or
+  // under a plain link) is simply a link to the brands index.
+  if (item.type === "brands") return ALL_BRANDS_HREF;
   return item.url || "#";
+}
+
+const NAV_ITEM_TYPES = new Set<MegaNavItem["type"]>([
+  "categories",
+  "category",
+  "page",
+  "blog",
+  "link",
+  "brands",
+]);
+
+/**
+ * Read the Navigation editor's saved tree (`nav_structure.header`) into bar
+ * items. Saved items carry a type; anything hand-written, older or of a type
+ * this build does not know is read as a LINK, so one odd row can never take the
+ * header down. Unlabelled items are dropped.
+ */
+export function normalizeNavItems(value: unknown): MegaNavItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((i): i is Record<string, unknown> => !!i && typeof i === "object")
+    .map((i) => {
+      const type = NAV_ITEM_TYPES.has(i.type as MegaNavItem["type"])
+        ? (i.type as MegaNavItem["type"])
+        : "link";
+      const item: MegaNavItem = {
+        type,
+        label: typeof i.label === "string" ? i.label : "",
+        url: typeof i.url === "string" ? i.url : undefined,
+        categoryId: typeof i.categoryId === "number" ? i.categoryId : undefined,
+        pageSlug: typeof i.pageSlug === "string" ? i.pageSlug : undefined,
+        newTab: i.newTab === true,
+        children: normalizeNavItems(i.children),
+      };
+      if (type === "brands" && Array.isArray(i.brandIds)) {
+        item.brandIds = i.brandIds.filter(
+          (id): id is number => typeof id === "number" && Number.isInteger(id)
+        );
+      }
+      return item;
+    })
+    .filter((i) => i.label);
 }
 
 function isPlainLink(item: MegaNavItem): boolean {
@@ -229,7 +296,80 @@ export function panelColumns(groups: MegaMenuNodeLike[], columnCount = 3): MegaM
   return columns;
 }
 
-/** The extra information pages/links an editor tucked inside a department. */
+/** The extra information pages/links an editor tucked inside a department.
+ *  A Brands column is NOT an extra — it renders as a link column of its own. */
 export function panelExtras(item: MegaNavItem): MegaNavItem[] {
-  return (item.children ?? []).filter((c) => c.label);
+  return (item.children ?? []).filter((c) => c.label && c.type !== "brands");
+}
+
+/** The Brands column an editor put inside a department's drop-down, if any
+ *  (card HaWBvySC). One per department: a second is ignored. */
+export function panelBrandColumn(item: MegaNavItem): MegaNavItem | null {
+  if (item.type !== "category") return null;
+  return (item.children ?? []).find((c) => c.type === "brands") ?? null;
+}
+
+/** How many sub-category columns a panel keeps. The panel has three link
+ *  columns; a Brands column takes the last of them. */
+export function subcategoryColumnCount(hasBrandColumn: boolean): number {
+  return hasBrandColumn ? 2 : 3;
+}
+
+/** One department's Brands column, as the header must fetch it. */
+export type BrandColumnRequest = { categoryId: number; brandIds: number[] };
+
+/**
+ * Which departments carry a Brands column, and which of those staff filled by
+ * hand. Read from the editor's items after link adoption, so an Industry
+ * Kitchens department saved as a `/categories/<slug>` link counts too. Empty
+ * when nobody has added one — the header then fetches nothing at all.
+ */
+export function brandColumnRequests(
+  items: MegaNavItem[] | null | undefined,
+  departments: MegaMenuNodeLike[]
+): BrandColumnRequest[] {
+  const seen = new Set<number>();
+  const out: BrandColumnRequest[] = [];
+  for (const item of adoptDepartmentLinks(items ?? [], departments)) {
+    const column = panelBrandColumn(item);
+    if (!column || item.categoryId == null || seen.has(item.categoryId)) continue;
+    seen.add(item.categoryId);
+    out.push({ categoryId: item.categoryId, brandIds: column.brandIds ?? [] });
+  }
+  return out;
+}
+
+/**
+ * The brands one column lists.
+ *
+ * CHOSEN brands (the column's `brandIds`) print in the order staff put them.
+ * With none chosen the column is AUTOMATIC: `topBrands` — the department's own
+ * busiest brands, busiest first, which is the same list its Brand filter shows.
+ *
+ * Either way a brand must still be one this storefront sells (`channelBrands`,
+ * which also supplies the slug the link needs): a brand whose last product left
+ * the site drops out rather than linking to an empty page. Capped at
+ * BRAND_COLUMN_LIMIT.
+ */
+export function resolveBrandColumn({
+  brandIds,
+  topBrands,
+  channelBrands,
+}: {
+  brandIds?: number[] | null;
+  topBrands?: { id: number }[] | null;
+  channelBrands: MegaBrandLike[];
+}): MegaBrandLike[] {
+  const byId = new Map(channelBrands.map((b) => [b.id, b]));
+  const ids = brandIds && brandIds.length > 0 ? brandIds : (topBrands ?? []).map((b) => b.id);
+  const out: MegaBrandLike[] = [];
+  const seen = new Set<number>();
+  for (const id of ids) {
+    const brand = byId.get(id);
+    if (!brand || !brand.slug || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id: brand.id, name: brand.name, slug: brand.slug });
+    if (out.length >= BRAND_COLUMN_LIMIT) break;
+  }
+  return out;
 }
