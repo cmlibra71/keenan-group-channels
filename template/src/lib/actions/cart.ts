@@ -834,7 +834,36 @@ export async function repriceCartForSession(): Promise<{ repriced: number }> {
 // into a single DB read. It's per-request in-memory only — a fresh request after
 // a mutation still re-reads, so there's no staleness. Not exported (a "use server"
 // module may only export async functions); getCart() is the public entry point.
-const readCart = cache(async () => {
+const readCart = cache(async () => readCartOnce(true));
+
+/**
+ * Do the cart's promotion REWARD lines match what the basket earns right now (card EIXdjw2s)?
+ * They drift without any cart mutation when an offer ends, is paused or starts: a paused Buy X Get
+ * Y left its free item in the cart at full price, locked (no quantity buttons, no remove), until
+ * checkout quietly took it away. Pure.
+ */
+function rewardLinesDrifted(
+  items: { quantity: number; applied_coupons?: unknown; product_sku?: string | null; variant_sku?: string | null }[],
+  rewardLines: { promotionId: number; sku: string; quantity: number }[]
+): boolean {
+  const held = new Map<string, number>();
+  for (const i of items) {
+    const pid = rewardPromotionIdOf(i);
+    if (pid == null) continue;
+    const key = `${pid}:${(i.variant_sku ?? i.product_sku ?? "").toUpperCase()}`;
+    held.set(key, (held.get(key) ?? 0) + (Number(i.quantity) || 0));
+  }
+  const wanted = new Map<string, number>();
+  for (const r of rewardLines) {
+    const key = `${r.promotionId}:${r.sku.toUpperCase()}`;
+    wanted.set(key, (wanted.get(key) ?? 0) + r.quantity);
+  }
+  for (const [key, qty] of held) if ((wanted.get(key) ?? 0) !== qty) return true;
+  for (const [key, qty] of wanted) if (qty > 0 && (held.get(key) ?? 0) !== qty) return true;
+  return false;
+}
+
+async function readCartOnce(allowRewardSync: boolean) {
   const uuid = await getCartUuid();
   if (!uuid) return null;
 
@@ -877,6 +906,17 @@ const readCart = cache(async () => {
     // THIS shopper, so the basket shows exactly what the till will charge.
     ...(await currentShopperForOffers()),
   });
+  // A reward line that no longer matches what the basket earns is brought into line ONCE, then the
+  // cart is read again — so the page never shows a free item the offer has stopped giving, nor
+  // misses one it now gives. Nothing to do on the ordinary basket (no reward lines, no offer).
+  if (
+    allowRewardSync &&
+    rewardLinesDrifted(visible as unknown as Parameters<typeof rewardLinesDrifted>[0], offers.rewardLines)
+  ) {
+    const changed = await syncRewardLines(cart.id);
+    if (changed > 0) return readCartOnce(false);
+  }
+
   const offerByItem = new Map(offers.lines.map((l) => [l.itemId, l]));
 
   return {
@@ -909,7 +949,7 @@ const readCart = cache(async () => {
       };
     }),
   };
-});
+}
 
 /**
  * Put a coupon code on the cart.
