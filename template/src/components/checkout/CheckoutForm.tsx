@@ -1772,10 +1772,38 @@ export function CheckoutForm({
                 </p>
               )}
               {!brandSpecial && !freeDelivery && !heldForSpecialised && shippingPromotion && (
-                <p className="mt-1 text-xs text-green-600">
-                  {shippingCost === 0
-                    ? `Free freight — ${shippingPromotion.label ?? "promotion"}`
-                    : `${shippingPromotion.label ?? "Freight promotion"}: $${shippingPromotion.given_away_ex_tax.toFixed(2)} off freight (ex GST)`}
+                // The freight promotion's own line (card EIXdjw2s, scope 8). Its amount is on the SAME
+                // basis as the Shipping row above it (ex GST on both live storefronts, whose GST row
+                // carries the tax) — never a figure in a different basis from its neighbour.
+                <p className="mt-1 text-xs text-green-600" data-testid="freight-promotion-line">
+                  {shippingCost === 0 ? (
+                    <>
+                      {/free\s+(freight|delivery|shipping)/i.test(shippingPromotion.label ?? "")
+                        ? shippingPromotion.label
+                        : `Free freight — ${shippingPromotion.label ?? "promotion"}`}{" "}
+                      (you save{" "}
+                      <Price
+                        amount={
+                          pricesIncludeTax
+                            ? gstSplit(shippingPromotion.given_away_ex_tax, false).incTax
+                            : shippingPromotion.given_away_ex_tax
+                        }
+                      />
+                      )
+                    </>
+                  ) : (
+                    <>
+                      {shippingPromotion.label ?? "Freight promotion"}:{" "}
+                      <Price
+                        amount={
+                          pricesIncludeTax
+                            ? gstSplit(shippingPromotion.given_away_ex_tax, false).incTax
+                            : shippingPromotion.given_away_ex_tax
+                        }
+                      />{" "}
+                      off delivery
+                    </>
+                  )}
                 </p>
               )}
               <div className="flex justify-between text-base font-semibold mt-4 pt-4 border-t border-zinc-200">

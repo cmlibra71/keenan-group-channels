@@ -20,7 +20,12 @@ import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLine
 import { resolveCartOffers, NO_OFFERS, type CartOffers, type OfferCartLine } from "@/lib/promotions/cart-offers";
 import { orderPromotionsRecord } from "@/lib/promotions/order-promotions";
 import { syncCartPromotionRewards } from "@/lib/actions/cart";
-import { applyFreightReward, type FreightOutcome } from "@keenan/services";
+import {
+  applyFreightReward,
+  readOrderFreightPromotionNote,
+  freightPromotionLine,
+  type FreightOutcome,
+} from "@keenan/services";
 import { reserveOffersForOrder, discardUnchargedOrder, OfferNoLongerAvailableError } from "@keenan/services";
 import { currentShopperForOffers } from "@/lib/promotions/shopper";
 import { resolveOrderPricingGroupId } from "@keenan/services";
@@ -1741,6 +1746,14 @@ export async function placeOrder(
       // customer's only email would read "Order Confirmed" over a total that excludes the
       // delivery we haven't quoted, and say nothing about the card not being charged.
       notice: heldForSpecialised ? SPECIALISED_HOLD_NOTICE : null,
+      // The freight promotion's own line (card EIXdjw2s, scope 8) — from the record this order
+      // was just written with, GST-inclusive like every figure in the email.
+      freightPromotionLine: (() => {
+        const note = readOrderFreightPromotionNote(orderMetafields);
+        if (!note) return null;
+        const aud = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" });
+        return freightPromotionLine(note, (n) => aud.format(n));
+      })(),
       bankDetails: method?.bankDetails ?? null,
       // Use the customer's actual account terms for a net-terms invoice email.
       netTermsDays:

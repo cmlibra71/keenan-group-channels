@@ -29,6 +29,11 @@ import {
   snapshotOrderLadderPricing,
   loadQuoteMailSources,
   quoteStampEmail,
+  readQuoteLinePromotions,
+  quoteOrderPromotionsRecord,
+  readQuoteFreightPromotionNote,
+  freightPromotionLine,
+  type QuoteRecordItem,
 } from "@keenan/services";
 import { QUOTE_REPRICED_ON_ACCEPT_MESSAGE } from "@keenan/services/member-ladder";
 import { repriceQuoteForCustomer } from "@/lib/quotes/reprice-deltas";
@@ -428,6 +433,15 @@ export async function payQuote(
   }
   if (plan.freightPending) metafields.plus_freight = true;
   if (paymentMethod === "net_terms" && netTerms) metafields.net_terms_days = netTerms.netTermsDays;
+  // The promotions this quote carried travel onto the order in the shape the web checkout and the
+  // portal conversion write (card EIXdjw2s): the freight it gave away with the QUOTED figure kept,
+  // the Buy X Get Y reward and the lines that earned it, and every promotion that moved money — so
+  // the report, the usage caps and a refund read this order like any other. Never fatal.
+  const quotePromotions = quoteOrderPromotionsRecord(
+    { attributes: quote.attributes, items: (quote.items ?? []) as unknown as QuoteRecordItem[] },
+    await readQuoteLinePromotions(Number(quote.id)).catch(() => new Map<number, number>())
+  );
+  if (quotePromotions) metafields.promotions = quotePromotions;
 
   const memoParts = [plan.order.internal_memo];
   if (plan.freightPending) {
@@ -704,6 +718,13 @@ async function sendQuoteOrderEmails(args: {
     // Steve: "When the invoice is sent, it should specify that the full amount
     // will also have to include 'Plus Freight'."
     notice: freightPending ? PLUS_FREIGHT_NOTICE : null,
+    // The freight promotion's own line (card EIXdjw2s, scope 8), GST-inclusive.
+    freightPromotionLine: (() => {
+      const note = readQuoteFreightPromotionNote(quote.attributes);
+      if (!note) return null;
+      const aud = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" });
+      return freightPromotionLine(note, (n) => aud.format(n));
+    })(),
     testMode: isTestMode,
   };
 

@@ -212,7 +212,6 @@ const withMasterTransforms = (components: ComponentMap): ComponentMap =>
   ) as ComponentMap;
 
 /**
-/**
  * Whether this channel cuts member-saving percentages from its stored price
  * masters even with the member price scale off. Chefs Depot only (card
  * gk23c1VK); this channel prints its masters as authored. Read by

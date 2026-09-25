@@ -212,7 +212,6 @@ const withMasterTransforms = (components: ComponentMap): ComponentMap =>
   );
 
 /**
-/**
  * Chefs Depot publishes NO member-saving percentage, with the member price scale
  * on OR off (card gk23c1VK: "no saving percentage renders anywhere while the
  * spread is unmeasured"; Tim's pack allows a per-product DOLLAR figure, never a
