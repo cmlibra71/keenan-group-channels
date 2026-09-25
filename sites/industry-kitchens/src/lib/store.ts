@@ -56,7 +56,7 @@ import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
 import { withBrandLogoFallback, targetsForChannel } from "@/builder/product-card-brand-logo";
 import { withPromoTagInComponents } from "@/builder/promo-tag-node";
-import { guardTileBuyControlsInComponents } from "@keenan/services/builder";
+import { guardTileBuyControlsInComponents, withPromotionBadgeInComponents, withSpecialPriceInComponents } from "@keenan/services/builder";
 import { withMemberScaleLabels } from "@/builder/member-scale-labels";
 import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
 import type { NodeTree } from "@keenan/services/builder";
@@ -136,6 +136,13 @@ export const {
   getMemberPricingExclusion,
   getMemberTrailingSpend,
   boundPricesToMemberScale,
+  // Partner Specials (card tJ4audbu) — a LOCKED price that beats every overlay above it, the
+  // account's contract price included. `applySpecialPrices` is the last step of `lib/member.ts`
+  // `applyAccountPrices`; `getLiveSpecials` prices a cart line; `getSpecialProducts` fills the
+  // specials section of `/clearance`.
+  applySpecialPrices,
+  getLiveSpecials,
+  getSpecialProducts,
   getUpcomingDraws,
   getPartnerOffers,
   getFeatureFlag,
@@ -194,17 +201,30 @@ const BRAND_LOGO_TARGETS = targetsForChannel(CHANNEL_ID);
  * data-driven: with no product flagged it returns the very same map.
  */
 const withTileBuyGuard = (components: ComponentMap): ComponentMap =>
-  guardTileBuyControlsInComponents(components as Record<string, NodeTree>) as ComponentMap;
-
-const withMasterTransforms = (components: ComponentMap): ComponentMap =>
-  withTileBuyGuard(
-    withPromoTagInComponents(
-      withBrandLogoFallback(components, BRAND_LOGO_TARGETS) as Record<string, NodeTree>,
-      PROMO_TAG_LABEL
-    ) as ComponentMap
-  );
+  guardTileBuyControlsInComponents(
+    // Card tJ4audbu — the Partner Special placed on the stored tile, tile-price and product-price
+    // masters (Tim's badge over the picture, and a was/now in place of the RRP). Data-switched:
+    // a product with no special renders exactly as before. Shared, see
+    // `@keenan/services/builder` `special-price.ts`; each site styles the class names in its
+    // own `globals.css`.
+    withSpecialPriceInComponents(components as Record<string, NodeTree>)
+  ) as ComponentMap;
 
 /**
+ * Card EIXdjw2s — the Buy X Get Y / free-freight badge on the authored listing tile: a node bound
+ * to the card row's `promo_badge`, present only when the row carries one (the category and brand
+ * branches put it there from `promotionBadgeMap`). Nothing stored.
+ */
+const withMasterTransforms = (components: ComponentMap): ComponentMap =>
+  withPromotionBadgeInComponents(
+    withTileBuyGuard(
+      withPromoTagInComponents(
+        withBrandLogoFallback(components, BRAND_LOGO_TARGETS) as Record<string, NodeTree>,
+        PROMO_TAG_LABEL
+      ) as ComponentMap
+    ) as Record<string, NodeTree>
+  ) as ComponentMap;
+
 /**
  * Whether this channel cuts member-saving percentages from its stored price
  * masters even with the member price scale off. Chefs Depot only (card

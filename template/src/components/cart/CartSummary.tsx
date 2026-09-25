@@ -10,6 +10,7 @@ import { Price } from "@/components/ui/Price";
 export function CartSummary({
   subtotal,
   discount,
+  specialSaving = 0,
   offerDiscount = 0,
   total,
   isMember,
@@ -20,6 +21,8 @@ export function CartSummary({
 }: {
   subtotal: number;
   discount: number;
+  /** What the Partner Special lines are below list (card tJ4audbu) — its own row, never a member saving. */
+  specialSaving?: number;
   /** What the carton bands, the cross-range kicker or a bundle took off (card p6YVxc4P). */
   offerDiscount?: number;
   total: number;
@@ -50,6 +53,14 @@ export function CartSummary({
           <span className="text-zinc-500">Subtotal</span>
           <Price amount={subtotal} className="font-medium" />
         </div>
+        {/* A Partner Special is its own row: it is every shopper's price, so its saving is
+            never a "Discount" and never the membership's (card tJ4audbu). */}
+        {specialSaving > 0 && (
+          <div className="flex justify-between text-sm">
+            <span className="text-zinc-500">Partner Special</span>
+            <span className="font-medium text-green-600">-<Price amount={specialSaving} /></span>
+          </div>
+        )}
         {discount > 0 && (
           <div className="flex justify-between text-sm">
             <span className="text-zinc-500">{isMember ? "Member Discount" : "Discount"}</span>

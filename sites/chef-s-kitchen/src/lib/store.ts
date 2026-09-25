@@ -2,7 +2,7 @@ import { unstable_cache } from "next/cache";
 import { cache } from "react";
 import type { NodeTree } from "@keenan/services/builder";
 import { withPromoTagInComponents } from "@/builder/promo-tag-node";
-import { guardTileBuyControlsInComponents } from "@keenan/services/builder";
+import { guardTileBuyControlsInComponents, withSpecialPriceInComponents } from "@keenan/services/builder";
 import { withMemberScaleLabels } from "@/builder/member-scale-labels";
 import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
 import { initCommerceDb, createChannelStore, getCommerceClient, blogService } from "@keenan/services";
@@ -140,6 +140,13 @@ export const {
   getMemberPricingExclusion,
   getMemberTrailingSpend,
   boundPricesToMemberScale,
+  // Partner Specials (card tJ4audbu) — a LOCKED price that beats every overlay above it, the
+  // account's contract price included. `applySpecialPrices` is the last step of `lib/member.ts`
+  // `applyAccountPrices`; `getLiveSpecials` prices a cart line; `getSpecialProducts` fills the
+  // specials section of `/clearance`.
+  applySpecialPrices,
+  getLiveSpecials,
+  getSpecialProducts,
   getUpcomingDraws,
   getPartnerOffers,
   getFeatureFlag,
@@ -201,7 +208,14 @@ const BRAND_LOGO_TARGETS = targetsForChannel(CHANNEL_ID);
  * data-driven: with no product flagged it returns the very same map.
  */
 const withTileBuyGuard = (components: ComponentMap): ComponentMap =>
-  guardTileBuyControlsInComponents(components as Record<string, NodeTree>) as ComponentMap;
+  guardTileBuyControlsInComponents(
+    // Card tJ4audbu — the Partner Special placed on the stored tile, tile-price and product-price
+    // masters (Tim's badge over the picture, and a was/now in place of the RRP). Data-switched:
+    // a product with no special renders exactly as before. Shared, see
+    // `@keenan/services/builder` `special-price.ts`; each site styles the class names in its
+    // own `globals.css`.
+    withSpecialPriceInComponents(components as Record<string, NodeTree>)
+  ) as ComponentMap;
 
 const withMasterTransforms = (components: ComponentMap): ComponentMap =>
   withTileBuyGuard(
@@ -211,7 +225,6 @@ const withMasterTransforms = (components: ComponentMap): ComponentMap =>
     ) as ComponentMap
   );
 
-/**
 /**
  * Chefs Depot publishes NO member-saving percentage, with the member price scale
  * on OR off (card gk23c1VK: "no saving percentage renders anywhere while the

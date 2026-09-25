@@ -11,6 +11,7 @@ import {
 import { CHANNEL_ID } from "@/lib/channel";
 import { getMemberContext, applyAccountPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
+import { promotionBadgeMap } from "@/lib/promotions/badges";
 import { attachBrandLogos } from "@/lib/brand-logo-fallback";
 import type { AttributeSelections } from "@keenan/services/services";
 import {
@@ -223,6 +224,12 @@ export async function renderCategoryNodeBranch({
   ]);
   const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
 
+  // The Buy X Get Y / free-freight badge each tile carries (card EIXdjw2s), read for exactly the
+  // products on this page and handed to the tile rows beside the member prices.
+  const promoBadgeMap = await promotionBadgeMap(
+    scoped as unknown as { id: number; sku?: string | null }[]
+  );
+
   const payload = composeCategoryPagePayload({
     channelId: CHANNEL_ID,
     category: category as unknown as Record<string, unknown>,
@@ -235,7 +242,7 @@ export async function renderCategoryNodeBranch({
     hasMore,
     nextPageHref,
     sort,
-    pricing,
+    pricing: { ...pricing, promoBadgeMap },
     breadcrumbs,
     subcategories,
     selections,

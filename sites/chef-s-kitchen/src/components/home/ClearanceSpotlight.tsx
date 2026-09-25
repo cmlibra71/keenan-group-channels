@@ -9,6 +9,8 @@ type RowProduct = {
   urlPath: string | null;
   price: string;
   salePrice: string | null;
+  /** Card tJ4audbu — the Partner Special on this product, carried by the price funnel. */
+  special?: { badge: string; label: string | null } | null;
   brandName?: string | null;
   /**
    * Card tSrCcnvx: the brand's logo, drawn instead of the grey package box when
@@ -75,6 +77,7 @@ export function ClearanceSpotlight({
                 sku={product.sku}
                 price={product.price}
                 salePrice={product.salePrice}
+                special={product.special ?? null}
                 imageUrl={product.thumbnailImage?.urlThumbnail || product.thumbnailImage?.urlStandard}
                 brandName={product.brandName}
                 brandLogoUrl={product.brand_logo_url ?? null}
@@ -116,6 +119,7 @@ export function ClearanceRail({
             sku={product.sku}
             price={product.price}
             salePrice={product.salePrice}
+                special={product.special ?? null}
             imageUrl={product.thumbnailImage?.urlThumbnail || product.thumbnailImage?.urlStandard}
             brandName={product.brandName}
             brandLogoUrl={product.brand_logo_url ?? null}

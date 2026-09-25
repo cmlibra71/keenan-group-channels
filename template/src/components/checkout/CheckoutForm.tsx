@@ -555,6 +555,16 @@ export function CheckoutForm({
   const [shippingCost, setShippingCost] = useState<number | null>(null);
   const [shippingLoading, setShippingLoading] = useState(false);
   const [shippingError, setShippingError] = useState<string | null>(null);
+  /**
+   * A freight PROMOTION on the quote (card EIXdjw2s): its label and what it took off, ex GST. The
+   * estimate route applies it with the same function placeOrder uses, so `shippingCost` is already
+   * the charged figure — this only says why it is lower than the rate.
+   */
+  const [shippingPromotion, setShippingPromotion] = useState<{
+    label: string | null;
+    quoted_ex_tax: number;
+    given_away_ex_tax: number;
+  } | null>(null);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
   const freeDelivery = qualifiesForFreeDelivery({
@@ -576,6 +586,7 @@ export function CheckoutForm({
     async (postcode: string, addressTypeHint?: string | null) => {
       if (!shippingEnabled || !postcode || postcode.length < 3) {
         setShippingCost(null);
+        setShippingPromotion(null);
         setShippingError(null);
         return;
       }
@@ -583,6 +594,7 @@ export function CheckoutForm({
       // Don't calculate if free shipping applies
       if (freeDelivery) {
         setShippingCost(0);
+        setShippingPromotion(null);
         return;
       }
 
@@ -607,14 +619,17 @@ export function CheckoutForm({
 
         if (result.success) {
           setShippingCost(result.cost);
+          setShippingPromotion(result.promotion ?? null);
           setShippingError(null);
         } else {
           setShippingCost(null);
+          setShippingPromotion(null);
           setShippingError(result.error || "Could not calculate shipping");
         }
       } catch {
         setShippingError("Failed to calculate shipping");
         setShippingCost(null);
+        setShippingPromotion(null);
       } finally {
         setShippingLoading(false);
       }
@@ -1754,6 +1769,41 @@ export function CheckoutForm({
               {brandSpecial && (
                 <p className="mt-1 text-xs text-green-600">
                   {brandFreeShippingMessage(brandSpecial)}
+                </p>
+              )}
+              {!brandSpecial && !freeDelivery && !heldForSpecialised && shippingPromotion && (
+                // The freight promotion's own line (card EIXdjw2s, scope 8). Its amount is on the SAME
+                // basis as the Shipping row above it (ex GST on both live storefronts, whose GST row
+                // carries the tax) — never a figure in a different basis from its neighbour.
+                <p className="mt-1 text-xs text-green-600" data-testid="freight-promotion-line">
+                  {shippingCost === 0 ? (
+                    <>
+                      {/free\s+(freight|delivery|shipping)/i.test(shippingPromotion.label ?? "")
+                        ? shippingPromotion.label
+                        : `Free freight — ${shippingPromotion.label ?? "promotion"}`}{" "}
+                      (you save{" "}
+                      <Price
+                        amount={
+                          pricesIncludeTax
+                            ? gstSplit(shippingPromotion.given_away_ex_tax, false).incTax
+                            : shippingPromotion.given_away_ex_tax
+                        }
+                      />
+                      )
+                    </>
+                  ) : (
+                    <>
+                      {shippingPromotion.label ?? "Freight promotion"}:{" "}
+                      <Price
+                        amount={
+                          pricesIncludeTax
+                            ? gstSplit(shippingPromotion.given_away_ex_tax, false).incTax
+                            : shippingPromotion.given_away_ex_tax
+                        }
+                      />{" "}
+                      off delivery
+                    </>
+                  )}
                 </p>
               )}
               <div className="flex justify-between text-base font-semibold mt-4 pt-4 border-t border-zinc-200">

@@ -1,11 +1,14 @@
 import Link from "next/link";
 import type { CategoryChildSlim } from "@keenan/services";
-import { getProducts, getFeatureFlag, getSubcategories } from "@/lib/store";
+import { getProducts, getFeatureFlag, getSubcategories, getSpecialProducts } from "@/lib/store";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 
 const CLEARANCE_ROOT_ID = 233;
 const PRODUCTS_PER_PAGE = 24;
+/** Card tJ4audbu — the Partner Specials filter, and how many lead the unfiltered page. */
+const SPECIALS_SLUG = "partner-specials";
+const SPECIALS_LEAD = 8;
 
 export const metadata = {
   title: "Clearance",
@@ -31,7 +34,12 @@ export default async function ClearancePage({
   // every clearance item, so listing it alongside "All Clearance" would be redundant.
   const filterOptions: FilterOption[] = await getSubcategories(CLEARANCE_ROOT_ID);
 
-  const activeFilter = filterOptions.find((f) => f.slug === type) ?? null;
+  // PARTNER SPECIALS (card tJ4audbu): the products on a live special are this page's first
+  // filter and lead its unfiltered first page — "the product appears on the specials / clearance
+  // page", with nothing for staff to do beyond setting the special. Priced with it: the rows come
+  // back with the special on them and ProductGrid runs the same per-shopper funnel as every grid.
+  const specialsView = type === SPECIALS_SLUG;
+  const activeFilter = specialsView ? null : filterOptions.find((f) => f.slug === type) ?? null;
 
   const fetchOptions: Parameters<typeof getProducts>[0] = {
     page: currentPage,
@@ -43,13 +51,20 @@ export default async function ClearancePage({
     fetchOptions.onSale = true;
   }
 
-  const [{ products, total }, memberPricingEnabled] = await Promise.all([
-    getProducts(fetchOptions),
+  type Listing = Awaited<ReturnType<typeof getProducts>>;
+  const noSpecials = { products: [], total: 0 } as unknown as Listing;
+  const [{ products, total }, memberPricingEnabled, specialsLead] = await Promise.all([
+    specialsView
+      ? (getSpecialProducts({ page: currentPage, limit: PRODUCTS_PER_PAGE }) as unknown as Promise<Listing>)
+      : getProducts(fetchOptions),
     getFeatureFlag("member_pricing_enabled"),
+    !specialsView && !activeFilter && currentPage === 1
+      ? (getSpecialProducts({ page: 1, limit: SPECIALS_LEAD }) as unknown as Promise<Listing>).catch(() => noSpecials)
+      : Promise.resolve(noSpecials),
   ]);
 
   const totalPages = Math.ceil(total / PRODUCTS_PER_PAGE);
-  const heading = activeFilter?.name ?? "Clearance";
+  const heading = specialsView ? "Partner Specials" : activeFilter?.name ?? "Clearance";
   const typeParam = type ? `type=${encodeURIComponent(type)}&` : "";
 
   return (
@@ -69,12 +84,24 @@ export default async function ClearancePage({
               <Link
                 href="/clearance"
                 className={`block px-3 py-2 text-sm rounded transition-colors ${
-                  !activeFilter
+                  !activeFilter && !specialsView
                     ? "bg-zinc-900 text-white font-medium"
                     : "text-zinc-600 hover:bg-zinc-100"
                 }`}
               >
                 All Clearance
+              </Link>
+            </li>
+            <li>
+              <Link
+                href={`/clearance?type=${SPECIALS_SLUG}`}
+                className={`block px-3 py-2 text-sm rounded transition-colors ${
+                  specialsView
+                    ? "bg-zinc-900 text-white font-medium"
+                    : "text-zinc-600 hover:bg-zinc-100"
+                }`}
+              >
+                Partner Specials
               </Link>
             </li>
             {filterOptions.map((opt) => (
@@ -95,9 +122,24 @@ export default async function ClearancePage({
         </aside>
 
         <div className="flex-1 min-w-0">
+          {specialsLead.products.length > 0 && (
+            <section className="mb-10" aria-label="Partner Specials">
+              <div className="mb-4 flex items-baseline justify-between gap-3">
+                <h2 className="text-lg font-semibold text-zinc-900">Partner Specials</h2>
+                {specialsLead.total > specialsLead.products.length && (
+                  <Link href={`/clearance?type=${SPECIALS_SLUG}`} className="text-sm font-medium text-zinc-700 hover:underline">
+                    See all {specialsLead.total}
+                  </Link>
+                )}
+              </div>
+              <ProductGrid products={specialsLead.products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(specialsLead.products)} listId="partner_specials" listName="Partner Specials" />
+            </section>
+          )}
           {products.length === 0 ? (
             <p className="text-zinc-500 text-center py-12">
-              No clearance items {activeFilter ? `in ${activeFilter.name}` : ""}. Check back soon!
+              {specialsView
+                ? "No Partner Specials are running right now. Check back soon!"
+                : <>No clearance items {activeFilter ? `in ${activeFilter.name}` : ""}. Check back soon!</>}
             </p>
           ) : (
             <>

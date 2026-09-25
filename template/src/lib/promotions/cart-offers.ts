@@ -24,8 +24,10 @@ import {
   couponService,
   evaluateBasketPromotions,
   loadCouponCustomerUses,
+  type FreightGrant,
   resolveOrderPricingGroupId,
   type PromotionEvaluation,
+  type RewardRecord,
 } from "@keenan/services";
 import { addonSurcharge, readStoredAddons } from "@keenan/services/product-addons";
 
@@ -39,9 +41,35 @@ export type OfferCartLine = {
   sale_price: string | null;
   product_sku: string | null;
   variant_sku?: string | null;
+  /**
+   * `cart_items.applied_coupons`. A Buy X Get Y reward line the cart added itself carries
+   * `[{ promotion_reward: <promotion id> }]` here (card EIXdjw2s) — see `rewardPromotionIdOf`.
+   */
+  applied_coupons?: unknown;
   /** The line's paid add-ons (warranty, install…), whose price is already inside `sale_price`. */
   modifier_selections?: unknown;
 };
+
+/**
+ * The promotion that PUT this line in the cart (Zoey's "Automatically Add Product To Cart"), or
+ * null for a line the shopper added. Read from `cart_items.applied_coupons`, a jsonb column the
+ * schema has always carried and nothing else writes.
+ */
+export function rewardPromotionIdOf(item: { applied_coupons?: unknown }): number | null {
+  const raw = item.applied_coupons;
+  if (!Array.isArray(raw)) return null;
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const id = Number((entry as { promotion_reward?: unknown }).promotion_reward);
+    if (Number.isInteger(id) && id > 0) return id;
+  }
+  return null;
+}
+
+/** The `applied_coupons` value that marks a line as this promotion's reward. */
+export function rewardMarker(promotionId: number): { promotion_reward: number }[] {
+  return [{ promotion_reward: promotionId }];
+}
 
 /** What one line took, as the cart, the checkout and the order all read it. */
 export type CartLineOffer = {
@@ -54,6 +82,10 @@ export type CartLineOffer = {
   percent: number;
   floorClamped: boolean;
   bundleSlug?: string;
+  /** A Buy X Get Y reward line (the free or discounted item). */
+  reward?: boolean;
+  /** Taken under its margin floor on a Manager-approved promotion. */
+  belowFloor?: boolean;
 };
 
 export type CartOffers = {
@@ -66,6 +98,12 @@ export type CartOffers = {
   appliedCouponCodes: string[];
   /** What each applied coupon took off, so the redemption records a real amount. */
   couponDiscounts: { code: string; promotionId: number; discount: number }[];
+  /** Reward lines the cart should hold (card EIXdjw2s) — `syncCartPromotionRewards` reads it. */
+  rewardLines: PromotionEvaluation["rewardLines"];
+  /** A freight reward this basket earned; the checkout applies it (`applyFreightReward`). */
+  freight: FreightGrant | null;
+  /** Which lines earned and took each Buy X Get Y reward, for the order's record. */
+  rewards: RewardRecord[];
 };
 
 export const NO_OFFERS: CartOffers = {
@@ -75,6 +113,9 @@ export const NO_OFFERS: CartOffers = {
   appliedPromotionIds: [],
   appliedCouponCodes: [],
   couponDiscounts: [],
+  rewardLines: [],
+  freight: null,
+  rewards: [],
 };
 
 /** The SKU actually being sold on this line: the variant's own where it has one. */
@@ -116,12 +157,17 @@ function toOffers(evaluation: PromotionEvaluation): CartOffers {
       percent: l.percent,
       floorClamped: l.floorClamped,
       ...(l.bundleSlug ? { bundleSlug: l.bundleSlug } : {}),
+      ...(l.reward ? { reward: true } : {}),
+      ...(l.belowFloor ? { belowFloor: true } : {}),
     })),
     totalDiscount: evaluation.totalDiscount,
     messages: evaluation.messages.map((m) => ({ kind: m.kind, text: m.text })),
     appliedPromotionIds: evaluation.appliedPromotionIds,
     appliedCouponCodes: evaluation.appliedCouponCodes,
     couponDiscounts: evaluation.couponDiscounts,
+    rewardLines: evaluation.rewardLines ?? [],
+    freight: evaluation.freight ?? null,
+    rewards: evaluation.rewards ?? [],
   };
 }
 
@@ -146,7 +192,12 @@ export async function resolveCartOffers(
      * (`email`, normalised the way guest orders are).
      */
     contactId?: number | null;
-    /** The shopper's trade account, when they have one — resolves their customer group. */
+    /**
+     * The shopper's trade ACCOUNT, when they have one. It resolves their customer group, and a Buy
+     * X Get Y offer limited to accounts, or capped at one use per account, is judged against it
+     * (card EIXdjw2s). A signed-in Industry Kitchens account buys on its negotiated prices, which
+     * such an offer only sits on top of when it says it combines with trade pricing.
+     */
     accountId?: number | null;
     /** The buyer's email — a guest's identity for a coupon's per-customer cap. */
     email?: string | null;
@@ -176,6 +227,7 @@ export async function resolveCartOffers(
         sku: lineSku(item),
         quantity: item.quantity,
         unitPrice: lineOfferBase(item),
+        rewardPromotionId: rewardPromotionIdOf(item),
       })),
       {
         channelId: options.channelId,
@@ -184,6 +236,9 @@ export async function resolveCartOffers(
         contactId: options.contactId ?? null,
         email: options.email ?? null,
         customerGroupId,
+        accountId: options.accountId ?? null,
+        pricing: { trade: options.accountId != null },
+        context: "storefront",
       }
     );
     return toOffers(evaluation);
