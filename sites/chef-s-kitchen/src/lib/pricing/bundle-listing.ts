@@ -4,6 +4,7 @@ import { getCommerceClient } from "@keenan/services";
 import {
   defaultBuildTotal,
   memberPriceMapWithKit,
+  offeredKit,
   readProductKit,
   withKitPrice,
 } from "@/lib/product-kit";
@@ -71,7 +72,10 @@ export async function bundleListingTotals(ids: number[]): Promise<Map<number, nu
         pending = (async () => {
           const kit = readProductKit(metafields);
           if (kit?.kind !== "bundle") return null;
-          return defaultBuildTotal(kit, await priceKitComponents(kit));
+          // The build the page OPENS on is drawn from the choices it OFFERS (`offeredKit`), so
+          // the tile and the page's first paint stay one figure.
+          const prices = await priceKitComponents(kit);
+          return defaultBuildTotal(offeredKit(kit, prices), prices);
         })().catch(() => null);
         memo.set(id, pending);
       }

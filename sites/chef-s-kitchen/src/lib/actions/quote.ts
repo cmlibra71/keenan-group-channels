@@ -22,9 +22,12 @@ import {
   kitQuestions,
   readProductKit,
   resolveKitChoices,
+  unbuyableBundlePart,
   type BundlePart,
   type KitChoice,
+  type ProductKit,
 } from "@/lib/product-kit";
+import { priceKitComponents } from "@/lib/pricing/kit-components";
 import {
   addonPanelShown,
   readProductAddons,
@@ -317,7 +320,8 @@ export async function addToQuote(
   }
   // EVERY part is read, checked and priced BEFORE the first write, so a build that cannot be
   // quoted leaves the quote as it was (Product Brief: no record from a failed save).
-  const partLines = bundlePartsToWrite ? await priceBundlePartsForQuote(bundlePartsToWrite, suppress) : [];
+  const partLines =
+    bundlePartsToWrite && kit ? await priceBundlePartsForQuote(kit, bundlePartsToWrite, suppress) : [];
   if ("error" in partLines) return { error: partLines.error };
 
   const quote = await getOrCreateQuote();
@@ -479,29 +483,46 @@ export async function addToQuote(
 /**
  * A bundle's parts as quote lines, checked and priced before anything is written (card Tc5ekvD6).
  * Each part is priced exactly as `addToQuote` prices that product added on its own — catalogue
- * price with this channel's sale-price suppression, no member or quantity tier (ADR 0001) — and
- * each is held to the same two switches: this shopper may see it, and staff have not restricted
- * it from quotes. One refusal refuses the whole build, in words that name the part.
+ * price with this channel's sale-price suppression, no member or quantity tier (ADR 0001).
+ *
+ * WHICH parts may be quoted is the page's and the cart's own test, not a looser one:
+ * `priceKitComponents` — sold on THIS storefront (a visible assignment here, the product visible
+ * and not deleted, so CD and IK never cross over), inside this shopper's catalogue, price not
+ * hidden, not cart-restricted, priced above $0. A part the page printed no price beside is never
+ * written onto a quote at a catalogue price (review 2026-09-25). On top of that, a part staff
+ * restricted from quotes is refused. A part that cannot be read at all (deleted between the page
+ * and the press — `getById` throws on a missing row) is a worded refusal, never a crash. One
+ * refusal refuses the whole build, in words that name the part.
  */
 async function priceBundlePartsForQuote(
+  kit: ProductKit,
   parts: BundlePart[],
   suppress: boolean
 ): Promise<
   | Array<BundlePart & { listPrice: string; salePrice: string | null; packSize: number }>
   | { error: string }
 > {
+  const refusal = (part: BundlePart) =>
+    `${part.name} can't be added to a quote online. Please contact us about this configuration.`;
+  const unbuyable = unbuyableBundlePart(parts, await priceKitComponents(kit));
+  if (unbuyable) return { error: refusal(unbuyable) };
   const out: Array<BundlePart & { listPrice: string; salePrice: string | null; packSize: number }> = [];
   for (const part of parts) {
-    const refusal = `${part.name} can't be added to a quote online. Please contact us about this configuration.`;
-    if (!(await isProductVisibleToViewer(part.productId))) return { error: refusal };
-    const row = (await productService.getById(part.productId)) as {
+    if (!(await isProductVisibleToViewer(part.productId))) return { error: refusal(part) };
+    type PartRow = {
       price: string;
       sale_price: string | null;
       restrict_add_to_quote?: boolean | null;
       sell_pack_size?: number | null;
       sell_pack_unit?: string | null;
-    } | null;
-    if (!row || row.restrict_add_to_quote === true) return { error: refusal };
+    };
+    let row: PartRow | null;
+    try {
+      row = (await productService.getById(part.productId)) as PartRow | null;
+    } catch {
+      return { error: refusal(part) };
+    }
+    if (!row || row.restrict_add_to_quote === true) return { error: refusal(part) };
     const { salePrice } = layerCartPrice({
       listPrice: row.price,
       catalogSalePrice: row.sale_price,

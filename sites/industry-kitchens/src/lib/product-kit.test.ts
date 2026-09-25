@@ -13,9 +13,11 @@ import {
   kitQuestions,
   memberPriceMapWithKit,
   memberPriceWithKit,
+  offeredKit,
   readProductKit,
   resolveKitChoices,
   toKitChoices,
+  unbuyableBundlePart,
   withKitPrice,
 } from "./product-kit.ts";
 
@@ -314,4 +316,60 @@ test("a refused tile add sends the shopper to the bundle's own page — and neve
   assert.equal(bundleProductPath("a\\b"), null);
   assert.equal(bundleProductPath(""), null);
   assert.equal(bundleProductPath(null), null);
+});
+
+// ── Review 2026-09-25: a part the page would not price is never offered, and never quoted ────────
+// `prices` is `priceKitComponents`' answer: a part retired (is_visible false), soft-deleted, or not
+// assigned to THIS storefront is simply absent from it, exactly like a hidden-price or $0 part.
+
+test("the picker leaves out a part that cannot be bought here, and the build opens on the next choice", () => {
+  const kit = readProductKit(bundleMeta)!;
+  // 12 (Left bay's DEFAULT) is retired / sold only on the other storefront.
+  const prices = { 11: 400, 21: 500, 22: 550 };
+  const offered = offeredKit(kit, prices)!;
+  assert.deepEqual(offered.groups.map((g) => [g.name, g.items.map((i) => i.productId)]), [
+    ["Left bay", [11]],
+    ["Right bay", [21, 22]],
+  ]);
+  assert.deepEqual(defaultKitSelection(offered.groups), { "Left bay": 11, "Right bay": 21 });
+  assert.equal(defaultBuildTotal(offered, prices), 900);
+  // Without the filter that same bundle opened on no price at all.
+  assert.equal(defaultBuildTotal(kit, prices), null);
+  // The server still resolves against the full kit: every offered build is a valid one.
+  assert.ok(resolveKitChoices(kit, toKitChoices(defaultKitSelection(offered.groups))));
+  // Never mutates the product's own kit.
+  assert.equal(kit.groups[0].items.length, 2);
+});
+
+test("a required group with no buyable choice is kept as authored; an optional one is dropped", () => {
+  const kit = readProductKit(iceMakerMeta)!;
+  // The ice maker (required, fixed) and both bins (optional) cannot be bought here.
+  const offered = offeredKit(kit, { 301: 159.35 })!;
+  assert.deepEqual(offered.groups.map((g) => g.name), ["Ice Maker", "Accessories"]);
+  assert.equal(offered.groups[0].items.length, 1);
+  // So the page still says the build is priced by our team, rather than dropping the question.
+  assert.equal(defaultBuildTotal(offered, { 301: 159.35 }), null);
+});
+
+test("the picker offers everything when every part is buyable, and a hidden-price bundle is untouched", () => {
+  const kit = readProductKit(iceMakerMeta)!;
+  const all = { 100: 5716.74, 201: 1313.14, 202: 1665.56, 301: 159.35 };
+  assert.equal(offeredKit(kit, all), kit);
+  assert.equal(offeredKit(kit, {}, true), kit);
+  assert.equal(offeredKit(null, all), null);
+  const grouped = readProductKit(groupedMeta)!;
+  assert.equal(offeredKit(grouped, {}), grouped);
+});
+
+test("Add to Quote names the part that is not on this storefront, or is deleted, and passes a buildable one", () => {
+  const parts = [
+    { productId: 100, name: "KMD-270AB ice maker" },
+    { productId: 201, name: "Bin 301" }, // assigned to the other storefront only
+    { productId: 301, name: "Top kit 8D" }, // soft-deleted since the page was drawn
+  ];
+  assert.equal(unbuyableBundlePart(parts, { 100: 5716.74, 301: 159.35 })?.name, "Bin 301");
+  assert.equal(unbuyableBundlePart(parts, { 100: 5716.74, 201: 1313.14 })?.name, "Top kit 8D");
+  assert.equal(unbuyableBundlePart(parts, { 100: 5716.74, 201: 1313.14, 301: 0 })?.name, "Top kit 8D");
+  assert.equal(unbuyableBundlePart(parts, { 100: 5716.74, 201: 1313.14, 301: 159.35 }), null);
+  assert.equal(unbuyableBundlePart([], {}), null);
 });

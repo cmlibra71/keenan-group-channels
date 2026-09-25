@@ -331,6 +331,65 @@ export function kitBuildTotal(
 }
 
 /**
+ * The bundle as the picker OFFERS it: every choice that cannot be bought online here (absent from
+ * `prices` — retired, deleted, not sold on this storefront, outside this shopper's catalogue, price
+ * hidden, cart-restricted or $0) is left out, the way Zoey hides a disabled selection (card
+ * Tc5ekvD6, review 2026-09-25). Without this a retired part that happened to be a required group's
+ * default opened the whole bundle on "priced by our team" with no Add to Cart.
+ *
+ * Only ever NARROWS: a required group with no buyable choice is kept exactly as authored, so the
+ * page still says the build is priced by our team rather than silently dropping a question; an
+ * optional group with no buyable choice is dropped (its only honest answer was "None"). A group's
+ * default that was left out falls to the next rule in `defaultKitSelection`. A bundle whose own
+ * price staff HID (`keepAll`) is priced by a rep as one quote line and is returned untouched.
+ * The server still resolves every submitted build against the product's OWN kit
+ * (`resolveKitChoices`), and a choice left out here was never valid there either.
+ */
+export function offeredKit(
+  kit: ProductKit | null,
+  prices: KitPrices | null | undefined,
+  keepAll = false
+): ProductKit | null {
+  if (!kit || kit.kind !== "bundle" || keepAll) return kit;
+  const buyable = (id: number) => {
+    const unit = prices?.[id];
+    return unit != null && Number.isFinite(unit) && unit > 0;
+  };
+  let changed = false;
+  const groups: KitGroup[] = [];
+  for (const group of kit.groups) {
+    const items = group.items.filter((i) => buyable(i.productId));
+    if (items.length === group.items.length) {
+      groups.push(group);
+    } else if (items.length > 0) {
+      changed = true;
+      groups.push({ ...group, items });
+    } else if (group.optional) {
+      changed = true;
+    } else {
+      groups.push(group);
+    }
+  }
+  if (!changed) return kit;
+  const kept = new Set(groups.flatMap((g) => g.items));
+  return { ...kit, groups, items: kit.items.filter((i) => !i.group || kept.has(i)) };
+}
+
+/** The part of a submitted build that cannot be bought online here (absent from `prices`, the
+ *  same test the page and the cart apply), or null when every part can. Add to Quote refuses on
+ *  it, naming the part, so a quote never carries a part the page would not price. */
+export function unbuyableBundlePart<P extends { productId: number }>(
+  parts: P[],
+  prices: KitPrices | null | undefined
+): P | null {
+  for (const part of parts) {
+    const unit = prices?.[part.productId];
+    if (unit == null || !Number.isFinite(unit) || unit <= 0) return part;
+  }
+  return null;
+}
+
+/**
  * The build a bundle's page OPENS on (`defaultKitSelection`), priced — the figure a listing tile,
  * a search hit or a rail adds to the bundle's own price, so the tile states exactly the headline
  * the page first paints. Null when a part of that build has no price online here: the page then

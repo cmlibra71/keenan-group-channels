@@ -12,7 +12,7 @@ import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductOfferTiers } from "@/components/product/ProductOfferTiers";
-import { readProductKit } from "@/lib/product-kit";
+import { offeredKit, readProductKit } from "@/lib/product-kit";
 import { priceKitComponents } from "@/lib/pricing/kit-components";
 import { readProductAddons } from "@keenan/services/product-addons";
 import { readOptionValueOrder } from "@keenan/services/product-option-order";
@@ -152,8 +152,11 @@ export default async function ProductPage({
   // A kit, read ONCE, and — for a bundle — what each component costs THIS shopper, ex GST,
   // through the cart's own pricing (card Tc5ekvD6), so the page prints what the cart charges.
   // Both renderers below read the same pair; every other product costs one no-op parse.
-  const productKit = readProductKit(product.metafields);
-  const kitPrices = await priceKitComponents(productKit);
+  // The picker OFFERS only the choices that can be bought here (`offeredKit` — Zoey hides a
+  // disabled selection), so a retired or other-site part never opens the bundle unpriced.
+  const rawKit = readProductKit(product.metafields);
+  const kitPrices = await priceKitComponents(rawKit);
+  const productKit = offeredKit(rawKit, kitPrices, product.hidePrice === true);
 
   // Editable CMS zones on every product page (global product template) — empty
   // unless set, so the page renders exactly as before.
