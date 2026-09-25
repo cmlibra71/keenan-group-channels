@@ -35,12 +35,18 @@ export function ProductPackNote() {
   const {
     packSize,
     packNote,
+    packLine,
     packUnit,
     displayPrice,
     displaySalePrice,
     activeMemberPrice,
   } = purchase;
   if (packSize <= 1 || !packNote) return null;
+  // Card O108e4jH (Tim 2026-09-21, "copy Zoey"): the quantity box above the buy buttons now counts
+  // PACKAGES, and this is Zoey's line beside it — "3 Cartons = 72 Pcs" — recounted as the shopper
+  // steps. "Sold in multiples of 12" where Enable Packaging is off. `packNote` is the fallback for
+  // a provider that predates the live line.
+  const sentence = packLine ?? packNote;
   // The price this shopper is actually being shown: their member/contract price when it is the
   // one on the panel, else the sale price, else the list price.
   const shown = displaySalePrice ?? displayPrice;
@@ -52,8 +58,10 @@ export function ProductPackNote() {
   // catch. What is dropped is the carton PRICE, which is the part that would leak the figure.
   return (
     <p className="mt-3 text-sm text-zinc-700">
-      <span className="font-semibold text-zinc-900">{packNote}</span>
-      {unit > 0 && (
+      <span className="font-semibold text-zinc-900">{sentence}</span>
+      {/* Zoey's Enable Packaging off (card O108e4jH): the sentence is "Sold in multiples of 12"
+          and there is no package to price. */}
+      {unit > 0 && purchase.packagingOn && (
         <>
           {" · "}
           <Price amount={packPrice(unit, packSize)} gst /> per {packUnit.toLowerCase()}

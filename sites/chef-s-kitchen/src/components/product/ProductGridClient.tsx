@@ -1,6 +1,7 @@
 "use client";
 import { ProductCard } from "./ProductCard";
 import { Ga4ViewItemList } from "@/components/analytics/Ga4ViewItemList";
+import { tilePackLine } from "@keenan/services/pack";
 
 // The CLIENT half of ProductGrid: pure grid + cards + GA4 list event, taking
 // rows that are ALREADY viewer-scoped and account-priced (the server pass in
@@ -134,6 +135,7 @@ export function ProductGridClient({
           inventoryTracking={product.inventoryTracking}
           restrictAddToCart={product.restrictAddToCart}
           restrictAddToQuote={product.restrictAddToQuote}
+          packLine={tilePackLine(product)}
           listId={listId}
           listName={listName}
           listIndex={indexOffset + index}

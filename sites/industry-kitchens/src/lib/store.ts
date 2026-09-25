@@ -55,6 +55,7 @@ import {
 import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
 import { withBrandLogoFallback, targetsForChannel } from "@/builder/product-card-brand-logo";
+import { withTilePackLineInComponents } from "@/builder/tile-pack-line";
 import { withPromoTagInComponents } from "@/builder/promo-tag-node";
 import { guardTileBuyControlsInComponents } from "@keenan/services/builder";
 import { withMemberScaleLabels } from "@/builder/member-scale-labels";
@@ -196,11 +197,15 @@ const BRAND_LOGO_TARGETS = targetsForChannel(CHANNEL_ID);
 const withTileBuyGuard = (components: ComponentMap): ComponentMap =>
   guardTileBuyControlsInComponents(components as Record<string, NodeTree>) as ComponentMap;
 
+// Card O108e4jH — "1 Carton = 24 Pcs" before the tile's buy row, after the promo tag (see
+// `builder/tile-pack-line.ts`). Data-driven: prints only where the row's `pack_line` is set.
 const withMasterTransforms = (components: ComponentMap): ComponentMap =>
   withTileBuyGuard(
-    withPromoTagInComponents(
-      withBrandLogoFallback(components, BRAND_LOGO_TARGETS) as Record<string, NodeTree>,
-      PROMO_TAG_LABEL
+    withTilePackLineInComponents(
+      withPromoTagInComponents(
+        withBrandLogoFallback(components, BRAND_LOGO_TARGETS) as Record<string, NodeTree>,
+        PROMO_TAG_LABEL
+      )
     ) as ComponentMap
   );
 

@@ -9,6 +9,8 @@ import { Minus, Plus, Trash2 } from "lucide-react";
 import { backorderMessage } from "@keenan/services/backorder";
 import {
   packNote as packNoteFor,
+  boxQuantity,
+  packCountSentence,
   packPrice,
   resolvePackSize,
   resolvePackUnit,
@@ -62,6 +64,13 @@ export type CartItemRow = {
    */
   pack_size?: number | null;
   pack_unit?: string | null;
+  /** Zoey's wording for this line, resolved server-side (card O108e4jH): "Case contains 6
+   *  Bottles", or "Sold in multiples of 12" where Enable Packaging is off. */
+  pack_note?: string | null;
+  /** Enable Packaging — false means there is no package to price on this line. */
+  pack_packaging?: boolean | null;
+  /** Zoey's Unit Label ("Pcs" / "Bottles"), for the "2 Cartons = 48 Pcs" line (card O108e4jH). */
+  pack_unit_label?: string | null;
   /**
    * What this line took from a promotion, resolved server-side in `readCart`
    * (card p6YVxc4P). The line's own unit price is UNTOUCHED — the offer is a
@@ -166,11 +175,26 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
   // refresh to re-sync the cart from the server instead.
   // 1 on everything that is not sold by the carton, so this row behaves exactly as it always has.
   const packSize = resolvePackSize({ sellPackSize: item.pack_size ?? null });
-  const packNote = packNoteFor({
-    sellPackSize: item.pack_size ?? null,
-    sellPackUnit: item.pack_unit ?? null,
-  });
+  // The server's sentence wins (it knows Enable Packaging, the Unit Label and the shopper's
+  // group row); the local one covers a line object from before those fields existed.
+  const packNote =
+    item.pack_note !== undefined
+      ? item.pack_note
+      : packNoteFor({
+          sellPackSize: item.pack_size ?? null,
+          sellPackUnit: item.pack_unit ?? null,
+        });
+  const packPriced = item.pack_packaging !== false;
   const packUnit = resolvePackUnit({ sellPackUnit: item.pack_unit ?? null });
+  // Card O108e4jH (Tim 2026-09-21, "copy Zoey"): with Enable Packaging on, the shopper counts
+  // PACKAGES, as Zoey's cart does — the box reads 2 and the line under the name "2 Cartons = 48
+  // Pcs". The line itself, its price and every write stay in PIECES; only what is SHOWN is
+  // translated, and it follows the optimistic quantity so +/- recounts instantly.
+  const countsPacks = packSize > 1 && packPriced;
+  const shownQty = boxQuantity(displayQty, packSize, countsPacks);
+  const packLine = countsPacks
+    ? packCountSentence(displayQty, packSize, item.pack_unit ?? null, item.pack_unit_label ?? null)
+    : packNote;
 
   function handleQuantity(newQty: number) {
     startTransition(async () => {
@@ -256,11 +280,16 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
           </ul>
         )}
         <p className="text-sm text-zinc-600 mt-1"><Price amount={unitPrice} /> each</p>
-        {packNote && (
+        {packLine && (
           <p className="text-xs text-zinc-600 mt-0.5">
-            {packNote} {"\u00b7 "}
-            <Price amount={packPrice(unitPrice, packSize)} />
-            {` per ${packUnit.toLowerCase()}`}
+            {packLine}
+            {packPriced && (
+              <>
+                {" \u00b7 "}
+                <Price amount={packPrice(unitPrice, packSize)} />
+                {` per ${packUnit.toLowerCase()}`}
+              </>
+            )}
           </p>
         )}
         {offerDiscount > 0 && item.offer_name && (
@@ -297,7 +326,7 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
         >
           <Minus className="h-3 w-3" />
         </button>
-        <span className="min-w-8 px-1 text-center text-sm font-medium">{displayQty}</span>
+        <span className="min-w-8 px-1 text-center text-sm font-medium">{shownQty}</span>
         <button
           onClick={() => handleQuantity(item.quantity + packSize)}
           // A restricted line may be reduced and removed, never increased — the

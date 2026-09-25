@@ -45,10 +45,16 @@ export async function backorderFactsForProducts(
         restrict_add_to_cart: boolean | null;
         sell_pack_size: number | null;
         sell_pack_unit: string | null;
+        qty_packaging_enabled: boolean | null;
+        qty_unit_label: string | null;
+        qty_increment_groups: unknown;
+        ignore_min_order_qty: boolean | null;
+        ignore_min_order_amount: boolean | null;
       }[]
     >`
       SELECT id, inventory_tracking, inventory_level, backorder_policy, restrict_add_to_cart,
-             sell_pack_size, sell_pack_unit
+             sell_pack_size, sell_pack_unit, qty_packaging_enabled, qty_unit_label,
+             qty_increment_groups, ignore_min_order_qty, ignore_min_order_amount
         FROM products
        WHERE id = ANY(${ids})`;
     for (const row of rows) {
@@ -64,6 +70,14 @@ export async function backorderFactsForProducts(
         // and we cannot tell which (see `@keenan/services/pack`).
         sellPackSize: row.sell_pack_size == null ? null : Number(row.sell_pack_size),
         sellPackUnit: row.sell_pack_unit,
+        // The rest of Zoey's "Quantity Increments & Packaging" (card O108e4jH): whether the pack
+        // is NAMED (Enable Packaging) and in what words, the per-customer-group rows, and the two
+        // minimum-order exclusions the checkout reads.
+        qtyPackagingEnabled: row.qty_packaging_enabled,
+        qtyUnitLabel: row.qty_unit_label,
+        qtyIncrementGroups: row.qty_increment_groups,
+        ignoreMinOrderQty: row.ignore_min_order_qty,
+        ignoreMinOrderAmount: row.ignore_min_order_amount,
       });
     }
   } catch (e) {

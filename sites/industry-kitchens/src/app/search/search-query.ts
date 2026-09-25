@@ -32,6 +32,17 @@ export type SearchProduct = {
    */
   restrictAddToCart?: boolean | null;
   restrictAddToQuote?: boolean | null;
+  /**
+   * The selling unit (card O108e4jH), carried so a search-result TILE says "1 Carton = 24 Pcs"
+   * (`tilePackLine`) exactly as the category tile for the same product does — both tiles' Add to
+   * Cart put a whole carton in the basket. Absent — a document indexed before the fields existed —
+   * reads as sold individually.
+   */
+  sellPackSize?: number | null;
+  sellPackUnit?: string | null;
+  qtyPackagingEnabled?: boolean | null;
+  qtyUnitLabel?: string | null;
+  qtyIncrementGroups?: unknown;
 };
 
 export type SearchChunk = {
@@ -127,6 +138,11 @@ export async function fetchSearchChunk(
           : null,
         restrictAddToCart: hit.restrictAddToCart === true,
         restrictAddToQuote: hit.restrictAddToQuote === true,
+        sellPackSize: hit.sellPackSize ?? null,
+        sellPackUnit: hit.sellPackUnit ?? null,
+        qtyPackagingEnabled: hit.qtyPackagingEnabled ?? null,
+        qtyUnitLabel: hit.qtyUnitLabel ?? null,
+        qtyIncrementGroups: hit.qtyIncrementGroups ?? null,
       })),
       total: result.estimatedTotalHits,
     };

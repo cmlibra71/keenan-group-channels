@@ -61,6 +61,13 @@ export interface ProductCardProps {
    */
   restrictAddToCart?: boolean | null;
   restrictAddToQuote?: boolean | null;
+  /**
+   * Card O108e4jH — "1 Carton = 24 Pcs" on a product sold by the package (Zoey's tile line; one
+   * press of Add to Cart here adds one package), "Sold in multiples of 12" with Enable Packaging
+   * off. Callers pass `tilePackLine(row)` from `@keenan/services/pack`; absent or "" prints
+   * nothing, which is every product sold individually.
+   */
+  packLine?: string | null;
   /** Accepted and deliberately unused: the tile does not gate on stock (7vu2iEEZ). Kept so the
    *  grid can keep passing what it reads without every caller changing. */
   inventoryLevel?: number | null;
@@ -93,6 +100,7 @@ export function ProductCard({
   availability,
   restrictAddToCart,
   restrictAddToQuote,
+  packLine,
   listId,
   listName,
   listIndex,
@@ -265,6 +273,10 @@ export function ProductCard({
             <span className="badge-promo">{PROMO_TAG_LABEL}</span>
           </p>
         )}
+
+        {/* The package this tile's Add to Cart buys (card O108e4jH) — the same line the authored
+            `product-card` master gets from `builder/tile-pack-line.ts`, off the same function. */}
+        {packLine && <p className="mt-2 text-xs font-medium text-zinc-700">{packLine}</p>}
 
         {/* CTAs */}
         <div className="mt-3 flex flex-col gap-2">
