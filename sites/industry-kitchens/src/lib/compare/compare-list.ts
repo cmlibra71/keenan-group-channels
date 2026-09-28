@@ -32,12 +32,24 @@ export const COMPARE_COOKIE = "ik_compare";
  */
 export const MAX_COMPARE_ITEMS = 6;
 
+/**
+ * The largest id a product can have: `products.id` is a Postgres `integer` (int4). A larger
+ * number in a hand-edited cookie would reach `WHERE id = ANY(...)` and fail the whole page
+ * with "value out of range for type integer", so it is dropped here instead.
+ */
+export const MAX_PRODUCT_ID = 2147483647;
+
+/** A usable product id: a whole number in 1..MAX_PRODUCT_ID. */
+export function isProductId(id: number): boolean {
+  return Number.isSafeInteger(id) && id > 0 && id <= MAX_PRODUCT_ID;
+}
+
 /** Thirty days: long enough to come back to, short enough not to haunt anyone. */
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
 /**
- * The ids in a cookie value, newest first. Anything that is not a positive whole
- * number is dropped, duplicates keep their first (newest) position, and the list
+ * The ids in a cookie value, newest first. Anything that is not a whole number in
+ * 1..MAX_PRODUCT_ID (int4) is dropped, duplicates keep their first (newest) position, and the list
  * is cut to the cap — a hand-edited cookie cannot make the page read more.
  */
 export function parseCompareList(value: string | null | undefined): number[] {
@@ -52,7 +64,7 @@ export function parseCompareList(value: string | null | undefined): number[] {
   for (const part of raw.split(/[,.\s]+/)) {
     if (!/^\d{1,10}$/.test(part)) continue;
     const id = Number(part);
-    if (!Number.isSafeInteger(id) || id <= 0 || out.includes(id)) continue;
+    if (!isProductId(id) || out.includes(id)) continue;
     out.push(id);
     if (out.length >= MAX_COMPARE_ITEMS) break;
   }
@@ -61,7 +73,7 @@ export function parseCompareList(value: string | null | undefined): number[] {
 
 /** The list with `id` added at the front (moved there if already present), capped. */
 export function addToCompareList(list: readonly number[], id: number): number[] {
-  if (!Number.isSafeInteger(id) || id <= 0) return [...list];
+  if (!isProductId(id)) return [...list];
   return [id, ...list.filter((x) => x !== id)].slice(0, MAX_COMPARE_ITEMS);
 }
 

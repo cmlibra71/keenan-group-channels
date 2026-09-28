@@ -5,11 +5,13 @@ import {
   sanitizeCatalogProducts,
 } from "@/lib/store";
 import { getCommerceClient } from "@keenan/services";
-import { tileButtons, tileControlsOf } from "@keenan/services/tile-controls";
 import { applyAccountPrices, getListingMemberPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
 import { cardPrice } from "@/lib/card-price";
 import { buildCompareRows, type CompareFieldDefinition, type CompareRow } from "./compare-rows";
+import { compareBuyButtons } from "./compare-buy";
+import { isProductId } from "./compare-list";
+import { readProductKit, tileKitChoices, type KitChoice } from "@/lib/product-kit";
 
 // ============================================================================
 // The compare page's data (IK parity, root cause `compare-feature`).
@@ -37,8 +39,13 @@ export interface CompareProduct {
   /** Card price: list (0 = Call for Price), real sale or null, "Starting From" flag. */
   price: { list: number; sale: number | null; from: boolean };
   memberPrice: number | null;
-  /** Which buy buttons the product's own tile offers (card 1sgz4B3v rule). */
+  /** Which buy buttons the product's OWN PAGE offers (`compare-buy.ts`). */
   buttons: { cart: boolean; quote: boolean };
+  /** `hide_price`: the column says "Call for Price", as the page's masked price does. */
+  priceHidden: boolean;
+  /** A bundle: its quote carries the kit's marked defaults (the tile's build), or null. */
+  isBundle: boolean;
+  kitChoices: KitChoice[] | null;
 }
 
 export interface CompareData {
@@ -57,21 +64,52 @@ interface ListRow {
   fromSalePrice?: string | null;
   brandName: string | null;
   thumbnailImage?: { urlStandard: string; urlThumbnail: string | null } | null;
+  restrictAddToCart?: boolean | null;
+  restrictAddToQuote?: boolean | null;
+  purchasingDisabled?: boolean | null;
 }
 
-async function readDetails(
-  ids: number[]
-): Promise<Map<number, { fields: Record<string, unknown>; descriptionShort: string | null }>> {
-  const out = new Map<number, { fields: Record<string, unknown>; descriptionShort: string | null }>();
+interface DetailRow {
+  fields: Record<string, unknown>;
+  descriptionShort: string | null;
+  metafields: unknown;
+  hidePrice: boolean;
+  inventoryTracking: string | null;
+  inventoryLevel: number | null;
+  backorderPolicy: string | null;
+}
+
+async function readDetails(ids: number[]): Promise<Map<number, DetailRow>> {
+  const out = new Map<number, DetailRow>();
   const sql = getCommerceClient();
   if (!sql || ids.length === 0) return out;
-  const rows = await sql<{ id: number; fields: unknown; description_short: string | null }[]>`
-    SELECT p.id, p.metafields->'fields' AS fields, p.description_short
+  const rows = await sql<
+    {
+      id: number;
+      metafields: unknown;
+      description_short: string | null;
+      hide_price: boolean | null;
+      inventory_tracking: string | null;
+      inventory_level: number | null;
+      backorder_policy: string | null;
+    }[]
+  >`
+    SELECT p.id, p.metafields, p.description_short, p.hide_price,
+           p.inventory_tracking, p.inventory_level::int AS inventory_level, p.backorder_policy
     FROM products p
     WHERE p.id = ANY(${ids})`;
   for (const r of rows) {
-    const fields = r.fields && typeof r.fields === "object" && !Array.isArray(r.fields) ? (r.fields as Record<string, unknown>) : {};
-    out.set(Number(r.id), { fields, descriptionShort: r.description_short });
+    const meta = r.metafields && typeof r.metafields === "object" ? (r.metafields as Record<string, unknown>) : {};
+    const f = meta.fields;
+    out.set(Number(r.id), {
+      fields: f && typeof f === "object" && !Array.isArray(f) ? (f as Record<string, unknown>) : {},
+      descriptionShort: r.description_short,
+      metafields: meta,
+      hidePrice: r.hide_price === true,
+      inventoryTracking: r.inventory_tracking,
+      inventoryLevel: r.inventory_level == null ? null : Number(r.inventory_level),
+      backorderPolicy: r.backorder_policy,
+    });
   }
   return out;
 }
@@ -100,7 +138,9 @@ async function readDefinitions(): Promise<CompareFieldDefinition[]> {
 }
 
 /** The products in `ids` this viewer may see, in list order, with their comparable rows. */
-export async function loadCompareData(ids: number[]): Promise<CompareData> {
+export async function loadCompareData(requested: number[]): Promise<CompareData> {
+  // Belt and braces with `parseCompareList`: an id Postgres cannot hold never reaches a query.
+  const ids = requested.filter(isProductId);
   if (ids.length === 0) return { products: [], rows: [] };
 
   const listed = await productService.listForChannel(CHANNEL_ID, { ids, limit: ids.length });
@@ -114,13 +154,26 @@ export async function loadCompareData(ids: number[]): Promise<CompareData> {
   const visibleIds = ordered.map((r) => r.id);
 
   const [details, definitions, memberPrices] = await Promise.all([
-    readDetails(visibleIds).catch(() => new Map()),
+    readDetails(visibleIds).catch(() => new Map<number, DetailRow>()),
     readDefinitions().catch(() => []),
     getListingMemberPrices(ordered).catch(() => ({}) as Record<number, number>),
   ]);
 
   const products: CompareProduct[] = ordered.map((r) => {
     const price = cardPrice(r);
+    const d = details.get(r.id);
+    const kit = d ? readProductKit(d.metafields, CHANNEL_ID) : null;
+    const buy = compareBuyButtons({
+      shownPrice: price.sale ?? price.list,
+      hidePrice: d?.hidePrice ?? false,
+      restrictAddToCart: r.restrictAddToCart,
+      restrictAddToQuote: r.restrictAddToQuote,
+      purchasingDisabled: r.purchasingDisabled,
+      inventoryTracking: d?.inventoryTracking ?? null,
+      inventoryLevel: d?.inventoryLevel ?? null,
+      backorderPolicy: d?.backorderPolicy ?? null,
+      kit,
+    });
     return {
       id: r.id,
       name: r.name,
@@ -128,10 +181,13 @@ export async function loadCompareData(ids: number[]): Promise<CompareData> {
       sku: r.sku,
       brandName: r.brandName,
       imageUrl: r.thumbnailImage?.urlStandard || r.thumbnailImage?.urlThumbnail || null,
-      descriptionShort: details.get(r.id)?.descriptionShort ?? null,
+      descriptionShort: d?.descriptionShort ?? null,
       price,
-      memberPrice: memberPrices[r.id] ?? null,
-      buttons: tileButtons(tileControlsOf(r), price.list > 0),
+      memberPrice: buy.priceHidden ? null : (memberPrices[r.id] ?? null),
+      buttons: { cart: buy.cart, quote: buy.quote },
+      priceHidden: buy.priceHidden,
+      isBundle: kit?.kind === "bundle",
+      kitChoices: kit ? tileKitChoices(kit) : null,
     };
   });
 

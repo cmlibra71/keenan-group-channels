@@ -45,6 +45,15 @@ export function writeCompareList(list: readonly number[]): void {
   window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
+/**
+ * The list, or NULL until the browser's cookie has been read (server render and the
+ * hydration pass). The compare page uses this to show the server's own columns
+ * until it knows better, rather than flashing an empty table.
+ */
+export function useCompareListOrNull(): number[] | null {
+  return useSyncExternalStore(subscribe, snapshot, () => null);
+}
+
 export function useCompareList() {
   // The server has no cookie jar to hand here, so the first paint is an empty
   // list; the real one lands on hydration. A compare link reading "Add to

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   COMPARE_COOKIE,
   MAX_COMPARE_ITEMS,
+  MAX_PRODUCT_ID,
   addToCompareList,
   formatCompareList,
   parseCompareList,
@@ -48,4 +49,13 @@ test("the cookie round-trips, and an empty list expires it", () => {
   assert.equal(readCompareCookie(`a=1; ${COMPARE_COOKIE}=3,1; gst_inclusive=true`), "3,1");
   assert.equal(readCompareCookie("a=1"), null);
   assert.deepEqual(parseCompareList(readCompareCookie(`${COMPARE_COOKIE}=3,1`)), [3, 1]);
+});
+
+test("ids beyond Postgres int4 are dropped, so a tampered cookie cannot fail the page", () => {
+  assert.deepEqual(parseCompareList("2147483648"), []);
+  assert.deepEqual(parseCompareList("9999999999"), []);
+  assert.deepEqual(parseCompareList("6093,2147483648"), [6093]);
+  assert.deepEqual(parseCompareList(String(MAX_PRODUCT_ID)), [MAX_PRODUCT_ID]);
+  assert.deepEqual(parseCompareList("99999999999999999999,5"), [5]);
+  assert.deepEqual(addToCompareList([1], MAX_PRODUCT_ID + 1), [1]);
 });

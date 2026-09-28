@@ -1,26 +1,20 @@
 "use client";
 
-import { useEffect, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { X } from "lucide-react";
 import { useCompareList, writeCompareList } from "@/lib/compare/use-compare-list";
 
-// The compare page's own controls. The page is server-rendered from the cookie,
-// so each one rewrites the cookie and then asks for a fresh render.
+// The compare page's own controls. Each rewrites the cookie; the table
+// (`CompareView`) reads the same cookie and drops the column at once — no
+// server round trip.
 
 /** Remove one product's column. */
 export function RemoveFromCompare({ productId, name }: { productId: number; name: string }) {
   const { remove } = useCompareList();
-  const router = useRouter();
-  const [pending, start] = useTransition();
   return (
     <button
       type="button"
-      onClick={() => {
-        remove(productId);
-        start(() => router.refresh());
-      }}
-      disabled={pending}
+      onClick={() => remove(productId)}
       aria-label={`Remove ${name} from compare`}
       title="Remove"
       className="flex h-7 w-7 items-center justify-center rounded-full border border-zinc-300 text-zinc-500 hover:border-zinc-900 hover:text-zinc-900 disabled:opacity-50 print:hidden"
@@ -34,16 +28,10 @@ export function RemoveFromCompare({ productId, name }: { productId: number; name
 /** Empty the whole list. */
 export function ClearCompare() {
   const { clear } = useCompareList();
-  const router = useRouter();
-  const [pending, start] = useTransition();
   return (
     <button
       type="button"
-      onClick={() => {
-        clear();
-        start(() => router.refresh());
-      }}
-      disabled={pending}
+      onClick={clear}
       className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:border-zinc-900 hover:text-zinc-900 disabled:opacity-50 print:hidden"
       data-testid="compare-clear"
     >
