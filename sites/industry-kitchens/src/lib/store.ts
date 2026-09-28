@@ -57,7 +57,11 @@ import { CHANNEL_ID } from "./channel";
 import { withBrandLogoFallback, targetsForChannel } from "@/builder/product-card-brand-logo";
 import { withPromoTagInComponents } from "@/builder/promo-tag-node";
 import { withTileCompareInComponents } from "@/builder/tile-compare-node";
-import { guardTileBuyControlsInComponents } from "@keenan/services/builder";
+import {
+  guardTileBuyControlsInComponents,
+  withAnswerRequiredTilesInComponents,
+} from "@keenan/services/builder";
+import { withAnswerRequiredTilesInDoc } from "@/builder/answer-required-tiles-doc";
 import { withMemberScaleLabels } from "@/builder/member-scale-labels";
 import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
 import type { NodeTree } from "@keenan/services/builder";
@@ -147,7 +151,8 @@ export const {
   getContentPage,
   getCmsPage,
   getCmsCategoryPage,
-  getCmsTemplate,
+  // Wrapped below: tiles whose product asks a required question show View Details (Zoey parity).
+  getCmsTemplate: getCmsTemplateRaw,
   getNamedStyles,
   getDesignTokens,
   getDraftDesignTokens,
@@ -212,13 +217,38 @@ const withTileCompare = (components: ComponentMap): ComponentMap =>
 
 const withMasterTransforms = (components: ComponentMap): ComponentMap =>
   withTileCompare(
-    withTileBuyGuard(
-      withPromoTagInComponents(
-        withBrandLogoFallback(components, BRAND_LOGO_TARGETS) as Record<string, NodeTree>,
-        PROMO_TAG_LABEL
-      ) as ComponentMap
+    withAnswerRequiredTiles(
+      withTileBuyGuard(
+        withPromoTagInComponents(
+          withBrandLogoFallback(components, BRAND_LOGO_TARGETS) as Record<string, NodeTree>,
+          PROMO_TAG_LABEL
+        ) as ComponentMap
+      )
     )
   );
+
+// ============================================================================
+// A TILE WHOSE PRODUCT ASKS A REQUIRED QUESTION OFFERS "VIEW DETAILS" (this site only).
+//
+// Zoey's category tile for a product with a required custom option carries no Add to Basket and
+// no Add to Quote — only "View Details" to the product page, where the question is asked (old
+// site, read 2026-09-28). The Zoey options are imported for THIS storefront
+// (`metafields.channel_addons["1"]`), so a rail tile for such a product would otherwise offer a
+// button the cart action can only refuse (it redirects to the product page, but the button still
+// reads "Add to Basket"). Services `withAnswerRequiredTiles` hides a tile's buy controls on rows
+// carrying `answer_required` and widens the upsell tile's existing configurable "View Details"
+// link to them. Composed HERE, in this channel's store, so Chefs Depot's tiles are untouched.
+// Render-time only: nothing is written to the stored templates or masters, and a row without the
+// fact keeps its buttons.
+// ============================================================================
+
+const withAnswerRequiredTiles = (components: ComponentMap): ComponentMap =>
+  withAnswerRequiredTilesInComponents(components as Record<string, NodeTree>) as ComponentMap;
+
+export const getCmsTemplate = async (
+  ...args: Parameters<typeof getCmsTemplateRaw>
+): ReturnType<typeof getCmsTemplateRaw> =>
+  withAnswerRequiredTilesInDoc(await getCmsTemplateRaw(...args));
 
 /**
 /**

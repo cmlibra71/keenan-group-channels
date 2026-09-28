@@ -51,8 +51,9 @@ function PriceCell({ p }: { p: CompareProduct }) {
 
 function BuyCell({ p }: { p: CompareProduct }) {
   // A configurable product (priced "Starting From") is bought on its own page, where its
-  // options are chosen — the old site's tiles said VIEW DETAILS for exactly these.
-  if (p.price.from) {
+  // options are chosen — the old site's tiles said VIEW DETAILS for exactly these. So is a
+  // product asking a required question with no default (Zoey's tile shows View Details alone).
+  if (p.price.from || p.answerRequired) {
     return (
       <Link
         href={p.href}

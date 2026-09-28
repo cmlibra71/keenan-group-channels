@@ -38,6 +38,12 @@ export interface CompareBuyFacts {
   inventoryLevel?: number | null;
   backorderPolicy?: string | null;
   kit: Pick<ProductKit, "kind" | "quoteOnly"> | null;
+  /**
+   * The REQUIRED questions a buy posted from this column could not answer (services
+   * `tileUnansweredQuestions` — the cart action's own rule, for this channel). Any at all ⇒ the
+   * column opens the product page instead of offering buttons, as Zoey's tile does. Absent ⇒ none.
+   */
+  unansweredQuestions?: readonly string[] | null;
 }
 
 export interface CompareBuy {
@@ -45,6 +51,12 @@ export interface CompareBuy {
   quote: boolean;
   /** The column prints "Call for Price" whatever the row's figure — the page masks a hidden price. */
   priceHidden: boolean;
+  /**
+   * The product asks a required question with no default: the column shows "View Details" to
+   * the product page and NO Add to Cart / Add to Quote (Zoey's tile; owner decision 10). The
+   * cart and quote actions refuse such a post anyway — this keeps the button from being offered.
+   */
+  answerRequired: boolean;
 }
 
 export function compareBuyButtons(f: CompareBuyFacts): CompareBuy {
@@ -63,9 +75,11 @@ export function compareBuyButtons(f: CompareBuyFacts): CompareBuy {
     1
   );
   const isBundle = f.kit?.kind === "bundle" || f.kit?.quoteOnly === true;
+  const answerRequired = (f.unansweredQuestions?.length ?? 0) > 0;
   return {
-    cart: hasPrice && !controls.cartRefused && !blockedByStock && !isBundle,
-    quote: !controls.quoteRefused,
+    cart: hasPrice && !controls.cartRefused && !blockedByStock && !isBundle && !answerRequired,
+    quote: !controls.quoteRefused && !answerRequired,
     priceHidden: f.hidePrice,
+    answerRequired,
   };
 }

@@ -10,6 +10,7 @@ import { applyCatalogScope } from "@/lib/catalog-scope";
 import { cardPrice } from "@/lib/card-price";
 import { buildCompareRows, type CompareFieldDefinition, type CompareRow } from "./compare-rows";
 import { compareBuyButtons } from "./compare-buy";
+import { tileUnansweredQuestions } from "@keenan/services";
 import { isProductId } from "./compare-list";
 import { readProductKit, tileKitChoices, type KitChoice } from "@/lib/product-kit";
 
@@ -41,6 +42,8 @@ export interface CompareProduct {
   memberPrice: number | null;
   /** Which buy buttons the product's OWN PAGE offers (`compare-buy.ts`). */
   buttons: { cart: boolean; quote: boolean };
+  /** The product asks a required question with no default — the column says View Details. */
+  answerRequired: boolean;
   /** `hide_price`: the column says "Call for Price", as the page's masked price does. */
   priceHidden: boolean;
   /** A bundle: its quote carries the kit's marked defaults (the tile's build), or null. */
@@ -74,6 +77,9 @@ interface DetailRow {
   descriptionShort: string | null;
   metafields: unknown;
   hidePrice: boolean;
+  /** The product's own list / sale price — what the cart action's extras-panel test reads. */
+  price: string | null;
+  salePrice: string | null;
   inventoryTracking: string | null;
   inventoryLevel: number | null;
   backorderPolicy: string | null;
@@ -89,12 +95,14 @@ async function readDetails(ids: number[]): Promise<Map<number, DetailRow>> {
       metafields: unknown;
       description_short: string | null;
       hide_price: boolean | null;
+      price: string | null;
+      sale_price: string | null;
       inventory_tracking: string | null;
       inventory_level: number | null;
       backorder_policy: string | null;
     }[]
   >`
-    SELECT p.id, p.metafields, p.description_short, p.hide_price,
+    SELECT p.id, p.metafields, p.description_short, p.hide_price, p.price, p.sale_price,
            p.inventory_tracking, p.inventory_level::int AS inventory_level, p.backorder_policy
     FROM products p
     WHERE p.id = ANY(${ids})`;
@@ -106,6 +114,8 @@ async function readDetails(ids: number[]): Promise<Map<number, DetailRow>> {
       descriptionShort: r.description_short,
       metafields: meta,
       hidePrice: r.hide_price === true,
+      price: r.price,
+      salePrice: r.sale_price,
       inventoryTracking: r.inventory_tracking,
       inventoryLevel: r.inventory_level == null ? null : Number(r.inventory_level),
       backorderPolicy: r.backorder_policy,
@@ -173,6 +183,17 @@ export async function loadCompareData(requested: number[]): Promise<CompareData>
       inventoryLevel: d?.inventoryLevel ?? null,
       backorderPolicy: d?.backorderPolicy ?? null,
       kit,
+      // A required question with no default (the Zoey options imported for this storefront)
+      // cannot be answered from a column: it opens the product page instead (Zoey's tile).
+      unansweredQuestions: d
+        ? tileUnansweredQuestions({
+            metafields: d.metafields,
+            channelId: CHANNEL_ID,
+            price: d.price,
+            salePrice: d.salePrice,
+            hidePrice: d.hidePrice,
+          })
+        : null,
     });
     return {
       id: r.id,
@@ -185,6 +206,7 @@ export async function loadCompareData(requested: number[]): Promise<CompareData>
       price,
       memberPrice: buy.priceHidden ? null : (memberPrices[r.id] ?? null),
       buttons: { cart: buy.cart, quote: buy.quote },
+      answerRequired: buy.answerRequired,
       priceHidden: buy.priceHidden,
       isBundle: kit?.kind === "bundle",
       kitChoices: kit ? tileKitChoices(kit) : null,
