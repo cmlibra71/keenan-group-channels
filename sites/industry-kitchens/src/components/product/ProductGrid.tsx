@@ -28,6 +28,8 @@ interface ProductWithImage {
   answerRequired?: boolean;
   /** services `attachTileFacts`: Zoey's price suffix. */
   priceSuffix?: string | null;
+  /** services `attachTileFacts`: Zoey product type when not simple (a grouped tile draws no buttons). */
+  zoeyType?: string | null;
   /** services `attachTierLows` (via `attachFromPrices` below): the lowest quantity-break price. */
   tierLowPrice?: string | null;
 }

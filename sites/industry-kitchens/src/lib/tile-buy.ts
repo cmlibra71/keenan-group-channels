@@ -14,7 +14,10 @@ import { cardPrice } from "./card-price";
 //     "Add to Quote" LINK on a search tile);
 //   * otherwise Add to Quote unless the product refuses quotes, and Add to Basket when the product
 //     is priced, not refused (restrict flag, Zoey quote-only switch, per-channel rule) and not
-//     switched off.
+//     switched off;
+//   * a product Zoey marks OUT OF STOCK (stock managed, is_in_stock 0) and a GROUPED product show
+//     no button at all (services `tileControlsOf` refuses the quote for the first; the second is
+//     decided here from `zoeyType`).
 //
 // Old site, 2026-09-28 (guest): 478 of 487 category tiles match this rule; the 9 that do not are
 // data gaps listed in the Step 5 report (stale stock flags, one un-imported required option).
@@ -34,6 +37,10 @@ export interface TileBuyRow {
   restrictAddToCart?: unknown;
   restrictAddToQuote?: unknown;
   purchasingDisabled?: unknown;
+  /** Zoey product type when not simple (services `attachTileFacts`). */
+  zoeyType?: string | null;
+  /** This storefront's Zoey rules, when the row still carries them (clearance rows). */
+  channelRules?: unknown;
 }
 
 export interface TileBuyFacts {
@@ -45,7 +52,11 @@ export interface TileBuyFacts {
   quote: boolean;
 }
 
+const NO_BUTTONS: TileBuyFacts = { viewDetails: false, cart: false, quote: false };
+
 export function tileBuyFacts(row: TileBuyRow): TileBuyFacts {
+  // A GROUPED Zoey product's tile carries no action at all (I-Fresh Sample Pack, old site).
+  if (typeof row.zoeyType === "string" && row.zoeyType.toLowerCase() === "grouped") return NO_BUTTONS;
   const price = cardPrice({ price: row.price, salePrice: row.salePrice, fromPrice: row.fromPrice, fromSalePrice: row.fromSalePrice });
   const viewDetails = price.from || row.answerRequired === true || row.answer_required === true;
   const controls = tileControlsOf(row);

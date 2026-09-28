@@ -39,3 +39,13 @@ test("switched off (availability disabled): no Add to Basket", () => {
 test("the snake_case fact reads the same as camelCase", () => {
   assert.equal(tileBuyFacts({ price: "10", answer_required: true }).viewDetails, true);
 });
+
+test("grouped (I-Fresh Sample Pack): no buttons at all", () => {
+  assert.deepEqual(tileBuyFacts({ price: "0", zoeyType: "grouped" }), { viewDetails: false, cart: false, quote: false });
+});
+
+test("out of stock in Zoey (stock managed, is_in_stock 0 — KH 97213): no buttons at all", () => {
+  assert.deepEqual(tileBuyFacts({ price: "277.20", channelRules: { out_of_stock: true } }), { viewDetails: false, cart: false, quote: false });
+  // …the same fact after the search path folded the rule into the row's flags.
+  assert.deepEqual(tileBuyFacts({ price: "277.20", restrictAddToCart: true, restrictAddToQuote: true }), { viewDetails: false, cart: false, quote: false });
+});
