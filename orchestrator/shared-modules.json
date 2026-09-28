@@ -151,6 +151,8 @@
     "lib/cart/online-purchase.ts",
     "lib/cart/restricted-message.test.ts",
     "lib/cart/restricted-message.ts",
+    "lib/cart/variant-choice.test.ts",
+    "lib/cart/variant-choice.ts",
     "lib/category-attributes.test.ts",
     "lib/category-attributes.ts",
     "lib/channel.ts",
