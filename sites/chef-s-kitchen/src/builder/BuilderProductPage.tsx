@@ -288,12 +288,19 @@ export function BuilderProductPage({
   // test (card 6f47rFeT, 2026-08-19) the brand answers it for the 76 SKOPE
   // fridges whose SKU does not. The payload already carries the brand slice, so
   // this costs no query — it only has to reach the provider.
+  //
+  // A kit scoped to THIS storefront may be quote only (`channel_kits[<channel>].quote_only` — a
+  // bundle Zoey sells by quote only, IK parity 2026-09-28). The route parsed the kit once into
+  // `nativeData.kit`; its `quoteOnly` switches Add to Cart off exactly as `restrict_add_to_cart`
+  // does. Read defensively: a site whose kit reader predates it simply has no such flag.
+  const kitQuoteOnly = (nativeData?.kit as { quoteOnly?: unknown } | null | undefined)?.quoteOnly === true;
   const product = React.useMemo(
     () => ({
       ...(payload.product as unknown as PurchaseProduct),
       brandName: payload.brand?.name ?? null,
+      ...(kitQuoteOnly ? { restrictAddToCart: true } : {}),
     }),
-    [payload]
+    [payload, kitQuoteOnly]
   );
   const enriched = React.useMemo(() => enrichProductPayload(payload, { sanitizeHtml }), [payload]);
   return (

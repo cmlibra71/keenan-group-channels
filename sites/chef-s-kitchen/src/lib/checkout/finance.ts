@@ -30,6 +30,7 @@
 // barrel (ProductImageService → sharp) into the browser bundle through
 // CheckoutForm and 500 the checkout.
 import { gstSplit } from "@keenan/services/calc";
+import { freightInStoredAddons } from "@keenan/services/product-addons";
 import {
   DEFAULT_FINANCE_SETTINGS,
   FINANCE_METHOD_ID,
@@ -73,6 +74,43 @@ export interface FinanceCartLine {
    * carries two different weekly rents on two of our own screens.
    */
   brand_name?: string | null;
+  /**
+   * The line's stored extras (`cart_items.modifier_selections`). Read only for the DELIVERY money
+   * in them — answers from a freight-kind group (owner decision 8) — which rides the line's price
+   * but stays out of the weekly figure and the floor, as delivery does (card H7IJD8ym).
+   */
+  modifier_selections?: unknown;
+}
+
+/**
+ * The delivery money inside one line's unit price: the freight-kind extras (owner decision 8),
+ * on the same basis the cart added them to the line. 0 on a line with none.
+ */
+function freightPerUnit(item: FinanceCartLine): number {
+  const n = freightInStoredAddons(item.modifier_selections);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/**
+ * The cart's freight-kind extras in total, inc GST — what comes OFF the goods total before the
+ * floor and the weekly figure are measured. Delivery is excluded from both however it is billed
+ * (card H7IJD8ym); a freight answer on the product line is delivery.
+ */
+export function freightAddonsIncGst(
+  items: readonly FinanceCartLine[],
+  pricesIncludeTax: boolean
+): number {
+  const total = items.reduce((sum, item) => sum + freightPerUnit(item) * item.quantity, 0);
+  return total > 0 ? gstSplit(total, pricesIncludeTax).incTax : 0;
+}
+
+/** The goods total the finance offer is measured on: the cart's goods less its freight extras. */
+export function financeGoodsTotalIncGst(
+  goodsTotalIncGst: number,
+  items: readonly FinanceCartLine[],
+  pricesIncludeTax: boolean
+): number {
+  return Math.max(0, goodsTotalIncGst - freightAddonsIncGst(items, pricesIncludeTax));
 }
 
 /** Everything the checkout needs to draw and validate the finance options. */
@@ -118,7 +156,9 @@ export function financeLinesFromCart(
 ): FinanceLine[] {
   return items.map((item) => {
     const unit = item.sale_price ? parseFloat(item.sale_price) : parseFloat(item.list_price ?? "0");
-    const lineTotal = (Number.isFinite(unit) ? unit : 0) * item.quantity;
+    // Freight-kind extras are delivery money — never rented (owner decision 8, card H7IJD8ym).
+    const goodsUnit = Math.max(0, (Number.isFinite(unit) ? unit : 0) - freightPerUnit(item));
+    const lineTotal = goodsUnit * item.quantity;
     return {
       amountIncGst: gstSplit(lineTotal, pricesIncludeTax).incTax,
       sku: item.variant_sku ?? item.product_sku ?? null,
