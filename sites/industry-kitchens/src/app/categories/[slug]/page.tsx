@@ -521,6 +521,7 @@ export default async function CategoryPage({
           </div>
 
           <ProductGrid
+            showCompare
             products={products}
             memberPricingAvailable={memberPricingEnabled}
             memberPriceMap={memberPriceMap}

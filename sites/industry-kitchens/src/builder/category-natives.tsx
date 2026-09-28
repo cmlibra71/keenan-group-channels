@@ -3,6 +3,8 @@ import type { NativeComponents } from "@keenan/services/builder-react";
 import { AttributeFacetSections, PriceSliderFacet } from "@/components/category/FilterRail";
 import type { CategoryFacets } from "@/components/category/FilterRail";
 import type { CategoryListingCtx } from "./BuilderCategoryPage";
+import { TileCompare } from "@/components/product/TileCompare";
+import { TILE_COMPARE_KEY } from "./tile-compare-node";
 
 // Industry Kitchens seals nothing on the category page any more.
 //
@@ -32,5 +34,9 @@ export function categoryNatives({ listing }: { listing: CategoryListingCtx }): N
       <AttributeFacetSections facets={listing.facets as CategoryFacets} />
     ),
     "facet-price-slider": () => <PriceSliderFacet facets={listing.facets as CategoryFacets} />,
+    // "Add to Compare" under each tile (IK parity, compare-feature). Placed beside every
+    // `product-card` by `builder/tile-compare-node.ts` (via lib/store.ts); `productId` arrives
+    // bound to the tile's row. Not a master key, so nothing is shadowed.
+    [TILE_COMPARE_KEY]: (props: Record<string, unknown>) => <TileCompare productId={props.productId} />,
   };
 }

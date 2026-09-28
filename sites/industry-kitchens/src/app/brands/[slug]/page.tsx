@@ -416,6 +416,7 @@ export default async function BrandPage({
 
           {products.length > 0 ? (
             <ProductGrid
+              showCompare
               products={products}
               memberPricingAvailable={memberPricingEnabled}
               memberPriceMap={await getListingMemberPrices(products)}

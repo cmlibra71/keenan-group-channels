@@ -1,4 +1,5 @@
 import { ProductCard } from "./ProductCard";
+import { TileCompare } from "./TileCompare";
 import { applyAccountPrices } from "@/lib/member";
 import { attachFromPrices } from "@/lib/store";
 import { applyCatalogScope } from "@/lib/catalog-scope";
@@ -31,6 +32,7 @@ export async function ProductGrid({
   wrapperClassName = "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6",
   renderEmpty = true,
   indexOffset = 0,
+  showCompare = false,
 }: {
   products: ProductWithImage[];
   memberPricingAvailable?: boolean;
@@ -49,6 +51,12 @@ export async function ProductGrid({
   renderEmpty?: boolean;
   /** Position of the first tile in the whole list, for GA4 list indexes. */
   indexOffset?: number;
+  /**
+   * An "Add to Compare" link under each tile (IK parity, compare-feature) — the old site's
+   * LISTING pages (category, brand, search, clearance) carried one; rails (home, related)
+   * did not, so it is opt-in per call site.
+   */
+  showCompare?: boolean;
 }) {
   // Hide before pricing. Rows arrive from the SHARED category_listing_cache / unstable_cache /
   // Meilisearch index, which cannot encode per-account visibility or price — both are applied HERE,
@@ -87,26 +95,36 @@ export async function ProductGrid({
           index: indexOffset + index,
         }))}
       />
-      {products.map((product, index) => (
-        <ProductCard
-          key={product.id}
-          productId={product.id}
-          name={product.name}
-          slug={product.urlPath || String(product.id)}
-          price={product.price}
-          salePrice={product.salePrice}
-          fromPrice={product.fromPrice ?? null}
-          fromSalePrice={product.fromSalePrice ?? null}
-          imageUrl={product.thumbnailImage?.urlThumbnail || product.thumbnailImage?.urlStandard}
-          brandLogoUrl={brandLogos.get(product.id)?.brand_logo_url ?? null}
-          brandLogoAlt={brandLogos.get(product.id)?.brand_name ?? null}
-          memberPricingAvailable={memberPricingAvailable}
-          memberPrice={memberPriceMap?.[product.id] ?? null}
-          listId={listId}
-          listName={listName}
-          listIndex={indexOffset + index}
-        />
-      ))}
+      {products.map((product, index) => {
+        const tile = (
+          <ProductCard
+            key={product.id}
+            productId={product.id}
+            name={product.name}
+            slug={product.urlPath || String(product.id)}
+            price={product.price}
+            salePrice={product.salePrice}
+            fromPrice={product.fromPrice ?? null}
+            fromSalePrice={product.fromSalePrice ?? null}
+            imageUrl={product.thumbnailImage?.urlThumbnail || product.thumbnailImage?.urlStandard}
+            brandLogoUrl={brandLogos.get(product.id)?.brand_logo_url ?? null}
+            brandLogoAlt={brandLogos.get(product.id)?.brand_name ?? null}
+            memberPricingAvailable={memberPricingAvailable}
+            memberPrice={memberPriceMap?.[product.id] ?? null}
+            listId={listId}
+            listName={listName}
+            listIndex={indexOffset + index}
+          />
+        );
+        return showCompare ? (
+          <div key={product.id}>
+            {tile}
+            <TileCompare productId={product.id} />
+          </div>
+        ) : (
+          tile
+        );
+      })}
     </div>
   );
 }

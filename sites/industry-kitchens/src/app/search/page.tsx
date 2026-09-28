@@ -266,6 +266,7 @@ export default async function SearchPage({
                   emptyState={emptyState}
                 >
                   <ProductGrid
+                    showCompare
                     products={visible}
                     memberPricingAvailable={memberPricingEnabled}
                     memberPriceMap={await getListingMemberPrices(visible)}
