@@ -18,15 +18,29 @@ import type { NodeTree, BuilderNode } from "@keenan/services/builder";
 // old site's order (tile, buttons, then the small compare link).
 //
 // WHO. Applied from THIS site's `lib/store.ts` master transforms, so Chefs
-// Depot's masters are never touched. The native is registered only in the
-// category and brand natives, so a `product-card` placed anywhere else (home
-// rails, the product page's related rail — where the old site showed no compare
-// link) renders the card and nothing more: an unregistered key with no master
-// renders null.
+// Depot's masters are never touched. The native is registered in the category,
+// brand and product natives, so a `product-card` placed on the home rails
+// (where the old site showed no compare link) renders the card and nothing
+// more: an unregistered key with no master renders null.
 //
 // AUTHOR FIRST / IDEMPOTENT. A master that already places `tile-compare` is
 // returned as it is. PURE: the stored master is never mutated.
+//
+// PER PAGE (IK parity, product cards — 2026-09-28 old-site harvest). Zoey's product list is
+// configured per page, and MOST category lists hide the compare link (`hide-compare`); a few
+// show it (Chefs Hat, Lightfry). The page's switch reaches the tree as `context.listing.compare`
+// (services `listing-settings.ts`, from the category / brand `metafields.zoey_listing`), so the
+// placed node carries `context.listing.compare !== false`: a page with no stored setting keeps
+// the link, a page Zoey hid it on loses it.
+//
+// The product page registers the native too: Zoey's related rail carries the link on most
+// product layouts (2 of 3 sampled). The home rails do not (old home page, 2026-09-28): the home
+// natives do not register it AND the condition excludes the home page, so a draft preview (which
+// marks an unregistered key "[missing component]") draws nothing there either.
 // ============================================================================
+
+/** The condition the placed compare node carries: hidden only where the page's list hides it. */
+export const TILE_COMPARE_CONDITION = 'context.kind != "home" && context.listing.compare !== false';
 
 /** The native key the category/brand natives register. Not a master key. */
 export const TILE_COMPARE_KEY = "tile-compare";
@@ -52,6 +66,7 @@ export function withTileCompareNode(tree: NodeTree): NodeTree {
     kind: "component",
     componentKey: TILE_COMPARE_KEY,
     props: { productId: { kind: "binding", path: "props.card.id" } },
+    condition: { kind: "expr", source: TILE_COMPARE_CONDITION },
   } as BuilderNode;
   const wrapper: BuilderNode = {
     id: `${TILE_COMPARE_KEY}-wrap`,

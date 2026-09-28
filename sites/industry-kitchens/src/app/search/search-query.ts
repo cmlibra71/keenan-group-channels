@@ -39,6 +39,9 @@ export type SearchProduct = {
    */
   restrictAddToCart?: boolean | null;
   restrictAddToQuote?: boolean | null;
+  /** The search tile's "SKU:" line (IK parity, product cards). */
+  sku?: string | null;
+  brandName?: string | null;
 };
 
 export type SearchChunk = {
@@ -150,6 +153,9 @@ export async function fetchSearchChunk(
           : null,
         restrictAddToCart: hit.restrictAddToCart === true,
         restrictAddToQuote: hit.restrictAddToQuote === true,
+        // Zoey's search tile prints the SKU (IK parity, product cards).
+        sku: hit.sku ?? null,
+        brandName: hit.brandName ?? null,
       }));
     return {
       consumed,

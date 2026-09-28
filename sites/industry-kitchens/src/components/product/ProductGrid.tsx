@@ -1,5 +1,8 @@
 import { ProductCard } from "./ProductCard";
 import { TileCompare } from "./TileCompare";
+import { TileBuyButtons } from "./TileBuyButtons";
+import { tileBuyFacts } from "@/lib/tile-buy";
+import { cardPrice } from "@/lib/card-price";
 import { applyAccountPrices } from "@/lib/member";
 import { attachFromPrices } from "@/lib/store";
 import { applyCatalogScope } from "@/lib/catalog-scope";
@@ -15,6 +18,18 @@ interface ProductWithImage {
   fromPrice?: string | null;
   fromSalePrice?: string | null;
   thumbnailImage?: { urlStandard: string; urlThumbnail: string | null } | null;
+  sku?: string | null;
+  brandName?: string | null;
+  availability?: string | null;
+  restrictAddToCart?: unknown;
+  restrictAddToQuote?: unknown;
+  purchasingDisabled?: unknown;
+  /** services `attachTileFacts` (via `attachFromPrices` below): a required question on this channel. */
+  answerRequired?: boolean;
+  /** services `attachTileFacts`: Zoey's price suffix. */
+  priceSuffix?: string | null;
+  /** services `attachTierLows` (via `attachFromPrices` below): the lowest quantity-break price. */
+  tierLowPrice?: string | null;
 }
 
 /**
@@ -33,6 +48,9 @@ export async function ProductGrid({
   renderEmpty = true,
   indexOffset = 0,
   showCompare = false,
+  buyButtons,
+  saleFlags = false,
+  showSku = false,
 }: {
   products: ProductWithImage[];
   memberPricingAvailable?: boolean;
@@ -57,6 +75,16 @@ export async function ProductGrid({
    * did not, so it is opt-in per call site.
    */
   showCompare?: boolean;
+  /**
+   * IK parity, product cards — the buy controls under each tile, as Zoey drew them on the
+   * equivalent old page: "listing" for a category-style list (clearance), "search" for search
+   * results. Omitted: no buttons (rails, /products), exactly as before. See `lib/tile-buy.ts`.
+   */
+  buyButtons?: "listing" | "search";
+  /** Zoey's "SALE" flag on the photo (listing and search pages; not rails). */
+  saleFlags?: boolean;
+  /** The "SKU:" line (Zoey's search tile). */
+  showSku?: boolean;
 }) {
   // Hide before pricing. Rows arrive from the SHARED category_listing_cache / unstable_cache /
   // Meilisearch index, which cannot encode per-account visibility or price — both are applied HERE,
@@ -111,15 +139,36 @@ export async function ProductGrid({
             brandLogoAlt={brandLogos.get(product.id)?.brand_name ?? null}
             memberPricingAvailable={memberPricingAvailable}
             memberPrice={memberPriceMap?.[product.id] ?? null}
+            saleFlag={saleFlags}
+            sku={product.sku ?? null}
+            showSku={showSku}
+            priceSuffix={product.priceSuffix ?? null}
+            tierLowPrice={product.tierLowPrice ?? null}
             listId={listId}
             listName={listName}
             listIndex={indexOffset + index}
           />
         );
-        return showCompare ? (
-          <div key={product.id}>
+        const buy = buyButtons ? (
+          <TileBuyButtons
+            mode={buyButtons}
+            facts={tileBuyFacts(product)}
+            productId={product.id}
+            href={`/products/${product.urlPath || product.id}`}
+            name={product.name}
+            sku={product.sku ?? null}
+            price={(() => {
+              const p = cardPrice(product);
+              return (p.sale ?? p.list) || null;
+            })()}
+            brand={product.brandName ?? null}
+          />
+        ) : null;
+        return showCompare || buy ? (
+          <div key={product.id} className="flex flex-col">
             {tile}
-            <TileCompare productId={product.id} />
+            {buy}
+            {showCompare && <TileCompare productId={product.id} />}
           </div>
         ) : (
           tile

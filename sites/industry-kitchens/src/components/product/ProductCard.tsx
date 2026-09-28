@@ -40,6 +40,21 @@ interface ProductCardProps {
   memberPricingAvailable?: boolean;
   /** Active member's price for this product — renders the member layout. */
   memberPrice?: number | null;
+  /**
+   * IK parity, product cards (old site 2026-09-28). All optional and off by default, so a call
+   * site that passes none of them draws the tile exactly as before.
+   *   saleFlag    — Zoey's grey "SALE" flag on the photo while the tile shows a real sale price
+   *                 (category, brand, search and home tiles; not the product page's rails).
+   *   sku         — the "SKU:" line, drawn only with `showSku` (Zoey's SEARCH tile carries it;
+   *                 its category tile does not).
+   *   priceSuffix — Zoey's price suffix after the price ("Each", "Per Carton of 1,000").
+   *   tierLowPrice— the lowest quantity-break price; "AS LOW AS:" when it undercuts the price shown.
+   */
+  saleFlag?: boolean;
+  sku?: string | null;
+  showSku?: boolean;
+  priceSuffix?: string | null;
+  tierLowPrice?: string | number | null;
   /** GA4 select_item context (all optional — card works without analytics). */
   productId?: number;
   listId?: string;
@@ -47,7 +62,7 @@ interface ProductCardProps {
   listIndex?: number;
 }
 
-export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSalePrice, imageUrl, brandName, brandLogoUrl, brandLogoAlt, memberPricingAvailable, memberPrice, productId, listId, listName, listIndex }: ProductCardProps) {
+export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSalePrice, imageUrl, brandName, brandLogoUrl, brandLogoAlt, memberPricingAvailable, memberPrice, saleFlag, sku, showSku, priceSuffix, tierLowPrice, productId, listId, listName, listIndex }: ProductCardProps) {
   // A dead image file is invisible to the server — the row exists and the URL is
   // well formed — so the browser is the only place it can be caught. An errored
   // photo drops to the same fallback an imageless product gets; a logo that is
@@ -66,6 +81,11 @@ export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSaleP
   });
   const showMemberPrice =
     memberPrice != null && displayPrice > 0 && memberPrice < (displaySalePrice ?? displayPrice);
+  const suffix = displayPrice > 0 && priceSuffix ? priceSuffix.trim() : "";
+  // Zoey's "As low as" — only when the lowest tier undercuts what this tile shows.
+  const tierLow = typeof tierLowPrice === "number" ? tierLowPrice : parseFloat(String(tierLowPrice ?? ""));
+  const shownUnit = showMemberPrice ? (memberPrice as number) : (displaySalePrice ?? displayPrice);
+  const showTierLow = displayPrice > 0 && Number.isFinite(tierLow) && tierLow > 0 && tierLow < shownUnit - 1e-9;
 
   // Non-blocking: gtag queues the event; navigation proceeds immediately.
   function handleSelect() {
@@ -120,6 +140,11 @@ export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSaleP
             <Package className="h-12 w-12" />
           </div>
         )}
+        {saleFlag && displaySalePrice != null && (
+          <span className="absolute left-2 top-2 z-[2] rounded-sm bg-zinc-500 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-white">
+            SALE
+          </span>
+        )}
       </div>
       <div className="mt-3">
         {brandName && (
@@ -128,6 +153,11 @@ export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSaleP
         <h3 className="text-sm font-medium text-zinc-900 group-hover:text-zinc-600 line-clamp-2">
           {name}
         </h3>
+        {showSku && sku && (
+          <p className="mt-1 text-xs text-zinc-600">
+            <span className="font-semibold">SKU:</span> {sku}
+          </p>
+        )}
         {showMemberPrice ? (
           <div className="mt-1">
             <div className="flex items-center gap-2">
@@ -141,23 +171,32 @@ export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSaleP
             </span>
           </div>
         ) : (
-          <div className="mt-1 flex items-center gap-2">
+          <div className="mt-1 flex flex-wrap items-center gap-x-2">
             {startingFrom && displayPrice > 0 && (
               <span className="text-xs text-zinc-500">Starting From:</span>
             )}
             {displayPrice === 0 ? (
               <span className="text-sm font-semibold text-zinc-900">Call for Price</span>
             ) : displaySalePrice ? (
+              // Zoey's order: the struck-through was-price, then the sale price.
               <>
-                <Price amount={displaySalePrice} gst className="text-sm font-semibold text-red-600" />
                 <span className="text-sm text-zinc-400 line-through">
                   <Price amount={displayPrice} gst />
                 </span>
+                <Price amount={displaySalePrice} gst className="text-sm font-semibold text-red-600" />
               </>
             ) : (
               <Price amount={displayPrice} gst className="text-sm font-semibold text-zinc-900" />
             )}
+            {suffix && <span className="text-sm font-semibold text-zinc-900">{suffix}</span>}
           </div>
+        )}
+        {showTierLow && (
+          <p className="mt-1 flex flex-wrap items-baseline gap-1 text-xs">
+            <span className="font-semibold uppercase text-red-600">AS LOW AS:</span>
+            <Price amount={tierLow} gst className="text-zinc-700" />
+            {suffix && <span className="text-zinc-500">{suffix}</span>}
+          </p>
         )}
         {!showMemberPrice && memberPricingAvailable && displayPrice > 0 && (
           <span className="mt-1 inline-block bg-green-50 text-green-700 px-2 py-0.5 rounded text-xs font-medium">

@@ -266,7 +266,10 @@ export default async function SearchPage({
                   emptyState={emptyState}
                 >
                   <ProductGrid
-                    showCompare
+                    // Zoey's SEARCH tile — see app/search/actions.tsx.
+                    buyButtons="search"
+                    saleFlags
+                    showSku
                     products={visible}
                     memberPricingAvailable={memberPricingEnabled}
                     memberPriceMap={await getListingMemberPrices(visible)}
