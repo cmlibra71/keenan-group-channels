@@ -19,6 +19,8 @@ import { usableBrandLogo } from "@/lib/brand-logo-url";
 import { CdMemberPricingPanel } from "@/components/product/CdMemberPricingPanel";
 import type { CdMembershipData } from "@/lib/pricing/cd-member-pricing";
 import { ProductAddons } from "@/components/product/ProductAddons";
+import { AddToCompare } from "@/components/product/AddToCompare";
+import { COMPARE_NODE_KEY } from "@/builder/compare-node";
 
 // ============================================================================
 // Industry Kitchens' sealed product-page leaves.
@@ -144,6 +146,13 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // Add to Cart sends — and an authored tree can hold neither state nor money. Renders
     // nothing for a product with no extras, so the node is safe on every product page.
     "product-addons": () => <ProductAddons />,
+    // "Add to Compare" / "View Compare" + "Compare products here" (IK parity plan decision 12,
+    // root cause `compare-feature`). Sealed because the visitor's compare list is client state
+    // (a cookie) that an authored tree cannot hold. Placed under the buy row by the shared
+    // `withCompareNode` pass, which only runs where `lib/compare-site.ts` is on — this site.
+    // The template lane may place a `product-compare` component node itself; the pass then
+    // leaves that placement alone. Chefs Depot does not register this key.
+    [COMPARE_NODE_KEY]: () => <AddToCompare />,
     // "Images are for illustrative purposes only" (card 82HgV23q). Sealed rather than
     // authored because the supplied panel colour is not a token on either site, and a
     // colour class invented in a STORED tree has no rule in the deployed stylesheet.

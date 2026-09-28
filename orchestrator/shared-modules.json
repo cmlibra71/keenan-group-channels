@@ -50,6 +50,8 @@
     "builder/category-node-branch.tsx",
     "builder/cd-member-pricing-node.test.ts",
     "builder/cd-member-pricing-node.ts",
+    "builder/compare-node.test.ts",
+    "builder/compare-node.ts",
     "builder/home-node-branch.tsx",
     "builder/item-id-node.test.ts",
     "builder/item-id-node.ts",
