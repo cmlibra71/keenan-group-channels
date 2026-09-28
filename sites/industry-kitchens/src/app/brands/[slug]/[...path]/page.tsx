@@ -20,7 +20,7 @@ import { categorySlugCandidates } from "@/lib/legacy-address";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { renderBrandNodeBranch } from "@/builder/brand-node-branch";
-import { brandTemplateProductGrid, rangeListingSettings } from "@/builder/brand-range-grid";
+import { brandTemplateProductGrid, rangeListingSettings, rangeListingSource } from "@/builder/brand-range-grid";
 
 // Brand + category combo page: renders the brand's products filtered to a
 // specific category. Mirrors the original Zoey URL pattern
@@ -120,8 +120,10 @@ export default async function BrandCategoryPage({
   // The range's own Zoey list switches when it lists its own products, else the brand page's —
   // key by key, so an unset range setting falls through (old site: 17 of 18 sampled ranges carry
   // the brand page's switches, one differs — Tablekraft Atlantis shows buttons, the brand hides them).
+  // The range's switches arrive already resolved through its parent categories when the category
+  // read carries `listing_effective` (portal "Product list" Inherit); the brand stays the last word.
   const listing = rangeListingSettings(
-    category && !rangeIsEmpty ? (category as { metafields?: unknown }).metafields : null,
+    category && !rangeIsEmpty ? rangeListingSource(category) : null,
     (brand as { metafields?: unknown }).metafields
   );
 
