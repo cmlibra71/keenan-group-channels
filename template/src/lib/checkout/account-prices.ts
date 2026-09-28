@@ -7,7 +7,7 @@ import {
   storedAddonsAsSelection,
   type ResolvedAddon,
 } from "@keenan/services/product-addons";
-import { cartItemService, productService } from "@/lib/store";
+import { cartItemService, productService, CHANNEL_ID } from "@/lib/store";
 import { decideAccountPriceWrite } from "./account-prices-policy";
 import { getAccountId } from "@/lib/member";
 
@@ -37,7 +37,7 @@ async function resolveLineAddons(line: CartLine): Promise<ResolvedAddon[]> {
   if (stored.length === 0) return [];
   try {
     const product = (await productService.getById(line.product_id)) as { metafields?: unknown } | null;
-    return resolveAddonSelection(readProductAddons(product?.metafields), storedAddonsAsSelection(stored));
+    return resolveAddonSelection(readProductAddons(product?.metafields, { channelId: CHANNEL_ID }), storedAddonsAsSelection(stored));
   } catch (e) {
     console.error("[account-prices] addon re-resolve failed (non-fatal):", e);
     return stored;

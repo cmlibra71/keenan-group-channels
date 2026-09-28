@@ -14,6 +14,7 @@
 // ============================================================================
 
 import { getCommerceClient } from "@keenan/services";
+import { CHANNEL_ID } from "@/lib/channel";
 import type { StockFacts } from "@keenan/services/backorder";
 import type { PackFacts } from "@keenan/services/pack";
 
@@ -48,6 +49,7 @@ export async function backorderFactsForProducts(
         inventory_level: number | null;
         backorder_policy: string | null;
         restrict_add_to_cart: boolean | null;
+        kit_quote_only: boolean | null;
         purchasing_disabled: boolean | null;
         purchasing_disabled_message: string | null;
         hide_price: boolean | null;
@@ -56,6 +58,7 @@ export async function backorderFactsForProducts(
       }[]
     >`
       SELECT id, inventory_tracking, inventory_level, backorder_policy, restrict_add_to_cart,
+             (metafields -> 'channel_kits' -> ${String(CHANNEL_ID)} ->> 'quote_only') = 'true' AS kit_quote_only,
              purchasing_disabled, purchasing_disabled_message, hide_price, sell_pack_size, sell_pack_unit
         FROM products
        WHERE id = ANY(${ids})`;
@@ -64,7 +67,10 @@ export async function backorderFactsForProducts(
         inventoryTracking: row.inventory_tracking,
         inventoryLevel: row.inventory_level == null ? null : Number(row.inventory_level),
         backorderPolicy: row.backorder_policy,
-        restrictAddToCart: row.restrict_add_to_cart === true,
+        // A bundle Zoey sells by quote only is quote only on the storefront its kit is scoped to
+        // (`metafields.channel_kits[<this channel>].quote_only`, IK parity 2026-09-28) — refused
+        // with the same sentence as `restrict_add_to_cart`. No other storefront reads the key.
+        restrictAddToCart: row.restrict_add_to_cart === true || row.kit_quote_only === true,
         // The other two quote-only switches ride the same read (see `lib/cart/online-purchase.ts`).
         purchasingDisabled: row.purchasing_disabled === true,
         purchasingDisabledMessage: row.purchasing_disabled_message,

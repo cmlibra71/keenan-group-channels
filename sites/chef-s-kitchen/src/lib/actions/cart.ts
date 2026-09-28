@@ -261,7 +261,7 @@ async function resolveAddonsForProduct(
   if (!selection || Object.keys(selection).length === 0) return [];
   const product = (await productService.getById(productId)) as { metafields?: unknown } | null;
   if (!product) return [];
-  return resolveAddonSelection(readProductAddons(product.metafields), selection);
+  return resolveAddonSelection(readProductAddons(product.metafields, { channelId: CHANNEL_ID }), selection);
 }
 
 /**
@@ -296,7 +296,9 @@ async function readAddonsForAdd(
         url_path?: string | null;
       }
     | null;
-  const definition = readProductAddons(product?.metafields);
+  // THIS storefront's definition: the shared groups plus any scoped to CHANNEL_ID
+  // (`metafields.channel_addons` — the Zoey options imported for Industry Kitchens only).
+  const definition = readProductAddons(product?.metafields, { channelId: CHANNEL_ID });
   if (!definition) return { resolved: [], refusal: null };
 
   // WOULD THE PAGE HAVE OFFERED A PANEL? The same predicate the provider draws it with
@@ -358,8 +360,12 @@ async function readAddonsForAdd(
     "cart"
   );
   if (typedRefusal) return { resolved: [], refusal: typedRefusal, productPage };
+  // A TILE posted nothing — and still records the answers the author pre-selected (Zoey's
+  // defaults, owner decisions 9/10): a required question with a default is answered by it, so
+  // the line reads "Gas Type: Natural Gas" rather than arriving bare. With no defaults on the
+  // product this resolves to nothing, exactly as before.
   return {
-    resolved: posted ? resolveAddonSelection(buyable, selection) : [],
+    resolved: resolveAddonSelection(buyable, posted ? selection : {}),
     refusal: null,
   };
 }

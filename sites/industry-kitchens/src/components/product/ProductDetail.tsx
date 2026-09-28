@@ -21,7 +21,14 @@ import { ProductKitBlock } from "./ProductKitBlock";
 import { ProductInstructionsPanel } from "./ProductInstructionsPanel";
 import { buyAreaSuppressed } from "@/lib/product-customisation";
 import { postsConfiguration } from "@/lib/product/addon-panel";
-import { defaultKitSelection, toKitChoices, type ProductKit } from "@/lib/product-kit";
+import {
+  defaultKitSelection,
+  kitSelectionReady,
+  toKitChoices,
+  toggleKitSelection,
+  type KitSelection,
+  type ProductKit,
+} from "@/lib/product-kit";
 
 /**
  * `kit` is present only for the two Zoey kit types (grouped / bundle). Every other caller — the
@@ -60,7 +67,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
   // A bundle's configuration lives here rather than in the purchase provider: it never becomes a
   // cart price (it is quoted), so it has no business in the pricing state the two storefronts and
   // the portal editor share.
-  const [kitSelection, setKitSelection] = useState<Record<string, number>>(() =>
+  const [kitSelection, setKitSelection] = useState<KitSelection>(() =>
     kit?.kind === "bundle" ? defaultKitSelection(kit.groups) : {}
   );
   // Free-text customisation (card kyMjCmAw) rides the SAME provider state the ticked extras
@@ -74,7 +81,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
   // rule would have made the box unreachable on the one product that needs it.
   const buyPostsConfiguration = postsConfiguration(addonGroupsOffered, product.addons);
   const isBundle = kit?.kind === "bundle";
-  const kitReady = !isBundle || kit.groups.every((g) => kitSelection[g.name] != null);
+  const kitReady = kitSelectionReady(kit, kitSelection);
 
   return (
     <div>
@@ -200,7 +207,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
         <ProductKitBlock
           kit={kit}
           selection={kitSelection}
-          onSelect={(group, id) => setKitSelection((prev) => ({ ...prev, [group]: id }))}
+          onSelect={(group, id) => setKitSelection((prev) => toggleKitSelection(kit, prev, group, id))}
         />
       )}
 

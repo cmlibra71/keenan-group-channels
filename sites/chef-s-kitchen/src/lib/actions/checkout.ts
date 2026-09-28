@@ -100,6 +100,7 @@ import {
   financeFloorError,
   financeLinesFromCart,
   financeOfferForCart,
+  financeGoodsTotalIncGst,
   filterFinanceMethods,
   fundingTypeError,
   isFinancePaymentMethod,
@@ -166,7 +167,7 @@ async function resolveLineAddons(
   if (stored.length === 0) return [];
   try {
     const product = (await productService.getById(productId)) as { metafields?: unknown } | null;
-    return resolveAddonSelection(readProductAddons(product?.metafields), storedAddonsAsSelection(stored));
+    return resolveAddonSelection(readProductAddons(product?.metafields, { channelId: CHANNEL_ID }), storedAddonsAsSelection(stored));
   } catch (e) {
     // Never block a checkout on this lookup: the line keeps the extras it was configured with.
     console.error("[placeOrder] addon re-resolve failed (non-fatal):", e);
@@ -903,7 +904,8 @@ export async function placeOrder(
   // with nothing actually offerable.
   const cartFinanceOffer = financeOfferForCart({
     lines: financeLinesFromCart(fullCart.items as never[], pricesIncludeTax),
-    goodsTotalIncGst: subtotalIncTax,
+    // Freight-kind extras come off the goods, exactly as the page measured it (owner decision 8).
+    goodsTotalIncGst: financeGoodsTotalIncGst(subtotalIncTax, fullCart.items as never[], pricesIncludeTax),
     // This storefront's own floor and rates (card 6GBlDtwf) — the SAME settings
     // object the checkout page drew the offer from, because it is the same
     // `getCheckoutSettings()` read. A floor resolved differently here would

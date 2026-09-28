@@ -291,7 +291,7 @@ export default async function ProductPage({
         warranty: brandMeta.warranty_text ?? null,
         customFields: (product.metafields as Record<string, unknown> | null) ?? null,
         // Grouped / bundle contents, for the sealed `product-kit` leaf.
-        kit: readProductKit(product.metafields),
+        kit: readProductKit(product.metafields, CHANNEL_ID),
         productId: product.id,
       },
     });
@@ -414,7 +414,11 @@ export default async function ProductPage({
           // Per-product buying controls (card 7vu2iEEZ). Unset reads as today's behaviour.
           backorderPolicy: product.backorderPolicy ?? null,
           restrictAddToQuote: product.restrictAddToQuote === true,
-          restrictAddToCart: product.restrictAddToCart === true,
+          // A bundle Zoey sells by quote only stays quote only here (IK parity, the scoped kit's
+          // `quote_only`): no Add to Cart at the head unit's partial price.
+          restrictAddToCart:
+            product.restrictAddToCart === true ||
+            readProductKit(product.metafields, CHANNEL_ID)?.quoteOnly === true,
           hidePrice: product.hidePrice === true,
           availability: product.availability ?? "available",
           descriptionShort: product.descriptionShort,
@@ -436,7 +440,9 @@ export default async function ProductPage({
           // has nothing to draw, its buy controls carry no picks, and the behaviour register's
           // "on EVERY renderer, not just the node one" would be recording something this page
           // does not do. The node path reads the same field out of its own payload.
-          addons: readProductAddons(product.metafields),
+          // Groups scoped to THIS storefront (`metafields.channel_addons[CHANNEL_ID]`) are added —
+          // the Zoey options imported for Industry Kitchens. Chefs Depot never reads them.
+          addons: readProductAddons(product.metafields, { channelId: CHANNEL_ID }),
           // Card VNh9DdYd — the order STAFF authored for this product's variation choices, read
           // from the same portal-owned metafields bag. Null when nobody has authored one, and then
           // `orderOptionValues` derives the order from the product's own combinations.
@@ -444,7 +450,7 @@ export default async function ProductPage({
         }}
         // Grouped / bundle contents (Zoey product types, authored in the portal — they ride
         // products.metafields, which is portal-owned). Null for every other product.
-        kit={readProductKit(product.metafields)}
+        kit={readProductKit(product.metafields, CHANNEL_ID)}
         memberPrice={memberPrice}
         memberPriceMap={memberPriceMap}
         isMember={isMember}

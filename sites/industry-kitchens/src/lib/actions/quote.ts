@@ -18,6 +18,7 @@ import {
   describeKitContents,
   readProductKit,
   resolveKitChoices,
+  tileKitChoices,
   type KitChoice,
 } from "@/lib/product-kit";
 import {
@@ -150,13 +151,24 @@ export async function addToQuote(
   // re-resolved against the product's OWN kit here, so nothing a browser sends can invent a line.
   // A GROUPED kit has no choices — its contents ride along so the rep can see what the one price
   // covers without opening the product.
-  const kit = readProductKit(product.metafields);
+  //
+  // THIS storefront's kit wins (`metafields.channel_kits[CHANNEL_ID]` — the Zoey bundles imported
+  // for Industry Kitchens, with their optional groups). A listing TILE posts no picks: on such a
+  // scoped kit it sends the default build (the always-included rows + each group's marked
+  // default) instead of being refused, unless a required choice has no default to send. A shared
+  // kit is refused from a tile exactly as before.
+  const kit = readProductKit(product.metafields, CHANNEL_ID);
+  const kitFromTile = kit?.kind === "bundle" && kitChoices == null && kit.scoped;
   let lineAttributes: Record<string, unknown> | null = null;
   let lineNotes: string | null = null;
   if (kit?.kind === "bundle") {
-    const resolved = resolveKitChoices(kit, kitChoices);
+    const resolved = resolveKitChoices(kit, kitFromTile ? tileKitChoices(kit) : kitChoices);
     if (!resolved) {
-      return { error: "Choose an option in every group before adding this to a quote." };
+      const productPage = kitFromTile ? productPageForRefusal(product.url_path) : null;
+      const error = kitFromTile
+        ? "Open this product's page to choose your configuration before adding it to a quote."
+        : "Choose an option in every group before adding this to a quote.";
+      return productPage ? { error, productPage } : { error };
     }
     lineAttributes = { kit_kind: "bundle", kit_selection: resolved };
     lineNotes = describeKitChoices(resolved);
@@ -190,7 +202,8 @@ export async function addToQuote(
   // anywhere to say "keep my blades". This is the same `undefined`-vs-empty distinction the
   // portal's own `product-type-actions.ts` draws.
   const addonsPosted = addons != null;
-  const rawAddonDefinition = readProductAddons(product.metafields);
+  // THIS storefront's definition — shared groups plus those scoped to CHANNEL_ID.
+  const rawAddonDefinition = readProductAddons(product.metafields, { channelId: CHANNEL_ID });
   // WOULD THE PAGE HAVE OFFERED A PANEL? The same predicate the provider draws it with
   // (`addonPanelShown`), re-made here against the product record. A product whose price is
   // hidden or zero sells by quote and shows no panel, so it has no required group to answer:
@@ -219,6 +232,11 @@ export async function addToQuote(
   // with both panels, both buttons and `addToCart`, so no two of them can disagree.
   const addonDefinition = buyableAddons(rawAddonDefinition, addonPanelOffered);
   const resolvedAddons = addonsPosted ? resolveAddonSelection(addonDefinition, addons) : [];
+  // A TILE posted nothing. On a NEW line it still records the answers the author pre-selected
+  // (Zoey's defaults, owner decisions 9/10 — "Gas Type: Natural Gas"); on a line already in the
+  // quote it changes nothing, because "nothing posted" means "leave my configuration alone"
+  // (`lib/quotes/addon-line-write.ts`). Empty on a product with no defaults, as before.
+  const tileDefaultAddons = addonsPosted ? [] : resolveAddonSelection(addonDefinition, {});
   // A required single-choice group is a question about the MACHINE, not about the cart, so it
   // is asked on this button too — and asked HERE rather than only in the page, because a stale
   // tab or a hand-posted action would otherwise quote a configuration nobody answered. From a
@@ -331,12 +349,15 @@ export async function addToQuote(
     // `lib/quotes/addon-line-write.ts`, which carries the reasoning: a listing TILE posts no
     // selection and must not be read as a clear-down, and a comment a rep typed is never
     // overwritten (quotes.md, card 7bmpuqei).
+    // A tile's DEFAULT bundle build is not a re-configuration of a line the customer already
+    // built on the page: it counts up and leaves that build (and its comment) alone.
+    const tileBuildOnly = kitFromTile;
     const { incrementsQuantity, clearsAddons, writesNote } = decideQuoteLineWrite({
       addonsPosted,
       hadAddons,
       resolvedAddonCount: resolvedAddons.length,
-      isBundleBuild: kit?.kind === "bundle",
-      lineNotes,
+      isBundleBuild: kit?.kind === "bundle" && !tileBuildOnly,
+      lineNotes: tileBuildOnly ? null : lineNotes,
       existingNote: existing.customer_notes ?? null,
       ownedNote:
         typeof existingAttributes.storefront_note === "string"
@@ -344,7 +365,7 @@ export async function addToQuote(
           : null,
     });
 
-    const attributeChanges: Record<string, unknown> = { ...(lineAttributes ?? {}) };
+    const attributeChanges: Record<string, unknown> = tileBuildOnly ? {} : { ...(lineAttributes ?? {}) };
     if (clearsAddons) attributeChanges.addon_selection = null;
     if (writesNote) attributeChanges.storefront_note = lineNotes;
 
@@ -364,6 +385,10 @@ export async function addToQuote(
       ...(writesNote ? { customerNotes: lineNotes } : {}),
     });
   } else {
+    if (tileDefaultAddons.length > 0) {
+      lineAttributes = { ...(lineAttributes ?? {}), addon_selection: tileDefaultAddons };
+      lineNotes = [lineNotes, describeAddonSelection(tileDefaultAddons)].filter(Boolean).join("\n") || null;
+    }
     await quoteItemService.createForParent(quote.id, {
       productId,
       variantId: variantId || null,
