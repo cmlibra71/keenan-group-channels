@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { draftMode, headers } from "next/headers";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import Image from "next/image";
 import Link from "next/link";
@@ -11,13 +12,15 @@ import {
   getDefaultListingSort,
   // Product photographs a pictureless brand can borrow (InEoeMZh).
   getBorrowedImageCandidates,
+  getCmsPage,
 } from "@/lib/store";
 import { borrowedImageFor, ownersNeedingBorrowedImage } from "@/lib/borrowed-image";
 import type { ListingSort } from "@/lib/listing-sort";
 import { categorySlugCandidates } from "@/lib/legacy-address";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
-import { readListingSettings } from "@keenan/services/builder";
+import { renderBrandNodeBranch } from "@/builder/brand-node-branch";
+import { brandTemplateProductGrid, rangeListingSettings } from "@/builder/brand-range-grid";
 
 // Brand + category combo page: renders the brand's products filtered to a
 // specific category. Mirrors the original Zoey URL pattern
@@ -117,12 +120,47 @@ export default async function BrandCategoryPage({
   // The range's own Zoey list switches when it lists its own products, else the brand page's —
   // key by key, so an unset range setting falls through (old site: 17 of 18 sampled ranges carry
   // the brand page's switches, one differs — Tablekraft Atlantis shows buttons, the brand hides them).
-  const ownListing = readListingSettings(category && !rangeIsEmpty ? (category as { metafields?: unknown }).metafields : null);
-  const brandListing = readListingSettings((brand as { metafields?: unknown }).metafields);
-  const listing = {
-    add_to_cart: ownListing.add_to_cart ?? brandListing.add_to_cart,
-    compare: ownListing.compare ?? brandListing.compare,
-  };
+  const listing = rangeListingSettings(
+    category && !rangeIsEmpty ? (category as { metafields?: unknown }).metafields : null,
+    (brand as { metafields?: unknown }).metafields
+  );
+
+  const memberPriceMap = products.length > 0 ? await getListingMemberPrices(products) : {};
+
+  // ═══ The tiles: the stored product-card master (IK parity, product cards) ═══
+  // The old site draws this page as a Zoey category list, so its tiles follow the category and
+  // brand pages' rules — buttons, quantity box, SALE flag, price suffix, "Starting From:",
+  // compare — all of which live in ONE stored master, `product-card`. The brand template's
+  // grid (the element repeating that master over `products`) is rendered here through the same
+  // engine as the brand page, with THIS page's list switches as `context.listing`; the page keeps
+  // its own breadcrumb and heading. No brand template, no grid in it, or the brand node path
+  // switched off: the React grid below, as before. `x-kg-json` / draft mode read the draft tree.
+  let masterGrid: React.ReactElement | null = null;
+  if (products.length > 0) {
+    const { isEnabled } = await draftMode();
+    const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
+    const brandCms = await getCmsPage("__brand__", draft).catch(() => null);
+    const gridTree = brandTemplateProductGrid((brandCms as { node_tree?: unknown } | null)?.node_tree);
+    if (gridTree) {
+      masterGrid = await renderBrandNodeBranch({
+        brandCms: { node_tree: gridTree },
+        // The composer reads `context.listing` from `brand.metafields.zoey_listing`; the grid binds
+        // nothing else of the brand, so only the identity and the merged switches are handed over.
+        brand: {
+          id: brand.id,
+          name: brand.name,
+          slug: brand.slug,
+          image_url: (brand as { image_url?: string | null }).image_url ?? null,
+          metafields: { zoey_listing: listing },
+        },
+        products: products as { id: number }[],
+        total,
+        pricing: { memberPriceMap },
+        memberPricingEnabled: memberPricingEnabled === true,
+        draft,
+      });
+    }
+  }
 
   const heading =
     category && !rangeIsEmpty
@@ -165,7 +203,9 @@ export default async function BrandCategoryPage({
         </div>
       </div>
 
-      {products.length > 0 ? (
+      {masterGrid ? (
+        masterGrid
+      ) : products.length > 0 ? (
         <ProductGrid
           // Zoey's per-page list switches (IK parity, product cards): this range's own category
           // setting, else the brand page's. Unset: buttons shown, compare hidden (Zoey's majority).
@@ -174,7 +214,7 @@ export default async function BrandCategoryPage({
           saleFlags
           products={products}
           memberPricingAvailable={memberPricingEnabled}
-          memberPriceMap={await getListingMemberPrices(products)}
+          memberPriceMap={memberPriceMap}
           listId={`brand_${brand.slug ?? brand.id}`}
           listName={String(brand.name ?? "")}
         />
