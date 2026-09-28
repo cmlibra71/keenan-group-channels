@@ -16,6 +16,8 @@ import {
 } from "@/lib/store";
 import { getListingMemberPrices, applyAccountPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
+import { getSession } from "@/lib/auth";
+import { channelRuleEffects, channelRulesOfRow, type ChannelRuleViewer } from "@keenan/services/channel-rules";
 import {
   ProductPurchaseProvider,
   type PurchaseProduct,
@@ -29,7 +31,11 @@ const str = (v: unknown): string => (typeof v === "string" ? v : "");
 const num = (v: unknown, d: number): number =>
   typeof v === "number" && Number.isFinite(v) ? v : d;
 
-function cardPurchaseProduct(p: AnyRecord): PurchaseProduct {
+function cardPurchaseProduct(p: AnyRecord, viewer: ChannelRuleViewer): PurchaseProduct {
+  // This storefront's Zoey rules ride listing rows as `channelRules` (portal PR #1028): zero-price
+  // hides the price and the cart, out-of-stock the cart, guest quote-only the cart for a guest.
+  // A row with no rules (every row today) is unchanged.
+  const rule = channelRuleEffects(channelRulesOfRow(p), viewer);
   return {
     id: p.id as number,
     name: (p.name as string) ?? "",
@@ -41,8 +47,8 @@ function cardPurchaseProduct(p: AnyRecord): PurchaseProduct {
     // Per-product buying controls (card 7vu2iEEZ). Unset reads as today's behaviour.
     backorderPolicy: (p.backorderPolicy as string) ?? null,
     restrictAddToQuote: p.restrictAddToQuote === true,
-    restrictAddToCart: p.restrictAddToCart === true,
-    hidePrice: p.hidePrice === true,
+    restrictAddToCart: p.restrictAddToCart === true || rule.cartRefused,
+    hidePrice: p.hidePrice === true || rule.priceHidden,
     availability: (p.availability as string) ?? "available",
     descriptionShort: null,
     images: [],
@@ -121,13 +127,19 @@ export async function CardPartialGrid({
       : getFeatureFlag("member_pricing_enabled").catch(() => false),
   ]);
   if (!cardSource) return null;
+  // Who is looking, for the guest quote-only rule — the session is read only when a row carries it.
+  const viewer: ChannelRuleViewer = {
+    loggedIn: products.some((p) => channelRulesOfRow(p)?.guestQuoteOnly)
+      ? (await getSession().catch(() => null)) != null
+      : false,
+  };
 
   return (
     <div className={gridClassName}>
       {products.map((p) => (
         <ProductPurchaseProvider
           key={p.id as number}
-          product={cardPurchaseProduct(p)}
+          product={cardPurchaseProduct(p, viewer)}
           memberPrice={mpe ? priceMap[p.id as number] ?? null : null}
           isMember={false}
         >

@@ -24,6 +24,7 @@ import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductOfferTiers } from "@/components/product/ProductOfferTiers";
 import { readProductKit } from "@/lib/product-kit";
 import { readProductAddons } from "@keenan/services/product-addons";
+import { channelRulesOfRow, guestQuoteOnlyApplies } from "@keenan/services/channel-rules";
 import { readOptionValueOrder } from "@keenan/services/product-option-order";
 import { ProductTabs } from "@/components/product/ProductTabs";
 import { ProductGrid } from "@/components/product/ProductGrid";
@@ -441,9 +442,16 @@ export default async function ProductPage({
           restrictAddToQuote: product.restrictAddToQuote === true,
           // A bundle Zoey sells by quote only stays quote only here (IK parity, the scoped kit's
           // `quote_only`): no Add to Cart at the head unit's partial price.
+          //
+          // This storefront's Zoey rules (portal PR #1028): `getProductBySlug` already folded
+          // zero-price and out-of-stock into `restrictAddToCart` / `hidePrice` for everyone; the
+          // GUEST quote-only rule is added here, where the session is known.
           restrictAddToCart:
             product.restrictAddToCart === true ||
-            readProductKit(product.metafields, CHANNEL_ID)?.quoteOnly === true,
+            readProductKit(product.metafields, CHANNEL_ID)?.quoteOnly === true ||
+            guestQuoteOnlyApplies(channelRulesOfRow(product), {
+              loggedIn: (await getSession().catch(() => null)) != null,
+            }),
           hidePrice: product.hidePrice === true,
           availability: product.availability ?? "available",
           descriptionShort: product.descriptionShort,
