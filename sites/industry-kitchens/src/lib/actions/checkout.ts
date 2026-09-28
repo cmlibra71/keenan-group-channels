@@ -28,6 +28,7 @@ import {
   restrictedCheckoutMessage,
   quantityRefusedCheckoutMessage,
 } from "@/lib/cart/restricted-message";
+import { onlineOrderingOff } from "@/lib/cart/online-purchase";
 import { normaliseAddressType } from "@keenan/services/residential";
 import { getLineCosts } from "@/lib/store";
 import { sendStaffNotification } from "@/lib/staff-email";
@@ -244,7 +245,10 @@ export async function placeOrder(
       quantity: number;
       product_name?: string | null;
     }[];
-    const restricted = lines.find((i) => stock.get(i.product_id)?.restrictAddToCart === true);
+    // Restricted, Zoey "quote only" (`purchasing_disabled`) or price hidden — the same three
+    // switches `addToCart` refuses (lib/cart/online-purchase.ts), so a line added before staff
+    // flipped one still cannot be bought.
+    const restricted = lines.find((i) => onlineOrderingOff(stock.get(i.product_id)));
     if (restricted) {
       return { error: restrictedCheckoutMessage(restricted.product_name) };
     }

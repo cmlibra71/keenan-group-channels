@@ -21,6 +21,10 @@ export type ProductBackorderFacts = StockFacts &
   PackFacts & {
     /** Per-product control: this product may not be added to the cart at all. */
     restrictAddToCart: boolean;
+    /** Zoey's "available by quote only" flag (`products.purchasing_disabled`). */
+    purchasingDisabled: boolean;
+    /** A hidden price behaves exactly like no price: quote only. */
+    hidePrice: boolean;
   };
 
 /**
@@ -43,12 +47,14 @@ export async function backorderFactsForProducts(
         inventory_level: number | null;
         backorder_policy: string | null;
         restrict_add_to_cart: boolean | null;
+        purchasing_disabled: boolean | null;
+        hide_price: boolean | null;
         sell_pack_size: number | null;
         sell_pack_unit: string | null;
       }[]
     >`
       SELECT id, inventory_tracking, inventory_level, backorder_policy, restrict_add_to_cart,
-             sell_pack_size, sell_pack_unit
+             purchasing_disabled, hide_price, sell_pack_size, sell_pack_unit
         FROM products
        WHERE id = ANY(${ids})`;
     for (const row of rows) {
@@ -57,6 +63,9 @@ export async function backorderFactsForProducts(
         inventoryLevel: row.inventory_level == null ? null : Number(row.inventory_level),
         backorderPolicy: row.backorder_policy,
         restrictAddToCart: row.restrict_add_to_cart === true,
+        // The other two quote-only switches ride the same read (see `lib/cart/online-purchase.ts`).
+        purchasingDisabled: row.purchasing_disabled === true,
+        hidePrice: row.hide_price === true,
         // The SELLING UNIT rides the same batched read (cards O108e4jH / zeMPVcA3): the cart has
         // to snap a quantity to whole packs and say what a pack holds, and both callers of this
         // lookup already have the product in hand. `products.min_purchase_quantity` is NOT read —

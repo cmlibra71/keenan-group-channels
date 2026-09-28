@@ -87,3 +87,60 @@ test("a `hidden` attribute never survives — it could only ever hide copy", () 
   assert.equal(out.includes("hidden"), false);
   assert.ok(out.includes("Specifications"));
 });
+
+// Root cause description-iframes-stripped: the old Industry Kitchens site shows
+// YouTube videos inside product descriptions; every iframe used to be deleted.
+
+test("keeps a YouTube embed, rebuilt with our own safe attributes and a responsive wrapper", () => {
+  const out = sanitizeHtml(
+    `<p>Watch:</p><iframe width="560" height="315" src="//www.youtube.com/embed/IEAUhsvLFjI" frameborder="0" allow="autoplay" onload="alert(1)" allowfullscreen></iframe>`
+  );
+  assert.match(out, /^<p>Watch:<\/p><span class="kg-video-embed" style="[^"]*padding-bottom:56.25%[^"]*"><iframe /);
+  assert.match(out, /src="https:\/\/www\.youtube\.com\/embed\/IEAUhsvLFjI"/);
+  assert.match(out, /sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"/);
+  assert.match(out, /referrerpolicy="strict-origin-when-cross-origin"/);
+  assert.match(out, /loading="lazy"/);
+  assert.equal(out.includes("onload"), false);
+  assert.equal(out.includes("frameborder"), false);
+  assert.equal(out.includes('width="560"'), false, "the wrapper sizes the frame, not its authored width");
+});
+
+test("keeps youtube-nocookie and Vimeo player embeds", () => {
+  assert.match(
+    sanitizeHtml(`<iframe src="https://www.youtube-nocookie.com/embed/abc"></iframe>`),
+    /src="https:\/\/www\.youtube-nocookie\.com\/embed\/abc"/
+  );
+  assert.match(
+    sanitizeHtml(`<iframe src="https://player.vimeo.com/video/123456"></iframe>`),
+    /src="https:\/\/player\.vimeo\.com\/video\/123456"/
+  );
+});
+
+test("any other iframe is still dropped — host compared after URL parsing, not by substring", () => {
+  for (const src of [
+    "https://evil.example/embed/x",
+    "https://youtube.com.evil.example/embed/x",
+    "https://evil.example/?u=https://www.youtube.com/embed/x",
+    "https://www.youtube.com/watch?v=x",
+    "https://vimeo.com/123",
+    "javascript:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "https://user:pw@www.youtube.com/embed/x",
+    "",
+  ]) {
+    const out = sanitizeHtml(`<iframe src="${src}"></iframe><b>ok</b>`);
+    assert.equal(out, "<b>ok</b>", `iframe with src ${JSON.stringify(src)} should not survive`);
+  }
+});
+
+test("sanitizing twice keeps ONE wrapper (idempotent)", () => {
+  const once = sanitizeHtml(`<iframe src="https://www.youtube.com/embed/abc"></iframe>`);
+  assert.equal(sanitizeHtml(once), once);
+});
+
+test("an embed wrapped in a paragraph keeps its surrounding text", () => {
+  const out = sanitizeHtml(`<p>Before <iframe src="https://www.youtube.com/embed/abc"></iframe> after</p>`);
+  assert.match(out, /Before /);
+  assert.match(out, / after/);
+  assert.match(out, /^<p>Before <span class="kg-video-embed"[^>]*><iframe [^>]*><\/iframe><\/span> after<\/p>$/);
+});
