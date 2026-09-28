@@ -10,6 +10,7 @@ import { applyCatalogScope } from "@/lib/catalog-scope";
 import { cardPrice } from "@/lib/card-price";
 import { buildCompareRows, type CompareFieldDefinition, type CompareRow } from "./compare-rows";
 import { compareBuyButtons } from "./compare-buy";
+import { tileRequiredQuestions } from "@keenan/services";
 import { isProductId } from "./compare-list";
 import { readProductKit, tileKitChoices, type KitChoice } from "@/lib/product-kit";
 
@@ -41,6 +42,8 @@ export interface CompareProduct {
   memberPrice: number | null;
   /** Which buy buttons the product's OWN PAGE offers (`compare-buy.ts`). */
   buttons: { cart: boolean; quote: boolean };
+  /** The product asks a required question (default or not) — the column says View Details. */
+  answerRequired: boolean;
   /** `hide_price`: the column says "Call for Price", as the page's masked price does. */
   priceHidden: boolean;
   /** A bundle: its quote carries the kit's marked defaults (the tile's build), or null. */
@@ -173,6 +176,9 @@ export async function loadCompareData(requested: number[]): Promise<CompareData>
       inventoryLevel: d?.inventoryLevel ?? null,
       backorderPolicy: d?.backorderPolicy ?? null,
       kit,
+      // Any required question (the Zoey options imported for this storefront, default or not):
+      // the column opens the product page instead, as Zoey's tile does.
+      requiredQuestions: d ? tileRequiredQuestions({ metafields: d.metafields, channelId: CHANNEL_ID }) : null,
     });
     return {
       id: r.id,
@@ -185,6 +191,7 @@ export async function loadCompareData(requested: number[]): Promise<CompareData>
       price,
       memberPrice: buy.priceHidden ? null : (memberPrices[r.id] ?? null),
       buttons: { cart: buy.cart, quote: buy.quote },
+      answerRequired: buy.answerRequired,
       priceHidden: buy.priceHidden,
       isBundle: kit?.kind === "bundle",
       kitChoices: kit ? tileKitChoices(kit) : null,
