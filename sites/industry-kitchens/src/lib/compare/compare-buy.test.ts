@@ -37,14 +37,19 @@ test("'do not sell when out of stock' refuses the cart only when the shelf is em
   assert.equal(compareBuyButtons({ ...plain, backorderPolicy: "deny", inventoryTracking: "none", inventoryLevel: 0 }).cart, true);
 });
 
-test("a required question with no default: no cart, no quote — the column opens the product page (Zoey's tile)", () => {
-  assert.deepEqual(compareBuyButtons({ ...plain, unansweredQuestions: ["Interstate Surcharge"] }), {
+test("any required question, default or not: no cart, no quote — the column opens the product page (Zoey's tile)", () => {
+  // Interstate Surcharge has no default; Gas Type has Natural Gas pre-selected — Zoey's tile
+  // says View Details for both.
+  for (const q of [["Interstate Surcharge"], ["Gas Type"]]) {
+    assert.equal(compareBuyButtons({ ...plain, requiredQuestions: q }).answerRequired, true);
+  }
+  assert.deepEqual(compareBuyButtons({ ...plain, requiredQuestions: ["Interstate Surcharge"] }), {
     cart: false,
     quote: false,
     priceHidden: false,
     answerRequired: true,
   });
-  // Nothing unanswered (none, or every required question pre-answered by its default): unchanged.
-  assert.deepEqual(compareBuyButtons({ ...plain, unansweredQuestions: [] }), compareBuyButtons(plain));
-  assert.deepEqual(compareBuyButtons({ ...plain, unansweredQuestions: null }), compareBuyButtons(plain));
+  // No required question: unchanged.
+  assert.deepEqual(compareBuyButtons({ ...plain, requiredQuestions: [] }), compareBuyButtons(plain));
+  assert.deepEqual(compareBuyButtons({ ...plain, requiredQuestions: null }), compareBuyButtons(plain));
 });

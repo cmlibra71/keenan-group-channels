@@ -230,12 +230,11 @@ const withMasterTransforms = (components: ComponentMap): ComponentMap =>
 // ============================================================================
 // A TILE WHOSE PRODUCT ASKS A REQUIRED QUESTION OFFERS "VIEW DETAILS" (this site only).
 //
-// Zoey's category tile for a product with a required custom option carries no Add to Basket and
-// no Add to Quote — only "View Details" to the product page, where the question is asked (old
-// site, read 2026-09-28). The Zoey options are imported for THIS storefront
-// (`metafields.channel_addons["1"]`), so a rail tile for such a product would otherwise offer a
-// button the cart action can only refuse (it redirects to the product page, but the button still
-// reads "Add to Basket"). Services `withAnswerRequiredTiles` hides a tile's buy controls on rows
+// Zoey's category tile for a product with a required custom option — with or without a
+// pre-selected answer — carries no Add to Basket and no Add to Quote, only "View Details" to the
+// product page, where the question is asked and the default pre-selected (old site, read
+// 2026-09-28; owner: 100% Zoey parity). The Zoey options are imported for THIS storefront
+// (`metafields.channel_addons["1"]`). Services `withAnswerRequiredTiles` hides a tile's buy controls on rows
 // carrying `answer_required` and widens the upsell tile's existing configurable "View Details"
 // link to them. Composed HERE, in this channel's store, so Chefs Depot's tiles are untouched.
 // Render-time only: nothing is written to the stored templates or masters, and a row without the
