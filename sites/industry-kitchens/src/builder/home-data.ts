@@ -7,6 +7,7 @@ import {
   getFeatureFlag,
   getProducts,
   getCategoryBySlug,
+  attachFromPrices,
 } from "@/lib/store";
 import { applyAccountPrices, getListingMemberPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
@@ -92,8 +93,9 @@ export async function loadHomeNativeData(
   const scopedCarousels: Record<string, { products: CarouselProducts }> = {};
   let memberPriceMap: Record<number, number> = {};
   for (const [slug, entry] of Object.entries(carousels)) {
+    // configurable-from-price: "Starting From" on configurable rail tiles, after the overlays.
     const scoped = (await attachBrandLogos(
-      await applyAccountPrices(await applyCatalogScope(entry.products))
+      await attachFromPrices(await applyAccountPrices(await applyCatalogScope(entry.products)))
     )) as unknown as CarouselProducts;
     scopedCarousels[slug] = { products: scoped };
     if (scoped.length) {

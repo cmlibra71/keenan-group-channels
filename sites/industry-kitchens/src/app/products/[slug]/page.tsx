@@ -2,11 +2,21 @@ import { notFound } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import { draftMode, headers } from "next/headers";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsPage, getCmsTemplate } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsPage, getCmsTemplate, getSiteConfig } from "@/lib/store";
+import type { Metadata } from "next";
 import type { RenderContext } from "@keenan/services";
 import { getSession } from "@/lib/auth";
 import { getAccountId, applyAccountPrices } from "@/lib/member";
-import { assertProductVisible, applyCatalogScope } from "@/lib/catalog-scope";
+import { assertProductVisible, applyCatalogScope, isProductVisibleToViewer } from "@/lib/catalog-scope";
+import { siteBaseUrl } from "@/lib/seo";
+import {
+  jsonLdScript,
+  productCanonicalUrl,
+  productJsonLd,
+  productMainImage,
+  productMetaDescription,
+  productPageTitle,
+} from "@/lib/product-seo";
 import { ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
@@ -28,6 +38,53 @@ type ProductBrandMetafields = {
   extended_warranty?: { name: string; body: string; link?: string };
   installation_notes?: string[];
 };
+
+/**
+ * The product's own <head> (IK parity root cause `product-seo-head`): title, description,
+ * canonical, Open Graph and Twitter. The rules live in `lib/product-seo.ts` (unit-tested).
+ *
+ * `robots` is deliberately NOT named here. Next resolves metadata field by field, and a page
+ * that names `robots` at all REPLACES the layout's `siteRobots()` — which is what keeps this
+ * site `noindex` until SITE_INDEXABLE is switched on (see lib/seo.ts, card InEoeMZh).
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const product = await getProductBySlug(slug);
+  if (!product) return { title: "Product not found" };
+  // A product this viewer may not see 404s in the page; its <head> must not name it either.
+  if (!(await isProductVisibleToViewer(product.id))) return { title: "Product not found" };
+  const { site } = await getSiteConfig();
+  const base = siteBaseUrl(site?.url);
+  const title = productPageTitle(product);
+  const description = productMetaDescription(product);
+  const url = productCanonicalUrl(product.urlPath || slug, base);
+  const image = productMainImage(product.images, base);
+  const images = image ? [{ url: image, alt: product.name }] : undefined;
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      title,
+      description,
+      url,
+      type: "website",
+      siteName: "Industry Kitchens",
+      locale: "en_AU",
+      images,
+    },
+    twitter: {
+      card: image ? "summary_large_image" : "summary",
+      title,
+      description,
+      images: image ? [image] : undefined,
+    },
+  };
+}
 
 export default async function ProductPage({
   params,
@@ -80,6 +137,30 @@ export default async function ProductPage({
   const brandMeta = (brandRow?.metafields ?? {}) as ProductBrandMetafields;
   const brandName = brandRow?.name ?? undefined;
 
+  // Product structured data (root cause `product-seo-head`). Built from the SHARED product row,
+  // not the account-priced copy: the offer is the price a visitor with no account sees, and a
+  // quote-only / Call for Price product gets no offer at all (lib/product-seo.ts).
+  const seoBase = siteBaseUrl((await getSiteConfig()).site?.url);
+  const productUrl = productCanonicalUrl(cachedProduct.urlPath || slug, seoBase);
+  const jsonLd = productJsonLd({
+    name: cachedProduct.name,
+    sku: cachedProduct.sku,
+    brandName: brandName ?? null,
+    image: productMainImage(cachedProduct.images, seoBase),
+    description: productMetaDescription(cachedProduct),
+    price: cachedProduct.price,
+    salePrice: cachedProduct.salePrice,
+    hidePrice: cachedProduct.hidePrice,
+    purchasingDisabled: cachedProduct.purchasingDisabled,
+    restrictAddToCart: cachedProduct.restrictAddToCart,
+    availability: cachedProduct.availability,
+    condition: cachedProduct.condition,
+    url: productUrl,
+  });
+  const jsonLdTag = (
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }} />
+  );
+
   // Breadcrumb trail scoped to this channel's own category tree. A product's
   // category assignments can span other channels' trees, so resolving through
   // the channel guarantees every crumb links to a category page that exists here.
@@ -95,7 +176,7 @@ export default async function ProductPage({
   let membershipTeaser: { fromPrice: string | null } | null = null;
   const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
 
-  let memberPriceMap: Record<number, number> = {};
+  const memberPriceMap: Record<number, number> = {};
   if (memberPricingEnabled) {
     const session = await getSession();
     let customerGroupId: number | null = null;
@@ -162,12 +243,12 @@ export default async function ProductPage({
 
   // Site Builder node path — additive. Returns null (and we fall through to the
   // block/legacy paths below) until node_product_template_enabled is on here.
-  // No jsonLd is passed: this route emits no JSON-LD, and the node branch must
-  // not invent structured data the native page does not claim.
+  // The route owns SEO and hands its Product JSON-LD in; every path below emits the same block.
   {
     const memberCtx = await getMemberContext().catch(() => null);
     const nodeRendered = await renderProductNodeBranch({
       slug,
+      jsonLd,
       member: {
         customerGroupId: memberCtx?.customerGroupId ?? null,
         isMember: memberCtx?.isMember ?? false,
@@ -245,6 +326,7 @@ export default async function ProductPage({
       };
       return (
         <div>
+          {jsonLdTag}
           <ViewedProductTracker
             product={{
               id: product.id,
@@ -281,6 +363,7 @@ export default async function ProductPage({
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+      {jsonLdTag}
       <ViewedProductTracker
         product={{
           id: product.id,

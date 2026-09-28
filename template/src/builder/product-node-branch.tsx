@@ -18,6 +18,7 @@ import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { withSilverChefNode } from "@/builder/silverchef-node";
 import { withItemIdNode } from "@/builder/item-id-node";
 import { withAddonsNode } from "@/builder/product-addons-node";
+import { withProductKitNode } from "@/builder/product-kit-node";
 import { withProductInstructionsNode } from "@/builder/product-instructions-node";
 import { withImageNoticeNode } from "@/builder/product-image-notice";
 import { withCombinationNoticeNode } from "@/builder/product-combination-notice";
@@ -243,7 +244,7 @@ export async function renderProductNodeBranch({
   const nodeTree = guardBuyControls(
     withCdMemberPricingNode(
       withUpsellBlock(
-        // FOUR passes share the `actions-row` anchor and each one inserts BEFORE it, so
+        // FIVE passes share the `actions-row` anchor and each one inserts BEFORE it, so
         // whichever runs LAST ends up nearest the buy buttons. The order is decided, not
         // accidental:
         //   * the UNMADE-COMBINATION sentence (card VNh9DdYd) is outermost, and therefore the
@@ -254,20 +255,26 @@ export async function renderProductNodeBranch({
         //     will charge, and a priced control belongs beside the button it moves.
         //   * the free-text INSTRUCTIONS box (kyMjCmAw) sits above them — it describes what to
         //     build and moves no money, so the priced control keeps the nearer place.
+        //   * the KIT CONTENTS (the sealed `product-kit` native, card 7bmpuqei — registered but
+        //     placed nowhere until the IK parity audit, 2026-09-28) sit below the pack note: what a
+        //     bundle holds, and for a bundle the picks its own Add to Quote carries. Renders null
+        //     for a product that is not a kit.
         //   * the PACK NOTE (O108e4jH / zeMPVcA3) is innermost: a fact about the price, which
         //     belongs with the price panel.
-        // Page order is therefore price -> pack sentence -> Instructions -> extras -> "we do
-        // not make that combination" -> buy row. `ProductDetail.tsx` (the non-node fallback
+        // Page order is therefore price -> pack sentence -> kit contents -> Instructions ->
+        // extras -> "we do not make that combination" -> buy row. `ProductDetail.tsx` (the non-node fallback
         // renderer) is hand-ordered to match so the two renderers cannot disagree, and if any
         // of these anchors moves they all move together (catalogue.md `sf-product-page`).
         withCombinationNoticeNode(
           withResidentialNoticeNode(
             withAddonsNode(
               withProductInstructionsNode(
-                withPackNoteNode(
-                  withModularNoticeNode(
-                    withReviewsBlock(
-                      withImageNoticeNode(withSilverChefNode(withItemIdNode(scaleWording(storedTree ?? SEED_PRODUCT_TREE))))
+                withProductKitNode(
+                  withPackNoteNode(
+                    withModularNoticeNode(
+                      withReviewsBlock(
+                        withImageNoticeNode(withSilverChefNode(withItemIdNode(scaleWording(storedTree ?? SEED_PRODUCT_TREE))))
+                      )
                     )
                   )
                 )

@@ -7,12 +7,20 @@ import { Package } from "lucide-react";
 import { Price } from "@/components/ui/Price";
 import { ga4SelectItem } from "@/components/analytics/ga4";
 import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
+import { cardPrice } from "@/lib/card-price";
 
 interface ProductCardProps {
   name: string;
   slug: string;
   price: string;
   salePrice?: string | null;
+  /**
+   * configurable-from-price (services #182, `attachFromPrices`): a configurable product's
+   * "Starting From" list / sale. Present, the tile prints "Starting From:" with these figures
+   * instead of the parent's own price (which is often $0 — "Call for Price").
+   */
+  fromPrice?: string | null;
+  fromSalePrice?: string | null;
   imageUrl?: string | null;
   brandName?: string;
   /**
@@ -39,7 +47,7 @@ interface ProductCardProps {
   listIndex?: number;
 }
 
-export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName, brandLogoUrl, brandLogoAlt, memberPricingAvailable, memberPrice, productId, listId, listName, listIndex }: ProductCardProps) {
+export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSalePrice, imageUrl, brandName, brandLogoUrl, brandLogoAlt, memberPricingAvailable, memberPrice, productId, listId, listName, listIndex }: ProductCardProps) {
   // A dead image file is invisible to the server — the row exists and the URL is
   // well formed — so the browser is the only place it can be caught. An errored
   // photo drops to the same fallback an imageless product gets; a logo that is
@@ -49,8 +57,13 @@ export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName,
   const photoUrl = imageUrl && !photoBroken ? imageUrl : null;
   const logoUrl = brandLogoUrl && !logoBroken ? brandLogoUrl : null;
 
-  const displayPrice = parseFloat(price);
-  const displaySalePrice = salePrice ? parseFloat(salePrice) : null;
+  // A sale only when 0 < sale < price, and a configurable prices "Starting From" — see lib/card-price.ts.
+  const { list: displayPrice, sale: displaySalePrice, from: startingFrom } = cardPrice({
+    price,
+    salePrice,
+    fromPrice,
+    fromSalePrice,
+  });
   const showMemberPrice =
     memberPrice != null && displayPrice > 0 && memberPrice < (displaySalePrice ?? displayPrice);
 
@@ -129,6 +142,9 @@ export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName,
           </div>
         ) : (
           <div className="mt-1 flex items-center gap-2">
+            {startingFrom && displayPrice > 0 && (
+              <span className="text-xs text-zinc-500">Starting From:</span>
+            )}
             {displayPrice === 0 ? (
               <span className="text-sm font-semibold text-zinc-900">Call for Price</span>
             ) : displaySalePrice ? (

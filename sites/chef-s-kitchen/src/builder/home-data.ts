@@ -8,6 +8,7 @@ import {
   getJsonSetting,
   productChannelAssignmentService,
   CHANNEL_ID,
+  attachFromPrices,
 } from "@/lib/store";
 import { getListingPricing, applyAccountPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
@@ -87,8 +88,9 @@ export async function loadHomeNativeData(
   // that has not opted in. Both rails below draw their tiles with `ProductCard`,
   // which reads `brand_logo_url` / `brand_name` off the row.
   const scopePrice = async (rows: Record<string, unknown>[]) =>
+    // configurable-from-price: "Starting From" on configurable rail tiles, after the overlays.
     (await attachBrandLogos(
-      await applyAccountPrices(await applyCatalogScope(rows as never))
+      await attachFromPrices(await applyAccountPrices(await applyCatalogScope(rows as never)))
     )) as unknown as GridProduct[];
 
   const clearanceProducts = clearanceRes ? await scopePrice(clearanceRes.products as never) : [];
