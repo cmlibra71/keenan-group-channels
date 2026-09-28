@@ -96,6 +96,9 @@ export const {
   sanitizeCatalogProducts,
   getProducts,
   getProductBySlug,
+  // configurable-from-price: a configurable row's "Starting From" list/sale, attached AFTER the
+  // per-viewer price overlays so its tile reads "Starting From" instead of "Call for Price".
+  attachFromPrices,
   // This site's own product search title + meta description (card CfnjZikj).
   getProductChannelSeo,
   getRedirectForPath,

@@ -27,6 +27,9 @@ export interface GridProduct {
   urlPath: string | null;
   price: string;
   salePrice: string | null;
+  /** configurable-from-price — attached upstream by the node branch (`attachFromPrices`). */
+  fromPrice?: string | null;
+  fromSalePrice?: string | null;
   thumbnailImage?: { urlStandard: string; urlThumbnail: string | null } | null;
   /**
    * Card tSrCcnvx: the brand's logo, which the tile shows instead of the grey
@@ -81,6 +84,8 @@ export function ProductGridClient({
           slug={product.urlPath || String(product.id)}
           price={product.price}
           salePrice={product.salePrice}
+          fromPrice={product.fromPrice ?? null}
+          fromSalePrice={product.fromSalePrice ?? null}
           imageUrl={product.thumbnailImage?.urlThumbnail || product.thumbnailImage?.urlStandard}
           brandLogoUrl={product.brand_logo_url ?? null}
           brandLogoAlt={product.brand_name ?? null}

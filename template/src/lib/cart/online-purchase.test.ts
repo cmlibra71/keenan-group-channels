@@ -27,6 +27,14 @@ test("each quote-only flag refuses the add with the cart's own sentence", () => 
   }
 });
 
+test("a Zoey quote-only product is refused with the page's own sentence", () => {
+  assert.equal(refuseOnlinePurchase({}, 999, "This item is available by quote only"), "This item is available by quote only");
+  assert.equal(refuseOnlinePurchase({ purchasingDisabled: true }, 999, "Call us for a price"), "Call us for a price");
+  // No message (purchasing on) falls through to the other rules.
+  assert.equal(refuseOnlinePurchase({}, 999, null), null);
+  assert.equal(refuseOnlinePurchase({}, 999, "  "), null);
+});
+
 test("a product with no price sells by quote only — $0, negative, blank or NaN", () => {
   for (const price of [0, -1, NaN, null, undefined]) {
     assert.equal(refuseOnlinePurchase({}, price as number), CART_RESTRICTED_ERROR, String(price));
@@ -59,6 +67,10 @@ test("addToCart refuses quote-only products BEFORE the extras are priced on", ()
   assert.ok(refuse > 0, "addToCart calls refuseOnlinePurchase");
   assert.ok(surcharge > refuse, "the refusal is judged on the price before extras");
   assert.match(src, /if \(onlineOrderingOff\(facts\)\) return CART_RESTRICTED_ERROR;/);
+  // Product OR variant quote-only, through the services helper.
+  assert.match(src, /purchasingDisabledMessage\(facts, variantRow\)/);
+  // The cart charges the page's catalogue price.
+  assert.match(src, /catalogLinePrices\(product, variant\)/);
 });
 
 test("placeOrder refuses a line whose product is quote-only", () => {
@@ -68,5 +80,5 @@ test("placeOrder refuses a line whose product is quote-only", () => {
 
 test("the facts read carries both quote-only switches", () => {
   const src = readFileSync(join(LIB, "cart/backorder-facts.ts"), "utf8");
-  assert.match(src, /purchasing_disabled, hide_price/);
+  assert.match(src, /purchasing_disabled, purchasing_disabled_message, hide_price/);
 });

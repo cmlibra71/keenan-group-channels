@@ -7,6 +7,8 @@ import { getAccountId } from "@/lib/member";
 import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { CART_RESTRICTED_ERROR } from "@/lib/cart/restricted-message";
 import { chargedUnitPrice, onlineOrderingOff, refuseOnlinePurchase } from "@/lib/cart/online-purchase";
+import { catalogLinePrices } from "@keenan/services/catalog-price";
+import { purchasingDisabledMessage } from "@keenan/services/purchasing";
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice, subscriptionPlanService } from "@/lib/store";
 import { getCartUuid, setCartUuid } from "@/lib/cart";
 import { brandIdsForProducts } from "@/lib/checkout/free-shipping-brands";
@@ -146,16 +148,16 @@ async function layerItemPricing(
     if (record) return { listPrice: record.price, salePrice: record.salePrice };
   }
 
-  let listPrice = product.price;
-  // NOTE: getById returns snake_case — read sale_price (reading salePrice silently
-  // yielded undefined, so IK was charging RRP instead of its public sale price).
-  let catalogSalePrice: string | null = product.sale_price ?? null;
-
-  if (variantId) {
-    const variant = (await productVariantService.getById(variantId)) as { price: string | null; sale_price: string | null } | null;
-    if (variant?.price) listPrice = variant.price;
-    if (variant?.sale_price) catalogSalePrice = variant.sale_price;
-  }
+  // THE CATALOGUE PRICE, exactly as the product page shows it (services #182, `catalogLinePrices`):
+  // variant price ?? parent price, sale = the variant's own sale when it has its own price, else
+  // variant sale ?? parent sale — and a sale only when 0 < sale < price. `getById` returns
+  // snake_case; the helper reads either casing.
+  const variant = variantId
+    ? ((await productVariantService.getById(variantId)) as { price: string | null; sale_price: string | null } | null)
+    : null;
+  const catalog = catalogLinePrices(product, variant);
+  let listPrice = catalog.listPrice;
+  const catalogSalePrice: string | null = catalog.salePrice;
 
   // ── THE ADVERTISED PRICE (card gk23c1VK). On a channel whose buying-group
   // ladder advertises the Industry Kitchens trade price, the cart's list price
@@ -379,7 +381,11 @@ async function refuseCartQuantity(
 ): Promise<string | null> {
   const facts = known !== undefined ? known : await backorderFactsForProduct(productId);
   if (!facts) return null; // unknown product: leave it to the pricing lookup below to fail properly
-  // Restricted, quote-only (`purchasing_disabled`) or price hidden — see lib/cart/online-purchase.ts.
+  // Zoey "quote only" (`purchasing_disabled`) says ITS OWN sentence — the staff message, else Zoey's
+  // default (services `purchasingDisabledMessage`, the same words the product page shows).
+  const quoteOnly = purchasingDisabledMessage(facts);
+  if (quoteOnly) return quoteOnly;
+  // Restricted or price hidden — see lib/cart/online-purchase.ts.
   if (onlineOrderingOff(facts)) return CART_RESTRICTED_ERROR;
   if (!canPurchaseQuantity(facts, quantity)) return CART_QUANTITY_ERROR;
   return null;
@@ -483,14 +489,12 @@ export async function addToCart(
   // a chosen variant Zoey marked "quote only", or a product this shopper would be charged $0 for
   // ("Call for Price" on the page). Judged on the price BEFORE extras, so ticked accessories can
   // never lift a $0 machine into the cart. The product-level flags were refused above.
-  const variantPurchasingDisabled = variantId
-    ? (((await productVariantService.getById(variantId).catch(() => null)) as
-        | { purchasing_disabled?: boolean | null }
-        | null)?.purchasing_disabled ?? false)
-    : false;
+  const variantRow = variantId ? await productVariantService.getById(variantId).catch(() => null) : null;
   const quoteOnly = refuseOnlinePurchase(
-    { ...(facts ?? {}), variantPurchasingDisabled },
-    chargedUnitPrice(basePricing)
+    facts,
+    chargedUnitPrice(basePricing),
+    // Product OR chosen variant (services `isPurchasingDisabled`), with the page's own sentence.
+    purchasingDisabledMessage(facts, variantRow)
   );
   if (quoteOnly) return { error: quoteOnly };
   const pricing = withAddonSurcharge(basePricing, resolvedAddons);

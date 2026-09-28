@@ -7,6 +7,7 @@ import {
   getComponents,
   getDraftComponents,
   getChannelSetting,
+  attachFromPrices,
 } from "@/lib/store";
 import { CHANNEL_ID } from "@/lib/channel";
 import { getMemberContext, applyAccountPrices } from "@/lib/member";
@@ -210,8 +211,11 @@ export async function renderCategoryNodeBranch({
   // to when a product has no photo. Additive — every other field on the row is
   // copied through — and the `product-card` master reads it as
   // `props.card.brand_logo_url` (see `product-card-brand-logo.ts`).
+  // configurable-from-price (services #182): AFTER the per-viewer price overlays, a configurable
+  // row gets its "Starting From" list/sale, which the `product-card` enrichment reads — without it
+  // a $0-parent configurable tile says "Call for Price".
   const scoped = (await attachBrandLogos(
-    await applyAccountPrices(await applyCatalogScope(products as { id: number }[]))
+    await attachFromPrices(await applyAccountPrices(await applyCatalogScope(products as { id: number }[])))
   )) as unknown as CategoryGridProduct[];
   const memberCtx = await getMemberContext().catch(() => null);
   // GST facts for the price-block masters: the composer emits both ex/inc

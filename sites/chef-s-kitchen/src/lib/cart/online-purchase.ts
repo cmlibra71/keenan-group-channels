@@ -19,8 +19,11 @@
 //                                everywhere, and a $0 product sells by quote only
 //                                (`sf-product-page`: "Call for Price" + Add to Quote).
 //
-// Every refusal is the same sentence the cart already shows for a restricted line
-// (`CART_RESTRICTED_ERROR`), because it says what to do instead: add it to a quote.
+// A Zoey "quote only" product (product or variant) is refused with the sentence the product page
+// shows for it — the staff message, else "This item is available by quote only" — which the caller
+// resolves with services `purchasingDisabledMessage` and passes in. Every other refusal is the
+// sentence the cart already shows for a restricted line (`CART_RESTRICTED_ERROR`), because it says
+// what to do instead: add it to a quote.
 //
 // Pure, so the rules are unit-tested (`online-purchase.test.ts`). Listed in
 // `orchestrator/shared-modules.json`: both storefronts refuse word for word.
@@ -67,8 +70,12 @@ export function chargedUnitPrice(pricing: { listPrice: string | null; salePrice:
  */
 export function refuseOnlinePurchase(
   flags: OnlinePurchaseFlags | null | undefined,
-  unitPrice: number | null | undefined
+  unitPrice: number | null | undefined,
+  /** services `purchasingDisabledMessage(product, variant)` — non-null means "quote only". */
+  purchasingMessage?: string | null
 ): string | null {
+  const said = (purchasingMessage ?? "").trim();
+  if (said) return said;
   if (onlineOrderingOff(flags)) return CART_RESTRICTED_ERROR;
   if (unitPrice == null || !Number.isFinite(unitPrice) || unitPrice <= 0) return CART_RESTRICTED_ERROR;
   return null;
