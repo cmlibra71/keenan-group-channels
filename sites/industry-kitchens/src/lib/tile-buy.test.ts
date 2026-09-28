@@ -47,5 +47,7 @@ test("grouped (I-Fresh Sample Pack): no buttons at all", () => {
 test("out of stock in Zoey (stock managed, is_in_stock 0 — KH 97213): no buttons at all", () => {
   assert.deepEqual(tileBuyFacts({ price: "277.20", channelRules: { out_of_stock: true } }), { viewDetails: false, cart: false, quote: false });
   // …the same fact after the search path folded the rule into the row's flags.
-  assert.deepEqual(tileBuyFacts({ price: "277.20", restrictAddToCart: true, restrictAddToQuote: true }), { viewDetails: false, cart: false, quote: false });
+  assert.deepEqual(tileBuyFacts({ price: "277.20", restrictAddToCart: true, restrictAddToQuote: true, zoeyOutOfStock: true }), { viewDetails: false, cart: false, quote: false });
+  // A required question on an out-of-stock product (Xtracta 1800): still nothing — no View Details.
+  assert.deepEqual(tileBuyFacts({ price: "2730", answerRequired: true, zoeyOutOfStock: true }), { viewDetails: false, cart: false, quote: false });
 });

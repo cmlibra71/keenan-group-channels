@@ -1,4 +1,5 @@
 import { tileControlsOf, tileButtons } from "@keenan/services/tile-controls";
+import { channelRulesOfRow } from "@keenan/services/channel-rules";
 import { cardPrice } from "./card-price";
 
 // ============================================================================
@@ -41,6 +42,8 @@ export interface TileBuyRow {
   zoeyType?: string | null;
   /** This storefront's Zoey rules, when the row still carries them (clearance rows). */
   channelRules?: unknown;
+  /** The derived out-of-stock fact, on rows whose rules were already folded (search). */
+  zoeyOutOfStock?: boolean;
 }
 
 export interface TileBuyFacts {
@@ -57,6 +60,8 @@ const NO_BUTTONS: TileBuyFacts = { viewDetails: false, cart: false, quote: false
 export function tileBuyFacts(row: TileBuyRow): TileBuyFacts {
   // A GROUPED Zoey product's tile carries no action at all (I-Fresh Sample Pack, old site).
   if (typeof row.zoeyType === "string" && row.zoeyType.toLowerCase() === "grouped") return NO_BUTTONS;
+  // Out of stock in Zoey (stock managed, is_in_stock 0): no action at all, not even View Details.
+  if (row.zoeyOutOfStock === true || channelRulesOfRow(row)?.outOfStock === true) return NO_BUTTONS;
   const price = cardPrice({ price: row.price, salePrice: row.salePrice, fromPrice: row.fromPrice, fromSalePrice: row.fromSalePrice });
   const viewDetails = price.from || row.answerRequired === true || row.answer_required === true;
   const controls = tileControlsOf(row);
