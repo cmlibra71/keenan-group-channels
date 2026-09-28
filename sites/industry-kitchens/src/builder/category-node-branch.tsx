@@ -38,6 +38,7 @@ import {
   BuilderCategoryPage,
   type CategoryGridProduct,
 } from "@/builder/BuilderCategoryPage";
+import { applyChannelRulesToTileRows } from "@keenan/services/channel-rules";
 
 // ============================================================================
 // The category template's Site Builder branch — ENGINE.
@@ -252,6 +253,15 @@ export async function renderCategoryNodeBranch({
     draft,
   });
 
+  // This storefront's Zoey rules (`channelRules`, portal PR #1028) for the rows the CLIENT wrapper
+  // receives (grid, "load more", GA4 view_item_list): zero-price shows no price (GA4 reports none),
+  // the cart is refused per rule/viewer, and the raw rules object is removed so it never reaches the
+  // browser. The composer above reads `scoped` itself and strips the rules from its own tiles. No rules
+  // (every Chefs Depot row) ⇒ the rows are unchanged.
+  const clientRows = applyChannelRulesToTileRows(scoped, {
+    viewer: { loggedIn: memberCtx?.loggedIn === true || memberCtx?.isMember === true },
+  });
+
   const namedStyles = await getNamedStyles().catch(() => ({}));
   // The per-category attribute sections and the price slider, placed into the
   // AUTHORED rail at render time (card C8G4f4U8). Which attributes a category
@@ -288,7 +298,7 @@ export async function renderCategoryNodeBranch({
         tree={withCategoryFacetNodes(nodeTree)}
         payload={payload}
         listing={{
-          products: scoped,
+          products: clientRows,
           total,
           shown,
           facets,

@@ -30,3 +30,22 @@ test("the fallback product renderers refuse the cart from the channel rules (out
   assert.match(read("lib/product/channel-rule-cart.ts"), /channelRulesOfRow\(product, CHANNEL_ID\)/);
   assert.match(read("blocks/widgets-server.tsx"), /products = applyChannelRulesToTileRows\(products, \{ viewer \}\)/);
 });
+
+test("rows handed to CLIENT components have the rules applied and the raw rules object removed", () => {
+  // Category + brand node branches (shared): the client wrapper (grid, load more, GA4) gets clientRows.
+  const cat = read("builder/category-node-branch.tsx");
+  assert.match(cat, /const clientRows = applyChannelRulesToTileRows\(scoped, \{/);
+  assert.match(cat, /products: clientRows,/);
+  const brand = read("builder/brand-node-branch.tsx");
+  assert.match(brand, /const clientRows = applyChannelRulesToTileRows\(scoped, \{/);
+  assert.match(brand, /products=\{clientRows\}/);
+  // Home carousels (client ProductGridClient / ClearanceSpotlight).
+  assert.match(read("builder/home-data.ts"), /const scoped = applyChannelRulesToTileRows\(overlaid, \{ viewer \}\)/);
+});
+
+test("the product page hands the client natives only the kit — no product row, no metafields", () => {
+  const src = read("app/products/[slug]/page.tsx");
+  const bag = src.slice(src.indexOf("nativeData: {"), src.indexOf("},", src.indexOf("nativeData: {")));
+  assert.match(bag, /kit: readProductKit\(product\.metafields, CHANNEL_ID\)/);
+  assert.doesNotMatch(bag, /purchaseProduct|customFields|metafields as/);
+});

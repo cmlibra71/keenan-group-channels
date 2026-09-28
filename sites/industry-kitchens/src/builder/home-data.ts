@@ -12,6 +12,8 @@ import {
 import { applyAccountPrices, getListingMemberPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
 import { attachBrandLogos } from "@/lib/brand-logo-fallback";
+import { getSession } from "@/lib/auth";
+import { applyChannelRulesToTileRows, channelRulesOfRow } from "@keenan/services/channel-rules";
 import type { HomeNativeData } from "./home-natives";
 import type { HomeSectionsInput } from "@keenan/services/builder";
 
@@ -94,9 +96,17 @@ export async function loadHomeNativeData(
   let memberPriceMap: Record<number, number> = {};
   for (const [slug, entry] of Object.entries(carousels)) {
     // configurable-from-price: "Starting From" on configurable rail tiles, after the overlays.
-    const scoped = (await attachBrandLogos(
+    const overlaid = (await attachBrandLogos(
       await attachFromPrices(await applyAccountPrices(await applyCatalogScope(entry.products)))
     )) as unknown as CarouselProducts;
+    // This storefront's Zoey rules (`channelRules`, portal PR #1028), applied HERE because these rows
+    // go to client components: zero-price shows no price, the cart is refused per rule (per viewer
+    // for the guest rule — the session is read only when a row carries it), and the raw rules object
+    // is removed so it never reaches the browser. No rules ⇒ rows unchanged.
+    const viewer = overlaid.some((r) => channelRulesOfRow(r)?.guestQuoteOnly)
+      ? { loggedIn: (await getSession().catch(() => null)) != null }
+      : null;
+    const scoped = applyChannelRulesToTileRows(overlaid, { viewer });
     scopedCarousels[slug] = { products: scoped };
     if (scoped.length) {
       memberPriceMap = { ...memberPriceMap, ...(await getListingMemberPrices(scoped)) };
