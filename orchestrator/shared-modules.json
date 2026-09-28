@@ -89,6 +89,8 @@
     "builder/strip-stock-nodes.ts",
     "builder/subcategory-tile-size.test.ts",
     "builder/subcategory-tile-size.ts",
+    "builder/tile-quantity.test.ts",
+    "builder/tile-quantity.ts",
     "builder/upsell-node.test.ts",
     "builder/upsell-node.ts",
     "builder/use-form-handlers.ts",

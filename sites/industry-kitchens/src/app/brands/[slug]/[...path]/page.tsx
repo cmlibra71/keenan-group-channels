@@ -17,6 +17,7 @@ import type { ListingSort } from "@/lib/listing-sort";
 import { categorySlugCandidates } from "@/lib/legacy-address";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
+import { readListingSettings } from "@keenan/services/builder";
 
 // Brand + category combo page: renders the brand's products filtered to a
 // specific category. Mirrors the original Zoey URL pattern
@@ -113,6 +114,16 @@ export default async function BrandCategoryPage({
     ({ products, total } = await getProducts(filter));
   }
 
+  // The range's own Zoey list switches when it lists its own products, else the brand page's —
+  // key by key, so an unset range setting falls through (old site: 17 of 18 sampled ranges carry
+  // the brand page's switches, one differs — Tablekraft Atlantis shows buttons, the brand hides them).
+  const ownListing = readListingSettings(category && !rangeIsEmpty ? (category as { metafields?: unknown }).metafields : null);
+  const brandListing = readListingSettings((brand as { metafields?: unknown }).metafields);
+  const listing = {
+    add_to_cart: ownListing.add_to_cart ?? brandListing.add_to_cart,
+    compare: ownListing.compare ?? brandListing.compare,
+  };
+
   const heading =
     category && !rangeIsEmpty
       ? `${brand.name as string} — ${category.name as string}`
@@ -155,7 +166,18 @@ export default async function BrandCategoryPage({
       </div>
 
       {products.length > 0 ? (
-        <ProductGrid showCompare products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(products)} listId={`brand_${brand.slug ?? brand.id}`} listName={String(brand.name ?? "")} />
+        <ProductGrid
+          // Zoey's per-page list switches (IK parity, product cards): this range's own category
+          // setting, else the brand page's. Unset: buttons shown, compare hidden (Zoey's majority).
+          buyButtons={listing.add_to_cart !== false ? "listing" : undefined}
+          showCompare={listing.compare === true}
+          saleFlags
+          products={products}
+          memberPricingAvailable={memberPricingEnabled}
+          memberPriceMap={await getListingMemberPrices(products)}
+          listId={`brand_${brand.slug ?? brand.id}`}
+          listName={String(brand.name ?? "")}
+        />
       ) : (
         <p className="text-zinc-500 text-center py-12">
           {category

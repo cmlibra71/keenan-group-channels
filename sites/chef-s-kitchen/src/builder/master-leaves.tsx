@@ -7,6 +7,7 @@ import { useCartQuoteCounts, useHeaderPanels } from "@/lib/cart-quote-counts";
 import { trackAddedToCart } from "@/components/analytics/klaviyo";
 import { ga4SelectItem, ga4AddToCart, ga4ViewPromotion, ga4SelectPromotion, ga4ViewItemList } from "@/components/analytics/ga4";
 import type { NativeComponents } from "@keenan/services/builder-react";
+import { tileQuantity } from "./tile-quantity";
 
 // ============================================================================
 // The sealed native LEAVES the component masters place — the only app-tier
@@ -153,7 +154,8 @@ export function useAddToCartHandler() {
   return async (args: Record<string, unknown>) => {
     const id = num(args.productId);
     if (id == null) return { success: false, error: "no product" };
-    const res = await addToCart(id, undefined, 1);
+    const quantity = tileQuantity(args.quantity);
+    const res = await addToCart(id, undefined, quantity);
     // Nothing was added, so nothing is reported and no panel pops out. The
     // master's onError follow-up carries the refusal to the shopper.
     if (res && "error" in res && typeof res.error === "string") {
@@ -178,7 +180,7 @@ export function useAddToCartHandler() {
       sku: strOr(args.sku) ?? null,
       name: strOr(args.name) ?? `Product ${id}`,
       price: num(args.price) ?? null,
-      quantity: 1,
+      quantity,
     });
     ga4AddToCart({
       item_id: strOr(args.sku) ?? String(id),
@@ -186,7 +188,7 @@ export function useAddToCartHandler() {
       item_brand: strOr(args.brand),
       item_category: strOr(args.category),
       price: num(args.price) ?? undefined,
-      quantity: 1,
+      quantity,
     });
     return { success: true };
   };
@@ -204,7 +206,8 @@ export function useAddToQuoteHandler() {
   return async (args: Record<string, unknown>) => {
     const id = num(args.productId);
     if (id == null) return { success: false, error: "no product" };
-    const res = await addToQuote(id, null);
+    const quantity = tileQuantity(args.quantity);
+    const res = await addToQuote(id, null, null, null, quantity > 1 ? quantity : null);
     // Same as the cart handler above (card tkvntxsq): a required question the tile cannot
     // answer sends the shopper to the product page to answer it.
     const destination = tileRefusalDestination(res);

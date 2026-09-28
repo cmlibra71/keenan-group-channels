@@ -90,6 +90,9 @@ const _store = createChannelStore(CHANNEL_ID, unstable_cache, {
   topCategoriesLimit: 12,
   topCategoriesMaxDepth: 0,
   useCuratedUpsells: true,
+  // IK parity, product cards: this storefront's tiles follow Zoey's rules, so every listing row
+  // carries the Zoey tile facts (services `attachTileFacts`). Chefs Depot leaves it off.
+  zoeyTileFacts: true,
 });
 
 export const {

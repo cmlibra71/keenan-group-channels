@@ -26,3 +26,7 @@ test("no price and no from price: 0 (Call for Price)", () => {
   assert.deepEqual(cardPrice({ price: "0.0000", salePrice: null, fromPrice: null }), { list: 0, sale: null, from: false });
   assert.deepEqual(cardPrice({ price: null }), { list: 0, sale: null, from: false });
 });
+
+test("a sale printing the same as the price to the cent is not shown (AG FDF1200L3, display only)", () => {
+  assert.deepEqual(cardPrice({ price: "3681.8210", salePrice: "3681.82" }), { list: 3681.821, sale: null, from: false });
+});

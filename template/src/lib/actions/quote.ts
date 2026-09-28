@@ -119,7 +119,12 @@ export async function addToQuote(
    * `addToQuote` deliberately applies no member or quantity tier either. What they do is
    * travel, so the rep can see the configuration the customer was looking at.
    */
-  addons?: AddonSelectionInput | null
+  addons?: AddonSelectionInput | null,
+  /**
+   * How many to add, in units — a listing tile's quantity box (IK parity, product cards). Absent
+   * (every caller before it) adds one pack, exactly as before. Snapped up to whole packs.
+   */
+  quantity?: number | null
 ) {
   // getById returns snake_case — read sale_price (reading salePrice was undefined,
   // so quotes silently used RRP instead of the catalog sale price).
@@ -323,6 +328,11 @@ export async function addToQuote(
     sellPackUnit: product.sell_pack_unit ?? null,
   });
 
+  // One press adds one pack; a tile's quantity box asks for more (units, snapped up to packs).
+  const wantedUnits =
+    typeof quantity === "number" && Number.isInteger(quantity) && quantity > 1 ? Math.min(quantity, 10000) : null;
+  const addUnits = wantedUnits != null ? Math.max(packSize, snapToPack(wantedUnits, packSize)) : packSize;
+
   const existing = await quoteItemService.findByProductVariant(quote.id, productId, variantId) as {
     id: number;
     quantity: number;
@@ -375,7 +385,7 @@ export async function addToQuote(
       // `incrementsQuantity` is the generalised form of main's `reconfigured` — it covers a
       // bundle rebuild AND a change of paid extras (card 0CDcCYmO).
       quantity: incrementsQuantity
-        ? snapToPack(existing.quantity + packSize, packSize)
+        ? snapToPack(existing.quantity + addUnits, packSize)
         : existing.quantity,
       // MERGED into the existing bag, never over it: `attributes` has other owners
       // (quotes.md `quote-editor`), and a bundle re-configuration used to replace it whole.
@@ -392,7 +402,7 @@ export async function addToQuote(
     await quoteItemService.createForParent(quote.id, {
       productId,
       variantId: variantId || null,
-      quantity: packSize,
+      quantity: addUnits,
       listPrice,
       salePrice,
       // WHO PUT THIS PRICE HERE: the customer did, off the catalogue, through

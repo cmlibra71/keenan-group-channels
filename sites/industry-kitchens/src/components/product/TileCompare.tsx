@@ -10,8 +10,11 @@
 //   * the authored `product-card` master — as the sealed native `tile-compare`,
 //     placed by `builder/tile-compare-node.ts` beside each card with
 //     `productId` bound to the row (`props.card.id`), registered on the
-//     category and brand pages only (the old site's listings);
-//   * the React `ProductGrid` (search, clearance) — directly.
+//     category, brand and product pages, and hidden where the page's own Zoey
+//     list hid it (`context.listing.compare`, IK parity product cards);
+//   * the React `ProductGrid` — directly, where a call site asks (`showCompare`).
+//     Zoey's search and clearance lists carried no compare link, so those
+//     call sites no longer ask.
 // It sits OUTSIDE the tile's link, so neither state nests a control in an <a>.
 // ============================================================================
 

@@ -4,6 +4,7 @@ import type { NodeTree, BuilderNode } from "@keenan/services/builder";
 import {
   PRODUCT_CARD_KEY,
   TILE_COMPARE_KEY,
+  TILE_COMPARE_CONDITION,
   withTileCompareInComponents,
   withTileCompareNode,
 } from "./tile-compare-node.ts";
@@ -35,6 +36,11 @@ test("wraps the card and puts the compare control after it, OUTSIDE the link, bo
   assert.deepEqual((second as { props?: unknown }).props, {
     productId: { kind: "binding", path: "props.card.id" },
   });
+  // Hidden only where the page's own list hides compare (Zoey `hide-compare`).
+  assert.deepEqual((second as { condition?: unknown }).condition, {
+    kind: "expr",
+    source: TILE_COMPARE_CONDITION,
+  });
   // Never mutates the stored master.
   assert.equal(tree.root.kind === "element" && tree.root.tag, "a");
 });
@@ -53,4 +59,19 @@ test("the library: only product-card changes; no card, same map", () => {
   assert.equal(withTileCompareInComponents(out), out);
   const empty = { "price-block": other };
   assert.equal(withTileCompareInComponents(empty), empty);
+});
+
+test("the compare condition shows the link only where the page's Zoey list showed it (and on product rails)", async () => {
+  const { parseExpr, evalExpr } = await import("@keenan/services/builder");
+  const parsed = parseExpr(TILE_COMPARE_CONDITION);
+  assert.ok(parsed.ok);
+  if (!parsed.ok) return;
+  const shows = (compare: unknown, kind = "category") =>
+    !!evalExpr(parsed.ast, (p) => (p === "context.listing.compare" ? compare : p === "context.kind" ? kind : undefined));
+  assert.equal(shows(undefined), false, "an unharvested listing takes Zoey's majority: hidden");
+  assert.equal(shows(null), false, "setting not stored for this page");
+  assert.equal(shows(true), true, "Zoey showed compare on this list");
+  assert.equal(shows(false), false, "Zoey hid compare on this list");
+  assert.equal(shows(undefined, "product"), true, "the product page's rails carry it");
+  assert.equal(shows(undefined, "home"), false, "the home rails never did");
 });
