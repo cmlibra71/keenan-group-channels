@@ -1,7 +1,14 @@
 import { unstable_cache } from "next/cache";
 import { dropRemovedCategoryNames } from "@keenan/services";
 import {
+  applyChannelRulesToTileRows,
+  channelRulesOfRow,
+  type ChannelPurchaseRules,
+} from "@keenan/services/channel-rules";
+import { getSession } from "@/lib/auth";
+import {
   CHANNEL_ID,
+  getChannelRulesForProducts,
   getProducts,
   getRemovedCategoryNames,
   shouldSuppressCatalogSalePrice,
@@ -49,6 +56,24 @@ export type SearchChunk = {
   /** The source has nothing after this chunk. */
   exhausted: boolean;
 };
+
+/**
+ * This storefront's Zoey rules (`metafields.zoey_channel_rules[CHANNEL_ID]`, portal PR #1028) applied
+ * to a page of search results, exactly as the listing tiles apply them: a zero-price product shows no
+ * price ("Call for Price"), and a product the rules refuse the cart for this shopper carries
+ * `restrictAddToCart`. Only these derived facts leave the server — never the rules object. Meilisearch
+ * hits carry no rules, so they are read for the page in one query (`rulesById`); Postgres rows carry
+ * their own `channelRules` column. The session is read only for a page holding a guest-rule product.
+ */
+async function withChannelRules<T extends { id: number }>(
+  rows: T[],
+  rulesById?: Map<number, ChannelPurchaseRules>
+): Promise<T[]> {
+  const rules = rulesById ? [...rulesById.values()] : rows.map((r) => channelRulesOfRow(r));
+  const needsViewer = rules.some((r) => r?.guestQuoteOnly === true);
+  const viewer = needsViewer ? { loggedIn: (await getSession().catch(() => null)) != null } : null;
+  return applyChannelRulesToTileRows(rows, { rulesById, viewer });
+}
 
 /**
  * The one place the URL/action parameters become Meilisearch arguments.
@@ -113,10 +138,8 @@ export async function fetchSearchChunk(
     // Member-only pricing channels suppress the shared catalog sale price.
     const suppressSale = await shouldSuppressCatalogSalePrice();
     const consumed = result.hits.length;
-    return {
-      consumed,
-      exhausted: consumed < opts.limit || opts.offset + consumed >= result.estimatedTotalHits,
-      products: result.hits.map((hit) => ({
+    const rulesById = await getChannelRulesForProducts(result.hits.map((hit) => hit.id));
+    const mapped: SearchProduct[] = result.hits.map((hit) => ({
         id: hit.id,
         name: hit.name,
         urlPath: hit.urlPath,
@@ -127,7 +150,11 @@ export async function fetchSearchChunk(
           : null,
         restrictAddToCart: hit.restrictAddToCart === true,
         restrictAddToQuote: hit.restrictAddToQuote === true,
-      })),
+      }));
+    return {
+      consumed,
+      exhausted: consumed < opts.limit || opts.offset + consumed >= result.estimatedTotalHits,
+      products: rulesById.size > 0 ? await withChannelRules(mapped, rulesById) : mapped,
       total: result.estimatedTotalHits,
     };
   } catch {
@@ -169,7 +196,9 @@ export async function searchWithPostgres(
     return { products: [], total: 0, consumed: 0, exhausted: true };
   }
   const page = Math.floor(opts.offset / opts.limit) + 1;
-  const { products, total } = await cachedPostgresSearch(query.toLowerCase(), opts.limit, page);
+  const { products: rows, total } = await cachedPostgresSearch(query.toLowerCase(), opts.limit, page);
+  // The cached rows carry this channel's `channelRules` column; applied (and removed) per request.
+  const products = await withChannelRules(rows as unknown as SearchProduct[]);
   return {
     products,
     total,

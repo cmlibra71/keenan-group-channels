@@ -105,6 +105,8 @@ export const {
   getCategoryBySlug,
   getSubcategories: getSubcategoriesRaw,
   getCategoryStats,
+  // This storefront's Zoey rules for rows from a source that carries none (Meilisearch hits).
+  getChannelRulesForProducts,
   getCategoryBreadcrumbs,
   getProductBreadcrumbs,
   // Names of the categories REMOVED from this storefront (channel_settings

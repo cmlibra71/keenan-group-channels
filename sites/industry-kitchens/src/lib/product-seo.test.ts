@@ -225,3 +225,30 @@ test("a simple product's lone base variant (no option mappings) does not make it
 test("the JSON-LD script cannot close its own tag", () => {
   assert.equal(jsonLdScript({ name: "</script><b>" }).includes("</script>"), false);
 });
+
+// Zoey out-of-stock on this storefront (`zoey_channel_rules["1"].out_of_stock`, portal PR #1028):
+// the page keeps its price and only loses Add to Cart, so the structured data keeps its Offer and
+// marks it OutOfStock rather than dropping it (judge follow-up on channels #310).
+test("a Zoey out-of-stock product keeps its Offer, marked OutOfStock", () => {
+  const base = { name: "Jetstream glasswasher", price: "4990.00", availability: "available", url: "https://x/p" };
+  const oos = productJsonLd({ ...base, zoeyOutOfStock: true });
+  const offer = oos.offers as Record<string, unknown>;
+  assert.equal(offer["@type"], "Offer");
+  assert.equal(offer.price, "4990.00");
+  assert.equal(offer.availability, "https://schema.org/OutOfStock");
+  // Configurable: the AggregateOffer says the same.
+  const agg = productJsonLd({
+    ...base,
+    price: "0",
+    zoeyOutOfStock: true,
+    variants: [{ id: 1, price: "10" }, { id: 2, price: "20" }],
+    options: [{}],
+    variantOptionMappings: [{ variantId: 1 }, { variantId: 2 }],
+  }).offers as Record<string, unknown>;
+  assert.equal(agg["@type"], "AggregateOffer");
+  assert.equal(agg.availability, "https://schema.org/OutOfStock");
+  // No rule: availability from the product, as before.
+  assert.equal((productJsonLd(base).offers as Record<string, unknown>).availability, "https://schema.org/InStock");
+  // Zero-price (folded into hidePrice + restrictAddToCart by services) still publishes no Offer.
+  assert.equal(productJsonLd({ ...base, zoeyOutOfStock: true, hidePrice: true, restrictAddToCart: true }).offers, undefined);
+});
