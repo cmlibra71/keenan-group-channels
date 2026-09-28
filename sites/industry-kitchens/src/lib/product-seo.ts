@@ -112,6 +112,13 @@ export interface ProductOfferSource {
   restrictAddToCart?: boolean | null;
   availability?: string | null;
   /**
+   * Zoey's "Out of Stock" status on this storefront (`metafields.zoey_channel_rules[CHANNEL_ID]
+   * .out_of_stock`, portal PR #1028). The page still shows its price (only Add to Cart goes), so the
+   * structured data keeps its Offer and says `OutOfStock` — it does not drop the Offer the way a
+   * quote-only product does. Absent / false = the product's own availability decides.
+   */
+  zoeyOutOfStock?: boolean | null;
+  /**
    * The configurable half of the product row (`getProductBySlug`): its variants, options and the
    * variant→option mappings. The page is in "pick a variation" mode exactly when there are options
    * AND mappings (the purchase provider's `useGroupedMode`), and the pickable choices are the
@@ -185,6 +192,8 @@ export function publicPrice(product: ProductOfferSource): PublicPrice | null {
   return effective > 0 ? { low: effective, high: effective, count: 1, configurable: false } : null;
 }
 
+const OUT_OF_STOCK = "https://schema.org/OutOfStock";
+
 export function schemaAvailability(availability: string | null | undefined): string {
   switch ((availability ?? "available").toLowerCase()) {
     case "available":
@@ -249,7 +258,7 @@ export function productJsonLd(input: ProductJsonLdInput): Record<string, unknown
         priceCurrency: "AUD",
         valueAddedTaxIncluded: false,
       },
-      availability: schemaAvailability(input.availability),
+      availability: input.zoeyOutOfStock === true ? OUT_OF_STOCK : schemaAvailability(input.availability),
       itemCondition: schemaCondition(input.condition),
     };
   } else if (price != null) {
@@ -265,7 +274,7 @@ export function productJsonLd(input: ProductJsonLdInput): Record<string, unknown
         priceCurrency: "AUD",
         valueAddedTaxIncluded: false,
       },
-      availability: schemaAvailability(input.availability),
+      availability: input.zoeyOutOfStock === true ? OUT_OF_STOCK : schemaAvailability(input.availability),
       itemCondition: schemaCondition(input.condition),
     };
   }

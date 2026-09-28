@@ -24,7 +24,8 @@ import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductOfferTiers } from "@/components/product/ProductOfferTiers";
 import { readProductKit } from "@/lib/product-kit";
 import { readProductAddons } from "@keenan/services/product-addons";
-import { channelRulesOfRow, guestQuoteOnlyApplies } from "@keenan/services/channel-rules";
+import { channelRulesOfRow } from "@keenan/services/channel-rules";
+import { channelRulesRefuseCartFor } from "@/lib/product/channel-rule-cart";
 import { readOptionValueOrder } from "@keenan/services/product-option-order";
 import { ProductTabs } from "@/components/product/ProductTabs";
 import { ProductGrid } from "@/components/product/ProductGrid";
@@ -167,6 +168,8 @@ export default async function ProductPage({
     purchasingDisabled: cachedProduct.purchasingDisabled,
     restrictAddToCart: cachedProduct.restrictAddToCart,
     availability: cachedProduct.availability,
+    // Zoey out-of-stock keeps the Offer and marks it OutOfStock (the page keeps its price).
+    zoeyOutOfStock: channelRulesOfRow(cachedProduct, CHANNEL_ID)?.outOfStock === true,
     condition: cachedProduct.condition,
     // A configurable publishes its "Starting From" range, exactly as the page prices it.
     variants: cachedProduct.variants ?? [],
@@ -296,23 +299,15 @@ export default async function ProductPage({
         brand: brandRow?.name ?? null,
       },
       draft,
-      // Everything IK's sealed product natives need. The node branch fetches
-      // the bindable payload itself; these are the route's own reads, which it
-      // already does for the block path's RenderContext extras.
+      // What IK's sealed product natives READ — and nothing more, because this bag is handed to the
+      // client `BuilderProductPage` and serialised into the page. `product-natives.tsx` reads
+      // `data.kit` (and `data.cdMembership`, which the node branch adds); the bindable payload
+      // carries everything else. It used to also carry the whole product row and its `metafields`
+      // bag, none of it read, which put portal-owned internals (e.g. `zoey_channel_rules`) in the
+      // browser (judge follow-up on channels #312).
       nativeData: {
-        purchaseProduct: product,
-        memberPrice,
-        memberPriceMap,
-        isMember,
-        membershipTeaser,
-        reviews,
-        attachments,
-        description: product.description ?? null,
-        warranty: brandMeta.warranty_text ?? null,
-        customFields: (product.metafields as Record<string, unknown> | null) ?? null,
         // Grouped / bundle contents, for the sealed `product-kit` leaf.
         kit: readProductKit(product.metafields, CHANNEL_ID),
-        productId: product.id,
       },
     });
     // The node branch renders the JSON-LD it was handed; og:type rides beside it.
@@ -444,14 +439,12 @@ export default async function ProductPage({
           // `quote_only`): no Add to Cart at the head unit's partial price.
           //
           // This storefront's Zoey rules (portal PR #1028): `getProductBySlug` already folded
-          // zero-price and out-of-stock into `restrictAddToCart` / `hidePrice` for everyone; the
-          // GUEST quote-only rule is added here, where the session is known.
+          // zero-price into `restrictAddToCart` / `hidePrice`; out-of-stock and (for a guest) guest
+          // quote-only are added here (`channelRulesRefuseCartFor`).
           restrictAddToCart:
             product.restrictAddToCart === true ||
             readProductKit(product.metafields, CHANNEL_ID)?.quoteOnly === true ||
-            guestQuoteOnlyApplies(channelRulesOfRow(product), {
-              loggedIn: (await getSession().catch(() => null)) != null,
-            }),
+            (await channelRulesRefuseCartFor(product)),
           hidePrice: product.hidePrice === true,
           availability: product.availability ?? "available",
           descriptionShort: product.descriptionShort,

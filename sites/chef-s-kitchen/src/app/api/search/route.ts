@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchProducts } from "@keenan/services/search";
-import { shouldSuppressCatalogSalePrice } from "@/lib/store";
+import { getChannelRulesForProducts, shouldSuppressCatalogSalePrice } from "@/lib/store";
+import { applyChannelRulesToTileRows } from "@keenan/services/channel-rules";
 import { CHANNEL_ID } from "@/lib/channel";
 import { applyCatalogScope } from "@/lib/catalog-scope";
 import { parsePublicSearchParams } from "@/lib/search-params";
+import { getSession } from "@/lib/auth";
 
 /**
  * Fields this PUBLIC endpoint may serialise, as an ALLOWLIST.
@@ -108,6 +110,21 @@ export async function GET(request: NextRequest) {
       result.hits = result.hits.map((hit) =>
         "salePrice" in hit ? { ...hit, salePrice: null } : hit
       ) as typeof result.hits;
+    }
+
+    // This storefront's Zoey rules (`metafields.zoey_channel_rules[CHANNEL_ID]`, portal PR #1028):
+    // a zero-price product shows no price in the suggestions, exactly as its tile and page show
+    // none. The index carries no rules, so they are read for this page of hits in one query; a
+    // product with none for this channel (every Chefs Depot product) is untouched.
+    if (result.hits.length > 0) {
+      const rulesById = await getChannelRulesForProducts(result.hits.map((h) => h.id));
+      if (rulesById.size > 0) {
+        // The guest rule needs to know who is asking — read only when a hit carries it.
+        const viewer = [...rulesById.values()].some((r) => r.guestQuoteOnly)
+          ? { loggedIn: (await getSession().catch(() => null)) != null }
+          : null;
+        result.hits = applyChannelRulesToTileRows(result.hits, { rulesById, viewer }) as typeof result.hits;
+      }
     }
 
     // Narrow to the public field set LAST, so nothing added above can widen it.

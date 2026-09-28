@@ -17,7 +17,7 @@ import {
 import { getListingMemberPrices, applyAccountPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
 import { getSession } from "@/lib/auth";
-import { channelRuleEffects, channelRulesOfRow, type ChannelRuleViewer } from "@keenan/services/channel-rules";
+import { applyChannelRulesToTileRows, channelRulesOfRow } from "@keenan/services/channel-rules";
 import {
   ProductPurchaseProvider,
   type PurchaseProduct,
@@ -31,11 +31,7 @@ const str = (v: unknown): string => (typeof v === "string" ? v : "");
 const num = (v: unknown, d: number): number =>
   typeof v === "number" && Number.isFinite(v) ? v : d;
 
-function cardPurchaseProduct(p: AnyRecord, viewer: ChannelRuleViewer): PurchaseProduct {
-  // This storefront's Zoey rules ride listing rows as `channelRules` (portal PR #1028): zero-price
-  // hides the price and the cart, out-of-stock the cart, guest quote-only the cart for a guest.
-  // A row with no rules (every row today) is unchanged.
-  const rule = channelRuleEffects(channelRulesOfRow(p), viewer);
+function cardPurchaseProduct(p: AnyRecord): PurchaseProduct {
   return {
     id: p.id as number,
     name: (p.name as string) ?? "",
@@ -47,8 +43,8 @@ function cardPurchaseProduct(p: AnyRecord, viewer: ChannelRuleViewer): PurchaseP
     // Per-product buying controls (card 7vu2iEEZ). Unset reads as today's behaviour.
     backorderPolicy: (p.backorderPolicy as string) ?? null,
     restrictAddToQuote: p.restrictAddToQuote === true,
-    restrictAddToCart: p.restrictAddToCart === true || rule.cartRefused,
-    hidePrice: p.hidePrice === true || rule.priceHidden,
+    restrictAddToCart: p.restrictAddToCart === true,
+    hidePrice: p.hidePrice === true,
     availability: (p.availability as string) ?? "available",
     descriptionShort: null,
     images: [],
@@ -127,19 +123,24 @@ export async function CardPartialGrid({
       : getFeatureFlag("member_pricing_enabled").catch(() => false),
   ]);
   if (!cardSource) return null;
-  // Who is looking, for the guest quote-only rule — the session is read only when a row carries it.
-  const viewer: ChannelRuleViewer = {
+  // This storefront's Zoey rules ride listing rows as `channelRules` (portal PR #1028). Applied HERE,
+  // before either the provider or the card template sees a row: zero-price shows no price, and the
+  // rules that refuse the cart for this shopper set `restrictAddToCart`. The raw rules object is
+  // removed, so it never reaches the template data. The session is read only when a row carries the
+  // guest rule. A row with no rules (every row today) is unchanged.
+  const viewer = {
     loggedIn: products.some((p) => channelRulesOfRow(p)?.guestQuoteOnly)
       ? (await getSession().catch(() => null)) != null
       : false,
   };
+  products = applyChannelRulesToTileRows(products, { viewer });
 
   return (
     <div className={gridClassName}>
       {products.map((p) => (
         <ProductPurchaseProvider
           key={p.id as number}
-          product={cardPurchaseProduct(p, viewer)}
+          product={cardPurchaseProduct(p)}
           memberPrice={mpe ? priceMap[p.id as number] ?? null : null}
           isMember={false}
         >

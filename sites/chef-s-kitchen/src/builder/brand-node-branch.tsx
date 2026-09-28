@@ -20,6 +20,7 @@ import {
 } from "@keenan/services/builder";
 import { cmsFunctionService } from "@keenan/services/services";
 import { BuilderBrandPage, type BrandGridProduct } from "@/builder/BuilderBrandPage";
+import { applyChannelRulesToTileRows } from "@keenan/services/channel-rules";
 
 // ============================================================================
 // The brand template's Site Builder branch — ENGINE.
@@ -132,6 +133,15 @@ export async function renderBrandNodeBranch({
     draft,
   });
 
+  // This storefront's Zoey rules (`channelRules`, portal PR #1028) for the rows the CLIENT wrapper
+  // receives (grid, "load more", GA4 view_item_list): zero-price shows no price (GA4 reports none),
+  // the cart is refused per rule/viewer, and the raw rules object is removed so it never reaches the
+  // browser. The composer above reads `scoped` itself and strips the rules from its own tiles. No rules
+  // (every Chefs Depot row) ⇒ the rows are unchanged.
+  const clientRows = applyChannelRulesToTileRows(scoped, {
+    viewer: { loggedIn: memberCtx?.loggedIn === true || memberCtx?.isMember === true },
+  });
+
   const namedStyles = await getNamedStyles().catch(() => ({}));
   const components = (await (draft ? getDraftComponents() : getComponents()).catch(
     () => ({})
@@ -158,7 +168,7 @@ export async function renderBrandNodeBranch({
       <BuilderBrandPage
         tree={nodeTree}
         payload={payload}
-        products={scoped}
+        products={clientRows}
         pricing={pricing}
         memberPricingAvailable={memberPricingEnabled}
         namedStyles={namedStyles}
