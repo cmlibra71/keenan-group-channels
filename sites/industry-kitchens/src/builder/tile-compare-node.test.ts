@@ -61,16 +61,16 @@ test("the library: only product-card changes; no card, same map", () => {
   assert.equal(withTileCompareInComponents(empty), empty);
 });
 
-test("the compare condition keeps the link unless the page's list says compare: false", async () => {
+test("the compare condition shows the link only where the page's Zoey list showed it (and on product rails)", async () => {
   const { parseExpr, evalExpr } = await import("@keenan/services/builder");
   const parsed = parseExpr(TILE_COMPARE_CONDITION);
   assert.ok(parsed.ok);
   if (!parsed.ok) return;
   const shows = (compare: unknown, kind = "category") =>
     !!evalExpr(parsed.ast, (p) => (p === "context.listing.compare" ? compare : p === "context.kind" ? kind : undefined));
-  assert.equal(shows(undefined), true, "no listing settings (home, product page, unharvested page)");
-  assert.equal(shows(null), true, "setting not stored for this page");
-  assert.equal(shows(true), true);
+  assert.equal(shows(undefined), false, "an unharvested listing takes Zoey's majority: hidden");
+  assert.equal(shows(null), false, "setting not stored for this page");
+  assert.equal(shows(true), true, "Zoey showed compare on this list");
   assert.equal(shows(false), false, "Zoey hid compare on this list");
   assert.equal(shows(undefined, "product"), true, "the product page's rails carry it");
   assert.equal(shows(undefined, "home"), false, "the home rails never did");

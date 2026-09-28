@@ -101,7 +101,7 @@ export default async function ClearancePage({
             </p>
           ) : (
             <>
-              <ProductGrid buyButtons="listing" saleFlags products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(products)} listId="clearance" listName="Clearance" />
+              <ProductGrid buyButtons="listing" saleFlags showSku products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={await getListingMemberPrices(products)} listId="clearance" listName="Clearance" />
 
               {totalPages > 1 && (
                 <nav className="mt-10 flex flex-wrap items-center justify-center gap-2">

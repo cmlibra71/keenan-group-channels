@@ -30,6 +30,8 @@ interface ProductWithImage {
   priceSuffix?: string | null;
   /** services `attachTileFacts`: Zoey product type when not simple (a grouped tile draws no buttons). */
   zoeyType?: string | null;
+  /** services `attachFromPrices`: the configurable's choices differ in price ("Starting From:"). */
+  fromPriceVaries?: boolean;
   /** services `attachTierLows` (via `attachFromPrices` below): the lowest quantity-break price. */
   tierLowPrice?: string | null;
 }
@@ -142,9 +144,16 @@ export async function ProductGrid({
             memberPricingAvailable={memberPricingAvailable}
             memberPrice={memberPriceMap?.[product.id] ?? null}
             saleFlag={saleFlags}
+            fromPriceVaries={buyButtons ? product.fromPriceVaries === true : undefined}
+            // Zoey: a $0 tile says "POA" on a category-style list and nothing on search; a grouped
+            // product's tile prints no price at all.
+            zeroPriceText={buyButtons === "search" ? "" : buyButtons === "listing" ? "POA" : undefined}
+            hidePrice={buyButtons != null && product.zoeyType === "grouped"}
+            brandLine={buyButtons === "search" ? (product.brandName ?? null) : null}
             sku={product.sku ?? null}
             showSku={showSku}
-            priceSuffix={product.priceSuffix ?? null}
+            // Zoey's search tile prints no price suffix; its category tile does.
+            priceSuffix={buyButtons === "search" ? null : (product.priceSuffix ?? null)}
             tierLowPrice={product.tierLowPrice ?? null}
             listId={listId}
             listName={listName}

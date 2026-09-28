@@ -51,6 +51,15 @@ interface ProductCardProps {
    *   tierLowPrice— the lowest quantity-break price; "AS LOW AS:" when it undercuts the price shown.
    */
   saleFlag?: boolean;
+  /** Zoey prints "Starting From:" only when a configurable's choices differ in price. */
+  fromPriceVaries?: boolean;
+  /** What a $0 tile prints instead of a price: "POA" (Zoey category), "" (Zoey search — nothing).
+   *  Omitted: "Call for Price", as before. */
+  zeroPriceText?: string;
+  /** Zoey's search tile "Brand:" line. */
+  brandLine?: string | null;
+  /** Print no price at all (Zoey's grouped product tile). */
+  hidePrice?: boolean;
   sku?: string | null;
   showSku?: boolean;
   priceSuffix?: string | null;
@@ -62,7 +71,7 @@ interface ProductCardProps {
   listIndex?: number;
 }
 
-export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSalePrice, imageUrl, brandName, brandLogoUrl, brandLogoAlt, memberPricingAvailable, memberPrice, saleFlag, sku, showSku, priceSuffix, tierLowPrice, productId, listId, listName, listIndex }: ProductCardProps) {
+export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSalePrice, imageUrl, brandName, brandLogoUrl, brandLogoAlt, memberPricingAvailable, memberPrice, saleFlag, fromPriceVaries, zeroPriceText, brandLine, hidePrice, sku, showSku, priceSuffix, tierLowPrice, productId, listId, listName, listIndex }: ProductCardProps) {
   // A dead image file is invisible to the server — the row exists and the URL is
   // well formed — so the browser is the only place it can be caught. An errored
   // photo drops to the same fallback an imageless product gets; a logo that is
@@ -158,7 +167,12 @@ export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSaleP
             <span className="font-semibold">SKU:</span> {sku}
           </p>
         )}
-        {showMemberPrice ? (
+        {brandLine && (
+          <p className="text-xs text-zinc-600">
+            <span className="font-semibold">Brand:</span> {brandLine}
+          </p>
+        )}
+        {hidePrice ? null : showMemberPrice ? (
           <div className="mt-1">
             <div className="flex items-center gap-2">
               <Price amount={memberPrice} gst className="text-sm font-semibold text-green-700" />
@@ -172,11 +186,13 @@ export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSaleP
           </div>
         ) : (
           <div className="mt-1 flex flex-wrap items-center gap-x-2">
-            {startingFrom && displayPrice > 0 && (
+            {startingFrom && (fromPriceVaries ?? true) && displayPrice > 0 && (
               <span className="text-xs text-zinc-500">Starting From:</span>
             )}
             {displayPrice === 0 ? (
-              <span className="text-sm font-semibold text-zinc-900">Call for Price</span>
+              zeroPriceText === "" ? null : (
+                <span className="text-sm font-semibold text-zinc-900">{zeroPriceText ?? "Call for Price"}</span>
+              )
             ) : displaySalePrice ? (
               // Zoey's order: the struck-through was-price, then the sale price.
               <>
@@ -191,14 +207,14 @@ export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSaleP
             {suffix && <span className="text-sm font-semibold text-zinc-900">{suffix}</span>}
           </div>
         )}
-        {showTierLow && (
+        {!hidePrice && showTierLow && (
           <p className="mt-1 flex flex-wrap items-baseline gap-1 text-xs">
             <span className="font-semibold uppercase text-red-600">AS LOW AS:</span>
             <Price amount={tierLow} gst className="text-zinc-700" />
             {suffix && <span className="text-zinc-500">{suffix}</span>}
           </p>
         )}
-        {!showMemberPrice && memberPricingAvailable && displayPrice > 0 && (
+        {!hidePrice && !showMemberPrice && memberPricingAvailable && displayPrice > 0 && (
           <span className="mt-1 inline-block bg-green-50 text-green-700 px-2 py-0.5 rounded text-xs font-medium">
             Members save up to 25%
           </span>

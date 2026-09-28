@@ -168,9 +168,9 @@ export default async function BrandCategoryPage({
       {products.length > 0 ? (
         <ProductGrid
           // Zoey's per-page list switches (IK parity, product cards): this range's own category
-          // setting, else the brand page's. Unset ⇒ buttons and compare shown, as before a harvest.
+          // setting, else the brand page's. Unset: buttons shown, compare hidden (Zoey's majority).
           buyButtons={listing.add_to_cart !== false ? "listing" : undefined}
-          showCompare={listing.compare !== false}
+          showCompare={listing.compare === true}
           saleFlags
           products={products}
           memberPricingAvailable={memberPricingEnabled}

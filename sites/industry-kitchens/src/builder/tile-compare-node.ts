@@ -30,8 +30,9 @@ import type { NodeTree, BuilderNode } from "@keenan/services/builder";
 // configured per page, and MOST category lists hide the compare link (`hide-compare`); a few
 // show it (Chefs Hat, Lightfry). The page's switch reaches the tree as `context.listing.compare`
 // (services `listing-settings.ts`, from the category / brand `metafields.zoey_listing`), so the
-// placed node carries `context.listing.compare !== false`: a page with no stored setting keeps
-// the link, a page Zoey hid it on loses it.
+// placed node carries `context.listing.compare === true` on a listing: only a page whose Zoey list
+// SHOWED the link gets it — a page with no stored setting takes the majority answer (hidden:
+// 124 of 148 harvested categories hide it). The product page's rails keep it.
 //
 // The product page registers the native too: Zoey's related rail carries the link on most
 // product layouts (2 of 3 sampled). The home rails do not (old home page, 2026-09-28): the home
@@ -40,7 +41,7 @@ import type { NodeTree, BuilderNode } from "@keenan/services/builder";
 // ============================================================================
 
 /** The condition the placed compare node carries: hidden only where the page's list hides it. */
-export const TILE_COMPARE_CONDITION = 'context.kind != "home" && context.listing.compare !== false';
+export const TILE_COMPARE_CONDITION = 'context.kind == "product" || context.listing.compare === true';
 
 /** The native key the category/brand natives register. Not a master key. */
 export const TILE_COMPARE_KEY = "tile-compare";

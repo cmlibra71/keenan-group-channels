@@ -46,17 +46,28 @@ export function TileBuyButtons({
   const addToCart = useAddToCartHandler();
   const addToQuote = useAddToQuoteHandler();
   const [busy, setBusy] = useState<"cart" | "quote" | null>(null);
+  // A refusal the handler does not turn into a trip to the product page (quote-only, stock, a
+  // channel rule) is said on the tile, as the authored tile's toast says it — never a silent no-op.
+  const [refused, setRefused] = useState<string | null>(null);
 
   const run = async (which: "cart" | "quote") => {
     if (busy) return;
     setBusy(which);
+    setRefused(null);
     try {
-      if (which === "cart") await addToCart({ productId, name, sku, price, brand });
-      else await addToQuote({ productId });
+      const res = which === "cart" ? await addToCart({ productId, name, sku, price, brand }) : await addToQuote({ productId });
+      if (res && res.success === false) setRefused(which === "cart" ? "Could not add to basket" : "Could not add to quote");
+    } catch {
+      setRefused(which === "cart" ? "Could not add to basket" : "Could not add to quote");
     } finally {
       setBusy(null);
     }
   };
+  const note = refused ? (
+    <p role="status" className="text-center text-xs font-medium text-red-700" data-testid="tile-buy-refused">
+      {refused}
+    </p>
+  ) : null;
 
   const cartBtn = facts.cart ? (
     <button type="button" className={RED} disabled={busy != null} onClick={() => run("cart")} data-testid="tile-add-to-basket">
@@ -106,6 +117,7 @@ export function TileBuyButtons({
           {cartBtn}
         </>
       )}
+      {note}
     </div>
   );
 }
