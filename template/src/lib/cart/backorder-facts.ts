@@ -17,6 +17,7 @@ import { getCommerceClient } from "@keenan/services";
 import { CHANNEL_ID } from "@/lib/channel";
 import type { StockFacts } from "@keenan/services/backorder";
 import type { PackFacts } from "@keenan/services/pack";
+import { parseChannelRules, type ChannelPurchaseRules } from "@keenan/services/channel-rules";
 
 export type ProductBackorderFacts = StockFacts &
   PackFacts & {
@@ -27,6 +28,13 @@ export type ProductBackorderFacts = StockFacts &
     purchasingDisabledMessage: string | null;
     /** A hidden price behaves exactly like no price: quote only. */
     hidePrice: boolean;
+    /**
+     * THIS storefront's Zoey rules (`metafields.zoey_channel_rules[CHANNEL_ID]`, portal PR #1028):
+     * quote-only / out-of-stock refuse the cart for everyone, guest quote-only for a guest (see
+     * `lib/cart/online-purchase.ts`). Null when the product has none for this channel — every
+     * product until the portal backfill runs, and every product on Chefs Depot.
+     */
+    channelRules: ChannelPurchaseRules | null;
   };
 
 /**
@@ -55,11 +63,13 @@ export async function backorderFactsForProducts(
         hide_price: boolean | null;
         sell_pack_size: number | null;
         sell_pack_unit: string | null;
+        channel_rules: unknown;
       }[]
     >`
       SELECT id, inventory_tracking, inventory_level, backorder_policy, restrict_add_to_cart,
              (metafields -> 'channel_kits' -> ${String(CHANNEL_ID)} ->> 'quote_only') = 'true' AS kit_quote_only,
-             purchasing_disabled, purchasing_disabled_message, hide_price, sell_pack_size, sell_pack_unit
+             purchasing_disabled, purchasing_disabled_message, hide_price, sell_pack_size, sell_pack_unit,
+             metafields -> 'zoey_channel_rules' -> ${String(CHANNEL_ID)} AS channel_rules
         FROM products
        WHERE id = ANY(${ids})`;
     for (const row of rows) {
@@ -75,6 +85,9 @@ export async function backorderFactsForProducts(
         purchasingDisabled: row.purchasing_disabled === true,
         purchasingDisabledMessage: row.purchasing_disabled_message,
         hidePrice: row.hide_price === true,
+        // This storefront's Zoey rules, keyed by CHANNEL_ID like `channel_kits` above — the IK key
+        // never reaches another storefront. Judged with the viewer by `onlineOrderingOff`.
+        channelRules: parseChannelRules(row.channel_rules),
         // The SELLING UNIT rides the same batched read (cards O108e4jH / zeMPVcA3): the cart has
         // to snap a quantity to whole packs and say what a pack holds, and both callers of this
         // lookup already have the product in hand. `products.min_purchase_quantity` is NOT read —

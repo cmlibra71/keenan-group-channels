@@ -28,6 +28,7 @@ import {
   getCmsPage,
 } from "@/lib/store";
 import { getSession } from "@/lib/auth";
+import { channelRulesOfRow, guestQuoteOnlyApplies } from "@keenan/services/channel-rules";
 import { getAccountId } from "@/lib/member";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductTabs } from "@/components/product/ProductTabs";
@@ -83,6 +84,18 @@ function extrasOf(ctx?: RenderContext): ProductExtras {
 }
 
 const CONTAINER = "mx-auto max-w-7xl px-4 sm:px-6 lg:px-8";
+
+/**
+ * This storefront's Zoey GUEST quote-only rule (`metafields.zoey_channel_rules[CHANNEL_ID]`, portal
+ * PR #1028) for the shopper looking: a guest gets Add to Quote and no Add to Cart. The rules that hold
+ * for everyone (zero-price, out-of-stock) are already folded into the row by `getProductBySlug`. The
+ * session is only read for a product carrying the rule.
+ */
+async function guestRuleRefusesCart(product: ProductRecord): Promise<boolean> {
+  const rules = channelRulesOfRow(product);
+  if (!rules?.guestQuoteOnly) return false;
+  return guestQuoteOnlyApplies(rules, { loggedIn: (await getSession().catch(() => null)) != null });
+}
 
 async function crumbsFor(product: ProductRecord, extras: ProductExtras): Promise<Crumb[]> {
   if (extras.breadcrumbs) return extras.breadcrumbs;
@@ -206,7 +219,9 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
           // Per-product buying controls (card 7vu2iEEZ). Unset reads as today's behaviour.
           backorderPolicy: product.backorderPolicy ?? null,
           restrictAddToQuote: product.restrictAddToQuote === true,
-          restrictAddToCart: product.restrictAddToCart === true,
+          // This storefront's Zoey guest quote-only rule (the everyone-rules are already folded into
+          // the row by `getProductBySlug`) — see `guestRuleRefusesCart`.
+          restrictAddToCart: product.restrictAddToCart === true || (await guestRuleRefusesCart(product)),
           hidePrice: product.hidePrice === true,
           availability: product.availability ?? "available",
           descriptionShort: product.descriptionShort,
@@ -395,7 +410,7 @@ async function ProductOverviewBlock({ props, ctx }: BlockProps) {
     // Per-product buying controls (card 7vu2iEEZ). Unset reads as today's behaviour.
     backorderPolicy: product.backorderPolicy ?? null,
     restrictAddToQuote: product.restrictAddToQuote === true,
-    restrictAddToCart: product.restrictAddToCart === true,
+    restrictAddToCart: product.restrictAddToCart === true || (await guestRuleRefusesCart(product)),
     hidePrice: product.hidePrice === true,
     availability: product.availability ?? "available",
     descriptionShort: product.descriptionShort,

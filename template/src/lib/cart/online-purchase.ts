@@ -25,10 +25,19 @@
 // sentence the cart already shows for a restricted line (`CART_RESTRICTED_ERROR`), because it says
 // what to do instead: add it to a quote.
 //
+// THIS storefront's Zoey rules (`metafields.zoey_channel_rules[CHANNEL_ID]`, portal PR #1028) are
+// the fifth way: zero-price (`quote_only`) and Zoey out-of-stock refuse the cart for everyone, and
+// `guest_quote_only` refuses it for a GUEST — a signed-in customer buys as before. They refuse with
+// the restricted-line sentence (it says "add it to a quote", and no stock wording — card CXnP1lrL).
+// Only the guest rule needs to know who is asking (`viewer`); a caller that cannot say is treated as
+// a guest, which can only refuse a guest-restricted product, never admit one. A product with no rules
+// for this channel (every product until the backfill runs; every Chefs Depot product) is unaffected.
+//
 // Pure, so the rules are unit-tested (`online-purchase.test.ts`). Listed in
 // `orchestrator/shared-modules.json`: both storefronts refuse word for word.
 // ============================================================================
 
+import { channelRulesRefuseCart, type ChannelPurchaseRules, type ChannelRuleViewer } from "@keenan/services/channel-rules";
 import { CART_RESTRICTED_ERROR } from "./restricted-message";
 
 export interface OnlinePurchaseFlags {
@@ -37,20 +46,30 @@ export interface OnlinePurchaseFlags {
   hidePrice?: boolean | null;
   /** The chosen variant's own `purchasing_disabled`. */
   variantPurchasingDisabled?: boolean | null;
+  /** This storefront's Zoey rules (`lib/cart/backorder-facts.ts`); null/absent = none. */
+  channelRules?: ChannelPurchaseRules | null;
 }
+
+/** Who is buying — only the guest quote-only rule reads it. */
+export type OnlinePurchaseViewer = ChannelRuleViewer;
 
 /**
  * Staff switched this product off for online ordering, whatever it costs. Used for a
  * cart LINE too (the row marks itself and refuses an increase), where the price
  * is not re-read.
  */
-export function onlineOrderingOff(flags: OnlinePurchaseFlags | null | undefined): boolean {
+export function onlineOrderingOff(
+  flags: OnlinePurchaseFlags | null | undefined,
+  /** Who is buying — omitted reads as a guest (see the header). */
+  viewer?: OnlinePurchaseViewer | null
+): boolean {
   if (!flags) return false;
   return (
     flags.restrictAddToCart === true ||
     flags.purchasingDisabled === true ||
     flags.hidePrice === true ||
-    flags.variantPurchasingDisabled === true
+    flags.variantPurchasingDisabled === true ||
+    channelRulesRefuseCart(flags.channelRules, viewer)
   );
 }
 
@@ -72,11 +91,13 @@ export function refuseOnlinePurchase(
   flags: OnlinePurchaseFlags | null | undefined,
   unitPrice: number | null | undefined,
   /** services `purchasingDisabledMessage(product, variant)` — non-null means "quote only". */
-  purchasingMessage?: string | null
+  purchasingMessage?: string | null,
+  /** Who is buying — omitted reads as a guest (see the header). */
+  viewer?: OnlinePurchaseViewer | null
 ): string | null {
   const said = (purchasingMessage ?? "").trim();
   if (said) return said;
-  if (onlineOrderingOff(flags)) return CART_RESTRICTED_ERROR;
+  if (onlineOrderingOff(flags, viewer)) return CART_RESTRICTED_ERROR;
   if (unitPrice == null || !Number.isFinite(unitPrice) || unitPrice <= 0) return CART_RESTRICTED_ERROR;
   return null;
 }

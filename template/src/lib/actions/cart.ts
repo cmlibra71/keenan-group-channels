@@ -6,7 +6,7 @@ import { resolveAccountLinePrices, accountLineKey } from "@keenan/services";
 import { getAccountId } from "@/lib/member";
 import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { CART_RESTRICTED_ERROR } from "@/lib/cart/restricted-message";
-import { chargedUnitPrice, onlineOrderingOff, refuseOnlinePurchase } from "@/lib/cart/online-purchase";
+import { chargedUnitPrice, onlineOrderingOff, refuseOnlinePurchase, type OnlinePurchaseViewer } from "@/lib/cart/online-purchase";
 import { catalogLinePrices } from "@keenan/services/catalog-price";
 import { catalogPricingVariantId, loadVariantChoiceFacts, unchosenOptionsRefusal } from "@/lib/cart/variant-choice";
 import { purchasingDisabledMessage } from "@keenan/services/purchasing";
@@ -389,6 +389,15 @@ async function readAddonsForAdd(
  */
 const CART_QUANTITY_ERROR = "This product is not available in the requested quantity.";
 
+/**
+ * Who is buying, for this storefront's Zoey guest quote-only rule (`lib/cart/online-purchase.ts`):
+ * signed in or not. A failed session read is a guest — it can only refuse a guest-restricted
+ * product, never admit one.
+ */
+async function cartViewer(): Promise<OnlinePurchaseViewer> {
+  return { loggedIn: (await getSession().catch(() => null)) != null };
+}
+
 async function refuseCartQuantity(
   productId: number,
   quantity: number,
@@ -400,8 +409,11 @@ async function refuseCartQuantity(
   // default (services `purchasingDisabledMessage`, the same words the product page shows).
   const quoteOnly = purchasingDisabledMessage(facts);
   if (quoteOnly) return quoteOnly;
-  // Restricted or price hidden — see lib/cart/online-purchase.ts.
-  if (onlineOrderingOff(facts)) return CART_RESTRICTED_ERROR;
+  // Restricted, price hidden, or one of this storefront's Zoey rules (zero-price, out-of-stock, and
+  // guest quote-only for a guest) — see lib/cart/online-purchase.ts. The session is only read for a
+  // product that carries the guest rule, so the ordinary add pays nothing for it.
+  const viewer = facts.channelRules?.guestQuoteOnly ? await cartViewer() : undefined;
+  if (onlineOrderingOff(facts, viewer)) return CART_RESTRICTED_ERROR;
   if (!canPurchaseQuantity(facts, quantity)) return CART_QUANTITY_ERROR;
   return null;
 }
@@ -530,7 +542,10 @@ export async function addToCart(
     facts,
     chargedUnitPrice(basePricing),
     // Product OR chosen variant (services `isPurchasingDisabled`), with the page's own sentence.
-    purchasingDisabledMessage(facts, variantRow)
+    purchasingDisabledMessage(facts, variantRow),
+    // This storefront's Zoey guest quote-only rule needs to know who is buying (read only when the
+    // product carries it). `refuseCartQuantity` above already refused it; this keeps the two in step.
+    facts?.channelRules?.guestQuoteOnly ? await cartViewer() : undefined
   );
   if (quoteOnly) return { error: quoteOnly };
   const pricing = withAddonSurcharge(basePricing, resolvedAddons);
@@ -786,6 +801,11 @@ const readCart = cache(async () => {
   // what makes "2 of the items will be backordered" follow a click instead of lagging a round
   // trip behind it. `available_units` is null for an untracked product — no ceiling, not zero.
   const stock = await backorderFactsForProducts(visible.map((i) => i.product_id));
+  // Who is looking, for this storefront's Zoey guest quote-only rule on each line — read once, and
+  // only when some line carries that rule.
+  const lineViewer = [...stock.values()].some((f) => f.channelRules?.guestQuoteOnly)
+    ? await cartViewer()
+    : undefined;
 
   // OFFERS (card p6YVxc4P). The carton bands, the cross-range kicker and the fixed
   // bundles are worked out from the lines that will actually be charged — the same
@@ -818,7 +838,8 @@ const readCart = cache(async () => {
         // or reducing it stays allowed — see `refuseCartQuantity`.
         // Also true for the other quote-only switches (`purchasing_disabled`, a hidden price):
         // `refuseCartQuantity` refuses an increase for all three, so the row has to say why.
-        restrict_add_to_cart: onlineOrderingOff(facts),
+        // …and for this storefront's Zoey rules (zero-price, out-of-stock, guest quote-only for a guest).
+        restrict_add_to_cart: onlineOrderingOff(facts, lineViewer),
         // The SELLING UNIT, resolved once here (cards O108e4jH / zeMPVcA3), so the row can step
         // by a whole pack and say what a pack holds without a second lookup or a second opinion.
         pack_size: resolvePackSize(facts),

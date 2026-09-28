@@ -249,7 +249,11 @@ export async function placeOrder(
     // Restricted, Zoey "quote only" (`purchasing_disabled`) or price hidden — the same three
     // switches `addToCart` refuses (lib/cart/online-purchase.ts), so a line added before staff
     // flipped one still cannot be bought.
-    const restricted = lines.find((i) => onlineOrderingOff(stock.get(i.product_id)));
+    // …and this storefront's Zoey rules (zero-price, out-of-stock, and guest quote-only for a guest:
+    // `session` is who is placing the order).
+    const restricted = lines.find((i) =>
+      onlineOrderingOff(stock.get(i.product_id), { loggedIn: session != null })
+    );
     if (restricted) {
       return { error: restrictedCheckoutMessage(restricted.product_name) };
     }
