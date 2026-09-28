@@ -8,6 +8,7 @@ import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR }
 import { CART_RESTRICTED_ERROR } from "@/lib/cart/restricted-message";
 import { chargedUnitPrice, onlineOrderingOff, refuseOnlinePurchase } from "@/lib/cart/online-purchase";
 import { catalogLinePrices } from "@keenan/services/catalog-price";
+import { catalogPricingVariantId, loadVariantChoiceFacts, unchosenOptionsRefusal } from "@/lib/cart/variant-choice";
 import { purchasingDisabledMessage } from "@keenan/services/purchasing";
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice, subscriptionPlanService } from "@/lib/store";
 import { getCartUuid, setCartUuid } from "@/lib/cart";
@@ -152,8 +153,16 @@ async function layerItemPricing(
   // variant price ?? parent price, sale = the variant's own sale when it has its own price, else
   // variant sale ?? parent sale — and a sale only when 0 < sale < price. `getById` returns
   // snake_case; the helper reads either casing.
-  const variant = variantId
-    ? ((await productVariantService.getById(variantId)) as { price: string | null; sale_price: string | null } | null)
+  //
+  // ...and only a variant the page would PRICE is handed to it: the chosen variation of a
+  // configurable. A simple product's lone base variant is not a choice — the page prices the
+  // parent row, sale included — so a request naming it is priced the same way (IK judge wave 1:
+  // Robot Coupe 27382 charged its base variant's $1,050 against the page's $966). A failed facts
+  // read keeps the named variant, which is what this line always did (lib/cart/variant-choice.ts).
+  const choiceFacts = variantId ? await loadVariantChoiceFacts(productId) : null;
+  const pricingVariantId = choiceFacts ? catalogPricingVariantId(choiceFacts, variantId) : (variantId ?? null);
+  const variant = pricingVariantId
+    ? ((await productVariantService.getById(pricingVariantId)) as { price: string | null; sale_price: string | null } | null)
     : null;
   const catalog = catalogLinePrices(product, variant);
   let listPrice = catalog.listPrice;
@@ -397,6 +406,12 @@ async function refuseCartQuantity(
   return null;
 }
 
+/** The product page a refused tile add opens (`productPageForRefusal` judges the stored path). */
+async function productPageFor(productId: number): Promise<string | null> {
+  const row = (await productService.getById(productId).catch(() => null)) as { url_path?: string | null } | null;
+  return productPageForRefusal(row?.url_path);
+}
+
 export async function addToCart(
   productId: number,
   variantId?: number | null,
@@ -408,6 +423,21 @@ export async function addToCart(
   // "What we show is what we accept" — a product restricted away from this shopper is not addable,
   // even by poking the action directly (the listing/PDP guards are UX; THIS is the enforcement).
   if (!(await isProductVisibleToViewer(productId))) return { error: RESTRICTED_PRODUCT_ERROR };
+
+  // A CONFIGURABLE product is bought as one of its variations, never as the bare parent (IK judge
+  // wave 1: Durafurn Seattle went in at $54.00 with no Castors or Colour chosen). The page greys
+  // its buy buttons until every option is picked; a hand-posted add or a listing tile is refused
+  // here with the page's own sentence — before a cart is created for it.
+  {
+    const posted = addons != null;
+    const facts = await loadVariantChoiceFacts(productId);
+    const refusal = unchosenOptionsRefusal(facts, variantId, { posted });
+    if (refusal) {
+      if (posted) return refusal;
+      // The product page is looked up only for a refused TILE add, never on the ordinary path.
+      return unchosenOptionsRefusal(facts, variantId, { posted, productPage: await productPageFor(productId) }) ?? refusal;
+    }
+  }
 
   const cart = await getOrCreateCart();
 

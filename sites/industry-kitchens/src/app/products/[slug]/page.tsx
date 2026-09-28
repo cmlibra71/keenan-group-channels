@@ -68,11 +68,12 @@ export async function generateMetadata({
     title,
     description,
     alternates: { canonical: url },
+    // og:type is NOT set here — see OG_TYPE_PRODUCT. Next's typed `openGraph.type` has no
+    // "product", and without a `type` Next emits no og:type at all.
     openGraph: {
       title,
       description,
       url,
-      type: "website",
       siteName: "Industry Kitchens",
       locale: "en_AU",
       images,
@@ -85,6 +86,17 @@ export async function generateMetadata({
     },
   };
 }
+
+/**
+ * `og:type` = "product" (Open Graph's product object). The old site prints Zoey's
+ * `product.item` (the Facebook catalogue type); "product" is the Open Graph spec's own type and
+ * what Facebook's crawler maps a product page to, so we use it rather than copy Zoey's.
+ * Next's Metadata API cannot express it (its `openGraph.type` union stops at the video/music/
+ * article types, and `other` writes `name=`, not `property=`), so the tag is rendered here and
+ * React 19 hoists a `<meta>` into <head> wherever it appears. Rendered with the JSON-LD on
+ * every path the route returns.
+ */
+const OG_TYPE_PRODUCT = <meta property="og:type" content="product" />;
 
 export default async function ProductPage({
   params,
@@ -155,10 +167,17 @@ export default async function ProductPage({
     restrictAddToCart: cachedProduct.restrictAddToCart,
     availability: cachedProduct.availability,
     condition: cachedProduct.condition,
+    // A configurable publishes its "Starting From" range, exactly as the page prices it.
+    variants: cachedProduct.variants ?? [],
+    options: cachedProduct.options ?? [],
+    variantOptionMappings: cachedProduct.variantOptionMappings ?? [],
     url: productUrl,
   });
   const jsonLdTag = (
-    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }} />
+    <>
+      {OG_TYPE_PRODUCT}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }} />
+    </>
   );
 
   // Breadcrumb trail scoped to this channel's own category tree. A product's
@@ -295,7 +314,13 @@ export default async function ProductPage({
         productId: product.id,
       },
     });
-    if (nodeRendered) return nodeRendered;
+    // The node branch renders the JSON-LD it was handed; og:type rides beside it.
+    if (nodeRendered) return (
+      <>
+        {OG_TYPE_PRODUCT}
+        {nodeRendered}
+      </>
+    );
   }
 
   // ═══ CMS product TEMPLATE path (kill switch: flag off → legacy) ═══
