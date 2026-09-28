@@ -56,6 +56,7 @@ import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
 import { withBrandLogoFallback, targetsForChannel } from "@/builder/product-card-brand-logo";
 import { withPromoTagInComponents } from "@/builder/promo-tag-node";
+import { withTileCompareInComponents } from "@/builder/tile-compare-node";
 import { guardTileBuyControlsInComponents } from "@keenan/services/builder";
 import { withMemberScaleLabels } from "@/builder/member-scale-labels";
 import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
@@ -199,12 +200,24 @@ const BRAND_LOGO_TARGETS = targetsForChannel(CHANNEL_ID);
 const withTileBuyGuard = (components: ComponentMap): ComponentMap =>
   guardTileBuyControlsInComponents(components as Record<string, NodeTree>) as ComponentMap;
 
+/**
+ * "Add to Compare" beside every `product-card` tile (IK parity, compare-feature) — this
+ * site only, which is why it is composed HERE and not in shared code. The control itself
+ * is the `tile-compare` native, registered on the category and brand pages; see
+ * `builder/tile-compare-node.ts`. Runs last so it wraps the card every other transform
+ * has already finished.
+ */
+const withTileCompare = (components: ComponentMap): ComponentMap =>
+  withTileCompareInComponents(components as Record<string, NodeTree>) as ComponentMap;
+
 const withMasterTransforms = (components: ComponentMap): ComponentMap =>
-  withTileBuyGuard(
-    withPromoTagInComponents(
-      withBrandLogoFallback(components, BRAND_LOGO_TARGETS) as Record<string, NodeTree>,
-      PROMO_TAG_LABEL
-    ) as ComponentMap
+  withTileCompare(
+    withTileBuyGuard(
+      withPromoTagInComponents(
+        withBrandLogoFallback(components, BRAND_LOGO_TARGETS) as Record<string, NodeTree>,
+        PROMO_TAG_LABEL
+      ) as ComponentMap
+    )
   );
 
 /**

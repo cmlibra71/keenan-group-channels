@@ -26,6 +26,8 @@ import { withReviewsBlock, withReviewsBlockInComponents } from "@/builder/produc
 import { withResidentialNoticeNode } from "@/builder/product-residential-notice";
 import { withPackNoteNode } from "@/builder/product-pack-note";
 import { withModularNoticeNode } from "@/builder/modular-notice";
+import { withCompareNode } from "@/builder/compare-node";
+import { COMPARE_ENABLED } from "@/lib/compare-site";
 import { withUpsellBlock } from "@/builder/upsell-node";
 import { attachBrandLogos } from "@/lib/brand-logo-fallback";
 import { withCdMemberPricingNode } from "@/builder/cd-member-pricing-node";
@@ -241,7 +243,7 @@ export async function renderProductNodeBranch({
   const scaleWording = <T extends typeof SEED_PRODUCT_TREE>(tree: T): T =>
     scaleOn || HIDE_MEMBER_SAVING_PCT ? withMemberScaleLabelsInTree(tree, { relabelRrp: scaleOn }) : tree;
 
-  const nodeTree = guardBuyControls(
+  const composedTree = guardBuyControls(
     withCdMemberPricingNode(
       withUpsellBlock(
         // FIVE passes share the `actions-row` anchor and each one inserts BEFORE it, so
@@ -319,6 +321,11 @@ export async function renderProductNodeBranch({
       >
     )
   );
+  // Add to Compare (IK parity plan decision 12, root cause `compare-feature`) — directly under
+  // the buy row, on the one site whose switch is on (`lib/compare-site.ts`: Industry Kitchens).
+  // Placed AFTER the component library is read so an author who put the `product-compare`
+  // leaf inside a master this page places (e.g. `actions-row`) keeps their placement.
+  const nodeTree = withCompareNode(composedTree, { enabled: COMPARE_ENABLED, components });
   // CSS for AUTHORED classes: the static Tailwind sheet only covers classes in
   // this repo's source, so the portal compiles the channel's designer
   // vocabulary (arbitrary values, lg:/hover: variants, palette colours…) on

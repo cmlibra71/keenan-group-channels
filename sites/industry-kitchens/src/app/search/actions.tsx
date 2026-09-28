@@ -73,6 +73,7 @@ export async function loadMoreSearchResults(
   return {
     node: (
       <ProductGrid
+        showCompare
         products={products}
         memberPricingAvailable={memberPricingEnabled}
         memberPriceMap={await getListingMemberPrices(products)}

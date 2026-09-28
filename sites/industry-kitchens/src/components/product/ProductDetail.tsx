@@ -12,6 +12,7 @@ import Link from "next/link";
 import { AddToCartButton } from "./AddToCartButton";
 import { ProductAddons } from "./ProductAddons";
 import { AddToQuoteButton } from "./AddToQuoteButton";
+import { AddToCompare } from "./AddToCompare";
 import { OptionSelector } from "./OptionSelector";
 import { ProductCombinationNotice } from "./ProductCombinationNotice";
 import { Price } from "@/components/ui/Price";
@@ -290,6 +291,10 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
           />
         )}
       </div>
+
+      {/* Add to Compare (IK parity, compare-feature) — directly under the buy buttons, as the
+          node-tree page places it (`withCompareNode`), so the two renderers agree. */}
+      <AddToCompare productId={productId} />
     </div>
   );
 }
