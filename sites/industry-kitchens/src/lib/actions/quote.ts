@@ -12,7 +12,7 @@ import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
 import { readAcquisitionUtm } from "@/lib/acquisition";
 import { getSession } from "@/lib/auth";
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
-import { resolvePackSize, snapToPack } from "@keenan/services/pack";
+import { effectivePackFacts, readChannelPack, resolvePackSize, snapToPack } from "@keenan/services/pack";
 import {
   describeKitChoices,
   describeKitContents,
@@ -323,10 +323,17 @@ export async function addToQuote(
   // rule the cart applies — a quote the customer built must not ask for two pieces of something
   // that only ships in twelves. `resolvePackSize` returns 1 for everything else, so an ordinary
   // product still goes on one at a time.
-  const packSize = resolvePackSize({
-    sellPackSize: product.sell_pack_size ?? null,
-    sellPackUnit: product.sell_pack_unit ?? null,
-  });
+  // THIS storefront's own Zoey pack (`metafields.zoey_channel_pack[CHANNEL_ID]`) fills a product
+  // with no shared pack, exactly as the cart's facts and the product page read it.
+  const packSize = resolvePackSize(
+    effectivePackFacts(
+      {
+        sellPackSize: product.sell_pack_size ?? null,
+        sellPackUnit: product.sell_pack_unit ?? null,
+      },
+      readChannelPack(product.metafields, CHANNEL_ID)
+    )
+  );
 
   // One press adds one pack; a tile's quantity box asks for more (units, snapped up to packs).
   const wantedUnits =
