@@ -81,6 +81,7 @@ import { applyAccountPricesToCart } from "@/lib/checkout/account-prices";
 import { repriceGroupLinesForCheckout } from "@/lib/checkout/group-prices";
 import { goodsTotalMoved, PRICES_CHANGED_MESSAGE } from "@/lib/checkout/shown-total";
 import { decideOpenOrderReuse, EARLIER_PAYMENT_IN_PROGRESS_MESSAGE } from "@/lib/checkout/open-order-reuse";
+import { findOpenCardOrderForCart } from "@/lib/checkout/open-order";
 import { saveCheckoutAddressForContact } from "@/lib/contact-addresses";
 import { blockedProductIds } from "@/lib/catalog-scope";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
@@ -1188,31 +1189,15 @@ export async function placeOrder(
 
   // Idempotency guard for card payments: if THIS cart already has an open, unpaid
   // Stripe order (the shopper hit "Pay" twice, or retried after a network blip),
-  // reuse it rather than creating a second orphan awaiting_payment order. We match
-  // on the cart uuid stamped in order metafields. createStripePaymentIntent is
+  // reuse it rather than creating a second orphan awaiting_payment order. Found
+  // directly by the cart uuid stamped in order metafields (no recent-orders window). createStripePaymentIntent is
   // itself idempotent on (orderId, amount), so re-confirming returns a usable
   // client secret for the same order.
   if (effectivePaymentMethod === "stripe") {
     try {
-      const open = await orderService.list({
-        page: 1,
-        limit: 20,
-        sort: "id",
-        direction: "desc",
-        filters: {
-          channel_id: { type: "eq", value: CHANNEL_ID },
-          payment_status: { type: "eq", value: "awaiting_payment" },
-          ...(session?.contactId ? { contact_id: { type: "eq", value: session.contactId } } : {}),
-        },
-      });
-      const openForCart = (open.data as Array<{
-        id: number;
-        order_number: string;
-        customer_po?: string | null;
-        metafields?: Record<string, unknown> | null;
-        total_inc_tax?: string | number | null;
-        payment_provider_id?: string | null;
-      }>).find((o) => (o.metafields ?? {})?.cart_uuid === uuid);
+      // THE CART'S OWN ORDER, looked up directly by the cart uuid stamped on it — never a window of
+      // recent orders (lib/checkout/open-order.ts).
+      const openForCart = (await findOpenCardOrderForCart(uuid, session?.contactId ?? null)) ?? undefined;
       // REUSE ONLY AN IDENTICAL ORDER (lib/checkout/open-order-reuse.ts). A cart re-priced since the
       // first attempt — up or down — gets a FRESH order from its current lines; the stale one's intent
       // is cancelled at Stripe and the order cancelled. If that intent can no longer be cancelled the
