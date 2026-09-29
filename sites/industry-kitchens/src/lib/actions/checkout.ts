@@ -80,6 +80,7 @@ import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import { applyAccountPricesToCart } from "@/lib/checkout/account-prices";
 import { repriceGroupLinesForCheckout } from "@/lib/checkout/group-prices";
 import { goodsTotalMoved, PRICES_CHANGED_MESSAGE } from "@/lib/checkout/shown-total";
+import { decideOpenOrderReuse, EARLIER_PAYMENT_IN_PROGRESS_MESSAGE } from "@/lib/checkout/open-order-reuse";
 import { saveCheckoutAddressForContact } from "@/lib/contact-addresses";
 import { blockedProductIds } from "@/lib/catalog-scope";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
@@ -1204,9 +1205,40 @@ export async function placeOrder(
           ...(session?.contactId ? { contact_id: { type: "eq", value: session.contactId } } : {}),
         },
       });
-      const existing = (open.data as Array<{ id: number; order_number: string; customer_po?: string | null; metafields?: Record<string, unknown> | null }>).find(
-        (o) => (o.metafields ?? {})?.cart_uuid === uuid
-      );
+      const openForCart = (open.data as Array<{
+        id: number;
+        order_number: string;
+        customer_po?: string | null;
+        metafields?: Record<string, unknown> | null;
+        total_inc_tax?: string | number | null;
+        payment_provider_id?: string | null;
+      }>).find((o) => (o.metafields ?? {})?.cart_uuid === uuid);
+      // REUSE ONLY AN IDENTICAL ORDER (lib/checkout/open-order-reuse.ts). A cart re-priced since the
+      // first attempt — up or down — gets a FRESH order from its current lines; the stale one's intent
+      // is cancelled at Stripe and the order cancelled. If that intent can no longer be cancelled the
+      // money is already moving: start nothing new.
+      let existing = openForCart;
+      if (openForCart && decideOpenOrderReuse(openForCart.total_inc_tax, totalIncTax) === "replace") {
+        existing = undefined;
+        if (openForCart.payment_provider_id) {
+          const voided = await paymentService
+            .voidPayment(openForCart.id, { transaction_id: openForCart.payment_provider_id })
+            .catch((e: unknown) => ({ success: false, error: e instanceof Error ? e.message : String(e) }));
+          if (!voided.success) {
+            console.error("[placeOrder] stale open order's intent could not be cancelled — not replacing", {
+              orderId: openForCart.id,
+              error: (voided as { error?: unknown }).error,
+            });
+            return { error: EARLIER_PAYMENT_IN_PROGRESS_MESSAGE };
+          }
+        }
+        await orderService.update(openForCart.id, {
+          status: "canceled",
+          staffNotes: `Replaced at checkout by a new order: the cart was re-priced after this attempt (total ${String(
+            openForCart.total_inc_tax
+          )} → ${totalIncTax.toFixed(2)} inc GST).`,
+        });
+      }
       if (existing) {
         // The shopper may have added, corrected OR CLEARED their reference on the
         // retry — the box on the form is the truth, so an emptied box clears the
