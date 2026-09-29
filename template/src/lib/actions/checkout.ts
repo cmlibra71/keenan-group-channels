@@ -79,7 +79,7 @@ import {
 import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import { applyAccountPricesToCart } from "@/lib/checkout/account-prices";
 import { repriceGroupLinesForCheckout } from "@/lib/checkout/group-prices";
-import { GROUP_PRICES_UPDATED_MESSAGE } from "@/lib/checkout/group-prices-policy";
+import { goodsTotalMoved, PRICES_CHANGED_MESSAGE } from "@/lib/checkout/shown-total";
 import { saveCheckoutAddressForContact } from "@/lib/contact-addresses";
 import { blockedProductIds } from "@/lib/catalog-scope";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
@@ -123,6 +123,12 @@ import {
 
 type PlaceOrderResult = {
   error?: string;
+  /**
+   * The lines were re-priced after the page rendered (group / account prices, membership expiry):
+   * nothing was placed or charged, the corrected prices are saved, and the form refreshes the page
+   * so the shopper confirms the new total by pressing Pay again (lib/checkout/shown-total.ts).
+   */
+  pricesChanged?: boolean;
   stripe?: {
     clientSecret: string;
     orderNumber: string;
@@ -380,7 +386,7 @@ export async function placeOrder(
   // price we would not charge — so nothing is placed, the corrected prices are saved, and the
   // shopper reviews the new total first. No-op on a channel without `customer_group_pricing`.
   if ((await repriceGroupLinesForCheckout(cartWithItems.id, fullCart.items)) > 0) {
-    return { error: GROUP_PRICES_UPDATED_MESSAGE };
+    return { error: PRICES_CHANGED_MESSAGE, pricesChanged: true };
   }
 
   // Re-validate subscription status — if member pricing is enabled but subscription
@@ -475,7 +481,10 @@ export async function placeOrder(
             console.error("[placeOrder] failed to persist re-priced cart item (non-fatal):", e);
           }
         }
-        return { error: "Your membership has expired. Prices have been updated to standard pricing. Please review your order and try again." };
+        return {
+          error: "Your membership has expired. Prices have been updated to standard pricing. Please review your order and try again.",
+          pricesChanged: true,
+        };
       }
     }
   }
@@ -490,6 +499,13 @@ export async function placeOrder(
   }
 
   // Calculate line items + subtotal (pure; GST math delegated to gstSplit).
+  // SHOWN == CHARGED for the goods (lib/checkout/shown-total.ts): the page posted the goods total it
+  // rendered. Any re-price above that moved the money — including an account price reconciled
+  // silently — refuses here, with the new prices already saved, and the form refreshes the page.
+  if (goodsTotalMoved(formData.get("shown_goods_total"), fullCart.items)) {
+    return { error: PRICES_CHANGED_MESSAGE, pricesChanged: true };
+  }
+
   const built = buildLineItems(fullCart.items, pricesIncludeTax);
   const totalItems = built.itemsTotal;
 

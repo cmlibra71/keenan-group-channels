@@ -154,6 +154,7 @@ export function CheckoutForm({
   items,
   subtotal,
   grossSubtotal,
+  shownGoodsTotal,
   offerDiscount = 0,
   offerMessages = [],
   gstAmount,
@@ -187,6 +188,11 @@ export function CheckoutForm({
   subtotal: number;
   /** The goods total BEFORE offers; display only (card p6YVxc4P). */
   grossSubtotal?: number;
+  /**
+   * The goods total THIS render priced the lines at (`goodsTotalOf`), posted back so `placeOrder`
+   * refuses to charge if the lines were re-priced since (lib/checkout/shown-total.ts).
+   */
+  shownGoodsTotal?: number;
   /** What the offers took off, 2dp. */
   offerDiscount?: number;
   /** The engine's own sentences, so the checkout cannot paraphrase the cart. */
@@ -279,6 +285,13 @@ export function CheckoutForm({
   const router = useRouter();
   const { open: openPanel } = useHeaderPanels();
   const [state, formAction, isPending] = useActionState(placeOrder, null);
+  // RE-PRICED AT CHECKOUT: nothing was charged and the new prices are saved on the cart. Re-render
+  // the page so the lines and totals on screen are the ones the next press of Pay will charge —
+  // the shopper confirms by pressing Pay again (lib/checkout/shown-total.ts). The refreshed page
+  // also posts the new goods total, so only a press made AFTER the refresh can go through.
+  useEffect(() => {
+    if (state?.pricesChanged) router.refresh();
+  }, [state, router]);
   const [selectedAddressId, setSelectedAddressId] = useState<number | "new">(
     () => savedAddresses.find((a) => a.isDefaultBilling)?.id ?? "new"
   );
@@ -940,6 +953,9 @@ export function CheckoutForm({
           off), the total would silently rise. The server compares against this and refuses to
           charge more than the shopper saw. */}
       <input type="hidden" name="shown_offer_discount" value={offerDiscount.toFixed(2)} />
+      {shownGoodsTotal != null && (
+        <input type="hidden" name="shown_goods_total" value={shownGoodsTotal.toFixed(2)} />
+      )}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
         <div className="lg:col-span-3 space-y-6">
           {/* Contact */}

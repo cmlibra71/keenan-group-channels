@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decideGroupPriceWrite, GROUP_PRICES_UPDATED_MESSAGE } from "./group-prices-policy";
+import { decideGroupPriceWrite } from "./group-prices-policy";
 
 test("a line already at its group price is not rewritten — money compared to the cent, not as text", () => {
   const out = decideGroupPriceWrite({
@@ -33,8 +33,4 @@ test("a sale that disappears (record carries no special) is a change", () => {
   });
   assert.equal(out.changed, true);
   assert.equal(out.salePrice, null);
-});
-
-test("the message says nothing was charged", () => {
-  assert.match(GROUP_PRICES_UPDATED_MESSAGE, /Nothing was charged/);
 });

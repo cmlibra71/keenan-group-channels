@@ -31,7 +31,3 @@ function sameCents(a: string | null | undefined, b: string | null | undefined): 
   if (an == null || bn == null || !Number.isFinite(an) || !Number.isFinite(bn)) return an === bn;
   return an === bn;
 }
-
-/** What the shopper is told when checkout had to re-price a line to their group's list. */
-export const GROUP_PRICES_UPDATED_MESSAGE =
-  "Some prices in your cart have been updated to your account's pricing. Nothing was charged — please review your order and place it again.";

@@ -109,12 +109,20 @@ export async function createGuestContactForCheckout(
       const [row] = await sql<{ id: number }[]>`
         INSERT INTO contacts (
           account_id, origin_channel_id, email, password_hash,
-          first_name, last_name, phone, is_active, attributes, metafields
+          first_name, last_name, phone, is_active, attributes, metafields, customer_group_id
         ) VALUES (
           NULL, ${CHANNEL_ID}, ${email}, NULL,
           ${firstName}, ${lastName}, ${phone}, true,
           '{}'::jsonb,
-          ${asJsonText(guestContactMetafields())}::jsonb
+          ${asJsonText(guestContactMetafields())}::jsonb,
+          -- The storefront's default group, so a guest who later claims this contact is priced as
+          -- a customer (see lib/contact-auth.ts). NULL where the channel sets none.
+          (
+            SELECT cg.id FROM channel_settings cs
+            JOIN customer_groups cg ON cg.id = CASE WHEN (cs.setting_value #>> '{}') ~ '^[0-9]+$'
+                                                    THEN (cs.setting_value #>> '{}')::int END
+            WHERE cs.channel_id = ${CHANNEL_ID} AND cs.setting_key = 'default_customer_group_id'
+          )
         )
         RETURNING id`;
       return row?.id ?? null;

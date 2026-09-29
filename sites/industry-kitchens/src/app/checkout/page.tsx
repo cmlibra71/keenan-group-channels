@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { goodsTotalOf } from "@/lib/checkout/shown-total";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
 import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getMembershipNumber, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, getLadderConfig, CHANNEL_ID } from "@/lib/store";
@@ -585,6 +586,7 @@ export default async function CheckoutPage() {
         items={summaryItems}
         subtotal={subtotal}
         grossSubtotal={grossSubtotal}
+        shownGoodsTotal={goodsTotalOf(cart.items as Parameters<typeof goodsTotalOf>[0])}
         offerDiscount={offerDiscount}
         offerMessages={cartOffers?.messages ?? []}
         gstAmount={gstAmount}
