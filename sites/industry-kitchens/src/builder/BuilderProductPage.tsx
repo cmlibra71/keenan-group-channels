@@ -29,7 +29,7 @@ import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 import { productNatives } from "./product-natives";
 import { productFinanceOffer, productFinanceScope } from "@/lib/finance/product-finance";
 import { useFinanceRates } from "@/lib/finance/finance-rates-context";
-import { barQuantity, KIT_ADD_TO_QUOTE_EVENT, type KitAddToQuoteDetail } from "@/lib/product-kit";
+import { barQuantity, KIT_ADD_TO_QUOTE_EVENT, type KitAddToQuoteDetail } from "@/lib/kit-bar-event";
 
 // ============================================================================
 // The product page rendered from a node tree. Thin wrapper over the SHARED

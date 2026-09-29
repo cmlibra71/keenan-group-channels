@@ -236,6 +236,7 @@
     "lib/gst-cookie.test.ts",
     "lib/gst-cookie.ts",
     "lib/gst.tsx",
+    "lib/kit-bar-event.ts",
     "lib/guard/bots.test.ts",
     "lib/guard/bots.ts",
     "lib/guard/events.ts",
