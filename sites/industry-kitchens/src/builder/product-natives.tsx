@@ -73,7 +73,9 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
         brandName={brand?.name ?? null}
       />
     ),
-    "warranty-directory": () => <WarrantyDirectory />,
+    // Rows, title and intro from the channel's `warranty_directory` setting (C14) — the route reads
+    // it once into the bag; absent, the component shows the list it always shipped.
+    "warranty-directory": () => <WarrantyDirectory {...((data.warranty ?? {}) as Record<string, never>)} />,
     // Storewide ex/inc-GST switch, now that it has left the header. Sealed for
     // the same reason as the two above: it carries behaviour of its own (writes
     // the GST cookie, flips a site-wide React context). It sits in normal flow

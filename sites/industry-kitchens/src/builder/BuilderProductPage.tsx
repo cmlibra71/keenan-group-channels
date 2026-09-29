@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import BuilderImage from "./builder-image";
 import type { NodeTree, ProductPagePayload } from "@keenan/services/builder";
+import { componentRendersFor } from "@keenan/services/component-renders";
 import {
   ProductPurchaseProvider,
   useProductPurchase,
@@ -209,6 +210,25 @@ function ActionsBridge({
   // one is set (card XBOxpQmd). Identity-returning when the page carries no
   // form, which is almost every page.
   const confirmed = useFormConfirmations(tree, components);
+  // Does THIS template draw the extras panel for this product? Answered from the rendered tree
+  // itself — the same Show-if chain the renderer walks, on the same payload + scope — so the buy
+  // row's "no dead button" fact (`purchase.requiredQuestionsUnanswerable`) follows whatever the
+  // author did with the panel: moved, re-conditioned or deleted (IK hidden-conditionals batch 3,
+  // judge on batch 2). Deterministic, so server and browser agree on first paint.
+  const pageScope = React.useMemo(() => {
+    const drawn = componentRendersFor(
+      confirmed.tree as NodeTree,
+      confirmed.components as Record<string, NodeTree>,
+      "product-addons",
+      livePayload,
+      scope
+    );
+    const p = scope.purchase as Record<string, unknown>;
+    return {
+      ...scope,
+      purchase: { ...p, requiredQuestionsUnanswerable: p.requiredQuestionsWithoutDefault === true && !drawn },
+    };
+  }, [confirmed, livePayload, scope]);
   const actionHandlers = React.useMemo(
     () => ({
       ...handlers,
@@ -258,7 +278,7 @@ function ActionsBridge({
         nativeComponents={nativeComponents}
         linkComponent={Link as unknown as React.ComponentType<Record<string, unknown>>}
         imageComponent={BuilderImage}
-        scope={scope}
+        scope={pageScope}
       />
       {optionsPrompt ? (
         <div

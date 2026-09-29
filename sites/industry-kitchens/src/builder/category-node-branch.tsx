@@ -10,6 +10,7 @@ import {
   attachFromPrices,
 } from "@/lib/store";
 import { CHANNEL_ID } from "@/lib/channel";
+import { getListingDisplay } from "@/lib/listing-display";
 import { getMemberContext, applyAccountPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
 import { attachBrandLogos } from "@/lib/brand-logo-fallback";
@@ -109,6 +110,22 @@ export interface CategoryNodeBranchArgs {
  * Every read here is the same `cache()`d load the branch itself does, so calling
  * both on one request costs one fetch.
  */
+/**
+ * Does the authored Category Page Template place the WHOLE approved copy block — intro and
+ * questions — itself? It says so by declaring `seo-copy` in its root's `data-kg-template-owns`
+ * (IK hidden-conditionals C23). The route then prints only the questions' JSON-LD (structured data
+ * stays code-owned) and no foot block. Same flag gate and the same cached template read as above.
+ */
+export async function categoryTreeOwnsSeoCopy(draft: boolean): Promise<boolean> {
+  const catTemplate = (await getCmsTemplate("category_layout", draft).catch(() => null)) as {
+    node_tree?: unknown;
+  } | null;
+  const nodeTree = (catTemplate?.node_tree as NodeTree | null) ?? null;
+  if (!nodeTree?.root) return false;
+  if (!draft && !(await getFeatureFlag("node_category_template_enabled"))) return false;
+  return templateOwnedNames(nodeTree).has("seo-copy");
+}
+
 export async function categoryTreePlacesSeoCopy(draft: boolean): Promise<boolean> {
   const catTemplate = (await getCmsTemplate("category_layout", draft).catch(() => null)) as {
     node_tree?: unknown;
@@ -260,6 +277,9 @@ export async function renderCategoryNodeBranch({
     gst: { inclusive: gstInclusive, pricesIncludeTax },
     memberPricingAvailable: memberPricingEnabled,
     draft,
+    // Price-band wording and the sort list from Settings → Storefront Listings (S18); today's with
+    // no setting.
+    listingDisplay: await getListingDisplay(),
   });
 
   // This storefront's Zoey rules (`channelRules`, portal PR #1028) for the rows the CLIENT wrapper

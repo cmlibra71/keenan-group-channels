@@ -23,10 +23,13 @@ import { categoryRobots } from "@/lib/seo";
 import {
   renderCategoryNodeBranch,
   categoryTreePlacesSeoCopy,
+  categoryTreeOwnsSeoCopy,
 } from "@/builder/category-node-branch";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { assertCategoryVisible } from "@/lib/catalog-scope";
 import { redirectIfMapped } from "@/lib/redirect-seam";
+import { getListingDisplay } from "@/lib/listing-display";
+import { visibleSortOptions } from "@keenan/services/listing-display-settings";
 import { applyStorefrontFilters, enabledFilterIds } from "@/lib/storefront-filters";
 import {
   attributeParam,
@@ -75,6 +78,7 @@ export async function generateMetadata({
   };
 }
 
+/** Load-more step with no `storefront_listing_settings` (C25) — the portal setting wins. */
 const PER_PAGE = 24;
 const MAX_PAGES = 8; // "Load more" renders cumulatively; hard cap keeps queries sane.
 
@@ -196,6 +200,12 @@ export default async function CategoryPage({
     }
   }
 
+  // Page size from Settings → Storefront Listings (C25); 24 with no setting.
+  const listingDisplay = await getListingDisplay();
+  const perPage = listingDisplay.page_sizes.category ?? PER_PAGE;
+  // The sort labels and which options show come from Settings → Storefront Listings, the same
+  // setting the node-tree listing reads, so the fallback rail never keeps a hard-coded list.
+  const sortOptions = visibleSortOptions(listingDisplay);
   const [listing, subcategories, breadcrumbs, memberPricingEnabled] = await Promise.all([
     getCategoryListing(category.id, {
       page: 1,
@@ -208,7 +218,7 @@ export default async function CategoryPage({
       // the materialized base row may get (refreshed in the background once it
       // passes the live listings' own TTL), so "Stoddart (43)" and "showing 31"
       // can no longer disagree.
-      limit: PER_PAGE * page,
+      limit: perPage * page,
       subcategoryIds: filtersOn.has("sub") ? parseIds(sp.sub) : [],
       brandIds: filtersOn.has("brand") ? parseIds(sp.brand) : [],
       priceBands,
@@ -243,7 +253,7 @@ export default async function CategoryPage({
   const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
   // Both of these are per-request cached loads that only need `draft`, so they go
   // together rather than one after the other — "as long as it's fast to open".
-  const [cmsCat, seoCopyPlacedInTree] = await Promise.all([
+  const [cmsCat, seoCopyPlacedInTree, seoCopyOwnedByTree] = await Promise.all([
     getCmsCategoryPage(category.id, draft).catch(() => null),
     // Does the authored Category Page Template PLACE this storefront's own
     // approved wording itself (card nYxPgpvK)? The payload carries it as
@@ -252,6 +262,8 @@ export default async function CategoryPage({
     // copy across every category page, which is the cannibalisation this content
     // exists to avoid. The QUESTIONS are not placeable and stay where they are.
     categoryTreePlacesSeoCopy(draft),
+    // …or places the WHOLE block (intro + questions) — `seo-copy` declared (C23).
+    categoryTreeOwnsSeoCopy(draft),
   ]);
   const region = (r: string): RenderedBlock[] =>
     ((cmsCat?.blocks as unknown as RenderedBlock[]) ?? []).filter((b) => b.region === r);
@@ -266,7 +278,13 @@ export default async function CategoryPage({
     channel_seo_faq?: { question: string; answer_html: string; answer_text: string }[];
     channel_seo_faq_jsonld?: string;
   };
-  const categorySeo = (
+  // A template that places the whole block itself (C23) gets no foot block from here — only the
+  // questions' JSON-LD, which is structured data the route keeps owning.
+  const categorySeo = seoCopyOwnedByTree ? (
+    seo.channel_seo_faq_jsonld ? (
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: seo.channel_seo_faq_jsonld }} />
+    ) : null
+  ) : (
     <CategorySeo
       introHtml={seoCopyPlacedInTree ? undefined : seo.channel_seo_intro_html}
       faq={seo.channel_seo_faq}
@@ -355,6 +373,7 @@ export default async function CategoryPage({
             // storefront that opens on price (InEoeMZh). Without it the widget
             // falls back to Relevance and the control misreports the listing.
             defaultSort: defaultListingSort,
+            sortOptions,
             memberPriceMap,
             memberPricingEnabled,
             breadcrumbs,
@@ -517,7 +536,7 @@ export default async function CategoryPage({
               </p>
               <FilterChips facets={facets} />
             </div>
-            <SortSelect defaultSort={defaultListingSort} />
+            <SortSelect options={sortOptions} defaultSort={defaultListingSort} />
           </div>
 
           <ProductGrid
