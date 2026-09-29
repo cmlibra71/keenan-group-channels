@@ -28,20 +28,13 @@
  * `brand_1` (printed from the product row). Some have no live values today; they
  * cost nothing, and a row appears the day a product carries one.
  */
-export const COMPARABLE_ZOEY_ATTRIBUTES: ReadonlySet<string> = new Set([
-  "accessories_for_product", "apron_size", "bag_type", "bowl_type", "bratt_pan_type",
-  "bulk_quantity", "burger_box", "capacity", "coffee_machine_group_type", "compressor",
-  "cup_dispenser_mount_type", "cup_wall_type", "depth", "diameter", "door_type", "doors",
-  "drawers", "freezer_lid_door_type", "freezer_lid_doors", "fuel_type",
-  "fuel_type_catering_equipment_", "gantry", "heat_lamp_width", "hot_or_cold_serve",
-  "jug_type", "kg_production_24hrs", "length", "lid_size", "lid_type", "material",
-  "medium_or_coarse", "napkin_ply", "no_of_blades", "no_of_dispensers", "no_of_pumps",
-  "no_of_timer_channels", "paper_type", "plated_colour", "power", "pressure_cook_function",
-  "product_type", "rack_size", "resolution_increment", "series", "shelf_depth", "shelf_width",
-  "size", "sizing", "spoon_length", "storage", "surface_texture", "swanstone_colour",
-  "total_current_amps_", "tray", "tray_size", "type", "vacuum_bag_size", "vito_oil_filters",
-  "volume", "weight_1", "width", "width_1",
-]);
+/**
+ * The Zoey attributes the compare page shows by default — now owned by services (D18) beside the
+ * per-definition "Show on compare page" flag. Re-exported for existing readers and tests.
+ */
+import { comparableDefinitionsInOrder, DEFAULT_COMPARABLE_ZOEY_ATTRIBUTES } from "@keenan/services/catalog-compare";
+
+export const COMPARABLE_ZOEY_ATTRIBUTES: ReadonlySet<string> = DEFAULT_COMPARABLE_ZOEY_ATTRIBUTES;
 
 /** What Zoey prints in a cell the product has no value for. */
 export const MISSING_VALUE = "N/A";
@@ -55,6 +48,8 @@ export interface CompareFieldDefinition {
   sourceId: string | null;
   sortOrder: number;
   options?: unknown;
+  /** `custom_field_definitions.storefront_display` — its `compare` flag / order (D18). */
+  storefrontDisplay?: unknown;
 }
 
 /** One printed attribute row: its label and one cell per product, in column order. */
@@ -70,17 +65,13 @@ export function zoeyCodeOf(def: Pick<CompareFieldDefinition, "sourceId">): strin
   return id.startsWith(SOURCE_PREFIX) ? id.slice(SOURCE_PREFIX.length) : null;
 }
 
-/** The definitions the compare page prints, in Zoey's attribute order. */
+/**
+ * The definitions the compare page prints, in order: services `comparableDefinitionsInOrder` — a
+ * definition's own "Show on compare page" flag (D18) when staff set one, else today's Zoey set; the
+ * flag's order, else the definition's sort order.
+ */
 export function comparableDefinitions(defs: readonly CompareFieldDefinition[]): CompareFieldDefinition[] {
-  const seen = new Set<string>();
-  return defs
-    .filter((d) => {
-      const zoey = zoeyCodeOf(d);
-      if (!zoey || !COMPARABLE_ZOEY_ATTRIBUTES.has(zoey) || seen.has(d.code)) return false;
-      seen.add(d.code);
-      return true;
-    })
-    .sort((a, b) => a.sortOrder - b.sortOrder || a.code.localeCompare(b.code));
+  return comparableDefinitionsInOrder(defs);
 }
 
 /** A select field's stored value, shown by its option LABEL when the definition has one. */

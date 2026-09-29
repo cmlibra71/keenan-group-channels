@@ -126,9 +126,9 @@ async function readDefinitions(): Promise<CompareFieldDefinition[]> {
   // `product.fields` (services `restrictToDefinedFields`), so a value authored for another
   // storefront never shows here.
   const rows = await sql<
-    { code: string; label: string; source_id: string | null; sort_order: number; options: unknown }[]
+    { code: string; label: string; source_id: string | null; sort_order: number; options: unknown; storefront_display: unknown }[]
   >`
-    SELECT code, label, source_id, sort_order, options
+    SELECT code, label, source_id, sort_order, options, storefront_display
     FROM custom_field_definitions
     WHERE entity_type = 'product'
       AND is_active = true
@@ -139,6 +139,8 @@ async function readDefinitions(): Promise<CompareFieldDefinition[]> {
     sourceId: r.source_id,
     sortOrder: Number(r.sort_order) || 0,
     options: r.options,
+    // D18: the definition's "Show on compare page" flag and order.
+    storefrontDisplay: r.storefront_display,
   }));
 }
 

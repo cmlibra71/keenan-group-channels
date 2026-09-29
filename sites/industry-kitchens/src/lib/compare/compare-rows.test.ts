@@ -67,3 +67,15 @@ test("a select value prints its option label; blanks and odd shapes are empty", 
     { code: "doors", label: "Doors", values: ["2 Doors, 3"] },
   ]);
 });
+
+// D18 sub-batch 3: a definition's "Show on compare page" flag and order (storefront_display.compare).
+test("compare flag: a flag switches a row on or off and its order wins; unset = today's Zoey set", async () => {
+  const { buildCompareRows } = await import("./compare-rows.ts");
+  const defs = [
+    { code: "doors", label: "Doors", sourceId: "product-attr:doors", sortOrder: 5 },
+    { code: "fuel_type", label: "Fuel", sourceId: "product-attr:fuel_type", sortOrder: 1, storefrontDisplay: { compare: { enabled: false } } },
+    { code: "voltage", label: "Voltage", sourceId: null, sortOrder: 9, storefrontDisplay: { compare: { enabled: true, sort: 0 } } },
+  ];
+  const rows = buildCompareRows(defs, [{ doors: "2", fuel_type: "Gas", voltage: "240V" }]);
+  assert.deepEqual(rows.map((r) => r.code), ["voltage", "doors"]);
+});
