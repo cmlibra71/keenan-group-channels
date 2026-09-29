@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getListingDisplay } from "@/lib/listing-display";
+import { visibleSortOptions } from "@keenan/services/listing-display-settings";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import type { Metadata } from "next";
 import { draftMode, headers } from "next/headers";
@@ -250,6 +251,8 @@ export default async function BrandPage({
   // `?sort=` wins, including `?sort=relevance`; with nothing on the URL the
   // listing opens in THIS storefront's own order (card InEoeMZh).
   const sort = parseBrandSort(sp.sort, defaultListingSort);
+  // Sort labels / shown options from Settings → Storefront Listings (same setting as the node-tree listing).
+  const sortOptions = visibleSortOptions(await getListingDisplay());
 
   // This storefront's rail configuration (portal: Products > Filtering). A
   // switched-off facet must stop FILTERING, not merely displaying, so its URL
@@ -413,7 +416,7 @@ export default async function BrandPage({
               </p>
               <FacetChips groups={groups} />
             </div>
-            <SortSelect defaultSort={defaultListingSort} />
+            <SortSelect options={sortOptions} defaultSort={defaultListingSort} />
           </div>
 
           {products.length > 0 ? (

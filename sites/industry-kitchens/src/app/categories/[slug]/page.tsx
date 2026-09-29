@@ -29,6 +29,7 @@ import { ProductGrid } from "@/components/product/ProductGrid";
 import { assertCategoryVisible } from "@/lib/catalog-scope";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import { getListingDisplay } from "@/lib/listing-display";
+import { visibleSortOptions } from "@keenan/services/listing-display-settings";
 import { applyStorefrontFilters, enabledFilterIds } from "@/lib/storefront-filters";
 import {
   attributeParam,
@@ -200,7 +201,11 @@ export default async function CategoryPage({
   }
 
   // Page size from Settings → Storefront Listings (C25); 24 with no setting.
-  const perPage = (await getListingDisplay()).page_sizes.category ?? PER_PAGE;
+  const listingDisplay = await getListingDisplay();
+  const perPage = listingDisplay.page_sizes.category ?? PER_PAGE;
+  // The sort labels and which options show come from Settings → Storefront Listings, the same
+  // setting the node-tree listing reads, so the fallback rail never keeps a hard-coded list.
+  const sortOptions = visibleSortOptions(listingDisplay);
   const [listing, subcategories, breadcrumbs, memberPricingEnabled] = await Promise.all([
     getCategoryListing(category.id, {
       page: 1,
@@ -368,6 +373,7 @@ export default async function CategoryPage({
             // storefront that opens on price (InEoeMZh). Without it the widget
             // falls back to Relevance and the control misreports the listing.
             defaultSort: defaultListingSort,
+            sortOptions,
             memberPriceMap,
             memberPricingEnabled,
             breadcrumbs,
@@ -530,7 +536,7 @@ export default async function CategoryPage({
               </p>
               <FilterChips facets={facets} />
             </div>
-            <SortSelect defaultSort={defaultListingSort} />
+            <SortSelect options={sortOptions} defaultSort={defaultListingSort} />
           </div>
 
           <ProductGrid
