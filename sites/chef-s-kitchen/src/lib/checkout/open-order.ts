@@ -12,6 +12,8 @@ export interface OpenCardOrder {
   metafields: Record<string, unknown> | null;
   total_inc_tax: string | null;
   payment_provider_id: string | null;
+  /** Null = placed as a GUEST (see the guest-then-sign-in note below). */
+  contact_id: number | null;
 }
 
 /**
@@ -23,8 +25,16 @@ export interface OpenCardOrder {
  * retry wrote a second order beside it (judge round 3). No window now: whatever the order's age or
  * how many other shoppers are mid-payment, the cart finds its own order or there is none.
  *
- * A signed-in shopper only ever gets back an order stamped with THEIR contact — the same narrowing
- * the old lookup applied, so a cart uuid can never hand one person another person's order.
+ * NEVER A DEAD ORDER: a cancelled order (either spelling) or a voided payment is not an open order,
+ * even if its payment status was left `awaiting_payment` (a replaced order whose intent had no id to
+ * cancel keeps that status).
+ *
+ * GUEST THEN SIGN IN: a shopper who pressed Pay as a guest and then signed in to retry still owns
+ * that order — it carries this browser's cart uuid and no contact. So a signed-in lookup matches an
+ * order stamped with THEIR contact OR with no contact at all; `placeOrder` then either reuses it
+ * (stamping the contact on it) or replaces it (cancelling its payment, as for any re-priced order).
+ * An order stamped with ANOTHER person's contact is never returned, so a cart uuid can never hand
+ * one person another person's order. Their own order wins over a guest one when both exist.
  */
 export async function findOpenCardOrderForCart(
   cartUuid: string,
@@ -37,13 +47,14 @@ export async function findOpenCardOrderForCart(
   if (!sql) return null;
   const channelId = deps.channelId ?? CHANNEL_ID;
   const rows = (await sql`
-    SELECT id, order_number, customer_po, metafields, total_inc_tax::text AS total_inc_tax, payment_provider_id
+    SELECT id, order_number, customer_po, metafields, total_inc_tax::text AS total_inc_tax, payment_provider_id, contact_id
       FROM orders
      WHERE channel_id = ${channelId}
        AND payment_status = 'awaiting_payment'
+       AND lower(coalesce(status, '')) NOT IN ('canceled', 'cancelled', 'voided')
        AND metafields ->> 'cart_uuid' = ${cartUuid}
-       AND (${contactId ?? null}::int IS NULL OR contact_id = ${contactId ?? null}::int)
-     ORDER BY id DESC
+       AND (${contactId ?? null}::int IS NULL OR contact_id = ${contactId ?? null}::int OR contact_id IS NULL)
+     ORDER BY (contact_id IS NOT NULL) DESC, id DESC
      LIMIT 1`) as OpenCardOrder[];
   return rows[0] ?? null;
 }

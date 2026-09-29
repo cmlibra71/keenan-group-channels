@@ -1233,6 +1233,16 @@ export async function placeOrder(
         if (customerReference !== (existing.customer_po ?? null)) {
           await orderService.update(existing.id, { customerPo: customerReference });
         }
+        // GUEST THEN SIGN IN (lib/checkout/open-order.ts): the order was placed as a guest and the
+        // shopper has signed in since. Same cart, same money — claim it for them, so the order is on
+        // their account like the fresh one would have been. (A re-priced one was replaced above.)
+        if (existing.contact_id == null && session?.contactId) {
+          await orderService.update(existing.id, {
+            contactId: session.contactId,
+            // …and the group it is now priced at, as the fresh order would be stamped.
+            ...(pricedGroupId != null ? { customerGroupId: pricedGroupId } : {}),
+          });
+        }
         const { clientSecret, billingDetails } = await paymentService.createStripePaymentIntent(existing.id, {
           amount: String(totalIncTax),
           description: `Order ${existing.order_number}`,

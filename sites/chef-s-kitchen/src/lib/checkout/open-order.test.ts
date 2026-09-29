@@ -27,6 +27,7 @@ const order: OpenCardOrder = {
   metafields: { cart_uuid: "cart-abc" },
   total_inc_tax: "7548.7500",
   payment_provider_id: "pi_123",
+  contact_id: 42,
 };
 
 test("looks the cart's order up BY cart uuid — no row window, one row back", async () => {
@@ -36,8 +37,10 @@ test("looks the cart's order up BY cart uuid — no row window, one row back", a
   assert.equal(calls.length, 1);
   const q = calls[0].text;
   assert.match(q, /metafields ->> 'cart_uuid' = \?/);
+  // Never a dead order.
+  assert.match(q, /NOT IN \('canceled', 'cancelled', 'voided'\)/);
   assert.match(q, /payment_status = 'awaiting_payment'/);
-  assert.match(q, /ORDER BY id DESC\s+LIMIT 1/);
+  assert.match(q, /id DESC\s+LIMIT 1/);
   assert.doesNotMatch(q, /LIMIT 20/);
   assert.deepEqual(calls[0].values.slice(0, 2), [1, "cart-abc"]);
   // Signed in: narrowed to THIS contact.
@@ -59,4 +62,24 @@ test("placeOrder uses the direct lookup, not a list window", () => {
   const reuse = src.slice(src.indexOf("Idempotency guard for card payments"), src.indexOf("Create order — stamped with the CONTACT"));
   assert.doesNotMatch(reuse, /orderService\.list\(/);
   assert.doesNotMatch(reuse, /limit: 20/);
+});
+
+test("guest then sign in: a signed-in lookup also matches the cart's GUEST order (no contact), own order first", async () => {
+  const { client, calls } = fakeClient([{ ...order, contact_id: null }]);
+  const found = await findOpenCardOrderForCart("cart-abc", 42, { client, channelId: 1 });
+  assert.equal(found?.contact_id, null);
+  const q = calls[0].text;
+  // THEIR contact, or no contact — never another person's.
+  assert.match(q, /contact_id = \?::int OR contact_id IS NULL\)/);
+  assert.match(q, /ORDER BY \(contact_id IS NOT NULL\) DESC, id DESC/);
+});
+
+test("placeOrder claims a reused guest order for the signed-in shopper; a re-priced one is replaced first", () => {
+  const src = readFileSync(path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../actions/checkout.ts"), "utf8");
+  const replace = src.indexOf("decideOpenOrderReuse(openForCart.total_inc_tax, totalIncTax)");
+  const claim = src.indexOf("existing.contact_id == null && session?.contactId");
+  const intent = src.indexOf("paymentService.createStripePaymentIntent(existing.id");
+  assert.ok(replace !== -1 && claim !== -1 && intent !== -1);
+  assert.ok(replace < claim && claim < intent, "claim after the reuse decision, before the intent");
+  assert.match(src.slice(claim, intent), /contactId: session\.contactId/);
 });
