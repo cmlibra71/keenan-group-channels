@@ -127,7 +127,8 @@ test("real query (commerce_test, rolled back): override rows through backorderFa
 test("the guard's query reads the pack entry scoped to THIS channel", async () => {
   const { client, seen } = fakeClient([]);
   await backorderFactsForProducts([1], { client, channelId: IK });
-  assert.match(seen[0], /metafields -> 'zoey_channel_pack' -> \? AS channel_pack/);
+  // A person's pack for this storefront (channel_pack_override) outranks Zoey's (audit D12).
+  assert.match(seen[0], /COALESCE\(metafields -> 'channel_pack_override' -> \?, metafields -> 'zoey_channel_pack' -> \?\) AS channel_pack/);
 });
 
 test("a channel pack sells by the carton where no shared pack is set; a shared pack wins", async () => {

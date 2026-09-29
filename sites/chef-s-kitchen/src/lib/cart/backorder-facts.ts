@@ -66,7 +66,8 @@ export async function backorderFactsForProducts(
              (metafields -> 'channel_kits' -> ${String(channelId)} ->> 'quote_only') = 'true' AS kit_quote_only,
              purchasing_disabled, purchasing_disabled_message, hide_price, sell_pack_size, sell_pack_unit, qty_packaging_enabled, qty_increment_groups,
              metafields -> 'zoey_channel_rules' AS zoey_channel_rules,
-             metafields -> 'zoey_channel_pack' -> ${String(channelId)} AS channel_pack,
+             -- A person's pack for this storefront (channel_pack_override, audit D12) outranks Zoey's.
+             COALESCE(metafields -> 'channel_pack_override' -> ${String(channelId)}, metafields -> 'zoey_channel_pack' -> ${String(channelId)}) AS channel_pack,
              metafields -> 'channel_rule_overrides' AS channel_rule_overrides
         FROM products
        WHERE id = ANY(${ids})`) as unknown as {
