@@ -61,8 +61,8 @@ test("this storefront's Zoey rules (services channel-rules), per viewer", () => 
   assert.deepEqual(compareBuyButtons({ ...plain, channelRules: rules({ cartDisabled: true }), viewer: member }), { cart: false, quote: true, priceHidden: false, answerRequired: false });
   // quote_only ($0 / POA): price hidden too.
   assert.deepEqual(compareBuyButtons({ ...plain, channelRules: rules({ quoteOnly: true }), viewer: member }), { cart: false, quote: true, priceHidden: true, answerRequired: false });
-  // out of stock: no cart, quote stays (the product page's rule).
-  assert.equal(compareBuyButtons({ ...plain, channelRules: rules({ outOfStock: true }), viewer: member }).cart, false);
+  // out of stock: no cart AND no quote — the column copies Zoey's tile, which shows no button.
+  assert.deepEqual(compareBuyButtons({ ...plain, channelRules: rules({ outOfStock: true }), viewer: member }), { cart: false, quote: false, priceHidden: false, answerRequired: false });
   // guest quote-only: guests lose the cart, signed-in customers keep it; no viewer reads as a guest.
   assert.equal(compareBuyButtons({ ...plain, channelRules: rules({ guestQuoteOnly: true }), viewer: { loggedIn: false } }).cart, false);
   assert.equal(compareBuyButtons({ ...plain, channelRules: rules({ guestQuoteOnly: true }) }).cart, false);
