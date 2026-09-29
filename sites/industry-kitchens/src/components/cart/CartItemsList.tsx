@@ -63,6 +63,8 @@ export type CartItemRow = {
   pack_size?: number | null;
   /** False on Zoey's "multiples of N" (Enable Packaging off) — no package is named. */
   pack_packaging_on?: boolean | null;
+  /** Zoey's multiples-of-N: no pack line at all (`PackFacts.silentMultiples`). */
+  pack_note_silent?: boolean | null;
   pack_unit?: string | null;
   /**
    * What this line took from a promotion, resolved server-side in `readCart`
@@ -172,6 +174,7 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
     sellPackSize: item.pack_size ?? null,
     sellPackUnit: item.pack_unit ?? null,
     qtyPackagingEnabled: item.pack_packaging_on === false ? false : null,
+    silentMultiples: item.pack_note_silent === true,
   });
   const packUnit = resolvePackUnit({ sellPackUnit: item.pack_unit ?? null });
 

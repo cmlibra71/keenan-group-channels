@@ -39,6 +39,8 @@ export type QuoteItemRow = {
   /** Enable Packaging, channel-aware (`QuoteService.getWithItems`): false = "multiples of N". */
   product_qty_packaging_enabled?: boolean | null;
   product_qty_unit_label?: string | null;
+  /** Zoey's multiples-of-N from the quote's storefront entry: no pack line (`getWithItems`). */
+  product_pack_silent?: boolean | null;
 };
 
 export function QuoteItemsList({ items, onMutate }: { items: QuoteItemRow[]; onMutate?: () => void }) {
@@ -66,6 +68,7 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
     sellPackUnit: item.product_sell_pack_unit ?? null,
     qtyPackagingEnabled: item.product_qty_packaging_enabled ?? null,
     qtyUnitLabel: item.product_qty_unit_label ?? null,
+    silentMultiples: item.product_pack_silent === true,
   });
 
   const unitPrice = item.sale_price

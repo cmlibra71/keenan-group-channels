@@ -150,4 +150,6 @@ test("Zoey's multiples of N (Packaging off) reaches the cart as a pieces rule, n
   const facts = (await backorderFactsForProducts([11], { client: fakeClient([r]).client, channelId: IK })).get(11);
   assert.equal(facts?.sellPackSize, 8);
   assert.equal(facts?.qtyPackagingEnabled, false);
+  // Zoey names nothing beside a multiples box: the entry is marked silent for the cart row.
+  assert.equal(facts?.silentMultiples, true);
 });
