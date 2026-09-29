@@ -85,6 +85,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ revalidated: true });
   }
 
+  // kind "feature_flags" is the portal saving a channel setting that may be an
+  // on/off switch. getFeatureFlag reads every switch through one 60 s cache
+  // tagged `channel-${id}-feature-flags`; that tag is all that changed, so the
+  // broad channel bust (and its mega-menu recompute) is not warranted.
+  if (kind === "feature_flags") {
+    purge(`channel-${channelId}-feature-flags`);
+    return NextResponse.json({ revalidated: true });
+  }
+
   // Broad bust (covers nav/settings reads), then the page-specific tag.
   // kind "catalog" (the Zoey ingestor's storefront_revalidate node) is just
   // the broad bust: nav / category tree / product pages pick up ingest writes
