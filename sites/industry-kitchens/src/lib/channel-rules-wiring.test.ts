@@ -49,3 +49,18 @@ test("the product page hands the client natives only the kit — no product row,
   assert.match(bag, /kit: readProductKit\(product\.metafields, CHANNEL_ID\)/);
   assert.doesNotMatch(bag, /purchaseProduct|customFields|metafields as/);
 });
+
+test("the cart and checkout guards judge the EFFECTIVE rules (staff overrides included)", () => {
+  // backorderFactsForProducts reads both bags and scopes them with the services reader
+  // (lib/cart/backorder-facts.test.ts drives it with override rows).
+  const facts = read("lib/cart/backorder-facts.ts");
+  assert.match(facts, /metafields -> 'channel_rule_overrides' AS channel_rule_overrides/);
+  assert.match(facts, /channelRules: readChannelRules\(/);
+  assert.doesNotMatch(facts, /parseChannelRules\(row\./);
+  // Checkout's re-check runs those facts through onlineOrderingOff with who is placing the order.
+  const checkout = read("lib/actions/checkout.ts");
+  assert.match(checkout, /const stock = await backorderFactsForProducts\(/);
+  assert.match(checkout, /onlineOrderingOff\(stock\.get\(i\.product_id\), \{ loggedIn: session != null \}\)/);
+  // Add to cart reads the same facts.
+  assert.match(read("lib/actions/cart.ts"), /await backorderFactsForProduct\(productId\)/);
+});
