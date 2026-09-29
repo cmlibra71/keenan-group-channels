@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { permanentRedirect, redirect } from "next/navigation";
 import { draftMode, headers } from "next/headers";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import Image from "next/image";
@@ -13,10 +13,23 @@ import {
   // Product photographs a pictureless brand can borrow (InEoeMZh).
   getBorrowedImageCandidates,
   getCmsPage,
+  getCategoryById,
+  getCategorySubtreeIds,
+  getRedirectForPath,
 } from "@/lib/store";
 import { borrowedImageFor, ownersNeedingBorrowedImage } from "@/lib/borrowed-image";
 import type { ListingSort } from "@/lib/listing-sort";
 import { categorySlugCandidates } from "@/lib/legacy-address";
+import { normalizeLookupPath, relativeRedirectTarget } from "@/lib/redirect-path";
+import {
+  ZOEY_RANGE_PAGE_SIZE,
+  brandRangeRedirectTarget,
+  rangeBelongsToBrand,
+  rangeBrandCategoryId,
+  rangePageFromSearch,
+  rangePageHref,
+  rangePager,
+} from "@/lib/brand-range";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { renderBrandNodeBranch } from "@/builder/brand-node-branch";
@@ -37,12 +50,36 @@ async function firstCategoryOf(last: string) {
   return null;
 }
 
+/** The Zoey "Brands" root category (`/brands`) of the Main Catalog tree — every legacy brand
+ *  range is a category under it. */
+const BRANDS_ROOT_SLUG = "brands";
+
+/**
+ * A range under a RENAMED brand address (`/brands/chefworks/chef-shirts`): the brand's own
+ * `url_redirects` row (`/brands/chefworks` → `/brands/chef-works`) carries every range under it,
+ * range path kept. See `brandRangeRedirectTarget`. Returns only when nothing is mapped.
+ */
+async function redirectRangeOfRenamedBrand(slug: string, path: string[]): Promise<void> {
+  const brandPath = normalizeLookupPath(`/brands/${slug}`);
+  if (!brandPath) return;
+  const hit = await getRedirectForPath(brandPath);
+  const target = relativeRedirectTarget(brandRangeRedirectTarget(hit?.toPath, path));
+  if (!target || normalizeLookupPath(target) === normalizeLookupPath(`/brands/${slug}/${path.join("/")}`)) return;
+  const permanent = hit?.statusCode == null || hit.statusCode === 301 || hit.statusCode === 308;
+  if (permanent) permanentRedirect(target);
+  redirect(target);
+}
+
 export default async function BrandCategoryPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string; path: string[] }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { slug, path } = await params;
+  // Zoey paginates these lists at 36 with `?p=N` (IK parity); page 1 is the bare address.
+  const page = rangePageFromSearch(searchParams ? await searchParams : null);
 
   // The original Zoey URLs vary in depth (e.g.
   // /brands/<brand>/<cat>, /brands/<brand>/<parent>/<cat>). Use the deepest
@@ -53,7 +90,7 @@ export default async function BrandCategoryPage({
   // catalogue, so the reader gets a plausible-looking page of the wrong products.
   const last = path[path.length - 1] ?? "";
 
-  const [brand, category, memberPricingEnabled, defaultListingSort] = await Promise.all([
+  const [brand, category, memberPricingEnabled, defaultListingSort, brandsRoot] = await Promise.all([
     getBrandBySlug(slug),
     firstCategoryOf(last),
     getFeatureFlag("member_pricing_enabled"),
@@ -61,11 +98,14 @@ export default async function BrandCategoryPage({
     // leaving lists price high-to-low. There is no sort control on this page,
     // so the storefront's own default is the whole answer (card InEoeMZh).
     getDefaultListingSort(),
+    getCategoryBySlug(BRANDS_ROOT_SLUG),
   ]);
 
   if (!brand) {
     // A renamed brand address redirects rather than bare-404ing. (card EVvRDnZt)
     await redirectIfMapped(`/brands/${slug}/${path.join("/")}`);
+    // …else the brand's OWN address may be mapped (a renamed brand slug): take the range along.
+    await redirectRangeOfRenamedBrand(slug, path);
     // A RANGE under a brand we no longer carry — 379 of these in the legacy sitemap
     // (card InEoeMZh). One hop to the brand index, not two: `/brands/<dead>` would
     // only send the reader on again. A range under a brand we DO carry never gets
@@ -91,19 +131,47 @@ export default async function BrandCategoryPage({
 
   // If we can't resolve the category, fall back to brand-only products. This
   // gives the URL a sensible landing instead of 404.
+  // ═══ Which products: the Zoey range's own, when the range IS a Zoey brand range ═══
+  // A category under the Brands root whose brand category is this brand's (IK parity, brand
+  // ranges): list what Zoey lists — every product linked to the range or to a category under it,
+  // whatever brand row the product carries (`lib/brand-range.ts`). Anything else keeps the old
+  // rule: this brand's products in that category.
+  const brandCategoryId = rangeBrandCategoryId(
+    category as { id: number; path_ids?: unknown } | null,
+    (brandsRoot as { id?: number } | null)?.id ?? null
+  );
+  const brandCategory = brandCategoryId ? await getCategoryById(brandCategoryId) : null;
+  const zoeyRange =
+    !!category &&
+    rangeBelongsToBrand(
+      brandCategory as { slug?: string | null; name?: string | null } | null,
+      brand as { slug?: unknown; name?: unknown; metafields?: unknown },
+      slug
+    );
+
+  // `categoryIds` is passed straight through to `listForChannel` (which takes it); the store's
+  // option type does not name it, hence the widened local.
   const filter: {
-    brandId: number;
+    brandId?: number;
     categoryId?: number;
+    categoryIds?: number[];
+    page: number;
     limit: number;
     sort: ListingSort;
   } = {
     brandId: brand.id as number,
-    limit: 48,
+    page,
+    limit: ZOEY_RANGE_PAGE_SIZE,
     sort: defaultListingSort,
   };
-  if (category) filter.categoryId = category.id;
+  if (category && zoeyRange) {
+    delete filter.brandId;
+    filter.categoryIds = await getCategorySubtreeIds(category.id as number);
+  } else if (category) {
+    filter.categoryId = category.id;
+  }
 
-  let { products, total } = await getProducts(filter);
+  let { products, total } = await getProducts(filter as Parameters<typeof getProducts>[0]);
   // A range this brand has nothing in lands the same way an UNRESOLVED range
   // does — on the brand's own products, not on an empty page. 2,691 legacy
   // addresses arrive here and the pairing is Zoey's, not ours: `3 Monkeez ×
@@ -111,10 +179,14 @@ export default async function BrandCategoryPage({
   // grid under a heading naming both reads as "this shop has stopped carrying
   // it", which is a different and wrong claim. (InEoeMZh.)
   let rangeIsEmpty = false;
-  if (category && products.length === 0) {
+  // `total`, not this page's rows: a stale `?p=` past the end is not an empty range.
+  if (category && total === 0) {
     rangeIsEmpty = true;
     delete filter.categoryId;
-    ({ products, total } = await getProducts(filter));
+    delete filter.categoryIds;
+    filter.brandId = brand.id as number;
+    filter.page = 1;
+    ({ products, total } = await getProducts(filter as Parameters<typeof getProducts>[0]));
   }
 
   // The range's own Zoey list switches when it lists its own products, else the brand page's —
@@ -161,6 +233,11 @@ export default async function BrandCategoryPage({
       });
     }
   }
+
+  // Past the last page (a stale `?p=`): back to the range's first page rather than an empty grid.
+  const basePath = `/brands/${slug}/${path.join("/")}`;
+  if (page > 1 && products.length === 0 && total > 0) redirect(basePath);
+  const pager = rangePager(total, page);
 
   const heading =
     category && !rangeIsEmpty
@@ -224,6 +301,63 @@ export default async function BrandCategoryPage({
             ? `No ${brand.name as string} products in ${category.name as string}.`
             : `No products from ${brand.name as string} yet.`}
         </p>
+      )}
+
+      {pager && (
+        <nav aria-label="Pages" className="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
+          <p className="text-sm text-zinc-500">
+            Items {pager.from}-{pager.to} of {total}
+          </p>
+          <ol className="flex flex-wrap items-center gap-1.5 text-sm">
+            {pager.prev && (
+              <li>
+                <Link
+                  href={rangePageHref(basePath, pager.prev)}
+                  rel="prev"
+                  className="flex h-9 items-center rounded-md border border-zinc-200 px-3 text-zinc-700 hover:bg-zinc-50"
+                >
+                  Previous
+                </Link>
+              </li>
+            )}
+            {pager.items.map((item, i) =>
+              item.kind === "gap" ? (
+                <li key={`gap-${i}`} className="px-1 text-zinc-400">
+                  …
+                </li>
+              ) : (
+                <li key={item.page}>
+                  {item.current ? (
+                    <span
+                      aria-current="page"
+                      className="flex h-9 min-w-9 items-center justify-center rounded-md bg-zinc-900 px-3 font-medium text-white"
+                    >
+                      {item.page}
+                    </span>
+                  ) : (
+                    <Link
+                      href={rangePageHref(basePath, item.page)}
+                      className="flex h-9 min-w-9 items-center justify-center rounded-md border border-zinc-200 px-3 text-zinc-700 hover:bg-zinc-50"
+                    >
+                      {item.page}
+                    </Link>
+                  )}
+                </li>
+              )
+            )}
+            {pager.next && (
+              <li>
+                <Link
+                  href={rangePageHref(basePath, pager.next)}
+                  rel="next"
+                  className="flex h-9 items-center rounded-md border border-zinc-200 px-3 text-zinc-700 hover:bg-zinc-50"
+                >
+                  Next
+                </Link>
+              </li>
+            )}
+          </ol>
+        </nav>
       )}
     </div>
   );

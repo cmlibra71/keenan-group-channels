@@ -606,6 +606,30 @@ export const getCategories = async (...args: Parameters<typeof getCategoriesRaw>
 export const getSubcategories = async (...args: Parameters<typeof getSubcategoriesRaw>) =>
   applyBorrowedCategoryImages(await getSubcategoriesRaw(...args));
 
+/**
+ * A category and every visible category under it — the id set a Zoey ANCHOR category lists
+ * products from (brand range pages, `/brands/<brand>/<range>`). Walks the same cached,
+ * hidden-category-aware child read the subcategory tiles use; bounded so a malformed tree
+ * cannot loop.
+ */
+export async function getCategorySubtreeIds(categoryId: number): Promise<number[]> {
+  const seen = new Set<number>([categoryId]);
+  let frontier = [categoryId];
+  for (let depth = 0; depth < 8 && frontier.length > 0 && seen.size < 2000; depth++) {
+    const children = await Promise.all(frontier.map((id) => getSubcategoriesRaw(id)));
+    frontier = [];
+    for (const rows of children) {
+      for (const row of rows as Array<{ id: number }>) {
+        if (!seen.has(row.id)) {
+          seen.add(row.id);
+          frontier.push(row.id);
+        }
+      }
+    }
+  }
+  return [...seen];
+}
+
 /** GA4 Measurement ID (`G-XXXXXXXX`) for this channel — powers the gtag.js tag +
  *  client ecommerce funnel. Empty string when GA4 isn't configured (tag omitted). */
 export const getGa4MeasurementId = unstable_cache(
