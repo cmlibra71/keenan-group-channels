@@ -84,7 +84,7 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // Grouped / bundle contents (card 7bmpuqei). Sealed, not exploded: it holds the customer's
     // picks and sends them through with Add to Quote. Renders nothing for a product that is not a
     // kit, so the node is safe to leave in the template for every product.
-    "product-kit": () => {
+    "product-kit": (props?: Record<string, unknown>) => {
       // `data.kit` is ALREADY parsed: the product route parses metafields exactly
       // once (`nativeData: { kit: readProductKit(product.metafields) }`) — the
       // same way every other native receives its data. Re-parsing a ProductKit as
@@ -92,7 +92,15 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
       // contents never rendered (release-review blocker).
       const kit = (data.kit ?? null) as ProductKit | null;
       if (!kit) return null;
-      return <ProductKitNative kit={kit} productId={Number(product.id)} />;
+      // The button words are node props (audit D20): editable on the template, today's words when unset.
+      const str = (v: unknown) => (typeof v === "string" ? v : null);
+      return (
+        <ProductKitNative
+          kit={kit}
+          productId={Number(product.id)}
+          labels={{ priced: str(props?.label_priced), unpriced: str(props?.label_unpriced) }}
+        />
+      );
     },
     // SilverChef / Skope Funding weekly rental panel (card 6f47rFeT). Sealed
     // because the figure follows the LIVE purchase state — variant choice,
