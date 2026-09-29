@@ -64,7 +64,7 @@ export async function backorderFactsForProducts(
     const rows = (await sql`
       SELECT id, inventory_tracking, inventory_level, backorder_policy, restrict_add_to_cart,
              (metafields -> 'channel_kits' -> ${String(channelId)} ->> 'quote_only') = 'true' AS kit_quote_only,
-             purchasing_disabled, purchasing_disabled_message, hide_price, sell_pack_size, sell_pack_unit,
+             purchasing_disabled, purchasing_disabled_message, hide_price, sell_pack_size, sell_pack_unit, qty_packaging_enabled,
              metafields -> 'zoey_channel_rules' AS zoey_channel_rules,
              metafields -> 'zoey_channel_pack' -> ${String(channelId)} AS channel_pack,
              metafields -> 'channel_rule_overrides' AS channel_rule_overrides
@@ -81,6 +81,7 @@ export async function backorderFactsForProducts(
         hide_price: boolean | null;
         sell_pack_size: number | null;
         sell_pack_unit: string | null;
+        qty_packaging_enabled?: boolean | null;
         zoey_channel_rules: unknown;
         channel_rule_overrides: unknown;
         channel_pack: unknown;
@@ -119,6 +120,7 @@ export async function backorderFactsForProducts(
           {
             sellPackSize: row.sell_pack_size == null ? null : Number(row.sell_pack_size),
             sellPackUnit: row.sell_pack_unit,
+            qtyPackagingEnabled: row.qty_packaging_enabled ?? null,
           },
           readChannelPackEntry(row.channel_pack)
         ),

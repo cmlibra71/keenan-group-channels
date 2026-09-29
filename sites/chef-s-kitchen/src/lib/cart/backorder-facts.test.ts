@@ -143,3 +143,11 @@ test("a channel pack sells by the carton where no shared pack is set; a shared p
   const none = (await backorderFactsForProducts([9], { client: fakeClient([{ ...row(9, null, null), channel_pack: null }]).client, channelId: CD })).get(9);
   assert.equal(none?.sellPackSize, null);
 });
+
+test("Zoey's multiples of N (Packaging off) reaches the cart as a pieces rule, not a carton", async () => {
+  const entry = { sell_pack_size: 8, sell_pack_unit: null, qty_packaging_enabled: false, qty_unit_label: "Pcs" };
+  const r = { ...row(11, null, null), qty_packaging_enabled: null, channel_pack: entry };
+  const facts = (await backorderFactsForProducts([11], { client: fakeClient([r]).client, channelId: IK })).get(11);
+  assert.equal(facts?.sellPackSize, 8);
+  assert.equal(facts?.qtyPackagingEnabled, false);
+});

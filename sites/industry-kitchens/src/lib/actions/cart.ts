@@ -15,7 +15,7 @@ import { getCartUuid, setCartUuid } from "@/lib/cart";
 import { brandIdsForProducts } from "@/lib/checkout/free-shipping-brands";
 import { backorderFactsForProducts, backorderFactsForProduct, type ProductBackorderFacts } from "@/lib/cart/backorder-facts";
 import { availableUnits, canPurchaseQuantity, resolveBackorderPolicy } from "@keenan/services/backorder";
-import { resolvePackSize, resolvePackUnit, snapToPack } from "@keenan/services/pack";
+import { isPackagingOn, resolvePackSize, resolvePackUnit, snapToPack } from "@keenan/services/pack";
 import { getSession } from "@/lib/auth";
 import { currentShopperForOffers } from "@/lib/promotions/shopper";
 import { pickBestBulkUnit, layerCartPrice, memberPricingGroupId } from "@/lib/pricing/cart-pricing";
@@ -844,6 +844,9 @@ const readCart = cache(async () => {
         // by a whole pack and say what a pack holds without a second lookup or a second opinion.
         pack_size: resolvePackSize(facts),
         pack_unit: resolvePackUnit(facts),
+        // False on Zoey's "multiples of N" (Enable Packaging off): the row then says "Sold in
+        // multiples of N" and names no package or package price.
+        pack_packaging_on: isPackagingOn(facts),
         // What this line took from an offer, so the row can show it without a
         // second evaluation (card p6YVxc4P). Absent on a line that took nothing.
         offer_discount: offerByItem.get(i.id)?.discount ?? null,

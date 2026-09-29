@@ -36,6 +36,9 @@ export type QuoteItemRow = {
    */
   product_sell_pack_size?: number | null;
   product_sell_pack_unit?: string | null;
+  /** Enable Packaging, channel-aware (`QuoteService.getWithItems`): false = "multiples of N". */
+  product_qty_packaging_enabled?: boolean | null;
+  product_qty_unit_label?: string | null;
 };
 
 export function QuoteItemsList({ items, onMutate }: { items: QuoteItemRow[]; onMutate?: () => void }) {
@@ -61,6 +64,8 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
   const packNote = packNoteFor({
     sellPackSize: item.product_sell_pack_size ?? null,
     sellPackUnit: item.product_sell_pack_unit ?? null,
+    qtyPackagingEnabled: item.product_qty_packaging_enabled ?? null,
+    qtyUnitLabel: item.product_qty_unit_label ?? null,
   });
 
   const unitPrice = item.sale_price
