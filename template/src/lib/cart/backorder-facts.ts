@@ -17,7 +17,7 @@ import { getCommerceClient } from "@keenan/services";
 // Relative (not `@/lib/channel`) so the node test runner can load this module and drive the guard.
 import { CHANNEL_ID } from "../channel";
 import type { StockFacts } from "@keenan/services/backorder";
-import type { PackFacts } from "@keenan/services/pack";
+import { effectivePackFacts, readChannelPackEntry, type PackFacts } from "@keenan/services/pack";
 import { readChannelRules, type ChannelPurchaseRules } from "@keenan/services/channel-rules";
 
 export type ProductBackorderFacts = StockFacts &
@@ -66,6 +66,7 @@ export async function backorderFactsForProducts(
              (metafields -> 'channel_kits' -> ${String(channelId)} ->> 'quote_only') = 'true' AS kit_quote_only,
              purchasing_disabled, purchasing_disabled_message, hide_price, sell_pack_size, sell_pack_unit,
              metafields -> 'zoey_channel_rules' AS zoey_channel_rules,
+             metafields -> 'zoey_channel_pack' -> ${String(channelId)} AS channel_pack,
              metafields -> 'channel_rule_overrides' AS channel_rule_overrides
         FROM products
        WHERE id = ANY(${ids})`) as unknown as {
@@ -82,6 +83,7 @@ export async function backorderFactsForProducts(
         sell_pack_unit: string | null;
         zoey_channel_rules: unknown;
         channel_rule_overrides: unknown;
+        channel_pack: unknown;
       }[];
     for (const row of rows) {
       out.set(Number(row.id), {
@@ -108,8 +110,18 @@ export async function backorderFactsForProducts(
         // lookup already have the product in hand. `products.min_purchase_quantity` is NOT read —
         // it carries Zoey's number, which is a carton on some products and a minimum on others,
         // and we cannot tell which (see `@keenan/services/pack`).
-        sellPackSize: row.sell_pack_size == null ? null : Number(row.sell_pack_size),
-        sellPackUnit: row.sell_pack_unit,
+        //
+        // THIS storefront's own Zoey pack (`metafields.zoey_channel_pack[CHANNEL_ID]`, keyed like
+        // `channel_kits` above) fills a product with no shared pack — Industry Kitchens sells
+        // ~4,500 products by the carton in Zoey without the shared columns, which would change
+        // Chefs Depot's cart too. Chefs Depot has no entry, so this is the shared columns there.
+        ...effectivePackFacts(
+          {
+            sellPackSize: row.sell_pack_size == null ? null : Number(row.sell_pack_size),
+            sellPackUnit: row.sell_pack_unit,
+          },
+          readChannelPackEntry(row.channel_pack)
+        ),
       });
     }
   } catch (e) {

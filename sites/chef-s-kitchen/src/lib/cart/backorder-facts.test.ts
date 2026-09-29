@@ -121,3 +121,25 @@ test("real query (commerce_test, rolled back): override rows through backorderFa
     await sql.end();
   }
 });
+
+// THIS storefront's own Zoey pack (`metafields.zoey_channel_pack[CHANNEL_ID]`): the query scopes it
+// to the channel being served, so Chefs Depot's cart never receives Industry Kitchens' entry.
+test("the guard's query reads the pack entry scoped to THIS channel", async () => {
+  const { client, seen } = fakeClient([]);
+  await backorderFactsForProducts([1], { client, channelId: IK });
+  assert.match(seen[0], /metafields -> 'zoey_channel_pack' -> \? AS channel_pack/);
+});
+
+test("a channel pack sells by the carton where no shared pack is set; a shared pack wins", async () => {
+  const entry = { sell_pack_size: 12, sell_pack_unit: "Carton", qty_packaging_enabled: true, qty_unit_label: null };
+  const withPack = { ...row(7, null, null), channel_pack: entry };
+  const facts = (await backorderFactsForProducts([7], { client: fakeClient([withPack]).client, channelId: IK })).get(7);
+  assert.equal(facts?.sellPackSize, 12);
+  assert.equal(facts?.sellPackUnit, "Carton");
+  const shared = { ...row(8, null, null), sell_pack_size: 6, sell_pack_unit: "Box", channel_pack: entry };
+  const sharedFacts = (await backorderFactsForProducts([8], { client: fakeClient([shared]).client, channelId: IK })).get(8);
+  assert.equal(sharedFacts?.sellPackSize, 6);
+  // no entry for the channel (Chefs Depot): the shared columns, exactly as before
+  const none = (await backorderFactsForProducts([9], { client: fakeClient([{ ...row(9, null, null), channel_pack: null }]).client, channelId: CD })).get(9);
+  assert.equal(none?.sellPackSize, null);
+});
