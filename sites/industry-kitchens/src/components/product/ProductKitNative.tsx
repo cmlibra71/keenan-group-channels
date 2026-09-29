@@ -19,11 +19,13 @@ import { useBuilderLocalState } from "@keenan/services/builder-react";
 import { BUNDLE_CONFIGURED_STATE, bundleAmount } from "@keenan/services/zoey-bundle-price";
 import { useGst } from "@/lib/gst";
 import { ProductKitBlock } from "./ProductKitBlock";
-import { AddToQuoteButton } from "./AddToQuoteButton";
+import { AddToQuoteButton, useQuoteAdd } from "./AddToQuoteButton";
 import {
   defaultKitSelection,
   kitConfiguredPrice,
   kitSelectionReady,
+  KIT_ADD_TO_QUOTE_EVENT,
+  type KitAddToQuoteDetail,
   toKitChoices,
   toggleKitSelection,
   type KitSelection,
@@ -53,6 +55,27 @@ export function ProductKitNative({ kit, productId }: { kit: ProductKit; productI
     if (configuredDisplay) local?.setValue(BUNDLE_CONFIGURED_STATE, configuredDisplay);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configuredDisplay]);
+
+  // The template's fixed "Price as configured" bar (Zoey's bundle bar) adds THIS build: its
+  // ADD TO QUOTE raises KIT_ADD_TO_QUOTE_EVENT with its quantity, answered here with these picks
+  // through the same add as the button below. Unanswered required groups are refused, as the
+  // button below would be (it is disabled until they are answered).
+  const { add } = useQuoteAdd(productId);
+  useEffect(() => {
+    if (!isBundle) return;
+    const onAdd = (e: Event) => {
+      const d = (e as CustomEvent<KitAddToQuoteDetail>).detail;
+      if (!d || d.productId !== productId) return;
+      d.handled = true;
+      if (!ready) {
+        d.resolve({ error: "Please make your choices above before adding this to your quote." });
+        return;
+      }
+      void add({ kitChoices: toKitChoices(selection), quantity: d.quantity }).then(d.resolve);
+    };
+    window.addEventListener(KIT_ADD_TO_QUOTE_EVENT, onAdd);
+    return () => window.removeEventListener(KIT_ADD_TO_QUOTE_EVENT, onAdd);
+  }, [isBundle, productId, ready, selection, add]);
 
   return (
     <div>
