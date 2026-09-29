@@ -80,7 +80,8 @@ import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import { applyAccountPricesToCart } from "@/lib/checkout/account-prices";
 import { repriceGroupLinesForCheckout } from "@/lib/checkout/group-prices";
 import { goodsTotalMoved, PRICES_CHANGED_MESSAGE } from "@/lib/checkout/shown-total";
-import { decideOpenOrderReuse, EARLIER_PAYMENT_IN_PROGRESS_MESSAGE } from "@/lib/checkout/open-order-reuse";
+import { decideOpenOrderReuse, intentBlocksReuse, EARLIER_PAYMENT_IN_PROGRESS_MESSAGE } from "@/lib/checkout/open-order-reuse";
+import { resolveStampableOrderContactId } from "@keenan/services";
 import { findOpenCardOrderForCart } from "@/lib/checkout/open-order";
 import { saveCheckoutAddressForContact } from "@/lib/contact-addresses";
 import { blockedProductIds } from "@/lib/catalog-scope";
@@ -1266,6 +1267,17 @@ export async function placeOrder(
         // order too rather than leaving the first attempt's value on it. Safe to
         // write on its own: OrderService.beforeUpdate only moves status when
         // paymentStatus is part of the same update.
+        // MONEY ALREADY MOVING? (lib/checkout/open-order-reuse.ts `intentBlocksReuse`). Read the open
+        // order's intent live BEFORE touching it: a payment already succeeded / processing in another
+        // tab must not be claimed for someone else or have its addresses rewritten under it.
+        if (existing.payment_provider_id) {
+          const intentStatus = await paymentService
+            .getStripePaymentIntentStatus(existing.id, existing.payment_provider_id)
+            .catch(() => null);
+          if (intentBlocksReuse(intentStatus)) {
+            return { error: EARLIER_PAYMENT_IN_PROGRESS_MESSAGE };
+          }
+        }
         if (customerReference !== (existing.customer_po ?? null)) {
           await orderService.update(existing.id, { customerPo: customerReference });
         }
@@ -1274,7 +1286,20 @@ export async function placeOrder(
         // what they submitted THIS time, exactly as a fresh order would (open-order-refresh).
         // Best-effort in its OWN try: a failure here must not fall through to writing a second order.
         try {
-          await orderService.update(existing.id, { billingAddress });
+          // A GUEST retry (nobody signed in): the order's person follows the billing email exactly as
+          // a fresh guest order's does — the storefront's own passwordless contact for that address
+          // (`OrderService.beforeCreate`), else the guest-checkout contact made for it
+          // (`createGuestContactForCheckout`, as the fresh path does after writing the order). A
+          // guest who corrected their email must not leave the order linked to the contact for the
+          // OLD address — that person's "my orders" would show an order billed to someone else.
+          const guestContactId = session?.contactId
+            ? undefined
+            : ((await resolveStampableOrderContactId({ email, channelId: CHANNEL_ID, accountId: null })) ??
+              (await createGuestContactForCheckout({ email, firstName, lastName, phone }).catch(() => null)));
+          await orderService.update(existing.id, {
+            billingAddress,
+            ...(guestContactId !== undefined ? { contactId: guestContactId } : {}),
+          });
           const shipRows = (
             await orderShippingAddressService.listForParent(existing.id, { page: 1, limit: 1, sort: "id", direction: "asc" })
           ).data as Array<{ id: number }>;

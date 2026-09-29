@@ -103,7 +103,7 @@ test("a signed-in retry also matches the PASSWORDLESS guest-checkout contact for
 test("a reused open order is refreshed with THIS checkout's billing + delivery address, before the intent", () => {
   const src = readFileSync(path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../actions/checkout.ts"), "utf8");
   const decide = src.indexOf("decideOpenOrderReuse(openForCart.total_inc_tax, totalIncTax)");
-  const billing = src.indexOf("await orderService.update(existing.id, { billingAddress })");
+  const billing = src.indexOf("billingAddress,\n            ...(guestContactId !== undefined");
   const ship = src.indexOf("orderShippingAddressService.updateForParent(existing.id, shipRows[0].id, shippingAddressRow())");
   const intent = src.indexOf("paymentService.createStripePaymentIntent(existing.id");
   assert.ok(decide !== -1 && billing !== -1 && ship !== -1 && intent !== -1);
