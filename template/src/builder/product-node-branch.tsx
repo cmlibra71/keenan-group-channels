@@ -15,22 +15,11 @@ import { cmsFunctionService } from "@keenan/services/services";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { ProductOfferTiers } from "@/components/product/ProductOfferTiers";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
-import { withSilverChefNode } from "@/builder/silverchef-node";
-import { withItemIdNode } from "@/builder/item-id-node";
-import { withAddonsNode } from "@/builder/product-addons-node";
-import { withProductKitNode } from "@/builder/product-kit-node";
-import { withProductInstructionsNode } from "@/builder/product-instructions-node";
-import { withImageNoticeNode } from "@/builder/product-image-notice";
-import { withCombinationNoticeNode } from "@/builder/product-combination-notice";
-import { withReviewsBlock, withReviewsBlockInComponents } from "@/builder/product-reviews-node";
-import { withResidentialNoticeNode } from "@/builder/product-residential-notice";
-import { withPackNoteNode } from "@/builder/product-pack-note";
-import { withModularNoticeNode } from "@/builder/modular-notice";
+import { withReviewsBlockInComponents } from "@/builder/product-reviews-node";
 import { withCompareNode } from "@/builder/compare-node";
 import { COMPARE_ENABLED } from "@/lib/compare-site";
-import { withUpsellBlock } from "@/builder/upsell-node";
+import { composeProductPlacements, placementPassRuns } from "@/builder/product-placements";
 import { attachBrandLogos } from "@/lib/brand-logo-fallback";
-import { withCdMemberPricingNode } from "@/builder/cd-member-pricing-node";
 import { withMemberScaleLabelsInTree } from "@/builder/member-scale-labels";
 import { buildCdMembershipData, resolveCdLadderShare } from "@/lib/pricing/cd-member-pricing.server";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
@@ -243,50 +232,12 @@ export async function renderProductNodeBranch({
   const scaleWording = <T extends typeof SEED_PRODUCT_TREE>(tree: T): T =>
     scaleOn || HIDE_MEMBER_SAVING_PCT ? withMemberScaleLabelsInTree(tree, { relabelRrp: scaleOn }) : tree;
 
-  const composedTree = guardBuyControls(
-    withCdMemberPricingNode(
-      withUpsellBlock(
-        // FIVE passes share the `actions-row` anchor and each one inserts BEFORE it, so
-        // whichever runs LAST ends up nearest the buy buttons. The order is decided, not
-        // accidental:
-        //   * the UNMADE-COMBINATION sentence (card VNh9DdYd) is outermost, and therefore the
-        //     very last thing before the buttons — it explains a DEAD button, so nothing may
-        //     come between the two. CXnP1lrL took away every availability string that used to
-        //     explain one (`sf-product-page`).
-        //   * the PRICED EXTRAS (0CDcCYmO) come next: ticking one changes what Add to Cart
-        //     will charge, and a priced control belongs beside the button it moves.
-        //   * the free-text INSTRUCTIONS box (kyMjCmAw) sits above them — it describes what to
-        //     build and moves no money, so the priced control keeps the nearer place.
-        //   * the KIT CONTENTS (the sealed `product-kit` native, card 7bmpuqei — registered but
-        //     placed nowhere until the IK parity audit, 2026-09-28) sit below the pack note: what a
-        //     bundle holds, and for a bundle the picks its own Add to Quote carries. Renders null
-        //     for a product that is not a kit.
-        //   * the PACK NOTE (O108e4jH / zeMPVcA3) is innermost: a fact about the price, which
-        //     belongs with the price panel.
-        // Page order is therefore price -> pack sentence -> kit contents -> Instructions ->
-        // extras -> "we do not make that combination" -> buy row. `ProductDetail.tsx` (the non-node fallback
-        // renderer) is hand-ordered to match so the two renderers cannot disagree, and if any
-        // of these anchors moves they all move together (catalogue.md `sf-product-page`).
-        withCombinationNoticeNode(
-          withResidentialNoticeNode(
-            withAddonsNode(
-              withProductInstructionsNode(
-                withProductKitNode(
-                  withPackNoteNode(
-                    withModularNoticeNode(
-                      withReviewsBlock(
-                        withImageNoticeNode(withSilverChefNode(withItemIdNode(scaleWording(storedTree ?? SEED_PRODUCT_TREE))))
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-  );
+  // A placement the stored template declares it authors itself (`data-kg-template-owns` on its
+  // root) is never inserted here, so its node, position and Show-if belong to the CMS alone (IK
+  // hidden-conditionals audit, 2026-09-29). The order of the rest is the one described above —
+  // see `builder/product-placements.ts`.
+  const baseTree = scaleWording(storedTree ?? SEED_PRODUCT_TREE);
+  const composedTree = guardBuyControls(composeProductPlacements(baseTree));
 
   // The panel's data, resolved ONCE per request. A sealed native cannot read the
   // database, so the prices and this shopper's ladder position ride the route's own
@@ -325,7 +276,10 @@ export async function renderProductNodeBranch({
   // the buy row, on the one site whose switch is on (`lib/compare-site.ts`: Industry Kitchens).
   // Placed AFTER the component library is read so an author who put the `product-compare`
   // leaf inside a master this page places (e.g. `actions-row`) keeps their placement.
-  const nodeTree = withCompareNode(composedTree, { enabled: COMPARE_ENABLED, components });
+  const nodeTree = withCompareNode(composedTree, {
+    enabled: COMPARE_ENABLED && placementPassRuns(baseTree, "compare"),
+    components,
+  });
   // CSS for AUTHORED classes: the static Tailwind sheet only covers classes in
   // this repo's source, so the portal compiles the channel's designer
   // vocabulary (arbitrary values, lg:/hover: variants, palette colours…) on

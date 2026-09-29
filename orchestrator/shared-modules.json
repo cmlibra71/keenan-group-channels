@@ -73,6 +73,8 @@
     "builder/product-kit-node.ts",
     "builder/product-node-branch.tsx",
     "builder/product-pack-note.test.ts",
+    "builder/product-placements.test.ts",
+    "builder/product-placements.ts",
     "builder/product-pack-note.ts",
     "builder/product-residential-notice.test.ts",
     "builder/product-residential-notice.ts",

@@ -147,7 +147,7 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // purchase state — they move the headline price, the weekly finance figure and what
     // Add to Cart sends — and an authored tree can hold neither state nor money. Renders
     // nothing for a product with no extras, so the node is safe on every product page.
-    "product-addons": () => <ProductAddons />,
+    "product-addons": () => <ProductAddons optionalRadioNone />,
     // "Add to Compare" / "View Compare" + "Compare products here" (IK parity plan decision 12,
     // root cause `compare-feature`). Sealed because the visitor's compare list is client state
     // (a cookie) that an authored tree cannot hold. Placed under the buy row by the shared
