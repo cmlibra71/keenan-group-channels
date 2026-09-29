@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { NodeTree } from "@keenan/services/builder";
-import { brandTemplateProductGrid, rangeListingSettings } from "./brand-range-grid.ts";
+import { brandTemplateProductGrid, rangeListingSettings, rangeListingSource } from "./brand-range-grid.ts";
 
 // The shape of Industry Kitchens' live `__brand__` template (cms_pages 59), trimmed.
 function brandTemplate(): NodeTree {
@@ -103,4 +103,17 @@ test("range switches win key by key; unset keys fall through to the brand's", ()
   assert.deepEqual(rangeListingSettings(null, brand), { add_to_cart: false, compare: false, wishlist: false, qty: false });
   // Neither set: every switch unset (tiles keep the master's defaults).
   assert.deepEqual(rangeListingSettings({}, null), { add_to_cart: null, compare: null, wishlist: null, qty: null });
+});
+
+test("rangeListingSource: the resolved listing_effective wins over the range's own metafields", () => {
+  const brand = { zoey_listing: { add_to_cart: false, compare: false, wishlist: false, qty: false } };
+  const range = {
+    metafields: { zoey_listing: { add_to_cart: true } },
+    // Range set to Inherit in the portal: its parent category (the brand category) shows buttons.
+    listing_effective: { add_to_cart: true, compare: null, wishlist: null, qty: true },
+  };
+  assert.deepEqual(rangeListingSettings(rangeListingSource(range), brand), { add_to_cart: true, compare: false, wishlist: false, qty: true });
+  // A row without it (older services) reads its own metafields, as before.
+  assert.deepEqual(rangeListingSource({ metafields: { zoey_listing: { qty: true } } }), { zoey_listing: { qty: true } });
+  assert.equal(rangeListingSource(null), null);
 });
