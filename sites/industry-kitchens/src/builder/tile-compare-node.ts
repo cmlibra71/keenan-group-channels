@@ -1,4 +1,5 @@
 import type { NodeTree, BuilderNode } from "@keenan/services/builder";
+import { templateOwns } from "@keenan/services/builder";
 
 // ============================================================================
 // "Add to Compare" on every listing tile — Industry Kitchens only (IK parity,
@@ -45,6 +46,8 @@ export const TILE_COMPARE_CONDITION = 'context.kind == "product" || context.list
 
 /** The native key the category/brand natives register. Not a master key. */
 export const TILE_COMPARE_KEY = "tile-compare";
+/** The `data-kg-template-owns` name for this placement. */
+export const TILE_COMPARE_PLACEMENT = "tile-compare";
 /** The one master this rewrites. */
 export const PRODUCT_CARD_KEY = "product-card";
 
@@ -61,7 +64,9 @@ function placesKey(node: BuilderNode): boolean {
 
 /** The product-card master with the compare control beside the card. */
 export function withTileCompareNode(tree: NodeTree): NodeTree {
-  if (!tree?.root || placesKey(tree.root)) return tree;
+  // AUTHORED: a master that places the node itself, or declares `tile-compare` in
+  // `data-kg-template-owns`, keeps exactly what it authored (IK hidden-conditionals C15).
+  if (!tree?.root || placesKey(tree.root) || templateOwns(tree, TILE_COMPARE_PLACEMENT)) return tree;
   const compare: BuilderNode = {
     id: `${TILE_COMPARE_KEY}-node`,
     kind: "component",

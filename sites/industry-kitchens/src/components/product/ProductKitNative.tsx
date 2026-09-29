@@ -14,11 +14,15 @@
 // GST toggle are sealed.
 // ============================================================================
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useBuilderLocalState } from "@keenan/services/builder-react";
+import { BUNDLE_CONFIGURED_STATE, bundleAmount } from "@keenan/services/zoey-bundle-price";
+import { useGst } from "@/lib/gst";
 import { ProductKitBlock } from "./ProductKitBlock";
 import { AddToQuoteButton } from "./AddToQuoteButton";
 import {
   defaultKitSelection,
+  kitConfiguredPrice,
   kitSelectionReady,
   toKitChoices,
   toggleKitSelection,
@@ -32,6 +36,23 @@ export function ProductKitNative({ kit, productId }: { kit: ProductKit; productI
   );
   const isBundle = kit.kind === "bundle";
   const ready = kitSelectionReady(kit, selection);
+  const { inclusive } = useGst();
+
+  // Zoey's "Price as configured" follows the picks. The page template prints it from
+  // `@state.bundle_configured_display` (falling back to `purchase.bundleConfiguredDisplay`, the
+  // unpicked value), so the words and where they sit stay the template's; this only keeps the
+  // amount current. A bare number like every `*Display` field. Nothing is written without a
+  // captured Zoey range.
+  const local = useBuilderLocalState();
+  const configured = kitConfiguredPrice(kit, selection);
+  const configuredDisplay =
+    configured == null
+      ? ""
+      : bundleAmount(configured, inclusive).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  useEffect(() => {
+    if (configuredDisplay) local?.setValue(BUNDLE_CONFIGURED_STATE, configuredDisplay);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configuredDisplay]);
 
   return (
     <div>
@@ -39,6 +60,7 @@ export function ProductKitNative({ kit, productId }: { kit: ProductKit; productI
         kit={kit}
         selection={selection}
         onSelect={(group, id) => setSelection((prev) => toggleKitSelection(kit, prev, group, id))}
+        inclusive={inclusive}
       />
       {/* A bundle's own CTA travels with its picks. A grouped kit is bought with the page's
           ordinary buttons — it is one product at one price — so it gets none here. */}
