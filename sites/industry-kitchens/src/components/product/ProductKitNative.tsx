@@ -70,7 +70,8 @@ export function ProductKitNative({ kit, productId }: { kit: ProductKit; productI
             productId={productId}
             disabled={!ready}
             kitChoices={toKitChoices(selection)}
-            label="Add to Quote — request pricing"
+            // Zoey's own button words on a bundle it priced; today's wording elsewhere.
+            label={kit.zoeyPrice ? "Add to Quote" : "Add to Quote — request pricing"}
           />
         </div>
       )}

@@ -64,9 +64,13 @@ export function ProductKitBlock({
     );
   }
 
+  // A bundle Zoey priced (its captured From / To box) reads as Zoey's: the groups and their prices,
+  // no "Build your configuration" heading and no "priced by our team" note — the page's price box
+  // (the template) says what it costs. Every other bundle keeps today's wording.
+  const zoeyPriced = kit.zoeyPrice != null;
   return (
     <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-5">
-      <h3 className="mb-4 text-sm font-semibold text-zinc-900">Build your configuration</h3>
+      {zoeyPriced ? null : <h3 className="mb-4 text-sm font-semibold text-zinc-900">Build your configuration</h3>}
       <div className="space-y-5">
         {kit.groups.map((group) => (
           <KitGroupPicker
@@ -78,10 +82,12 @@ export function ProductKitBlock({
           />
         ))}
       </div>
-      <p className="mt-4 text-xs text-zinc-500">
-        Configurations like this are priced by our team. Your choices are sent through with the
-        quote request.
-      </p>
+      {zoeyPriced ? null : (
+        <p className="mt-4 text-xs text-zinc-500">
+          Configurations like this are priced by our team. Your choices are sent through with the
+          quote request.
+        </p>
+      )}
     </div>
   );
 }
