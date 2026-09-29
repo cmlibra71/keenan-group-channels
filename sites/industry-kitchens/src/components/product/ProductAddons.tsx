@@ -37,7 +37,7 @@
 import { useProductPurchase } from "@keenan/services/product-page";
 import type { ProductAddonGroup } from "@keenan/services/product-addons";
 import { Price } from "@/components/ui/Price";
-import { extrasPanelGroups, questionGroups } from "@/lib/product/addon-panel";
+import { extrasPanelGroups, optionalRadioNoneRow, questionGroups } from "@/lib/product/addon-panel";
 import { useGst, adjustForGst } from "@/lib/gst";
 
 /** "245.00" ex GST, or "269.50" once the storewide toggle says inclusive.
@@ -130,10 +130,8 @@ function AddonGroup({
   optionalRadioNone?: boolean;
 }) {
   const single = group.control !== "checkbox";
-  // Zoey (Magento) draws an OPTIONAL pick-one radio group with its own "None" answer on top,
-  // ticked while nothing else is — so the shopper can see nothing is chosen and can go back to
-  // nothing after a click. A required group has no None: it must be answered.
-  const showNone = optionalRadioNone && group.control === "radio" && !group.required;
+  // Zoey's "None" answer on an OPTIONAL radio group — see `optionalRadioNoneRow`.
+  const noneRow = optionalRadioNoneRow(group, chosen, optionalRadioNone);
   const unanswered = single && group.required && chosen.length === 0;
   const money = useAddonMoney();
   // A <select> can hold no anchor, so a dropdown group's link is rendered UNDER the list, for
@@ -191,12 +189,12 @@ function AddonGroup({
         </>
       ) : (
         <div className="mt-2 divide-y divide-border rounded-md border border-border">
-          {showNone ? (
+          {noneRow.shown ? (
             <label className="flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-surface-secondary">
               <input
                 type="radio"
                 name={`addon-${group.key}`}
-                checked={chosen.length === 0}
+                checked={noneRow.checked}
                 onChange={() => {
                   // `on: false` on the held answer: toggleAddon needs a real option key to find
                   // the group's row, exactly as the dropdown's own "None" does.
@@ -247,7 +245,7 @@ export function ProductAddons({
    * Remote Control on Zoey). Off by default, so a site that does not ask for it is unchanged.
    */
   optionalRadioNone?: boolean;
-} = {}) {
+}) {
   const purchase = useProductPurchase();
   const addons = purchase.product.addons ?? null;
   if (!addons) return null;

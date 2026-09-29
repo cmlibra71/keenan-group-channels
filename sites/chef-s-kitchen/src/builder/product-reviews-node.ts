@@ -1,4 +1,5 @@
 import type { NodeTree, BuilderNode, NodeCondition } from "@keenan/services/builder";
+import { templateOwns } from "@keenan/services/builder";
 
 // ============================================================================
 // Putting the REAL review block back on the built product page (card qxVqy5Dn).
@@ -270,6 +271,10 @@ function dropStraySubmitNodes(node: BuilderNode, statuses: Set<string>): Builder
  */
 export function withReviewsBlock<T extends NodeTree>(tree: T): T {
   if (!tree || !tree.root) return tree;
+  // A tree (page template or master) that declares `reviews-panel` in `data-kg-template-owns`
+  // authors its reviews block itself (IK hidden-conditionals C29): nothing is swapped, so what the
+  // author placed — or removed — is what renders.
+  if (templateOwns(tree, "reviews-panel")) return tree;
   if (hasNode(tree.root, PRODUCT_REVIEWS_NODE_ID)) return tree;
 
   // The REPEAT is what says "the review panel lives in this tree". Without one

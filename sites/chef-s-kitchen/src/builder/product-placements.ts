@@ -74,7 +74,8 @@ export type ProductPlacement =
   | "combination-notice"
   | "upsell-rail"
   | "cd-member-pricing"
-  | "compare";
+  | "compare"
+  | "offer-tiers";
 
 type Pass = (tree: NodeTree) => NodeTree;
 
@@ -101,6 +102,9 @@ export const TEMPLATE_OWNS_ATTR = "data-kg-template-owns";
 const KNOWN: ReadonlySet<string> = new Set<ProductPlacement>([
   ...PASSES.map(([name]) => name),
   "compare",
+  // The carton-tier table (C13): drawn BELOW the tree by the branch unless the template places
+  // the `product-offer-tiers` native itself.
+  "offer-tiers",
 ]);
 
 /**
@@ -136,7 +140,8 @@ export function composeProductPlacements(tree: NodeTree): NodeTree {
   return out;
 }
 
-/** True when `name`'s pass should run on this tree (the compare pass runs later, in the branch). */
+/** True when `name`'s pass should run on this tree (the compare pass and the offer-tier table are
+ *  decided later, in the branch). */
 export function placementPassRuns(tree: NodeTree, name: ProductPlacement): boolean {
   return !templateOwnedPlacements(tree).has(name);
 }
