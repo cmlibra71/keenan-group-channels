@@ -79,6 +79,19 @@ export function productMetaDescription(product: ProductSeoSource): string {
   return `${name} — commercial kitchen equipment from ${STORE_NAME}.`;
 }
 
+/**
+ * `<meta name="keywords">` — the old site prints Zoey's `meta_keyword` on 354 live products (e.g. the
+ * Unox double-stack kit). Staff's own `meta_keywords` wins; else the Zoey value as imported (the
+ * ingestor keeps it in `zoey_raw`). Empty = no tag, exactly as Zoey omits it.
+ */
+export function productMetaKeywords(product: { metaKeywords?: unknown; zoeyRaw?: unknown }): string {
+  const own = plainText(product.metaKeywords);
+  if (own) return own;
+  const raw = product.zoeyRaw;
+  const zoey = raw && typeof raw === "object" ? (raw as Record<string, unknown>).meta_keyword : null;
+  return typeof zoey === "string" ? plainText(zoey) : "";
+}
+
 type ImageRow = { urlStandard?: string | null; urlZoom?: string | null; isThumbnail?: boolean | null; sortOrder?: number | null };
 
 /** The main image: the one flagged as the thumbnail, else the first by sort order. Absolute. */

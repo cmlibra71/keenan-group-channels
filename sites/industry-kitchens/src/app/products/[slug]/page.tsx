@@ -17,6 +17,7 @@ import {
   productJsonLd,
   productMainImage,
   productMetaDescription,
+  productMetaKeywords,
   productPageTitle,
 } from "@/lib/product-seo";
 import { ChevronRight } from "lucide-react";
@@ -69,9 +70,11 @@ export async function generateMetadata({
   const url = productCanonicalUrl(product.urlPath || slug, base);
   const image = productMainImage(product.images, base);
   const images = image ? [{ url: image, alt: product.name }] : undefined;
+  const keywords = productMetaKeywords(product as { metaKeywords?: unknown; zoeyRaw?: unknown });
   return {
     title,
     description,
+    ...(keywords ? { keywords } : {}),
     alternates: { canonical: url },
     // og:type is NOT set here — see OG_TYPE_PRODUCT. Next's typed `openGraph.type` has no
     // "product", and without a `type` Next emits no og:type at all.
