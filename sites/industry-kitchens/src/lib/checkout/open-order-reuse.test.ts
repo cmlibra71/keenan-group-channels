@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decideOpenOrderReuse, EARLIER_PAYMENT_IN_PROGRESS_MESSAGE } from "./open-order-reuse";
+import { decideOpenOrderReuse, intentBlocksReuse, EARLIER_PAYMENT_IN_PROGRESS_MESSAGE } from "./open-order-reuse";
 
 test("same total to the cent → reuse the open order (double-press / network retry)", () => {
   assert.equal(decideOpenOrderReuse("7548.7500", 7548.75), "reuse");
@@ -43,4 +43,40 @@ test("placeOrder reuses only on the decision, and cancels the stale intent befor
     assert.notEqual(i, -1, `${name} not found — this guard needs rewriting`);
   }
   assert.ok(decide < voidIntent && voidIntent < refuse && refuse < cancel && cancel < reuse && reuse < create);
+});
+
+test("money already moving blocks a claim / refresh: succeeded, processing, requires_capture", () => {
+  for (const s of ["succeeded", "processing", "requires_capture"]) assert.equal(intentBlocksReuse(s), true, s);
+  for (const s of ["requires_payment_method", "requires_confirmation", "requires_action", "canceled", null, undefined])
+    assert.equal(intentBlocksReuse(s as string | null | undefined), false, String(s));
+});
+
+test("placeOrder reads the intent BEFORE claiming or refreshing a reused order, and refuses when money is moving", () => {
+  const src = readFileSync(
+    path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../actions/checkout.ts"),
+    "utf8"
+  );
+  const decide = src.indexOf("decideOpenOrderReuse(openForCart.total_inc_tax, totalIncTax)");
+  const status = src.indexOf("getStripePaymentIntentStatus(existing.id, existing.payment_provider_id)");
+  const block = src.indexOf("if (intentBlocksReuse(intentStatus))", status);
+  const refuse = src.indexOf("return { error: EARLIER_PAYMENT_IN_PROGRESS_MESSAGE }", block);
+  const po = src.indexOf("customerPo: customerReference", block);
+  const billing = src.indexOf("billingAddress,", block);
+  const claim = src.indexOf("session?.contactId && existing.contact_id !== session.contactId");
+  const intent = src.indexOf("paymentService.createStripePaymentIntent(existing.id");
+  for (const [n, i] of Object.entries({ decide, status, block, refuse, po, billing, claim, intent })) {
+    assert.notEqual(i, -1, `${n} not found — this guard needs rewriting`);
+  }
+  assert.ok(decide < status && status < block && block < refuse && refuse < po && po < billing && billing < claim && claim < intent);
+});
+
+test("a guest retry re-links the order's person from the (possibly corrected) billing email, as a fresh order does", () => {
+  const src = readFileSync(
+    path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../actions/checkout.ts"),
+    "utf8"
+  );
+  const reuse = src.slice(src.indexOf("MONEY ALREADY MOVING?"), src.indexOf("paymentService.createStripePaymentIntent(existing.id"));
+  assert.match(reuse, /session\?\.contactId\s*\?\s*undefined\s*:\s*\(\(await resolveStampableOrderContactId\(\{ email, channelId: CHANNEL_ID, accountId: null \}\)\)/);
+  assert.match(reuse, /createGuestContactForCheckout\(\{ email, firstName, lastName, phone \}\)/);
+  assert.match(reuse, /contactId: guestContactId/);
 });

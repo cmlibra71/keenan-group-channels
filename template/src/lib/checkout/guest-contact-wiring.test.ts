@@ -26,7 +26,9 @@ const PLACE_ORDER = path.join(SRC, "lib/actions/checkout.ts");
 
 test("placeOrder files the customer record after the lines are safely written", () => {
   const source = readFileSync(PLACE_ORDER, "utf8");
-  const callAt = source.indexOf("createGuestContactForCheckout(");
+  // The FRESH order's call is the last one. (The open-order reuse branch also files one, for an
+  // order whose lines were written on the first attempt — see lib/checkout/open-order-reuse.ts.)
+  const callAt = source.lastIndexOf("createGuestContactForCheckout(");
   assert.notEqual(callAt, -1, "placeOrder no longer attaches a customer record to a guest order");
 
   const itemsAt = source.indexOf("orderItemService.createManyForParent");
@@ -105,7 +107,9 @@ test("the ladder snapshot runs after the guest customer record is stamped", () =
   const source = readFileSync(PLACE_ORDER, "utf8");
   const snapshotAt = source.indexOf("snapshotOrderLadderPricing(order.id");
   assert.notEqual(snapshotAt, -1, "the buying-group snapshot is no longer wired into placeOrder");
-  const callAt = source.indexOf("createGuestContactForCheckout(");
+  // The FRESH order's call is the last one. (The open-order reuse branch also files one, for an
+  // order whose lines were written on the first attempt — see lib/checkout/open-order-reuse.ts.)
+  const callAt = source.lastIndexOf("createGuestContactForCheckout(");
   assert.notEqual(callAt, -1, "placeOrder no longer attaches a customer record to a guest order");
   assert.ok(
     callAt < snapshotAt,

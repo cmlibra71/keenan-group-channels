@@ -25,5 +25,18 @@ export function decideOpenOrderReuse(openOrderTotal: unknown, newTotal: number):
   return Math.round(open * 100) === Math.round(newTotal * 100) ? "reuse" : "replace";
 }
 
+/**
+ * MONEY ALREADY MOVING (judge hardening after #329). Before a reused open order is CLAIMED for a
+ * signed-in shopper or has its addresses REFRESHED, its PaymentIntent's live Stripe status is read:
+ * `succeeded`, `processing` or `requires_capture` (authorised, awaiting capture) mean the payment for
+ * that order is already under way in another tab. Re-pointing it at another person, or rewriting the
+ * address it will ship to under a payment that has already been made, is refused — the shopper is
+ * told the earlier payment is still being processed. Any other status (`requires_payment_method`,
+ * `requires_confirmation`, `requires_action`, `canceled`) or none at all is not money moving.
+ */
+export function intentBlocksReuse(stripeStatus: string | null | undefined): boolean {
+  return stripeStatus === "succeeded" || stripeStatus === "processing" || stripeStatus === "requires_capture";
+}
+
 export const EARLIER_PAYMENT_IN_PROGRESS_MESSAGE =
   "An earlier payment attempt for this cart is still being processed, so we haven't started a new one. Please check your email for an order confirmation before trying again, or contact us.";
