@@ -3,6 +3,7 @@ import { redirectIfMapped } from "@/lib/redirect-seam";
 import { draftMode, headers } from "next/headers";
 import Link from "next/link";
 import { getProductBySlug, getProductChannelSeo, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getMemberSavingsPctMap, brandService, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice, getCmsPage, getCmsTemplate } from "@/lib/store";
+import { stripHiddenPrices } from "@keenan/services/price-visibility";
 import type { RenderContext } from "@keenan/services";
 import { getMemberContext, getListingPricing, applyAccountPrices } from "@/lib/member";
 import { assertProductVisible, applyCatalogScope } from "@/lib/catalog-scope";
@@ -74,7 +75,10 @@ export default async function ProductPage({
 
   // Per-account product prices override EVERY other price. The cached product row is SHARED by all
   // shoppers, so the account's price is overlaid onto a copy at read time (never into the cache).
-  const [product] = await applyAccountPrices([cachedProduct]);
+  // An account price must not put a figure back on a product whose price is HIDDEN: the row is
+  // re-hidden AFTER the overlay, so no price is serialised into this page for it (audit S19).
+  const [product] = (await applyAccountPrices([cachedProduct])).map(stripHiddenPrices);
+  const priceHidden = product.hidePrice === true;
 
   // Reviews are PROJECTED BEFORE THEY ARE AWAITED. `getProductReviews` returns the
   // whole `product_reviews` row — `author_email` (stamped on every signed-in
@@ -130,7 +134,7 @@ export default async function ProductPage({
   membershipTeaser = memberCtx.planPrice
     ? { fromPrice: parseFloat(memberCtx.planPrice).toFixed(2) }
     : null;
-  if ((memberPricingEnabled && memberCtx.customerGroupId) || memberCtx.accountId) {
+  if (!priceHidden && ((memberPricingEnabled && memberCtx.customerGroupId) || memberCtx.accountId)) {
 
     // Member prices for ALL variants so the client can update on variant change. The account is
     // threaded in so its contract price short-circuits the member / cost-plus price.
