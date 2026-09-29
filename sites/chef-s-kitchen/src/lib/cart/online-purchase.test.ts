@@ -71,7 +71,7 @@ test("addToCart refuses quote-only products BEFORE the extras are priced on", ()
   // Product OR variant quote-only, through the services helper.
   assert.match(src, /purchasingDisabledMessage\(facts, variantRow\)/);
   // The cart charges the page's catalogue price.
-  assert.match(src, /catalogLinePrices\(product, variant\)/);
+  assert.match(src, /catalogLinePrices\(product, variant(, \{ parentPrice: parentPriced \})?\)/);
 });
 
 test("placeOrder refuses a line whose product is quote-only", () => {

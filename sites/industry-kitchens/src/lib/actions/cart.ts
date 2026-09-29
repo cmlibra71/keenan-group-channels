@@ -10,7 +10,7 @@ import { getAccountId, getPricingGroupId, getMemberContext } from "@/lib/member"
 import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { CART_RESTRICTED_ERROR } from "@/lib/cart/restricted-message";
 import { chargedUnitPrice, onlineOrderingOff, refuseOnlinePurchase, type OnlinePurchaseViewer } from "@/lib/cart/online-purchase";
-import { catalogLinePrices } from "@keenan/services/catalog-price";
+import { catalogLinePrices, usesParentPrice } from "@keenan/services/catalog-price";
 import { catalogPricingVariantId, loadVariantChoiceFacts, unchosenOptionsRefusal } from "@/lib/cart/variant-choice";
 import { purchasingDisabledMessage } from "@keenan/services/purchasing";
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice, subscriptionPlanService } from "@/lib/store";
@@ -171,8 +171,11 @@ async function layerItemPricing(
   variantId: number | null | undefined,
   quantity: number
 ): Promise<{ listPrice: string; salePrice: string | null }> {
-  const product = (await productService.getById(productId)) as { price: string; sale_price: string | null } | null;
+  const product = (await productService.getById(productId)) as { price: string; sale_price: string | null; metafields?: unknown } | null;
   if (!product) throw new Error("Product not found");
+  // Zoey "use child price: No" on this storefront: every choice costs the parent's price and
+  // special, exactly as the product page prices it (services `usesParentPrice`).
+  const parentPriced = usesParentPrice(product.metafields, CHANNEL_ID);
 
   // ── ACCOUNT CONTRACT PRICE: an unconditional override (Zoey: "takes priority over ALL other
   // Product prices"). Resolved BEFORE any layering, and returned directly — the catalogue sale
@@ -201,7 +204,7 @@ async function layerItemPricing(
   const variant = pricingVariantId
     ? ((await productVariantService.getById(pricingVariantId)) as { price: string | null; sale_price: string | null } | null)
     : null;
-  const catalog = catalogLinePrices(product, variant);
+  const catalog = catalogLinePrices(product, variant, { parentPrice: parentPriced });
   let listPrice = catalog.listPrice;
   const catalogSalePrice: string | null = catalog.salePrice;
 

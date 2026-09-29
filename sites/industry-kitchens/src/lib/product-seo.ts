@@ -107,6 +107,11 @@ export function productCanonicalUrl(slug: string, baseUrl: string): string {
 export interface ProductOfferSource {
   price?: unknown;
   salePrice?: unknown;
+  /**
+   * Zoey "Use Child Price: No" on this storefront (services `usesParentPrice`): every choice sells
+   * at the PARENT's price and special, so the offer is the parent's — one price for every variation.
+   */
+  parentPriced?: boolean | null;
   hidePrice?: boolean | null;
   purchasingDisabled?: boolean | null;
   restrictAddToCart?: boolean | null;
@@ -181,6 +186,12 @@ export function publicPrice(product: ProductOfferSource): PublicPrice | null {
   if (quoteOnly(product)) return null;
   const parent: PriceRow = { price: product.price as MoneyLike, salePrice: product.salePrice as MoneyLike };
   const choices = configurableChoices(product);
+  if (choices.length > 0 && product.parentPriced === true) {
+    // Same rule as the page and the cart (`resolveCatalogPrice(…, { parentPrice })`): a priced
+    // parent prices every choice; a $0 parent falls through to today's per-choice range.
+    const parentEffective = resolveCatalogPrice(parent, null).effective;
+    if (parentEffective > 0) return { low: parentEffective, high: parentEffective, count: choices.length, configurable: true };
+  }
   if (choices.length > 0) {
     const from = resolveFromPrice(parent, choices);
     if (from == null) return null;

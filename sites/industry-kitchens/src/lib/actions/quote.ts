@@ -13,6 +13,7 @@ import { readAcquisitionUtm } from "@/lib/acquisition";
 import { getSession } from "@/lib/auth";
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
 import { effectivePackFacts, readChannelPack, resolvePackSize, snapToPack } from "@keenan/services/pack";
+import { usesParentPrice } from "@keenan/services/catalog-price";
 import {
   describeKitChoices,
   describeKitContents,
@@ -283,7 +284,10 @@ export async function addToQuote(
   let listPrice = product.price;
   let catalogSalePrice: string | null = product.sale_price;
 
-  if (variantId) {
+  // Zoey "use child price: No" on this storefront: every choice is the parent's price (the page
+  // and the cart price it so) — the chosen variant's row is not read for money.
+  const parentPriced = usesParentPrice((product as { metafields?: unknown }).metafields, CHANNEL_ID) && parseFloat(String(product.price ?? 0)) > 0;
+  if (variantId && !parentPriced) {
     const variant = await productVariantService.getById(variantId) as { price: string | null; sale_price: string | null } | null;
     if (variant?.price) listPrice = variant.price;
     if (variant?.sale_price) catalogSalePrice = variant.sale_price;
