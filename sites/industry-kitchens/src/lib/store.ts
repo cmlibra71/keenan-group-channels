@@ -1,7 +1,7 @@
 import { unstable_cache } from "next/cache";
 import { cache } from "react";
 import { normalizeNavItems, type MegaNavItem } from "./mega-menu";
-import { initCommerceDb, createChannelStore, getCommerceClient } from "@keenan/services";
+import { initCommerceDb, createChannelStore, getCommerceClient, setStripeClientOptions } from "@keenan/services";
 import {
   channelService,
   siteService,
@@ -80,6 +80,12 @@ const dbUrl = process.env.COMMERCE_DATABASE_URL;
 if (dbUrl) {
   initCommerceDb(dbUrl, { maxConnections: 5 });
 }
+
+// STRIPE FROM A STOREFRONT answers in 10 s or not at all (one network retry). Stripe's 80 s default
+// held a shopper on the Pay spinner long past the point they press it again — how duplicate attempts
+// are made. Every PaymentIntent create carries an idempotency key, so the retry is safe. The portal
+// and the worker never call this and keep Stripe's defaults (services StripeProvider).
+setStripeClientOptions({ timeoutMs: 10_000, maxNetworkRetries: 1 });
 
 // ============================================================================
 // Shared channel-store factory — all channel-scoped, cache-wrapped accessors

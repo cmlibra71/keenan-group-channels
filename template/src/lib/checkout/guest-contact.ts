@@ -69,7 +69,13 @@ export interface GuestContactInput {
   phone?: string | null;
 }
 
-/** The accountless contact for (this channel, this address), or null. */
+/**
+ * The PASSWORDLESS accountless contact for (this channel, this address), or null — the guest-
+ * checkout person another checkout just created (the 23505 race below). Never a login: when the
+ * slot was taken by a REGISTRATION racing this checkout, that row holds a password and a guest order
+ * must not be filed into it (services `isGuestAttachableContact`, the one rule every guest-order
+ * attachment follows). The order then stays a guest order.
+ */
 async function accountlessContactId(email: string): Promise<number | null> {
   const sql = getCommerceClient();
   if (!sql) return null;
@@ -78,6 +84,7 @@ async function accountlessContactId(email: string): Promise<number | null> {
     WHERE account_id IS NULL
       AND coalesce(origin_channel_id, 0) = ${CHANNEL_ID}
       AND lower(email) = ${email}
+      AND password_hash IS NULL
     LIMIT 1`;
   return rows[0]?.id ?? null;
 }
