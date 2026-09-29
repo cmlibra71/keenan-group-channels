@@ -80,3 +80,19 @@ test("a guest retry re-links the order's person from the (possibly corrected) bi
   assert.match(reuse, /createGuestContactForCheckout\(\{ email, firstName, lastName, phone \}\)/);
   assert.match(reuse, /contactId: guestContactId/);
 });
+
+test("any failure in the reuse step refuses — it never falls through to writing a second order", () => {
+  const src = readFileSync(
+    path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../actions/checkout.ts"),
+    "utf8"
+  );
+  const branch = src.indexOf('if (effectivePaymentMethod === "stripe") {\n    try {');
+  const lookup = src.indexOf("findOpenCardOrderForCart(uuid", branch);
+  const catchAt = src.indexOf("} catch (e) {", src.indexOf("paymentService.createStripePaymentIntent(existing.id", lookup));
+  const refuse = src.indexOf("return { error: OPEN_ORDER_CHECK_FAILED_MESSAGE };", catchAt);
+  const create = src.indexOf("const order = await orderService.create({", lookup);
+  for (const [n, i] of Object.entries({ branch, lookup, catchAt, refuse, create })) assert.notEqual(i, -1, `${n} not found`);
+  // The catch that closes the reuse branch returns before the fresh order is written.
+  assert.ok(lookup < catchAt && catchAt < refuse && refuse < create);
+  assert.doesNotMatch(src.slice(catchAt, refuse), /non-fatal/);
+});

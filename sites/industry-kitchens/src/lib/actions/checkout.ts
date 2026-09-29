@@ -80,7 +80,12 @@ import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import { applyAccountPricesToCart } from "@/lib/checkout/account-prices";
 import { repriceGroupLinesForCheckout } from "@/lib/checkout/group-prices";
 import { goodsTotalMoved, PRICES_CHANGED_MESSAGE } from "@/lib/checkout/shown-total";
-import { decideOpenOrderReuse, intentBlocksReuse, EARLIER_PAYMENT_IN_PROGRESS_MESSAGE } from "@/lib/checkout/open-order-reuse";
+import {
+  decideOpenOrderReuse,
+  intentBlocksReuse,
+  EARLIER_PAYMENT_IN_PROGRESS_MESSAGE,
+  OPEN_ORDER_CHECK_FAILED_MESSAGE,
+} from "@/lib/checkout/open-order-reuse";
 import { resolveStampableOrderContactId } from "@keenan/services";
 import { findOpenCardOrderForCart } from "@/lib/checkout/open-order";
 import { saveCheckoutAddressForContact } from "@/lib/contact-addresses";
@@ -1346,7 +1351,13 @@ export async function placeOrder(
         };
       }
     } catch (e) {
-      console.error("[placeOrder] idempotency reuse check failed (non-fatal):", e);
+      // NEVER FALL THROUGH TO A SECOND ORDER (judge hardening). Anything that fails in here — the
+      // lookup, the intent read, a void, a claim, the intent create on the reused order — means we
+      // cannot say whether this cart already has an order (and perhaps a payment) in flight. Writing
+      // a fresh order on top could leave the shopper with two orders and two payments, so the press
+      // is refused instead; nothing new was charged, and the next press starts from the top.
+      console.error("[placeOrder] open-order reuse failed — refusing rather than writing a second order:", e);
+      return { error: OPEN_ORDER_CHECK_FAILED_MESSAGE };
     }
   }
 

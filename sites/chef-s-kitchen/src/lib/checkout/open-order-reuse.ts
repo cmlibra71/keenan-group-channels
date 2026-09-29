@@ -40,3 +40,7 @@ export function intentBlocksReuse(stripeStatus: string | null | undefined): bool
 
 export const EARLIER_PAYMENT_IN_PROGRESS_MESSAGE =
   "An earlier payment attempt for this cart is still being processed, so we haven't started a new one. Please check your email for an order confirmation before trying again, or contact us.";
+
+/** The reuse step itself failed (see placeOrder): refuse rather than risk a second order/payment. */
+export const OPEN_ORDER_CHECK_FAILED_MESSAGE =
+  "We couldn't check your earlier payment attempt just now, so we haven't started a new one. Nothing was charged — please try again in a moment.";

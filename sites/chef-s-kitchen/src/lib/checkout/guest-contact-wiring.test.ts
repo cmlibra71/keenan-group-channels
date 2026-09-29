@@ -117,3 +117,12 @@ test("the ladder snapshot runs after the guest customer record is stamped", () =
       "first-time guest's prices against no buyer (gk23c1VK + LiuLvc5b)"
   );
 });
+
+test("the guest-contact race never hands back a LOGIN: the fallback lookup only takes a passwordless row", () => {
+  const src = readFileSync(path.join(path.dirname(PLACE_ORDER), "../checkout/guest-contact.ts"), "utf8");
+  const lookup = src.slice(src.indexOf("async function accountlessContactId"), src.indexOf("export async function createGuestContactForCheckout"));
+  assert.match(lookup, /AND password_hash IS NULL/);
+  // …and it is what the 23505 (slot taken by a racing checkout OR registration) branch returns.
+  const create = src.slice(src.indexOf("export async function createGuestContactForCheckout"));
+  assert.match(create, /code !== "23505"\) throw e;\s*return await accountlessContactId\(email\);/);
+});
