@@ -6,6 +6,10 @@
    portal compiles it into the builder CSS on publish; this keeps it in the static sheet too, so a
    draft preview renders the panel in its colour before the page is published. */
 @source inline("bg-[#C85735]");
+/* Authored-node classes the draft previews need before the builder CSS is recompiled on publish:
+   the carton-tier table's placement on the product template (C13) and the brand-range template's
+   range crumb wrapper (C24). */
+@source inline("-mb-8 pt-8 contents");
 
 /* Prevent horizontal overflow when users pinch-zoom on mobile */
 html, body {

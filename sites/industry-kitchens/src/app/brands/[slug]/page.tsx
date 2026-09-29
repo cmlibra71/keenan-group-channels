@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { getListingDisplay } from "@/lib/listing-display";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import type { Metadata } from "next";
 import { draftMode, headers } from "next/headers";
@@ -217,7 +218,8 @@ export default async function BrandPage({
       // alphabetical order this read has always returned.
       getProducts({
         brandId: brand.id as number,
-        limit: 48,
+        // Settings → Storefront Listings (C25); 48 with no setting.
+        limit: (await getListingDisplay()).page_sizes.brand,
         sort: defaultListingSort,
       }),
       getFeatureFlag("member_pricing_enabled"),

@@ -16,13 +16,15 @@ import {
   getCategoryById,
   getCategorySubtreeIds,
   getRedirectForPath,
+  getCmsTemplate,
 } from "@/lib/store";
+import { getListingDisplay } from "@/lib/listing-display";
+import { composeBrandRangeSlice } from "@keenan/services/builder";
 import { borrowedImageFor, ownersNeedingBorrowedImage } from "@/lib/borrowed-image";
 import type { ListingSort } from "@/lib/listing-sort";
 import { categorySlugCandidates } from "@/lib/legacy-address";
 import { normalizeLookupPath, relativeRedirectTarget } from "@/lib/redirect-path";
 import {
-  ZOEY_RANGE_PAGE_SIZE,
   brandRangeRedirectTarget,
   rangeBelongsToBrand,
   rangeBrandCategoryId,
@@ -32,7 +34,7 @@ import {
 } from "@/lib/brand-range";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
-import { renderBrandNodeBranch } from "@/builder/brand-node-branch";
+import { renderBrandNodeBranch, brandNodePathApplies } from "@/builder/brand-node-branch";
 import { brandTemplateProductGrid, rangeListingSettings, rangeListingSource } from "@/builder/brand-range-grid";
 
 // Brand + category combo page: renders the brand's products filtered to a
@@ -90,7 +92,7 @@ export default async function BrandCategoryPage({
   // catalogue, so the reader gets a plausible-looking page of the wrong products.
   const last = path[path.length - 1] ?? "";
 
-  const [brand, category, memberPricingEnabled, defaultListingSort, brandsRoot] = await Promise.all([
+  const [brand, category, memberPricingEnabled, defaultListingSort, brandsRoot, listingDisplay] = await Promise.all([
     getBrandBySlug(slug),
     firstCategoryOf(last),
     getFeatureFlag("member_pricing_enabled"),
@@ -99,7 +101,11 @@ export default async function BrandCategoryPage({
     // so the storefront's own default is the whole answer (card InEoeMZh).
     getDefaultListingSort(),
     getCategoryBySlug(BRANDS_ROOT_SLUG),
+    // Page size and the empty-range fallback — Settings → Storefront Listings (C24/C25); 36 and
+    // "fall back to the brand's products" with no setting.
+    getListingDisplay(),
   ]);
+  const pageSize = listingDisplay.page_sizes.brand_range;
 
   if (!brand) {
     // A renamed brand address redirects rather than bare-404ing. (card EVvRDnZt)
@@ -161,7 +167,7 @@ export default async function BrandCategoryPage({
   } = {
     brandId: brand.id as number,
     page,
-    limit: ZOEY_RANGE_PAGE_SIZE,
+    limit: pageSize,
     sort: defaultListingSort,
   };
   if (category && zoeyRange) {
@@ -180,7 +186,7 @@ export default async function BrandCategoryPage({
   // it", which is a different and wrong claim. (InEoeMZh.)
   let rangeIsEmpty = false;
   // `total`, not this page's rows: a stale `?p=` past the end is not an empty range.
-  if (category && total === 0) {
+  if (category && total === 0 && listingDisplay.brand_range_empty_fallback) {
     rangeIsEmpty = true;
     delete filter.categoryId;
     delete filter.categoryIds;
@@ -239,7 +245,60 @@ export default async function BrandCategoryPage({
   // Past the last page (a stale `?p=`): back to the range's first page rather than an empty grid.
   const basePath = `/brands/${slug}/${path.join("/")}`;
   if (page > 1 && products.length === 0 && total > 0) redirect(basePath);
-  const pager = rangePager(total, page);
+  const pager = rangePager(total, page, pageSize);
+
+  // ═══ The Brand Range Template (IK hidden-conditionals C24) ═══
+  // When this channel has authored one (`page_kind = 'brand_range_layout'`) and the brand node path
+  // is on, the WHOLE page — breadcrumb, heading, count, picture, grid, empty message, pager — renders
+  // from it, with the facts below; the JSX further down is the fallback for a channel without one.
+  {
+    const { isEnabled } = await draftMode();
+    const draft = isEnabled || (await headers()).get("x-kg-json") === "1";
+    const rangeTemplate = (await getCmsTemplate("brand_range_layout", draft).catch(() => null)) as {
+      builder_kind?: string;
+      node_tree?: unknown;
+    } | null;
+    const rangeCms = rangeTemplate?.builder_kind === "nodes" && rangeTemplate.node_tree ? { node_tree: rangeTemplate.node_tree } : null;
+    if (rangeCms && (await brandNodePathApplies({ brandCms: rangeCms, draft }))) {
+      const rendered = await renderBrandNodeBranch({
+        brandCms: rangeCms,
+        brand: {
+          id: brand.id,
+          name: brand.name,
+          slug: brand.slug,
+          image_url: (brand as { image_url?: string | null }).image_url ?? null,
+          metafields: { zoey_listing: listing },
+        },
+        products: products as { id: number }[],
+        total,
+        pricing: { memberPriceMap },
+        memberPricingEnabled: memberPricingEnabled === true,
+        draft,
+        payloadExtras: composeBrandRangeSlice({
+          brandSlug: slug,
+          category: category ? { name: category.name, slug: category.slug } : null,
+          rangeIsEmpty,
+          picture: brandPicture,
+          page,
+          pageSize,
+          pager: pager
+            ? {
+                from: pager.from,
+                to: pager.to,
+                prevHref: pager.prev ? rangePageHref(basePath, pager.prev) : null,
+                nextHref: pager.next ? rangePageHref(basePath, pager.next) : null,
+                items: pager.items.map((item) =>
+                  item.kind === "gap"
+                    ? { gap: true }
+                    : { gap: false, page: item.page, href: rangePageHref(basePath, item.page), current: item.current }
+                ),
+              }
+            : null,
+        }) as unknown as Record<string, unknown>,
+      });
+      if (rendered) return rendered;
+    }
+  }
 
   const heading =
     category && !rangeIsEmpty

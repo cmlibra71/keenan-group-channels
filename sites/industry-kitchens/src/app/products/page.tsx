@@ -1,4 +1,5 @@
 import { getProducts, getFeatureFlag, getMegaMenu, getMegaMenuNav, getMegaMenuHidden, productService, CHANNEL_ID, type MegaMenuNode } from "@/lib/store";
+import { getListingDisplay } from "@/lib/listing-display";
 import { flattenTree } from "@/lib/mega-menu";
 import { ikNavItems } from "@/lib/ik-nav";
 import { getListingMemberPrices } from "@/lib/member";
@@ -42,7 +43,9 @@ export default async function ProductsPage({
     ? (params.filter as FilterKey)
     : "all";
 
-  const fetchOptions: Parameters<typeof getProducts>[0] = { page, limit: 24 };
+  // Page size from Settings → Storefront Listings (C25); 24 with no setting.
+  const pageSize = (await getListingDisplay()).page_sizes.all_products;
+  const fetchOptions: Parameters<typeof getProducts>[0] = { page, limit: pageSize };
   if (activeFilter === "featured") fetchOptions.featured = true;
   if (activeFilter === "sale") fetchOptions.onSale = true;
 
@@ -61,7 +64,7 @@ export default async function ProductsPage({
         ? Promise.resolve({ products: [], total: 0 })
         : productService.listForChannel(CHANNEL_ID, {
             page,
-            limit: 24,
+            limit: pageSize,
             categoryIds: accessibleCategoryIds,
             featured: fetchOptions.featured,
             onSale: fetchOptions.onSale,
@@ -75,7 +78,7 @@ export default async function ProductsPage({
       getMegaMenuNav().catch(() => []),
       getMegaMenuHidden().catch(() => []),
     ]);
-  const totalPages = Math.ceil(total / 24);
+  const totalPages = Math.ceil(total / pageSize);
 
   // The strip IS the department bar's own list. Industry Kitchens now composes
   // its bar through the same shared, unit-tested `resolveNavItems` with the same
