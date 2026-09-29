@@ -105,7 +105,10 @@ test("in the branch's order: price -> pack note -> kit -> instructions -> buy ro
   assert.ok(at(PRODUCT_INSTRUCTIONS_NODE_ID) < at("actions-row-inst"));
 });
 
-test("the product node branch applies the kit placer", () => {
-  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "product-node-branch.tsx"), "utf8");
-  assert.match(src, /withProductKitNode\(\s*withPackNoteNode\(/);
+test("the product node branch applies the kit placer, right after the pack note", () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const branch = readFileSync(join(here, "product-node-branch.tsx"), "utf8");
+  assert.match(branch, /composeProductPlacements\(/);
+  const placements = readFileSync(join(here, "product-placements.ts"), "utf8");
+  assert.match(placements, /\["pack-note", withPackNoteNode\],\s*\["kit", withProductKitNode\]/);
 });

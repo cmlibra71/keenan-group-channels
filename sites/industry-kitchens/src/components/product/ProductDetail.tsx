@@ -235,7 +235,7 @@ export function ProductDetail({ kit }: { kit?: ProductKit | null } = {}) {
         />
       )}
 
-      <ProductAddons />
+      <ProductAddons optionalRadioNone />
 
       {/* Card VNh9DdYd — every option answered and nothing built that way, so the buy row below
           is dead and has to bring its own words: CXnP1lrL took away every availability string

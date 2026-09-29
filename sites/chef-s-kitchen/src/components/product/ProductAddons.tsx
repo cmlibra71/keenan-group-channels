@@ -117,6 +117,7 @@ function AddonGroup({
   onToggle,
   priced = true,
   first = false,
+  optionalRadioNone = false,
 }: {
   group: ProductAddonGroup;
   chosen: string[];
@@ -125,8 +126,14 @@ function AddonGroup({
   priced?: boolean;
   /** The first group in a box with no heading above it sits flush with the box's padding. */
   first?: boolean;
+  /** See `ProductAddons`' prop of the same name. */
+  optionalRadioNone?: boolean;
 }) {
   const single = group.control !== "checkbox";
+  // Zoey (Magento) draws an OPTIONAL pick-one radio group with its own "None" answer on top,
+  // ticked while nothing else is — so the shopper can see nothing is chosen and can go back to
+  // nothing after a click. A required group has no None: it must be answered.
+  const showNone = optionalRadioNone && group.control === "radio" && !group.required;
   const unanswered = single && group.required && chosen.length === 0;
   const money = useAddonMoney();
   // A <select> can hold no anchor, so a dropdown group's link is rendered UNDER the list, for
@@ -184,6 +191,24 @@ function AddonGroup({
         </>
       ) : (
         <div className="mt-2 divide-y divide-border rounded-md border border-border">
+          {showNone ? (
+            <label className="flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-surface-secondary">
+              <input
+                type="radio"
+                name={`addon-${group.key}`}
+                checked={chosen.length === 0}
+                onChange={() => {
+                  // `on: false` on the held answer: toggleAddon needs a real option key to find
+                  // the group's row, exactly as the dropdown's own "None" does.
+                  if (chosen[0]) onToggle(chosen[0], false);
+                }}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-brand,#000)]"
+              />
+              <span className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                <span className="min-w-0 text-sm text-text-primary">None</span>
+              </span>
+            </label>
+          ) : null}
           {group.options.map((o) => {
             const isOn = chosen.includes(o.key);
             return (
@@ -213,7 +238,16 @@ function AddonGroup({
   );
 }
 
-export function ProductAddons() {
+export function ProductAddons({
+  optionalRadioNone = false,
+}: {
+  /**
+   * Draw Zoey's "None" answer at the top of every OPTIONAL radio group, ticked while nothing
+   * else is (IK parity: Hatco GRAH "Optional Controller" reads None / Built-in Control Unit /
+   * Remote Control on Zoey). Off by default, so a site that does not ask for it is unchanged.
+   */
+  optionalRadioNone?: boolean;
+} = {}) {
   const purchase = useProductPurchase();
   const addons = purchase.product.addons ?? null;
   if (!addons) return null;
@@ -288,6 +322,7 @@ export function ProductAddons() {
             <AddonGroup
               key={group.key}
               group={group}
+              optionalRadioNone={optionalRadioNone}
               chosen={purchase.selectedAddons[group.key] ?? []}
               onToggle={(optionKey, on) => purchase.toggleAddon(group.key, optionKey, on)}
             />

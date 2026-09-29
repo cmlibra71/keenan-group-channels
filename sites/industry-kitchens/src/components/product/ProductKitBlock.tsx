@@ -83,7 +83,9 @@ function KitGroupPicker({
 }) {
   if (group.mode === "included") {
     return (
-      <fieldset>
+      // min-w-0: a <fieldset> defaults to `min-inline-size: min-content`, so one long product
+      // name widened the box past a 390px phone screen instead of wrapping.
+      <fieldset className="min-w-0">
         <legend className="mb-2 text-sm font-medium text-zinc-900">{group.name}</legend>
         <ul className="space-y-1">
           {group.items.map((item) => (
@@ -106,7 +108,10 @@ function KitGroupPicker({
       on ? "border-zinc-900 bg-white" : "border-zinc-200 bg-white hover:border-zinc-400"
     }`;
   return (
-    <fieldset>
+    // min-w-0: a <fieldset> defaults to `min-inline-size: min-content`, so the `truncate` rows
+    // below set the box to the longest name — Hoshizaki KMD-270AB 396px, Rational Duo 533px on a
+    // 390px phone — instead of truncating inside it.
+    <fieldset className="min-w-0">
       <legend className="mb-2 text-sm font-medium text-zinc-900">
         {group.name}
         {group.required && <span className="ml-1 text-xs font-normal text-zinc-500">(required)</span>}
