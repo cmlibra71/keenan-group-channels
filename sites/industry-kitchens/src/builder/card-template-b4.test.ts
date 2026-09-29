@@ -60,11 +60,11 @@ describe("the kit carries Zoey's bundle prices (this storefront only)", () => {
       "1": {
         product_kind: "bundle",
         quote_only: true,
-        zoey_price: { display: "range", from: 741.2, to: 2063.8, price: null },
+        zoey_price: { source: "zoey_api", display: "range", from_ex_tax: 741.2, to_ex_tax: 2063.8 },
         kit: {
           items: [
-            { product_id: 1, name: "Power unit", group: "Power", zoey_selection_price: 741.2 },
-            { product_id: 2, name: "Tenderizer", group: "Tenderizer", zoey_selection_price: 731 },
+            { product_id: 1, name: "Power unit", group: "Power", zoey_selection_price_ex_tax: 741.2 },
+            { product_id: 2, name: "Tenderizer", group: "Tenderizer", zoey_selection_price_ex_tax: 731 },
             { product_id: 3, name: "Stripper", group: "Stripper", zoey_selection_price: 591.6 },
           ],
           groups: [
