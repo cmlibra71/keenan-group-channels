@@ -26,7 +26,8 @@ import type { ProductKit } from "@/lib/product-kit";
 //     reader the product page, tiles and the cart guard use): quote_only ($0 / POA — also hides the
 //     price), cart_disabled (no basket for anyone, price shown), out_of_stock, and guest_quote_only
 //     for a guest.
-// Add to Quote is offered unless `restrict_add_to_quote` (`quoteOffered`).
+// Add to Quote is offered unless `restrict_add_to_quote` (`quoteOffered`) — or the product is Zoey
+// OUT OF STOCK: the compare column copies Zoey's TILE, which shows no button at all for it.
 //
 // PURE apart from the two pure services helpers; pinned by compare-buy.test.ts.
 // The server's own cart refusal is separate work and is not duplicated here.
@@ -88,7 +89,9 @@ export function compareBuyButtons(f: CompareBuyFacts): CompareBuy {
   const answerRequired = (f.requiredQuestions?.length ?? 0) > 0;
   return {
     cart: hasPrice && !controls.cartRefused && !rules.cartRefused && !blockedByStock && !isBundle && !answerRequired,
-    quote: !controls.quoteRefused && !answerRequired,
+    // Zoey's out-of-stock TILE shows no button at all, and the compare column is a tile: no Add to
+    // Quote either (services `applyChannelRulesToTileRows` / `tileControlsOf` read it the same way).
+    quote: !controls.quoteRefused && !answerRequired && f.channelRules?.outOfStock !== true,
     priceHidden,
     answerRequired,
   };
