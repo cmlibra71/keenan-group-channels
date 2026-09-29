@@ -78,6 +78,10 @@ import {
 } from "@/lib/role-permissions";
 import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import { applyAccountPricesToCart } from "@/lib/checkout/account-prices";
+import { repriceGroupLinesForCheckout } from "@/lib/checkout/group-prices";
+import { goodsTotalMoved, PRICES_CHANGED_MESSAGE } from "@/lib/checkout/shown-total";
+import { decideOpenOrderReuse, EARLIER_PAYMENT_IN_PROGRESS_MESSAGE } from "@/lib/checkout/open-order-reuse";
+import { findOpenCardOrderForCart } from "@/lib/checkout/open-order";
 import { saveCheckoutAddressForContact } from "@/lib/contact-addresses";
 import { blockedProductIds } from "@/lib/catalog-scope";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
@@ -121,6 +125,12 @@ import {
 
 type PlaceOrderResult = {
   error?: string;
+  /**
+   * The lines were re-priced after the page rendered (group / account prices, membership expiry):
+   * nothing was placed or charged, the corrected prices are saved, and the form refreshes the page
+   * so the shopper confirms the new total by pressing Pay again (lib/checkout/shown-total.ts).
+   */
+  pricesChanged?: boolean;
   stripe?: {
     clientSecret: string;
     orderNumber: string;
@@ -373,6 +383,14 @@ export async function placeOrder(
   // reconciled against the account's price here, at the moment of charging, and persisted to the cart.
   await applyAccountPricesToCart(cartWithItems.id, fullCart.items);
 
+  // ── CUSTOMER-GROUP PRICES (Industry Kitchens): the same reconciliation for the shopper's group
+  // price list, through the cart's own derivation. A line that moved means the page showed a
+  // price we would not charge — so nothing is placed, the corrected prices are saved, and the
+  // shopper reviews the new total first. No-op on a channel without `customer_group_pricing`.
+  if ((await repriceGroupLinesForCheckout(cartWithItems.id, fullCart.items)) > 0) {
+    return { error: PRICES_CHANGED_MESSAGE, pricesChanged: true };
+  }
+
   // Re-validate subscription status — if member pricing is enabled but subscription
   // has expired since items were added, recalculate at non-member prices
   const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
@@ -465,7 +483,10 @@ export async function placeOrder(
             console.error("[placeOrder] failed to persist re-priced cart item (non-fatal):", e);
           }
         }
-        return { error: "Your membership has expired. Prices have been updated to standard pricing. Please review your order and try again." };
+        return {
+          error: "Your membership has expired. Prices have been updated to standard pricing. Please review your order and try again.",
+          pricesChanged: true,
+        };
       }
     }
   }
@@ -480,6 +501,13 @@ export async function placeOrder(
   }
 
   // Calculate line items + subtotal (pure; GST math delegated to gstSplit).
+  // SHOWN == CHARGED for the goods (lib/checkout/shown-total.ts): the page posted the goods total it
+  // rendered. Any re-price above that moved the money — including an account price reconciled
+  // silently — refuses here, with the new prices already saved, and the form refreshes the page.
+  if (goodsTotalMoved(formData.get("shown_goods_total"), fullCart.items)) {
+    return { error: PRICES_CHANGED_MESSAGE, pricesChanged: true };
+  }
+
   const built = buildLineItems(fullCart.items, pricesIncludeTax);
   const totalItems = built.itemsTotal;
 
@@ -1161,26 +1189,41 @@ export async function placeOrder(
 
   // Idempotency guard for card payments: if THIS cart already has an open, unpaid
   // Stripe order (the shopper hit "Pay" twice, or retried after a network blip),
-  // reuse it rather than creating a second orphan awaiting_payment order. We match
-  // on the cart uuid stamped in order metafields. createStripePaymentIntent is
+  // reuse it rather than creating a second orphan awaiting_payment order. Found
+  // directly by the cart uuid stamped in order metafields (no recent-orders window). createStripePaymentIntent is
   // itself idempotent on (orderId, amount), so re-confirming returns a usable
   // client secret for the same order.
   if (effectivePaymentMethod === "stripe") {
     try {
-      const open = await orderService.list({
-        page: 1,
-        limit: 20,
-        sort: "id",
-        direction: "desc",
-        filters: {
-          channel_id: { type: "eq", value: CHANNEL_ID },
-          payment_status: { type: "eq", value: "awaiting_payment" },
-          ...(session?.contactId ? { contact_id: { type: "eq", value: session.contactId } } : {}),
-        },
-      });
-      const existing = (open.data as Array<{ id: number; order_number: string; customer_po?: string | null; metafields?: Record<string, unknown> | null }>).find(
-        (o) => (o.metafields ?? {})?.cart_uuid === uuid
-      );
+      // THE CART'S OWN ORDER, looked up directly by the cart uuid stamped on it — never a window of
+      // recent orders (lib/checkout/open-order.ts).
+      const openForCart = (await findOpenCardOrderForCart(uuid, session?.contactId ?? null)) ?? undefined;
+      // REUSE ONLY AN IDENTICAL ORDER (lib/checkout/open-order-reuse.ts). A cart re-priced since the
+      // first attempt — up or down — gets a FRESH order from its current lines; the stale one's intent
+      // is cancelled at Stripe and the order cancelled. If that intent can no longer be cancelled the
+      // money is already moving: start nothing new.
+      let existing = openForCart;
+      if (openForCart && decideOpenOrderReuse(openForCart.total_inc_tax, totalIncTax) === "replace") {
+        existing = undefined;
+        if (openForCart.payment_provider_id) {
+          const voided = await paymentService
+            .voidPayment(openForCart.id, { transaction_id: openForCart.payment_provider_id })
+            .catch((e: unknown) => ({ success: false, error: e instanceof Error ? e.message : String(e) }));
+          if (!voided.success) {
+            console.error("[placeOrder] stale open order's intent could not be cancelled — not replacing", {
+              orderId: openForCart.id,
+              error: (voided as { error?: unknown }).error,
+            });
+            return { error: EARLIER_PAYMENT_IN_PROGRESS_MESSAGE };
+          }
+        }
+        await orderService.update(openForCart.id, {
+          status: "canceled",
+          staffNotes: `Replaced at checkout by a new order: the cart was re-priced after this attempt (total ${String(
+            openForCart.total_inc_tax
+          )} → ${totalIncTax.toFixed(2)} inc GST).`,
+        });
+      }
       if (existing) {
         // The shopper may have added, corrected OR CLEARED their reference on the
         // retry — the box on the form is the truth, so an emptied box clears the

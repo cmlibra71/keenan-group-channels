@@ -130,6 +130,15 @@ export const {
   getActiveSubscription,
   getMemberPriceMap,
   applyAccountPricesToProducts,
+  // Customer-group price lists (Industry Kitchens' Zoey model, services `groupPricing.ts`). All
+  // switched by `channel_settings.customer_group_pricing`; off = null / identity / empty map.
+  applyGroupPrices,
+  resolveViewerPricingGroupId,
+  resolveGroupLineRecords,
+  isGroupPricingEnabled,
+  // Today's Partner Specials by product (card tJ4audbu) — the cart locks a line to one exactly as
+  // the page does.
+  getLiveSpecials,
   // The Chefs Depot member price scale (cards gk23c1VK / Nyp8bkPm). These are
   // no-ops on a channel with the scale switched off in `channel_settings`, which
   // is every channel until one is written.

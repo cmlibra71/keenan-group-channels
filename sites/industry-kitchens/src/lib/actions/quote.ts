@@ -53,6 +53,8 @@ import { isStaffOnlyDraft, withoutStaffOnlyDrafts } from "@/lib/quotes/draft-vis
 import { acceptanceAcknowledgementUrl } from "@/lib/quotes/acknowledgement-url";
 import { repriceQuoteForCustomer } from "@/lib/quotes/reprice-deltas";
 import { QUOTE_REPRICED_ON_ACCEPT_MESSAGE } from "@keenan/services/member-ladder";
+import { getPricingGroupId } from "@/lib/member";
+import { groupLinePricing } from "@/lib/pricing/group-line";
 import { accountAcceptanceHoldsConversion } from "@/lib/quotes/pro-forma-pay-call";
 import { getContactPermissions } from "@/lib/role-permissions";
 import { mayFileAddressInBook } from "@/lib/account/address-authority";
@@ -285,6 +287,19 @@ export async function addToQuote(
     const variant = await productVariantService.getById(variantId) as { price: string | null; sale_price: string | null } | null;
     if (variant?.price) listPrice = variant.price;
     if (variant?.sale_price) catalogSalePrice = variant.sale_price;
+  }
+
+  // THE SHOPPER'S CUSTOMER-GROUP PRICE LIST (Industry Kitchens' Zoey model): on a channel with
+  // `customer_group_pricing` on, the catalogue price THIS viewer was shown is their group's record
+  // (the account's group, else the person's, else NOT LOGGED IN) — the same record the product
+  // page and the cart read. The record alone: no quantity break, per the ADR below. Only a line
+  // the catalogue prices; null group (every other channel) → unchanged.
+  if (parseFloat(String(listPrice ?? "0")) > 0) {
+    const grouped = await groupLinePricing(await getPricingGroupId(), productId, variantId || null, 1, { tiers: false });
+    if (grouped) {
+      listPrice = grouped.listPrice;
+      catalogSalePrice = grouped.salePrice;
+    }
   }
 
   // A quote applies ONLY base price + catalog-sale suppression at add time; member

@@ -64,7 +64,7 @@ export async function backorderFactsForProducts(
     const rows = (await sql`
       SELECT id, inventory_tracking, inventory_level, backorder_policy, restrict_add_to_cart,
              (metafields -> 'channel_kits' -> ${String(channelId)} ->> 'quote_only') = 'true' AS kit_quote_only,
-             purchasing_disabled, purchasing_disabled_message, hide_price, sell_pack_size, sell_pack_unit, qty_packaging_enabled,
+             purchasing_disabled, purchasing_disabled_message, hide_price, sell_pack_size, sell_pack_unit, qty_packaging_enabled, qty_increment_groups,
              metafields -> 'zoey_channel_rules' AS zoey_channel_rules,
              metafields -> 'zoey_channel_pack' -> ${String(channelId)} AS channel_pack,
              metafields -> 'channel_rule_overrides' AS channel_rule_overrides
@@ -82,6 +82,7 @@ export async function backorderFactsForProducts(
         sell_pack_size: number | null;
         sell_pack_unit: string | null;
         qty_packaging_enabled?: boolean | null;
+        qty_increment_groups?: unknown;
         zoey_channel_rules: unknown;
         channel_rule_overrides: unknown;
         channel_pack: unknown;
@@ -124,6 +125,10 @@ export async function backorderFactsForProducts(
           },
           readChannelPackEntry(row.channel_pack)
         ),
+        // Zoey's per-customer-group increments ("Quantity Increments & Packaging"): the cart steps
+        // by the shopper's group row exactly as the product page does (`resolvePackSize(facts,
+        // group)`). None carry any today; absent → the base pack, as before.
+        qtyIncrementGroups: row.qty_increment_groups ?? null,
       });
     }
   } catch (e) {

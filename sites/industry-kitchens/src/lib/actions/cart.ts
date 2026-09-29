@@ -3,7 +3,10 @@
 import { cache } from "react";
 import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, applyAdvertisedLadderPrices, getMemberLadderShare, boundPricesToMemberScale, getLadderConfig, CHANNEL_ID } from "@/lib/store";
 import { resolveAccountLinePrices, accountLineKey } from "@keenan/services";
-import { getAccountId } from "@/lib/member";
+import { groupLinePricing } from "@/lib/pricing/group-line";
+import { specialAmounts } from "@keenan/services";
+import { getLiveSpecials } from "@/lib/store";
+import { getAccountId, getPricingGroupId, getMemberContext } from "@/lib/member";
 import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { CART_RESTRICTED_ERROR } from "@/lib/cart/restricted-message";
 import { chargedUnitPrice, onlineOrderingOff, refuseOnlinePurchase, type OnlinePurchaseViewer } from "@/lib/cart/online-purchase";
@@ -15,7 +18,7 @@ import { getCartUuid, setCartUuid } from "@/lib/cart";
 import { brandIdsForProducts } from "@/lib/checkout/free-shipping-brands";
 import { backorderFactsForProducts, backorderFactsForProduct, type ProductBackorderFacts } from "@/lib/cart/backorder-facts";
 import { availableUnits, canPurchaseQuantity, resolveBackorderPolicy } from "@keenan/services/backorder";
-import { isPackagingOn, resolvePackSize, resolvePackUnit, snapToPack } from "@keenan/services/pack";
+import { hasGroupIncrements, isPackagingOn, resolvePackSize, resolvePackUnit, snapToPack, type PackFacts } from "@keenan/services/pack";
 import { getSession } from "@/lib/auth";
 import { currentShopperForOffers } from "@/lib/promotions/shopper";
 import { pickBestBulkUnit, layerCartPrice, memberPricingGroupId } from "@/lib/pricing/cart-pricing";
@@ -108,7 +111,7 @@ async function resolveItemPricing(
   variantId: number | null | undefined,
   quantity: number
 ): Promise<{ listPrice: string; salePrice: string | null }> {
-  const layered = await layerItemPricing(productId, variantId, quantity);
+  const layered = await lockToPartnerSpecial(productId, await layerItemPricing(productId, variantId, quantity));
   // THE MEMBER PRICE SCALE'S BAND (card gk23c1VK). Whatever layer won — the
   // account's contract price included, which returns before any engine call —
   // a scale-priced line is held inside [Wholesale x 1.01, standard price]:
@@ -119,6 +122,40 @@ async function resolveItemPricing(
   if ((await getLadderConfig().catch(() => null))?.enabled !== true) return layered;
   const bandVariantId = variantId ?? (await defaultVariantId(productId));
   return boundPricesToMemberScale(bandVariantId, layered).catch(() => layered);
+}
+
+/**
+ * A PARTNER SPECIAL LOCKS THE LINE (card tJ4audbu), exactly as the page draws it: the page's funnel
+ * lays the special LAST — over the group price and the account's contract price — so the regular it
+ * strikes through is whatever the line would otherwise cost (`layered.listPrice`), and the price is
+ * the special for every shopper, with no quantity break off it (`specialAmounts`, the same pure
+ * function the page's overlay uses). Until this, the cart applied no special on any path: the
+ * first live special would have shown one price and charged another. One cached read; a storefront
+ * with no live special (both, today) gets the line back untouched.
+ */
+async function lockToPartnerSpecial(
+  productId: number,
+  layered: { listPrice: string; salePrice: string | null }
+): Promise<{ listPrice: string; salePrice: string | null }> {
+  const special = (await getLiveSpecials([productId]).catch(() => new Map())).get(productId) as
+    | { priceExTax: number }
+    | undefined;
+  if (!special) return layered;
+  const regular = parseFloat(layered.listPrice);
+  const amounts = specialAmounts(Number.isFinite(regular) && regular > 0 ? regular : null, special.priceExTax);
+  return { listPrice: amounts.price, salePrice: amounts.salePrice };
+}
+
+/**
+ * WHICH GROUP'S QUANTITY STEP a line uses — the product page's rule (`getProductPageData`: the
+ * member group, else the customer-group pricing group), so the page and the cart step by the same
+ * pack. Only asked for a product that carries per-group increments, so an ordinary line costs no
+ * lookup; null → the base pack.
+ */
+async function packGroupFor(facts: PackFacts | null | undefined): Promise<number | null> {
+  if (!hasGroupIncrements(facts)) return null;
+  const member = await getMemberContext().catch(() => null);
+  return member?.customerGroupId ?? (await getPricingGroupId());
 }
 
 /** The variant a variant-less line prices from: the product's lowest-id variant. */
@@ -167,6 +204,23 @@ async function layerItemPricing(
   const catalog = catalogLinePrices(product, variant);
   let listPrice = catalog.listPrice;
   const catalogSalePrice: string | null = catalog.salePrice;
+
+  // ── THE SHOPPER'S CUSTOMER-GROUP PRICE LIST (Industry Kitchens' Zoey model, services
+  // `groupPricing.ts`). On a channel with `customer_group_pricing` on, the viewer's group — the
+  // ACCOUNT's, else the person's, else "NOT LOGGED IN" for a guest — has a record for this
+  // variant, and that record IS the price the product page showed (`applyAccountPrices` overlays
+  // the same record onto the row): its regular is the list price, its special the sale, and the
+  // product's own catalogue special does not undercut it. A quantity break still wins where it is
+  // lower (Zoey tier prices). Only a line the catalogue PRICES is re-priced — a POA product has no
+  // price to replace. Null group (every other channel) → this block does nothing. The account's
+  // contract price has already returned above, so it still beats the group price.
+  const pricingGroupId = await getPricingGroupId();
+  if (pricingGroupId && parseFloat(listPrice) > 0) {
+    // A simple product's lone base variant is not a choice (`pricingVariantId` is null) — its
+    // record lives on that variant, which is the product's default: the resolver's rule.
+    const grouped = await groupLinePricing(pricingGroupId, productId, pricingVariantId, quantity);
+    if (grouped) return grouped;
+  }
 
   // ── THE ADVERTISED PRICE (card gk23c1VK). On a channel whose buying-group
   // ladder advertises the Industry Kitchens trade price, the cart's list price
@@ -518,7 +572,7 @@ export async function addToCart(
   // O108e4jH / zeMPVcA3). The product page already steps in whole packs; this covers the listing
   // tile, a stale form and a direct call — snapping UP, so a shopper is never handed less than
   // they asked for. On everything else `snapToPack` returns the quantity untouched.
-  const packSize = resolvePackSize(facts);
+  const packSize = resolvePackSize(facts, await packGroupFor(facts));
   const finalQty = snapToPack(wantedQty, packSize);
 
   const refusal = await refuseCartQuantity(productId, finalQty, facts);
@@ -619,7 +673,7 @@ export async function updateCartItem(itemId: number, quantity: number) {
     // removed the line above, so a pack product can still be emptied out of the cart; anything
     // that survives to here is rounded up to a whole pack.
     const packFacts = await backorderFactsForProduct(item.product_id);
-    const nextQuantity = snapToPack(quantity, resolvePackSize(packFacts));
+    const nextQuantity = snapToPack(quantity, resolvePackSize(packFacts, await packGroupFor(packFacts)));
 
     // Same refusal as the add, so a "+" cannot walk past a limit the add refused (card 7vu2iEEZ).
     // Only an INCREASE is judged: a line already in the basket when staff changed the setting must
@@ -821,6 +875,12 @@ const readCart = cache(async () => {
     ...(await currentShopperForOffers()),
   });
   const offerByItem = new Map(offers.lines.map((l) => [l.itemId, l]));
+  // The group step per product, for the rows' pack display (only products with group rows ask).
+  const packGroups = new Map<number, number | null>();
+  for (const i of visible) {
+    const f = stock.get(i.product_id);
+    if (hasGroupIncrements(f) && !packGroups.has(i.product_id)) packGroups.set(i.product_id, await packGroupFor(f));
+  }
 
   return {
     ...full,
@@ -842,11 +902,11 @@ const readCart = cache(async () => {
         restrict_add_to_cart: onlineOrderingOff(facts, lineViewer),
         // The SELLING UNIT, resolved once here (cards O108e4jH / zeMPVcA3), so the row can step
         // by a whole pack and say what a pack holds without a second lookup or a second opinion.
-        pack_size: resolvePackSize(facts),
-        pack_unit: resolvePackUnit(facts),
+        pack_size: resolvePackSize(facts, packGroups.get(i.product_id) ?? null),
+        pack_unit: resolvePackUnit(facts, packGroups.get(i.product_id) ?? null),
         // False on Zoey's "multiples of N" (Enable Packaging off): the row then says "Sold in
         // multiples of N" and names no package or package price.
-        pack_packaging_on: isPackagingOn(facts),
+        pack_packaging_on: isPackagingOn(facts, packGroups.get(i.product_id) ?? null),
         // Zoey's own multiples-of-N presentation (this storefront's Zoey entry): the row names
         // nothing — the ± step and the snap are the whole of it, as on Zoey.
         pack_note_silent: facts?.silentMultiples === true,

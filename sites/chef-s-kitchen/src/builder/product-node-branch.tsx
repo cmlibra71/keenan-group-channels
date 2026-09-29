@@ -10,6 +10,7 @@ import {
   HIDE_MEMBER_SAVING_PCT,
 } from "@/lib/store";
 import { CHANNEL_ID } from "@/lib/channel";
+import { getPricingGroupId } from "@/lib/member";
 import { loadJsSandbox, computeCallResults, guardBuyControls, guardBuyControlsInComponents } from "@keenan/services/builder";
 import { cmsFunctionService } from "@keenan/services/services";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
@@ -119,6 +120,9 @@ export async function renderProductNodeBranch({
     // related cards and its variant pricing are all resolved with the account
     // in scope.
     accountId: member.accountId,
+    // The viewer's customer-group price list (Industry Kitchens' Zoey model) — priced onto the
+    // product row and both rails beneath the account's prices. Null on a channel without it.
+    pricingGroupId: await getPricingGroupId().catch(() => null),
     draft,
   }).catch(() => null);
   if (!payload) return null;

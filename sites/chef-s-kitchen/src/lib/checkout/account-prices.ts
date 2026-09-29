@@ -32,7 +32,7 @@ export interface CartLine {
  * A lookup failure falls back to the stored picks rather than to nothing: charging the shopper for
  * the configuration they were shown beats silently dropping the accessories off the price.
  */
-async function resolveLineAddons(line: CartLine): Promise<ResolvedAddon[]> {
+export async function resolveLineAddons(line: CartLine): Promise<ResolvedAddon[]> {
   const stored = readStoredAddons(line.modifier_selections);
   if (stored.length === 0) return [];
   try {

@@ -5,7 +5,7 @@ import {
   sanitizeCatalogProducts,
 } from "@/lib/store";
 import { getCommerceClient } from "@keenan/services";
-import { applyAccountPrices, getListingMemberPrices } from "@/lib/member";
+import { applyAccountPrices, getListingMemberPrices, getPricingGroupId } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
 import { cardPrice } from "@/lib/card-price";
 import { buildCompareRows, type CompareFieldDefinition, type CompareRow } from "./compare-rows";
@@ -150,7 +150,7 @@ export async function loadCompareData(requested: number[]): Promise<CompareData>
   let rows = (await sanitizeCatalogProducts(listed.products as unknown as ListRow[])) as ListRow[];
   rows = await applyCatalogScope(rows);
   rows = await applyAccountPrices(rows);
-  rows = (await attachFromPrices(rows)) as ListRow[];
+  rows = (await attachFromPrices(rows, { pricingGroupId: await getPricingGroupId() })) as ListRow[];
 
   const byId = new Map(rows.map((r) => [r.id, r]));
   const ordered = ids.map((id) => byId.get(id)).filter((r): r is ListRow => r != null);

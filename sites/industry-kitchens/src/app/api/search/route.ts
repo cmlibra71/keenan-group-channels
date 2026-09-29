@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchProducts } from "@keenan/services/search";
-import { getChannelRulesForProducts, shouldSuppressCatalogSalePrice } from "@/lib/store";
+import { applyGroupPrices, getChannelRulesForProducts, shouldSuppressCatalogSalePrice } from "@/lib/store";
+import { getPricingGroupId } from "@/lib/member";
 import { applyChannelRulesToTileRows } from "@keenan/services/channel-rules";
 import { CHANNEL_ID } from "@/lib/channel";
 import { applyCatalogScope } from "@/lib/catalog-scope";
@@ -102,6 +103,18 @@ export async function GET(request: NextRequest) {
     if (dropped > 0) {
       result.hits = visible as unknown as typeof result.hits;
       result.estimatedTotalHits = Math.max(visible.length, result.estimatedTotalHits - dropped);
+    }
+
+    // The viewer's customer-group price list (Industry Kitchens' Zoey model): a suggestion quotes
+    // the price the product's own tile and page quote this viewer — the same record, overlaid
+    // onto a COPY of the shared index hits (this response is no-store, below). Identity on a
+    // channel without `customer_group_pricing` switched on.
+    const pricingGroupId = await getPricingGroupId();
+    if (pricingGroupId && result.hits.length > 0) {
+      result.hits = (await applyGroupPrices(
+        result.hits as unknown as { id: number }[],
+        pricingGroupId
+      )) as unknown as typeof result.hits;
     }
 
     // Member-only pricing channels never expose the shared catalog sale price

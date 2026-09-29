@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import { draftMode, headers } from "next/headers";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsPage, getCmsTemplate, getSiteConfig, getChannelSetting } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsPage, getCmsTemplate, getSiteConfig, getChannelSetting, applyGroupPrices, resolveViewerPricingGroupId } from "@/lib/store";
 import { stripHiddenPrices } from "@keenan/services/price-visibility";
 import type { Metadata } from "next";
 import type { RenderContext } from "@keenan/services";
@@ -159,6 +159,13 @@ export default async function ProductPage({
   // Product structured data (root cause `product-seo-head`). Built from the SHARED product row,
   // not the account-priced copy: the offer is the price a visitor with no account sees, and a
   // quote-only / Call for Price product gets no offer at all (lib/product-seo.ts).
+  // The offer is what a GUEST pays — on this storefront that is the NOT LOGGED IN price list
+  // (customer-group pricing, services `groupPricing.ts`), exactly what the page shows a crawler.
+  // Priced onto a copy of the shared row; the viewer's own group never reaches the markup.
+  const guestPricingGroupId = await resolveViewerPricingGroupId({ accountId: null, contactId: null }).catch(() => null);
+  const [seoRow] = guestPricingGroupId
+    ? await applyGroupPrices([cachedProduct], guestPricingGroupId)
+    : [cachedProduct];
   const seoBase = siteBaseUrl((await getSiteConfig()).site?.url);
   const productUrl = productCanonicalUrl(cachedProduct.urlPath || slug, seoBase);
   const jsonLd = productJsonLd({
@@ -167,8 +174,8 @@ export default async function ProductPage({
     brandName: brandName ?? null,
     image: productMainImage(cachedProduct.images, seoBase),
     description: productMetaDescription(cachedProduct),
-    price: cachedProduct.price,
-    salePrice: cachedProduct.salePrice,
+    price: seoRow.price,
+    salePrice: seoRow.salePrice,
     hidePrice: cachedProduct.hidePrice,
     purchasingDisabled: cachedProduct.purchasingDisabled,
     restrictAddToCart: cachedProduct.restrictAddToCart,
@@ -177,7 +184,7 @@ export default async function ProductPage({
     zoeyOutOfStock: channelRulesOfRow(cachedProduct, CHANNEL_ID)?.outOfStock === true,
     condition: cachedProduct.condition,
     // A configurable publishes its "Starting From" range, exactly as the page prices it.
-    variants: cachedProduct.variants ?? [],
+    variants: seoRow.variants ?? [],
     options: cachedProduct.options ?? [],
     variantOptionMappings: cachedProduct.variantOptionMappings ?? [],
     url: productUrl,
