@@ -26,6 +26,8 @@ import { BuilderTree, type NativeComponents } from "@keenan/services/builder-rea
 import { BuilderActionsProvider } from "@keenan/services/builder-react";
 import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 import { productNatives } from "./product-natives";
+import { productFinanceOffer, productFinanceScope } from "@/lib/finance/product-finance";
+import { useFinanceRates } from "@/lib/finance/finance-rates-context";
 
 // ============================================================================
 // The product page rendered from a node tree. Thin wrapper over the SHARED
@@ -136,7 +138,26 @@ function ActionsBridge({
     addToQuote: countingAddToQuote,
     onOptionsRequired,
   });
-  const scope = useProductPageScope(payload, { inclusive, pricesIncludeTax });
+  const baseScope = useProductPageScope(payload, { inclusive, pricesIncludeTax });
+  // The weekly-rent offer as `purchase.finance*` (IK hidden-conditionals C8): the SAME call, on the
+  // same inputs, as the sealed SilverChefPanel, so a template that authors the panel quotes the
+  // same rent. Additive — a tree that never reads these renders exactly as before.
+  const financeRates = useFinanceRates();
+  const scope = React.useMemo(() => {
+    const offer = productFinanceOffer({
+      price: {
+        displayPrice: purchase.financeDisplayPrice ?? purchase.displayPrice,
+        displaySalePrice:
+          purchase.financeDisplaySalePrice !== undefined ? purchase.financeDisplaySalePrice : purchase.displaySalePrice,
+        memberPrice: purchase.financeMemberPrice !== undefined ? purchase.financeMemberPrice : purchase.activeMemberPrice,
+      },
+      sku: purchase.activeVariant?.sku ?? purchase.product.sku,
+      brand: purchase.product.brandName ?? null,
+      pricesIncludeTax,
+      rates: financeRates,
+    });
+    return { ...baseScope, purchase: { ...baseScope.purchase, ...productFinanceScope(offer) } };
+  }, [baseScope, purchase, pricesIncludeTax, financeRates]);
   // Overlay the live GST toggle onto context.gst so any card-rail price-block
   // masters (related products) resolve ex/inc labels from the live state.
   const livePayload = React.useMemo(

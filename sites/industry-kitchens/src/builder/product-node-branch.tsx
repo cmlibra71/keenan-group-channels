@@ -13,7 +13,7 @@ import { CHANNEL_ID } from "@/lib/channel";
 import { loadJsSandbox, computeCallResults, guardBuyControls, guardBuyControlsInComponents } from "@keenan/services/builder";
 import { cmsFunctionService } from "@keenan/services/services";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
-import { ProductOfferTiers } from "@/components/product/ProductOfferTiers";
+import { ProductOfferTiers, loadOfferTierTables } from "@/components/product/ProductOfferTiers";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { withReviewsBlockInComponents } from "@/builder/product-reviews-node";
 import { withCompareNode } from "@/builder/compare-node";
@@ -238,6 +238,17 @@ export async function renderProductNodeBranch({
   // see `builder/product-placements.ts`.
   const baseTree = scaleWording(storedTree ?? SEED_PRODUCT_TREE);
   const composedTree = guardBuyControls(composeProductPlacements(baseTree));
+  // The carton-tier table (card p6YVxc4P) is drawn BELOW the tree unless the template declares it
+  // places the `product-offer-tiers` native itself (C13). Then the tables are loaded here — the SAME
+  // loader, the same inputs — handed to the native through `nativeData`, and `offerTiers.shown` /
+  // `offerTiers.tables` are bindable for the template's own Show-if.
+  const offerTiersInTree = !placementPassRuns(baseTree, "offer-tiers");
+  const offerTierTables = offerTiersInTree
+    ? await loadOfferTierTables({
+        sku: (viewedProduct?.sku as string | null) ?? null,
+        productId: (viewedProduct?.id as number | null) ?? null,
+      })
+    : [];
 
   // The panel's data, resolved ONCE per request. A sealed native cannot read the
   // database, so the prices and this shopper's ladder position ride the route's own
@@ -316,24 +327,30 @@ export async function renderProductNodeBranch({
       <ViewedProductTracker product={viewedProduct} />
       <BuilderProductPage
         tree={nodeTree}
-        payload={pagePayload}
+        payload={
+          offerTiersInTree
+            ? ({ ...pagePayload, offerTiers: { shown: offerTierTables.length > 0, tables: offerTierTables } } as typeof pagePayload)
+            : pagePayload
+        }
         namedStyles={namedStyles}
         components={components}
         jsFunctions={jsFunctions}
         callResults={callResults}
-        nativeData={{ ...(nativeData ?? {}), cdMembership }}
+        nativeData={{ ...(nativeData ?? {}), cdMembership, offerTiers: { tables: offerTierTables } }}
       />
       {/* Carton tiers this product is in (card p6YVxc4P). The node tree is the
           path the LIVE Industry Kitchens product page takes, so the table has to
           render here as well as on the CMS-template and legacy branches — it is
           the same component reading the same live promotions the cart applies,
           and it draws nothing when the product is in no banded offer. */}
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <ProductOfferTiers
-          sku={(viewedProduct?.sku as string | null) ?? null}
-          productId={(viewedProduct?.id as number | null) ?? null}
-        />
-      </div>
+      {offerTiersInTree ? null : (
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <ProductOfferTiers
+            sku={(viewedProduct?.sku as string | null) ?? null}
+            productId={(viewedProduct?.id as number | null) ?? null}
+          />
+        </div>
+      )}
     </div>
   );
 }

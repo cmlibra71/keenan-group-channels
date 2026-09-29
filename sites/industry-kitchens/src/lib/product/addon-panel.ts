@@ -239,3 +239,25 @@ export function quoteLinePicks(attributes: unknown): ResolvedAddon[] {
 export function chosenOptionLines(picks: readonly ResolvedAddon[]): string[] {
   return Object.entries(addonsAsOrderOptions(picks)).map(([group, answer]) => `${group}: ${answer}`);
 }
+
+/**
+ * ZOEY'S "None" ANSWER ON AN OPTIONAL RADIO GROUP (IK parity; hidden-conditionals batch 2).
+ *
+ * Zoey (Magento) draws an OPTIONAL pick-one radio group with its own "None" answer on top, ticked
+ * while nothing else is — Hatco GRAH "Optional Controller" opens on None; Speed Queen LDG3TR
+ * "Venting Option", whose "Standard Rear Venting $0" is pre-selected, opens with that ticked and
+ * None unticked (old site, 2026-09-29). A REQUIRED group has no None: it must be answered. Only a
+ * radio group gets one (a dropdown carries its own "None" option; tick-boxes need none).
+ *
+ * Returns whether the row is drawn and whether it is ticked, for `chosen` = the group's current
+ * picks. `enabled` is the storefront's switch (`ProductAddons` `optionalRadioNone`), so a site that
+ * does not ask for the row is unchanged.
+ */
+export function optionalRadioNoneRow(
+  group: Pick<ProductAddonGroup, "control" | "required">,
+  chosen: readonly string[],
+  enabled: boolean
+): { shown: boolean; checked: boolean } {
+  const shown = enabled && group.control === "radio" && !group.required;
+  return { shown, checked: shown && chosen.length === 0 };
+}

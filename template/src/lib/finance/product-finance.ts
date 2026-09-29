@@ -187,3 +187,31 @@ export function productFinanceOffer(input: {
     applyPath: FINANCE_APPLY_PATH[funder],
   };
 }
+
+/**
+ * The offer as `purchase.finance*` facts, so a product TEMPLATE can author the weekly-rent panel
+ * itself (IK hidden-conditionals audit C8) — its Show-if, its funder branches and its words — while
+ * the money stays here. Built from the SAME `productFinanceOffer` call, with the same inputs, as the
+ * sealed `SilverChefPanel`, so an authored panel and the sealed one can never quote different rents.
+ * All empty / false when there is nothing to quote.
+ */
+export function productFinanceScope(offer: ProductFinanceOffer | null): {
+  financeShown: boolean;
+  financeFunder: ProductFinanceFunder | "";
+  financeIsSkope: boolean;
+  financeAmount: string;
+  financeWeekly: number | null;
+  financeApplyPath: string;
+} {
+  if (!offer) {
+    return { financeShown: false, financeFunder: "", financeIsSkope: false, financeAmount: "", financeWeekly: null, financeApplyPath: "" };
+  }
+  return {
+    financeShown: true,
+    financeFunder: offer.funder,
+    financeIsSkope: offer.funder === "skope",
+    financeAmount: offer.amount,
+    financeWeekly: offer.weekly,
+    financeApplyPath: offer.applyPath,
+  };
+}

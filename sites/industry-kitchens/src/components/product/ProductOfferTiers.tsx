@@ -7,6 +7,7 @@ import {
 } from "@keenan/services";
 import { floorUnitPrice, DEFAULT_MARGIN_FLOOR_PCT } from "@keenan/services/margin-floor";
 import { CHANNEL_ID, productService } from "@/lib/store";
+import { OfferTierTables, type OfferTierTable } from "@/components/product/OfferTierTables";
 
 /**
  * The carton-tier table on a product page (card p6YVxc4P, display requirement 6).
@@ -47,7 +48,7 @@ import { CHANNEL_ID, productService } from "@/lib/store";
  * read it as a quantity break on THAT product, which is what `bulk_pricing_rules`
  * does two panels up.
  */
-export async function ProductOfferTiers({
+export async function loadOfferTierTables({
   sku,
   productId,
   unitPrice,
@@ -56,8 +57,8 @@ export async function ProductOfferTiers({
   productId?: number | null;
   /** The per-unit price this shopper is shown (member price where they have one). */
   unitPrice?: number | null;
-}) {
-  if (!sku) return null;
+}): Promise<OfferTierTable[]> {
+  if (!sku) return [];
 
   let tables: NonNullable<ReturnType<typeof tierTableFor>>[] = [];
   try {
@@ -107,49 +108,23 @@ export async function ProductOfferTiers({
         })),
       }));
   } catch {
-    return null;
+    return [];
   }
-  if (tables.length === 0) return null;
-
-  return (
-    <div className="mt-8">
-      {tables.map((table) => (
-        <div key={table.label} className="mb-4">
-          <h3 className="mb-2 text-sm font-semibold text-zinc-700">{table.label}</h3>
-          <div className="overflow-hidden rounded-lg border border-zinc-200">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-zinc-50 text-zinc-600">
-                  <th className="px-3 py-2 text-left font-medium">Cartons in your cart</th>
-                  <th className="px-3 py-2 text-right font-medium">You save</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100">
-                {table.rows.map((row) => (
-                  <tr key={row.label} className="text-zinc-700">
-                    <td className="px-3 py-2">{row.label}</td>
-                    <td className="px-3 py-2 text-right">
-                      {row.requestQuote ? (
-                        <a href="/request-quote" className="font-medium underline">
-                          Request a quote
-                        </a>
-                      ) : row.percent > 0 ? (
-                        `${row.percent}% off`
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="mt-2 text-xs text-zinc-500">
-            Mix and match across the range — the cartons are counted across your whole cart, not per
-            product.
-          </p>
-        </div>
-      ))}
-    </div>
-  );
+  return tables;
 }
+
+/**
+ * The table itself, laid out from ALREADY-LOADED tables (see `OfferTierTables`). An async server
+ * component: load, then draw — nothing when this product is in no banded offer.
+ */
+export async function ProductOfferTiers(props: {
+  sku: string | null;
+  productId?: number | null;
+  /** The per-unit price this shopper is shown (member price where they have one). */
+  unitPrice?: number | null;
+}) {
+  const tables = await loadOfferTierTables(props);
+  if (tables.length === 0) return null;
+  return <OfferTierTables tables={tables} />;
+}
+

@@ -23,6 +23,7 @@ import { AddToCompare } from "@/components/product/AddToCompare";
 import { COMPARE_NODE_KEY } from "@/builder/compare-node";
 import { TILE_COMPARE_KEY } from "@/builder/tile-compare-node";
 import { TileCompare } from "@/components/product/TileCompare";
+import { OfferTierTables, type OfferTierTable } from "@/components/product/OfferTierTables";
 
 // ============================================================================
 // Industry Kitchens' sealed product-page leaves.
@@ -185,6 +186,15 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // multiplies the price the shopper is being shown by the pack size, which is live purchase
     // state a stored tree cannot carry, and it renders NULL on every product sold individually.
     "product-pack-note": () => <ProductPackNote />,
+    // The carton-tier table (card p6YVxc4P; IK hidden-conditionals C13). The tables are loaded by
+    // the branch with the cart's own rules (only when the template declares `offer-tiers`) and
+    // arrive in the route's bag, so where the table sits — and its Show-if, `offerTiers.shown` —
+    // is the template's. Draws nothing with no banded offer.
+    "product-offer-tiers": () => (
+      <OfferTierTables
+        tables={((data.offerTiers as { tables?: OfferTierTable[] } | undefined)?.tables ?? []) as OfferTierTable[]}
+      />
+    ),
     // The Modular Systems banner (card qGfWAzQx, Steve — CE-40). The SAME sealed
     // panel as the notice above, because it is the same message: one look, one
     // colour, red panel with white writing. What differs is the rule — the slug
