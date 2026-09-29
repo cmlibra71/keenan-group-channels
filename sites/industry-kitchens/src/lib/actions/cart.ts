@@ -847,6 +847,9 @@ const readCart = cache(async () => {
         // False on Zoey's "multiples of N" (Enable Packaging off): the row then says "Sold in
         // multiples of N" and names no package or package price.
         pack_packaging_on: isPackagingOn(facts),
+        // Zoey's own multiples-of-N presentation (this storefront's Zoey entry): the row names
+        // nothing — the ± step and the snap are the whole of it, as on Zoey.
+        pack_note_silent: facts?.silentMultiples === true,
         // What this line took from an offer, so the row can show it without a
         // second evaluation (card p6YVxc4P). Absent on a line that took nothing.
         offer_discount: offerByItem.get(i.id)?.discount ?? null,
