@@ -385,3 +385,14 @@ html, body {
 @source inline("left-[15px] top-[15px] rounded-[3px] bg-[#ABABAB] bg-[#BF1A2D] leading-[12px] leading-[14px]");
 /* Zoey's fixed "Price as configured" bar on a priced bundle (cms_pages 69, node ikp-bundle-bar). */
 @source inline("z-[60] border-[#cccccc] text-[#444444] p-[10px] lg:p-5 text-[20px] lg:text-[18px] lg:text-right");
+/* Room for Zoey's fixed bundle bar: the space under the page (node ikp-bundle-bar-spacer) and the
+   "Talk to a Specialist" button lifted above the bar while it is on screen. */
+@source inline("h-[104px] lg:h-[128px]");
+body:has([data-node-id="ikp-bundle-bar"]) .ik-specialist-float {
+  bottom: calc(var(--ik-bundle-bar-h, 104px) + 1.25rem);
+}
+@media (min-width: 1024px) {
+  body:has([data-node-id="ikp-bundle-bar"]) .ik-specialist-float {
+    bottom: calc(var(--ik-bundle-bar-h-lg, 128px) + 1.25rem);
+  }
+}
