@@ -252,8 +252,10 @@ export function Footer({
           </div>
         )}
 
-        {/* Legal */}
-        <div className="mt-8 border-t border-zinc-200 pt-6 text-center text-xs text-zinc-400">
+        {/* Legal. Below lg the fixed "Talk to a Specialist" float (bottom-right, ~44px + 20px) sat on
+            top of this line at the end of the page (390px, bundle pages and others); the extra bottom
+            padding lets the line scroll clear of it. Desktop keeps its spacing. */}
+        <div className="mt-8 border-t border-zinc-200 pt-6 pb-[4.5rem] text-center text-xs text-zinc-400 lg:pb-0">
           {config?.legal ?? `© ${new Date().getFullYear()} ${storeName}. All rights reserved.`}
         </div>
       </div>
