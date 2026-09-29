@@ -74,6 +74,21 @@ export interface RangeListingSettings {
  * the brand's. `rangeMetafields` is null when the page is not listing the range's own
  * products (unresolved range, or a range the brand has nothing in).
  */
+/**
+ * What the range category contributes to `rangeListingSettings`: the storefront category read's
+ * RESOLVED switches (`listing_effective` — own → nearest ancestor → matching brand, services
+ * `categoryService.listingLevels`) when it carries them, so a range staff set to Inherit in the
+ * portal inherits exactly what the portal's "Product list" section says; else its own metafields.
+ * Null when there is no range row.
+ */
+export function rangeListingSource(category: unknown): unknown {
+  if (!category || typeof category !== "object") return null;
+  const row = category as { listing_effective?: unknown; metafields?: unknown };
+  const eff = row.listing_effective;
+  if (eff && typeof eff === "object" && !Array.isArray(eff)) return { zoey_listing: eff };
+  return row.metafields ?? null;
+}
+
 export function rangeListingSettings(rangeMetafields: unknown, brandMetafields: unknown): RangeListingSettings {
   const own = readListingSettings(rangeMetafields);
   const brand = readListingSettings(brandMetafields);

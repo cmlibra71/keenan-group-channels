@@ -48,7 +48,7 @@ test("a tile add records the pre-selected answers instead of arriving bare", () 
 test("a quote-only scoped bundle has no Add to Cart, on the page and in the cart action", () => {
   assert.match(read("app/products/[slug]/page.tsx"), /readProductKit\(product\.metafields, CHANNEL_ID\)\?\.quoteOnly === true/);
   assert.match(read("builder/BuilderProductPage.tsx"), /kitQuoteOnly \? \{ restrictAddToCart: true \}/);
-  assert.match(read("lib/cart/backorder-facts.ts"), /'channel_kits' -> \$\{String\(CHANNEL_ID\)\} ->> 'quote_only'/);
+  assert.match(read("lib/cart/backorder-facts.ts"), /'channel_kits' -> \$\{String\(channelId\)\} ->> 'quote_only'/);
 });
 
 test("the SilverChef panel rents the finance amounts (freight extras excluded)", () => {

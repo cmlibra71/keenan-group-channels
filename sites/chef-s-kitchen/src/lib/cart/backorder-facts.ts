@@ -14,10 +14,11 @@
 // ============================================================================
 
 import { getCommerceClient } from "@keenan/services";
-import { CHANNEL_ID } from "@/lib/channel";
+// Relative (not `@/lib/channel`) so the node test runner can load this module and drive the guard.
+import { CHANNEL_ID } from "../channel";
 import type { StockFacts } from "@keenan/services/backorder";
 import type { PackFacts } from "@keenan/services/pack";
-import { parseChannelRules, type ChannelPurchaseRules } from "@keenan/services/channel-rules";
+import { readChannelRules, type ChannelPurchaseRules } from "@keenan/services/channel-rules";
 
 export type ProductBackorderFacts = StockFacts &
   PackFacts & {
@@ -29,7 +30,10 @@ export type ProductBackorderFacts = StockFacts &
     /** A hidden price behaves exactly like no price: quote only. */
     hidePrice: boolean;
     /**
-     * THIS storefront's Zoey rules (`metafields.zoey_channel_rules[CHANNEL_ID]`, portal PR #1028):
+     * THIS storefront's EFFECTIVE Zoey rules — `metafields.zoey_channel_rules[CHANNEL_ID]` with the
+     * portal's staff overrides (`metafields.channel_rule_overrides`, override ?? zoey per rule) laid
+     * over it by the ONE services reader (`readChannelRules`), exactly as the product page, tiles and
+     * listings read them — so the cart and checkout guards refuse precisely what the page hides:
      * quote-only / out-of-stock refuse the cart for everyone, guest quote-only for a guest (see
      * `lib/cart/online-purchase.ts`). Null when the product has none for this channel — every
      * product until the portal backfill runs, and every product on Chefs Depot.
@@ -37,21 +41,34 @@ export type ProductBackorderFacts = StockFacts &
     channelRules: ChannelPurchaseRules | null;
   };
 
+/** A postgres-js tagged-template client (the live pool, a transaction, or a test double). */
+type SqlClient = (strings: TemplateStringsArray, ...values: unknown[]) => PromiseLike<unknown[]>;
+
 /**
  * Stock and buying facts for a set of products, batched. A product missing from the
  * result is treated by every caller as untracked, i.e. no back order and no refusal.
  */
 export async function backorderFactsForProducts(
-  productIds: number[]
+  productIds: number[],
+  /** Test seam: the client and channel to read with. Omitted = the live pool and this storefront. */
+  deps: { client?: SqlClient; channelId?: number } = {}
 ): Promise<Map<number, ProductBackorderFacts>> {
   const out = new Map<number, ProductBackorderFacts>();
   const ids = [...new Set(productIds.filter((id) => Number.isInteger(id) && id > 0))];
   if (ids.length === 0) return out;
   try {
-    const sql = getCommerceClient();
+    const channelId = deps.channelId ?? CHANNEL_ID;
+    const live = deps.client ? null : getCommerceClient();
+    const sql = (deps.client ?? live) as unknown as SqlClient | null;
     if (!sql) return out;
-    const rows = await sql<
-      {
+    const rows = (await sql`
+      SELECT id, inventory_tracking, inventory_level, backorder_policy, restrict_add_to_cart,
+             (metafields -> 'channel_kits' -> ${String(channelId)} ->> 'quote_only') = 'true' AS kit_quote_only,
+             purchasing_disabled, purchasing_disabled_message, hide_price, sell_pack_size, sell_pack_unit,
+             metafields -> 'zoey_channel_rules' AS zoey_channel_rules,
+             metafields -> 'channel_rule_overrides' AS channel_rule_overrides
+        FROM products
+       WHERE id = ANY(${ids})`) as unknown as {
         id: number;
         inventory_tracking: string | null;
         inventory_level: number | null;
@@ -63,15 +80,9 @@ export async function backorderFactsForProducts(
         hide_price: boolean | null;
         sell_pack_size: number | null;
         sell_pack_unit: string | null;
-        channel_rules: unknown;
-      }[]
-    >`
-      SELECT id, inventory_tracking, inventory_level, backorder_policy, restrict_add_to_cart,
-             (metafields -> 'channel_kits' -> ${String(CHANNEL_ID)} ->> 'quote_only') = 'true' AS kit_quote_only,
-             purchasing_disabled, purchasing_disabled_message, hide_price, sell_pack_size, sell_pack_unit,
-             metafields -> 'zoey_channel_rules' -> ${String(CHANNEL_ID)} AS channel_rules
-        FROM products
-       WHERE id = ANY(${ids})`;
+        zoey_channel_rules: unknown;
+        channel_rule_overrides: unknown;
+      }[];
     for (const row of rows) {
       out.set(Number(row.id), {
         inventoryTracking: row.inventory_tracking,
@@ -87,7 +98,11 @@ export async function backorderFactsForProducts(
         hidePrice: row.hide_price === true,
         // This storefront's Zoey rules, keyed by CHANNEL_ID like `channel_kits` above — the IK key
         // never reaches another storefront. Judged with the viewer by `onlineOrderingOff`.
-        channelRules: parseChannelRules(row.channel_rules),
+        // Staff overrides included (the same reader every other surface uses).
+        channelRules: readChannelRules(
+          { zoey_channel_rules: row.zoey_channel_rules, channel_rule_overrides: row.channel_rule_overrides },
+          channelId
+        ),
         // The SELLING UNIT rides the same batched read (cards O108e4jH / zeMPVcA3): the cart has
         // to snap a quantity to whole packs and say what a pack holds, and both callers of this
         // lookup already have the product in hand. `products.min_purchase_quantity` is NOT read —

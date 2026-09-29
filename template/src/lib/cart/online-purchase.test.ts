@@ -146,10 +146,12 @@ test("no rules on the product (today, before the backfill) changes nothing", () 
   assert.equal(onlineOrderingOff({}, GUEST), false);
 });
 
-test("the facts read carries THIS channel's Zoey rules, keyed by CHANNEL_ID", () => {
+test("the facts read carries THIS channel's EFFECTIVE Zoey rules (staff overrides included), keyed by CHANNEL_ID", () => {
   const src = readFileSync(join(LIB, "cart/backorder-facts.ts"), "utf8");
-  assert.match(src, /metafields -> 'zoey_channel_rules' -> \$\{String\(CHANNEL_ID\)\} AS channel_rules/);
-  assert.match(src, /channelRules: parseChannelRules\(row\.channel_rules\)/);
+  assert.match(src, /const channelId = deps\.channelId \?\? CHANNEL_ID;/);
+  assert.match(src, /metafields -> 'zoey_channel_rules' AS zoey_channel_rules/);
+  assert.match(src, /metafields -> 'channel_rule_overrides' AS channel_rule_overrides/);
+  assert.match(src, /channelRules: readChannelRules\(\s*\{ zoey_channel_rules: row\.zoey_channel_rules, channel_rule_overrides: row\.channel_rule_overrides \},\s*channelId\s*\)/);
 });
 
 test("addToCart / updateCartItem / the cart view judge the rules for the shopper asking", () => {

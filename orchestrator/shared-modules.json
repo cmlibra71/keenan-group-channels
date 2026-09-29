@@ -153,6 +153,7 @@
     "lib/cart-quote-counts.tsx",
     "lib/cart.ts",
     "lib/cart/backorder-facts.ts",
+    "lib/cart/backorder-facts.test.ts",
     "lib/cart/online-purchase.test.ts",
     "lib/cart/online-purchase.ts",
     "lib/cart/restricted-message.test.ts",
