@@ -31,8 +31,9 @@ import {
   type KitSelection,
   type ProductKit,
 } from "@/lib/product-kit";
+import { kitQuoteLabel, type KitQuoteLabels } from "@/lib/kit-quote-label";
 
-export function ProductKitNative({ kit, productId }: { kit: ProductKit; productId: number }) {
+export function ProductKitNative({ kit, productId, labels }: { kit: ProductKit; productId: number; labels?: KitQuoteLabels | null }) {
   const [selection, setSelection] = useState<KitSelection>(() =>
     kit.kind === "bundle" ? defaultKitSelection(kit.groups) : {}
   );
@@ -94,7 +95,8 @@ export function ProductKitNative({ kit, productId }: { kit: ProductKit; productI
             disabled={!ready}
             kitChoices={toKitChoices(selection)}
             // Zoey's own button words on a bundle it priced; today's wording elsewhere.
-            label={kit.zoeyPrice ? "Add to Quote" : "Add to Quote — request pricing"}
+            // Words editable on the template's product-kit node (props label_priced / label_unpriced, D20).
+            label={kitQuoteLabel(Boolean(kit.zoeyPrice), labels)}
           />
         </div>
       )}
