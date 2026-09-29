@@ -3,6 +3,7 @@ import { redirectIfMapped } from "@/lib/redirect-seam";
 import { draftMode, headers } from "next/headers";
 import Link from "next/link";
 import { getProductBySlug, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsPage, getCmsTemplate, getSiteConfig, getChannelSetting, applyGroupPrices, resolveViewerPricingGroupId } from "@/lib/store";
+import { usesParentPrice } from "@keenan/services/catalog-price";
 import { stripHiddenPrices } from "@keenan/services/price-visibility";
 import type { Metadata } from "next";
 import type { RenderContext } from "@keenan/services";
@@ -176,6 +177,8 @@ export default async function ProductPage({
     description: productMetaDescription(cachedProduct),
     price: seoRow.price,
     salePrice: seoRow.salePrice,
+    // Zoey "use child price: No": every variation is offered at the parent's price, as the page sells it.
+    parentPriced: usesParentPrice((cachedProduct as { metafields?: unknown }).metafields, CHANNEL_ID),
     hidePrice: cachedProduct.hidePrice,
     purchasingDisabled: cachedProduct.purchasingDisabled,
     restrictAddToCart: cachedProduct.restrictAddToCart,

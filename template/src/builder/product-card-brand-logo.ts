@@ -205,7 +205,7 @@ function expressions(prefix: string) {
   };
 }
 
-// The walk is structural, exactly as `strip-stock-nodes.ts` and
+// The walk is structural, exactly as the old stock-wording pass and
 // `brand-logo-link.ts` do it: `BuilderNode` is a union whose members carry
 // different child arrays, so the transform reads a plain-record view and copies
 // everything it does not touch through byte for byte. That is what keeps an

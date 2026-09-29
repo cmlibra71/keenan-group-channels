@@ -9,6 +9,7 @@ import {
   productMetaDescription,
   productPageTitle,
   publicDisplayPrice,
+  publicPrice,
 } from "./product-seo.ts";
 
 // Titles measured on the OLD site (www.industrykitchens.com.au) on 2026-09-28 — the oracle.
@@ -251,4 +252,22 @@ test("a Zoey out-of-stock product keeps its Offer, marked OutOfStock", () => {
   assert.equal((productJsonLd(base).offers as Record<string, unknown>).availability, "https://schema.org/InStock");
   // Zero-price (folded into hidePrice + restrictAddToCart by services) still publishes no Offer.
   assert.equal(productJsonLd({ ...base, zoeyOutOfStock: true, hidePrice: true, restrictAddToCart: true }).offers, undefined);
+});
+
+test("Zoey 'Use Child Price: No': every variation is offered at the parent's price and special (ZIP BCSHA20)", () => {
+  const zip = {
+    price: "9770.55",
+    salePrice: "8427.00",
+    options: [{ id: 1 }],
+    variantOptionMappings: [{ variantId: 11 }, { variantId: 12 }],
+    variants: [
+      { id: 11, price: "4975.00", salePrice: null },
+      { id: 12, price: "5200.00", salePrice: null },
+    ],
+  } as unknown as Parameters<typeof publicPrice>[0];
+  assert.deepEqual(publicPrice({ ...zip, parentPriced: true }), { low: 8427, high: 8427, count: 2, configurable: true });
+  // Without the flag the per-choice range is untouched (today's behaviour).
+  assert.equal(publicPrice(zip)?.low, 4975);
+  // A $0 parent keeps the per-choice range even when flagged.
+  assert.equal(publicPrice({ ...zip, price: "0", salePrice: null, parentPriced: true })?.low, 4975);
 });

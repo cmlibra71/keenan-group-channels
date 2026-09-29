@@ -8,6 +8,7 @@ import {
   getDraftComponents,
   getChannelSetting,
   attachFromPrices,
+  getMemberScaleOn,
 } from "@/lib/store";
 import { CHANNEL_ID } from "@/lib/channel";
 import { getListingDisplay } from "@/lib/listing-display";
@@ -258,7 +259,10 @@ export async function renderCategoryNodeBranch({
   ]);
   const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
 
+  // The channel's member price scale (audit C11) — the price masters word "Standard price"/"RRP" on it.
+  const memberScaleOn = await getMemberScaleOn();
   const payload = composeCategoryPagePayload({
+    memberScaleOn,
     channelId: CHANNEL_ID,
     category: category as unknown as Record<string, unknown>,
     listing: {

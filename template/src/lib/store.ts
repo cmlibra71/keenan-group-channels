@@ -232,6 +232,10 @@ const withScaleWording = async (components: ComponentMap): Promise<ComponentMap>
   }) as ComponentMap;
 };
 
+/** The channel's member price scale (ladder) is on — `context.memberScale.on` on listing pages (audit C11). */
+export const getMemberScaleOn = async (): Promise<boolean> =>
+  (await _store.getLadderConfig().catch(() => null))?.enabled === true;
+
 export const getComponents = async (): Promise<ComponentMap> =>
   withScaleWording(withTileBuyGuard(withPromoTag(await _store.getComponents())));
 
