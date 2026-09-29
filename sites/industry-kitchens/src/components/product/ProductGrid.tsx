@@ -3,7 +3,7 @@ import { TileCompare } from "./TileCompare";
 import { TileBuyButtons } from "./TileBuyButtons";
 import { tileBuyFacts } from "@/lib/tile-buy";
 import { cardPrice } from "@/lib/card-price";
-import { applyAccountPrices } from "@/lib/member";
+import { applyAccountPrices, getPricingGroupId } from "@/lib/member";
 import { attachFromPrices } from "@/lib/store";
 import { applyCatalogScope } from "@/lib/catalog-scope";
 import { getBrandLogos } from "@/lib/brand-logo-fallback";
@@ -97,7 +97,8 @@ export async function ProductGrid({
   products = await applyCatalogScope(products);
   products = await applyAccountPrices(products);
   // configurable-from-price: AFTER the overlays, so a configurable tile reads "Starting From".
-  products = await attachFromPrices(products);
+  // …priced at the viewer's customer-group price list, the same record the tile's headline carries.
+  products = await attachFromPrices(products, { pricingGroupId: await getPricingGroupId() });
   if (products.length === 0) {
     if (!renderEmpty) return null;
     return (

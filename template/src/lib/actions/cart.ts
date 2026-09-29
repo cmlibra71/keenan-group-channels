@@ -3,7 +3,8 @@
 import { cache } from "react";
 import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, applyAdvertisedLadderPrices, getMemberLadderShare, boundPricesToMemberScale, getLadderConfig, CHANNEL_ID } from "@/lib/store";
 import { resolveAccountLinePrices, accountLineKey } from "@keenan/services";
-import { getAccountId } from "@/lib/member";
+import { groupLinePricing } from "@/lib/pricing/group-line";
+import { getAccountId, getPricingGroupId } from "@/lib/member";
 import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { CART_RESTRICTED_ERROR } from "@/lib/cart/restricted-message";
 import { chargedUnitPrice, onlineOrderingOff, refuseOnlinePurchase, type OnlinePurchaseViewer } from "@/lib/cart/online-purchase";
@@ -167,6 +168,23 @@ async function layerItemPricing(
   const catalog = catalogLinePrices(product, variant);
   let listPrice = catalog.listPrice;
   const catalogSalePrice: string | null = catalog.salePrice;
+
+  // ── THE SHOPPER'S CUSTOMER-GROUP PRICE LIST (Industry Kitchens' Zoey model, services
+  // `groupPricing.ts`). On a channel with `customer_group_pricing` on, the viewer's group — the
+  // ACCOUNT's, else the person's, else "NOT LOGGED IN" for a guest — has a record for this
+  // variant, and that record IS the price the product page showed (`applyAccountPrices` overlays
+  // the same record onto the row): its regular is the list price, its special the sale, and the
+  // product's own catalogue special does not undercut it. A quantity break still wins where it is
+  // lower (Zoey tier prices). Only a line the catalogue PRICES is re-priced — a POA product has no
+  // price to replace. Null group (every other channel) → this block does nothing. The account's
+  // contract price has already returned above, so it still beats the group price.
+  const pricingGroupId = await getPricingGroupId();
+  if (pricingGroupId && parseFloat(listPrice) > 0) {
+    // A simple product's lone base variant is not a choice (`pricingVariantId` is null) — its
+    // record lives on that variant, which is the product's default: the resolver's rule.
+    const grouped = await groupLinePricing(pricingGroupId, productId, pricingVariantId, quantity);
+    if (grouped) return grouped;
+  }
 
   // ── THE ADVERTISED PRICE (card gk23c1VK). On a channel whose buying-group
   // ladder advertises the Industry Kitchens trade price, the cart's list price

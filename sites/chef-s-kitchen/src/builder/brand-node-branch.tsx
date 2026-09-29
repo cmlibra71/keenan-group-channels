@@ -9,7 +9,7 @@ import {
   attachFromPrices,
 } from "@/lib/store";
 import { CHANNEL_ID } from "@/lib/channel";
-import { getMemberContext, applyAccountPrices } from "@/lib/member";
+import { getMemberContext, applyAccountPrices, getPricingGroupId } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
 import { attachBrandLogos } from "@/lib/brand-logo-fallback";
 import {
@@ -115,7 +115,11 @@ export async function renderBrandNodeBranch({
   // row gets its "Starting From" list/sale, which the `product-card` enrichment reads — without it
   // a $0-parent configurable tile says "Call for Price".
   const scoped = (await attachBrandLogos(
-    await attachFromPrices(await applyAccountPrices(await applyCatalogScope(products as { id: number }[])))
+    await attachFromPrices(await applyAccountPrices(await applyCatalogScope(products as { id: number }[])), {
+      // The viewer's customer-group price list prices each configurable's children (Industry
+      // Kitchens); null on a channel without it.
+      pricingGroupId: await getPricingGroupId(),
+    })
   )) as unknown as BrandGridProduct[];
 
   const memberCtx = await getMemberContext().catch(() => null);

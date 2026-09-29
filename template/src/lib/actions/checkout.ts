@@ -78,6 +78,8 @@ import {
 } from "@/lib/role-permissions";
 import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import { applyAccountPricesToCart } from "@/lib/checkout/account-prices";
+import { repriceGroupLinesForCheckout } from "@/lib/checkout/group-prices";
+import { GROUP_PRICES_UPDATED_MESSAGE } from "@/lib/checkout/group-prices-policy";
 import { saveCheckoutAddressForContact } from "@/lib/contact-addresses";
 import { blockedProductIds } from "@/lib/catalog-scope";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
@@ -372,6 +374,14 @@ export async function placeOrder(
   // may have been added before the account price was set (or before they logged in), so every line is
   // reconciled against the account's price here, at the moment of charging, and persisted to the cart.
   await applyAccountPricesToCart(cartWithItems.id, fullCart.items);
+
+  // ── CUSTOMER-GROUP PRICES (Industry Kitchens): the same reconciliation for the shopper's group
+  // price list, through the cart's own derivation. A line that moved means the page showed a
+  // price we would not charge — so nothing is placed, the corrected prices are saved, and the
+  // shopper reviews the new total first. No-op on a channel without `customer_group_pricing`.
+  if ((await repriceGroupLinesForCheckout(cartWithItems.id, fullCart.items)) > 0) {
+    return { error: GROUP_PRICES_UPDATED_MESSAGE };
+  }
 
   // Re-validate subscription status — if member pricing is enabled but subscription
   // has expired since items were added, recalculate at non-member prices

@@ -16,6 +16,9 @@ const ACCOUNT_LINKS: { label: string; href: string }[] = [
   { label: "Checkout", href: "/checkout" },
 ];
 
+/** Links that only make sense to someone who is not signed in. */
+const SIGNED_OUT_ONLY = new Set(["Login", "Register"]);
+
 /**
  * The sub-desktop ACCOUNT panel.
  *
@@ -26,7 +29,7 @@ const ACCOUNT_LINKS: { label: string; href: string }[] = [
  * hamburgers stood side by side. Categories belong to that drawer; this one
  * keeps the account and shopping links and wears the person icon.
  */
-export function MobileNav() {
+export function MobileNav({ signedIn = false }: { signedIn?: boolean } = {}) {
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
 
@@ -40,7 +43,8 @@ export function MobileNav() {
         <div className="p-4">
           {/* Account / shopping links */}
           <nav className="flex flex-col">
-            {ACCOUNT_LINKS.map((item) => (
+            {/* Signed in: no Login / Register prompt (Zoey's signed-in menu has none). */}
+            {ACCOUNT_LINKS.filter((item) => !signedIn || !SIGNED_OUT_ONLY.has(item.label)).map((item) => (
               <Link
                 key={item.label}
                 href={item.href}

@@ -61,8 +61,13 @@ export async function Header({
     getFeatureFlag("subscriptions_enabled"),
     getFeatureFlag("draws_enabled"),
   ]);
+  // SIGNED IN at all — independent of membership. Industry Kitchens sells no membership
+  // (`subscriptions_enabled` is off), so keying the account label off `isMember` alone left a
+  // signed-in trade customer looking at "Sign In/Register" on every page (IK trade check RC10;
+  // Zoey's signed-in header says My Account). Read once, here, for both labels.
+  const session = await getSession().catch(() => null);
+  const signedIn = session != null;
   if (subscriptionsEnabled) {
-    const session = await getSession().catch(() => null);
     if (session) {
       const activeSub = await getActiveSubscriptionForContact(session.contactId).catch(() => null);
       isMember = !!activeSub;
@@ -150,6 +155,7 @@ export async function Header({
                   cartCount={cartCount}
                   quoteCount={quoteCount}
                   isMember={isMember}
+                  signedIn={signedIn}
                   entryCount={entryCount}
                   drawsEnabled={drawsEnabled}
                 />
@@ -166,6 +172,7 @@ export async function Header({
                   cartCount={cartCount}
                   quoteCount={quoteCount}
                   isMember={isMember}
+                  signedIn={signedIn}
                   entryCount={entryCount}
                   drawsEnabled={drawsEnabled}
                   variant="compact"
@@ -178,7 +185,7 @@ export async function Header({
                     brandColumns={brandColumns}
                   />
                 </span>
-                <MobileNav />
+                <MobileNav signedIn={signedIn} />
               </div>
             </div>
           </div>
@@ -202,6 +209,7 @@ export async function Header({
                 cartCount={cartCount}
                 quoteCount={quoteCount}
                 isMember={isMember}
+                signedIn={signedIn}
                 entryCount={entryCount}
                 drawsEnabled={drawsEnabled}
                 variant="account"

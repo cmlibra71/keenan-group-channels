@@ -9,6 +9,8 @@ import {
   applyAccountPricesToProducts,
   applyAdvertisedLadderPrices,
   getMemberLadderShare,
+  applyGroupPrices,
+  resolveViewerPricingGroupId,
 } from "@/lib/store";
 
 export interface MemberContext {
@@ -48,6 +50,21 @@ export const getAccountId = cache(async (): Promise<number | null> => {
     .resolveAccountIdForContact(session.contactId, { emailFallback: session.email })
     .catch(() => null);
   return resolved?.accountId ?? null;
+});
+
+/**
+ * The customer group whose PRICE LIST prices this viewer — Industry Kitchens' Zoey model
+ * (services `groupPricing.ts`): the buying ACCOUNT's group, else the person's own, else the
+ * storefront's not-logged-in tier (a guest is priced from "NOT LOGGED IN", as on Zoey).
+ *
+ * Null on a channel without `customer_group_pricing` switched on — Chefs Depot — after one
+ * cached settings read, so nothing below changes there. Independent of membership: it is NOT the
+ * member-pricing group (`getMemberContext().customerGroupId`, which only an active Chefs Depot
+ * member carries). Memoized per request: every catalogue surface, the cart and checkout ask.
+ */
+export const getPricingGroupId = cache(async (): Promise<number | null> => {
+  const [session, accountId] = await Promise.all([getSession(), getAccountId()]);
+  return resolveViewerPricingGroupId({ accountId, contactId: session?.contactId ?? null }).catch(() => null);
 });
 
 /**
@@ -106,9 +123,12 @@ export async function applyAccountPrices<T extends { id: number }[]>(products: T
   // The buying-group ADVERTISED price first (card gk23c1VK) — a no-op on a
   // channel with no ladder — then the account's contract prices over the top.
   const advertised = (await applyAdvertisedLadderPrices(products as never)) as T;
+  // The viewer's customer-group price list (Industry Kitchens) — between the advertised price and
+  // the account's contract prices, which still win. Identity on a channel without it switched on.
+  const grouped = (await applyGroupPrices(advertised as never, await getPricingGroupId())) as T;
   const accountId = await getAccountId();
-  if (!accountId) return advertised;
-  return applyAccountPricesToProducts(advertised as never, accountId) as Promise<T>;
+  if (!accountId) return grouped;
+  return applyAccountPricesToProducts(grouped as never, accountId) as Promise<T>;
 }
 
 /**
@@ -122,5 +142,10 @@ export async function getListingMemberPrices(
   if (products.length === 0) return {};
   const { customerGroupId, accountId, ladderShare } = await getMemberContext();
   if (!customerGroupId && !accountId) return {};
-  return getMemberPriceMap(products.map((p) => p.id), customerGroupId, accountId, ladderShare);
+  // On a customer-group-pricing channel (Industry Kitchens) the account's contract prices are
+  // resolved AT its group, so a product with no contract price comes back at the group record —
+  // the price the tile already shows — and never at a bare catalogue sale that would undercut it
+  // under a "Member Price" label the cart does not charge. Null group elsewhere: unchanged.
+  const pricingGroupId = customerGroupId ?? (accountId ? await getPricingGroupId() : null);
+  return getMemberPriceMap(products.map((p) => p.id), pricingGroupId, accountId, ladderShare);
 }

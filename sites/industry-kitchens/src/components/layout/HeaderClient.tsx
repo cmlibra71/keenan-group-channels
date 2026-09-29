@@ -8,6 +8,7 @@ export function HeaderClient({
   cartCount: serverCartCount,
   quoteCount: serverQuoteCount,
   isMember,
+  signedIn,
   entryCount,
   drawsEnabled,
   variant = "full",
@@ -15,6 +16,8 @@ export function HeaderClient({
   cartCount: number;
   quoteCount: number;
   isMember?: boolean;
+  /** A session exists — a signed-in shopper who is not a member still gets "My Account". */
+  signedIn?: boolean;
   entryCount?: number;
   /** Prize draws live (channel setting draws_enabled) — gates the account crown + entry-count badge. */
   drawsEnabled?: boolean;
@@ -59,7 +62,7 @@ export function HeaderClient({
       ) : (
         <User className="h-4 w-4" />
       )}
-      {isMember ? "Account" : "Sign In/Register"}
+      {isMember ? "Account" : signedIn ? "My Account" : "Sign In/Register"}
     </button>
   );
 

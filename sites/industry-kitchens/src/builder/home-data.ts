@@ -9,7 +9,7 @@ import {
   getCategoryBySlug,
   attachFromPrices,
 } from "@/lib/store";
-import { applyAccountPrices, getListingMemberPrices } from "@/lib/member";
+import { applyAccountPrices, getListingMemberPrices, getPricingGroupId } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
 import { attachBrandLogos } from "@/lib/brand-logo-fallback";
 import { getSession } from "@/lib/auth";
@@ -97,7 +97,9 @@ export async function loadHomeNativeData(
   for (const [slug, entry] of Object.entries(carousels)) {
     // configurable-from-price: "Starting From" on configurable rail tiles, after the overlays.
     const overlaid = (await attachBrandLogos(
-      await attachFromPrices(await applyAccountPrices(await applyCatalogScope(entry.products)))
+      await attachFromPrices(await applyAccountPrices(await applyCatalogScope(entry.products)), {
+        pricingGroupId: await getPricingGroupId(),
+      })
     )) as unknown as CarouselProducts;
     // This storefront's Zoey rules (`channelRules`, portal PR #1028), applied HERE because these rows
     // go to client components: zero-price shows no price, the cart is refused per rule (per viewer
