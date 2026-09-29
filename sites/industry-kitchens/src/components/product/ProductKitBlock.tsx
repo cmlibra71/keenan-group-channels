@@ -16,18 +16,31 @@
 // ============================================================================
 
 import { Package } from "lucide-react";
-import type { KitGroup, KitSelection, ProductKit } from "@/lib/product-kit";
+import type { KitGroup, KitItem, KitSelection, ProductKit } from "@/lib/product-kit";
+import { bundleAmount, formatBundleAmount } from "@keenan/services/zoey-bundle-price";
+
+/**
+ * Zoey's own price beside an option ("+$731.00", ex or inc GST as the shopper views prices), when
+ * the Zoey import captured one for this storefront's bundle. Nothing otherwise.
+ */
+function OptionPrice({ item, inclusive }: { item: KitItem; inclusive: boolean }) {
+  if (item.selectionPrice == null) return null;
+  return <span className="ml-1 whitespace-nowrap text-zinc-700">+{formatBundleAmount(bundleAmount(item.selectionPrice, inclusive))}</span>;
+}
 
 export function ProductKitBlock({
   kit,
   selection,
   onSelect,
+  inclusive = false,
 }: {
   kit: ProductKit;
   /** Bundle only: chosen product ids per group name. */
   selection: KitSelection;
   /** `null` is the None answer of an optional pick-one group. */
   onSelect: (group: string, productId: number | null) => void;
+  /** The shopper's GST view, for the option prices Zoey printed (ex GST by default). */
+  inclusive?: boolean;
 }) {
   if (kit.kind === "grouped") {
     return (
@@ -51,9 +64,13 @@ export function ProductKitBlock({
     );
   }
 
+  // A bundle Zoey priced (its captured From / To box) reads as Zoey's: the groups and their prices,
+  // no "Build your configuration" heading and no "priced by our team" note — the page's price box
+  // (the template) says what it costs. Every other bundle keeps today's wording.
+  const zoeyPriced = kit.zoeyPrice != null;
   return (
     <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-5">
-      <h3 className="mb-4 text-sm font-semibold text-zinc-900">Build your configuration</h3>
+      {zoeyPriced ? null : <h3 className="mb-4 text-sm font-semibold text-zinc-900">Build your configuration</h3>}
       <div className="space-y-5">
         {kit.groups.map((group) => (
           <KitGroupPicker
@@ -61,13 +78,16 @@ export function ProductKitBlock({
             group={group}
             selectedIds={selection[group.name] ?? []}
             onSelect={onSelect}
+            inclusive={inclusive}
           />
         ))}
       </div>
-      <p className="mt-4 text-xs text-zinc-500">
-        Configurations like this are priced by our team. Your choices are sent through with the
-        quote request.
-      </p>
+      {zoeyPriced ? null : (
+        <p className="mt-4 text-xs text-zinc-500">
+          Configurations like this are priced by our team. Your choices are sent through with the
+          quote request.
+        </p>
+      )}
     </div>
   );
 }
@@ -76,10 +96,12 @@ function KitGroupPicker({
   group,
   selectedIds,
   onSelect,
+  inclusive,
 }: {
   group: KitGroup;
   selectedIds: number[];
   onSelect: (group: string, productId: number | null) => void;
+  inclusive: boolean;
 }) {
   if (group.mode === "included") {
     return (
@@ -94,6 +116,7 @@ function KitGroupPicker({
               <span>
                 <span className="font-medium text-zinc-900">{item.quantity} ×</span> {item.name}
                 {item.sku && <span className="ml-1 text-xs text-zinc-500">({item.sku})</span>}
+                <OptionPrice item={item} inclusive={inclusive} />
               </span>
             </li>
           ))}
@@ -149,6 +172,7 @@ function KitGroupPicker({
                 </span>
                 {item.sku && <span className="block truncate text-xs text-zinc-500">{item.sku}</span>}
               </span>
+              <OptionPrice item={item} inclusive={inclusive} />
             </label>
           );
         })}

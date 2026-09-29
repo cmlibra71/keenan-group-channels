@@ -40,6 +40,14 @@ export function extrasPanelGroups(addons: ProductAddons | null | undefined): Pro
 }
 
 /**
+ * Zoey's own options on a product with no price to show (POA / quote only) — asked in their own
+ * box, each option's price beside it as Zoey prints it, answers riding the quote (IK parity,
+ * XLV-5214). `quoteExtrasGroups` in `@keenan/services/product-addons` is the predicate; drawn
+ * only while the provider says so (`quoteExtrasShown`).
+ */
+export { quoteExtrasGroups } from "@keenan/services/product-addons";
+
+/**
  * The QUESTIONS a product asks before it can be bought — a pick-one group whose every answer is a
  * declared no-charge answer, Gas Type (Natural Gas / LPG) being the one that matters (card
  * tkvntxsq). `isNoChargeQuestion` in `@keenan/services/product-addons` is the predicate.
@@ -110,8 +118,10 @@ export function extrasDefinition(
   // Everything the shopper CHOOSES (as opposed to types): the priced groups while their panel is
   // on screen, and the no-charge questions always (card tkvntxsq) — author order kept, because
   // the refusal names them in that order.
+  // Zoey's own options (`scoped`) are asked whatever the price (IK parity, XLV-5214), so they are
+  // answered — and refused when unanswered — whatever the price too.
   const groups = addons.groups.filter(
-    (g) => g.control !== "text" && (pricedPanelShown || isNoChargeQuestion(g))
+    (g) => g.control !== "text" && (pricedPanelShown || isNoChargeQuestion(g) || g.scoped === true)
   );
   return groups.length > 0 ? { groups } : null;
 }

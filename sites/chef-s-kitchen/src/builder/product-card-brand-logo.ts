@@ -1,4 +1,8 @@
 import type { NodeTree } from "@keenan/services/builder";
+import { templateOwns } from "@keenan/services/builder";
+
+/** The `data-kg-template-owns` name a master declares when it authors the fallback itself. */
+export const BRAND_LOGO_PLACEMENT = "brand-logo";
 
 // ============================================================================
 // Card tSrCcnvx — the AUTHORED half of "missing images default to the brand
@@ -351,7 +355,7 @@ export function applyBrandLogoFallback(
 ): BrandLogoCardResult {
   const root = tree?.root as unknown as NodeRecord | undefined;
   if (!root || typeof root !== "object") return { tree, inserted: false };
-  if (hasNode(root, target.logoId)) return { tree, inserted: false };
+  if (hasNode(root, target.logoId) || templateOwns(tree, BRAND_LOGO_PLACEMENT)) return { tree, inserted: false };
 
   const state = { inserted: false };
   // The root itself can be the grey box only in a degenerate tree; the anchor is

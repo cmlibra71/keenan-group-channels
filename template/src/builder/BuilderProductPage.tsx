@@ -29,6 +29,7 @@ import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 import { productNatives } from "./product-natives";
 import { productFinanceOffer, productFinanceScope } from "@/lib/finance/product-finance";
 import { useFinanceRates } from "@/lib/finance/finance-rates-context";
+import { barQuantity, KIT_ADD_TO_QUOTE_EVENT, type KitAddToQuoteDetail } from "@/lib/kit-bar-event";
 
 // ============================================================================
 // The product page rendered from a node tree. Thin wrapper over the SHARED
@@ -233,6 +234,16 @@ function ActionsBridge({
     () => ({
       ...handlers,
       ...formHandlers,
+      // Zoey's fixed "Price as configured" bar on a bundle: its ADD TO QUOTE adds the kit's picks
+      // (the kit native answers the event) at the bar's quantity. Resolves for the bar's toast;
+      // a page with no kit native answers nothing, so the press says so rather than hanging.
+      addBundleToQuote: (args?: Record<string, unknown>) =>
+        new Promise<{ success?: boolean; error?: string }>((resolve) => {
+          const detail: KitAddToQuoteDetail = { productId, quantity: barQuantity(args?.quantity), handled: false, resolve };
+          // dispatchEvent runs listeners synchronously, so `handled` is known on return.
+          window.dispatchEvent(new CustomEvent(KIT_ADD_TO_QUOTE_EVENT, { detail }));
+          if (!detail.handled) resolve({ error: "This product has no configuration to add." });
+        }),
       goBack: (args?: Record<string, unknown>) => {
         if (window.history.length > 1) router.back();
         else router.push(String(args?.fallbackHref ?? "/products"));

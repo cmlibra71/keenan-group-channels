@@ -37,7 +37,7 @@
 import { useProductPurchase } from "@keenan/services/product-page";
 import type { ProductAddonGroup } from "@keenan/services/product-addons";
 import { Price } from "@/components/ui/Price";
-import { extrasPanelGroups, optionalRadioNoneRow, questionGroups } from "@/lib/product/addon-panel";
+import { extrasPanelGroups, optionalRadioNoneRow, questionGroups, quoteExtrasGroups } from "@/lib/product/addon-panel";
 import { useGst, adjustForGst } from "@/lib/gst";
 
 /** "245.00" ex GST, or "269.50" once the storewide toggle says inclusive.
@@ -118,12 +118,16 @@ function AddonGroup({
   priced = true,
   first = false,
   optionalRadioNone = false,
+  bareNoCharge = false,
 }: {
   group: ProductAddonGroup;
   chosen: string[];
   onToggle: (optionKey: string, on?: boolean) => void;
   /** False for a no-charge question — its answers carry no price to print. */
   priced?: boolean;
+  /** Print nothing beside a declared no-charge answer in a priced group ("Other - call for freight
+   *  quote POA", as Zoey prints it) — the quote-extras box only, so the priced panel is unchanged. */
+  bareNoCharge?: boolean;
   /** The first group in a box with no heading above it sits flush with the box's padding. */
   first?: boolean;
   /** See `ProductAddons`' prop of the same name. */
@@ -177,7 +181,7 @@ function AddonGroup({
           <option value="">{group.required ? "Please choose…" : "None"}</option>
           {group.options.map((o) => (
             <option key={o.key} value={o.key}>
-              {priced ? `${o.label} (+$${money(o.price)})` : o.label}
+              {priced && !(bareNoCharge && o.noCharge) ? `${o.label} (+$${money(o.price)})` : o.label}
             </option>
           ))}
         </select>
@@ -226,7 +230,7 @@ function AddonGroup({
                   onClick={single && isOn && !group.required ? () => onToggle(o.key, false) : undefined}
                   className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-brand,#000)]"
                 />
-                <OptionLabel label={o.label} price={o.price} url={o.url} priced={priced} />
+                <OptionLabel label={o.label} price={o.price} url={o.url} priced={priced && !(bareNoCharge && o.noCharge)} />
               </label>
             );
           })}
@@ -287,7 +291,15 @@ export function ProductAddons({
    * free-text customisation box, and a no-charge question is drawn above.
    */
   const groups = purchase.extrasPanelShown ? extrasPanelGroups(addons) : [];
-  if (questions.length === 0 && groups.length === 0) return null;
+  /**
+   * ZOEY'S OWN OPTIONS ON A PRODUCT WITH NO PRICE (IK parity, XLV-5214). Zoey asks "Freight —
+   * Melbourne Metro +$575.00 …" on a POA canopy, and the answer rides the quote. The provider keeps
+   * them buyable and says so (`quoteExtrasShown`); they are drawn in the questions' box — each
+   * option priced, as Zoey prints it, but no "Optional extras" heading and no running total,
+   * because there is no product price for anything to add up to.
+   */
+  const quoteExtras = purchase.quoteExtrasShown ? quoteExtrasGroups(addons) : [];
+  if (questions.length === 0 && groups.length === 0 && quoteExtras.length === 0) return null;
 
   return (
     <>
@@ -302,6 +314,25 @@ export function ProductAddons({
               group={group}
               priced={false}
               first={i === 0}
+              chosen={purchase.selectedAddons[group.key] ?? []}
+              onToggle={(optionKey, on) => purchase.toggleAddon(group.key, optionKey, on)}
+            />
+          ))}
+        </div>
+      ) : null}
+
+      {quoteExtras.length > 0 ? (
+        <div
+          className="mt-5 rounded-[12px] border border-border bg-surface-primary px-4 py-3"
+          data-product-quote-extras=""
+        >
+          {quoteExtras.map((group, i) => (
+            <AddonGroup
+              key={group.key}
+              group={group}
+              first={i === 0}
+              optionalRadioNone={optionalRadioNone}
+              bareNoCharge
               chosen={purchase.selectedAddons[group.key] ?? []}
               onToggle={(optionKey, on) => purchase.toggleAddon(group.key, optionKey, on)}
             />

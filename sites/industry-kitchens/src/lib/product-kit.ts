@@ -38,6 +38,14 @@
 // page, so anything unreadable simply reads as "not a kit".
 // ============================================================================
 
+import {
+  configuredBundlePrice,
+  readSelectionPrice,
+  readZoeyBundlePrice,
+  ZOEY_BUNDLE_PRICE_KEY,
+  type ZoeyBundlePrice,
+} from "@keenan/services/zoey-bundle-price";
+
 export type KitKind = "grouped" | "bundle";
 
 /** How a bundle group is answered (see GROUP RULES above). */
@@ -52,6 +60,9 @@ export interface KitItem {
   group: string | null;
   /** Bundle only — preselected inside its group. */
   isDefault: boolean;
+  /** Zoey's own price for this option, ex GST (`zoey_selection_price`, the "+$731.00" beside it);
+   *  null when Zoey printed none. Display only — the quote line is still priced by the team. */
+  selectionPrice?: number | null;
 }
 
 export interface KitGroup {
@@ -72,10 +83,29 @@ export interface ProductKit {
   scoped: boolean;
   /** Quote only on this storefront (a scoped kit's `quote_only`). Never true on a shared kit. */
   quoteOnly: boolean;
+  /** Zoey's price box for a scoped kit (`zoey_price`: From / To, or one price), ex GST; null for none. */
+  zoeyPrice?: ZoeyBundlePrice | null;
 }
 
 /** The customer's picks: group name → the product ids chosen in it (one, several, or none). */
 export type KitSelection = Record<string, number[]>;
+
+export { KIT_ADD_TO_QUOTE_EVENT, barQuantity, type KitAddToQuoteDetail } from "./kit-bar-event";
+
+/**
+ * Zoey's "Price as configured" for these picks, ex GST: the From amount plus every picked OPTIONAL
+ * row's own price (always-included rows are inside From). Null without a captured range.
+ */
+export function kitConfiguredPrice(kit: ProductKit | null | undefined, selection: KitSelection): number | null {
+  if (!kit || kit.kind !== "bundle" || kit.zoeyPrice?.display !== "range") return null;
+  const picked: Array<number | null> = [];
+  for (const g of kit.groups) {
+    if (g.mode === "included") continue;
+    const ids = selection[g.name] ?? [];
+    for (const item of g.items) if (ids.includes(item.productId)) picked.push(item.selectionPrice ?? null);
+  }
+  return configuredBundlePrice(kit.zoeyPrice.from ?? null, picked);
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -138,6 +168,7 @@ function readKitBag(root: Record<string, unknown>, scoped: boolean): ProductKit 
       quantity: toPositiveInt(row.quantity, 1) ?? 1,
       group: cleanLabel(row.group),
       isDefault: row.is_default === true,
+      selectionPrice: scoped ? readSelectionPrice(row) : null,
     });
   }
   if (items.length === 0) return null;
@@ -156,6 +187,7 @@ function readKitBag(root: Record<string, unknown>, scoped: boolean): ProductKit 
     groups: kind === "bundle" ? groupKitItems(items, readGroupRules(kitBag)) : [],
     scoped,
     quoteOnly: scoped && root.quote_only === true,
+    zoeyPrice: scoped ? readZoeyBundlePrice(root[ZOEY_BUNDLE_PRICE_KEY]) : null,
   };
 }
 
