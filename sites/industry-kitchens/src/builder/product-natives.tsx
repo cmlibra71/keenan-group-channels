@@ -24,6 +24,7 @@ import { COMPARE_NODE_KEY } from "@/builder/compare-node";
 import { TILE_COMPARE_KEY } from "@/builder/tile-compare-node";
 import { TileCompare } from "@/components/product/TileCompare";
 import { OfferTierTables, type OfferTierTable } from "@/components/product/OfferTierTables";
+import { GiftCardPanel } from "@/components/product/GiftCardPanel";
 
 // ============================================================================
 // Industry Kitchens' sealed product-page leaves.
@@ -112,6 +113,11 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // pressed, which an authored tree cannot do. It renders nothing for a product with
     // no text groups, so the node is safe in front of every product page.
     "product-instructions": () => <ProductInstructionsNative />,
+    // IK gift cards (Zoey parity): Amount / Recipient / Sender / Special Message, carried by Add to
+    // Quote. Sealed for the Instructions box's reason — the answers are live purchase state that
+    // must travel with the button. Placed by page 69 with Show-if `product.isGiftCard`, and renders
+    // nothing on a product without a gift card configuration.
+    "product-gift-card": () => <GiftCardPanel />,
     // The product page's Reviews tab (card qxVqy5Dn). Sealed rather than
     // authored because the Write a Review form needs client state (the star
     // picker) and a server action, neither of which a node tree can carry —

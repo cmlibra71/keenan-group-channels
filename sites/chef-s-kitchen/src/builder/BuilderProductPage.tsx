@@ -15,6 +15,7 @@ import {
 } from "@keenan/services/product-page";
 import { addToCart } from "@/lib/actions/cart";
 import type { AddonSelectionInput, ProductAddons } from "@keenan/services/product-addons";
+import type { GiftCardSelectionInput } from "@keenan/services/gift-card";
 import { missingAnswerSentence, tileRefusalDestination } from "@/lib/product/addon-panel";
 import { COMBINATION_UNAVAILABLE_TEXT } from "@/components/product/ProductCombinationNotice";
 import { addToQuote } from "@/lib/actions/quote";
@@ -98,9 +99,12 @@ function ActionsBridge({
       // The shopper's ticked extras (card 0CDcCYmO). A quote line is priced by a rep, so
       // these move no money here — they ride the line as the record of what was asked for,
       // the same way a bundle build does.
-      addons?: AddonSelectionInput
+      addons?: AddonSelectionInput,
+      // IK gift cards (Zoey parity): the amount and recipient / sender details — re-validated by
+      // the action against the product's own configuration.
+      giftCard?: GiftCardSelectionInput
     ) => {
-      const res = await addToQuote(pid, variantId, null, addons);
+      const res = await addToQuote(pid, variantId, null, addons, null, giftCard ?? null);
       if (res && "quoteCount" in res && typeof res.quoteCount === "number") {
         setQuoteCount(res.quoteCount);
         open("quote");
