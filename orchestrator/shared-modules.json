@@ -87,8 +87,6 @@
     "builder/seo-copy-placement.ts",
     "builder/silverchef-node.test.ts",
     "builder/silverchef-node.ts",
-    "builder/strip-stock-nodes.test.ts",
-    "builder/strip-stock-nodes.ts",
     "builder/subcategory-tile-size.test.ts",
     "builder/subcategory-tile-size.ts",
     "builder/tile-quantity.test.ts",

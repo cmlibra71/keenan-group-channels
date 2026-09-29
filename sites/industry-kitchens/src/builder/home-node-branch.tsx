@@ -8,6 +8,7 @@ import {
   getComponents,
   getDraftComponents,
   getChannelSetting,
+  getMemberScaleOn,
 } from "@/lib/store";
 import { CHANNEL_ID } from "@/lib/channel";
 import { getMemberContext } from "@/lib/member";
@@ -100,7 +101,10 @@ export async function renderHomeNodeBranch(
   ]);
   const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
 
+  // The channel's member price scale (audit C11) — the price masters word "Standard price"/"RRP" on it.
+  const memberScaleOn = await getMemberScaleOn();
   const payload = composeHomePagePayload({
+    memberScaleOn,
     channelId: CHANNEL_ID,
     sections,
     customer: {

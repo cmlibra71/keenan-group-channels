@@ -9,7 +9,7 @@ import type { NodeTree, BuilderNode } from "@keenan/services/builder";
 // the brand's name in small letters where the old Industry Kitchens page showed
 // the brand's logo.
 //
-// Same shape as `strip-stock-nodes.ts`, and for the same reason: the storefront
+// Same shape as the old stock-wording pass, and for the same reason: the storefront
 // renders the AUTHORED tree out of the database (`cms_pages.node_tree` for a
 // draft read, `cms_page_versions.node_tree` of the published version for a live
 // one), and `SEED_PRODUCT_TREE` is only the fallback for a site that never
@@ -189,7 +189,7 @@ export interface BrandLogoResult {
 }
 
 // Structural walk over a plain-record view of the tree, exactly as
-// strip-stock-nodes does: `BuilderNode` is a union whose members carry
+// the old stock-wording pass did: `BuilderNode` is a union whose members carry
 // different child arrays, and everything the transform does not touch is copied
 // through byte for byte so component instances, styles and bindings survive.
 type NodeRecord = Record<string, unknown> & { id?: unknown };
