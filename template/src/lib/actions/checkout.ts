@@ -1187,6 +1187,42 @@ export async function placeOrder(
     }));
   }
 
+  // The order's delivery address, as THIS checkout states it — one builder for the fresh order's
+  // row and for the refresh of a reused open order (below), so the two cannot describe it differently.
+  const shippingAddressRow = () => ({
+    first_name: firstName,
+    last_name: lastName,
+    email,
+    phone: phone || null,
+    company: (formData.get("company") as string)?.trim() || null,
+    address1,
+    address2: billingAddress.address2 || null,
+    city,
+    state_or_province: state || null,
+    postal_code: postalCode,
+    country,
+    country_code: country,
+    // Residential vs commercial for THIS delivery (card HMtUxvwZ). Derived by the
+    // details lookup from the shopper's own Places pick and posted as a hidden field;
+    // null when nothing was picked or the pick said nothing, which reads commercial —
+    // exactly how every order behaves today. It refuses NOTHING: it is what lets the
+    // order screen print RESIDENTIAL ADDRESS and raise the commercial-only flag on an
+    // order raised here, which is the highest-volume way an order is created at all.
+    address_type: shippingAddressType,
+    shipping_method: heldForSpecialised
+      ? "Specialised delivery — to be quoted"
+      : deliveryServiceType === "curbside"
+        ? "Curbside delivery"
+        : shippingIncTax > 0
+          ? "Storefront delivery"
+          : "Free delivery",
+    base_cost: String(shippingExTax),
+    cost_ex_tax: String(shippingExTax),
+    cost_inc_tax: String(shippingIncTax),
+    cost_tax: String(shippingTax),
+    items_total: totalItems,
+  });
+
   // Idempotency guard for card payments: if THIS cart already has an open, unpaid
   // Stripe order (the shopper hit "Pay" twice, or retried after a network blip),
   // reuse it rather than creating a second orphan awaiting_payment order. Found
@@ -1197,7 +1233,7 @@ export async function placeOrder(
     try {
       // THE CART'S OWN ORDER, looked up directly by the cart uuid stamped on it — never a window of
       // recent orders (lib/checkout/open-order.ts).
-      const openForCart = (await findOpenCardOrderForCart(uuid, session?.contactId ?? null)) ?? undefined;
+      const openForCart = (await findOpenCardOrderForCart(uuid, session?.contactId ?? null, session?.email ?? null)) ?? undefined;
       // REUSE ONLY AN IDENTICAL ORDER (lib/checkout/open-order-reuse.ts). A cart re-priced since the
       // first attempt — up or down — gets a FRESH order from its current lines; the stale one's intent
       // is cancelled at Stripe and the order cancelled. If that intent can no longer be cancelled the
@@ -1233,10 +1269,28 @@ export async function placeOrder(
         if (customerReference !== (existing.customer_po ?? null)) {
           await orderService.update(existing.id, { customerPo: customerReference });
         }
-        // GUEST THEN SIGN IN (lib/checkout/open-order.ts): the order was placed as a guest and the
-        // shopper has signed in since. Same cart, same money — claim it for them, so the order is on
-        // their account like the fresh one would have been. (A re-priced one was replaced above.)
-        if (existing.contact_id == null && session?.contactId) {
+        // THE ADDRESSES AS THIS CHECKOUT STATES THEM. The total matched, but the shopper may have
+        // corrected the billing name, phone or delivery address on the retry — the order must carry
+        // what they submitted THIS time, exactly as a fresh order would (open-order-refresh).
+        // Best-effort in its OWN try: a failure here must not fall through to writing a second order.
+        try {
+          await orderService.update(existing.id, { billingAddress });
+          const shipRows = (
+            await orderShippingAddressService.listForParent(existing.id, { page: 1, limit: 1, sort: "id", direction: "asc" })
+          ).data as Array<{ id: number }>;
+          if (shipRows[0]) {
+            await orderShippingAddressService.updateForParent(existing.id, shipRows[0].id, shippingAddressRow());
+          } else {
+            await orderShippingAddressService.createForParent(existing.id, shippingAddressRow());
+          }
+        } catch (e) {
+          console.error("[placeOrder] refreshing a reused order's addresses failed (non-fatal):", e);
+        }
+        // GUEST THEN SIGN IN (lib/checkout/open-order.ts): the order was placed as a guest — with no
+        // contact, or linked to the passwordless guest contact for their email — and the shopper has
+        // signed in since. Same cart, same money — claim it for them, so the order is on their account
+        // like the fresh one would have been. (A re-priced one was replaced above.)
+        if (session?.contactId && existing.contact_id !== session.contactId) {
           await orderService.update(existing.id, {
             contactId: session.contactId,
             // …and the group it is now priced at, as the fresh order would be stamped.
@@ -1541,39 +1595,7 @@ export async function placeOrder(
   // Stripe early-return so EVERY payment method records shipping. Best-effort: a
   // failure here must not strand a paid order, so we log and continue.
   try {
-    await orderShippingAddressService.createForParent(order.id, {
-      first_name: firstName,
-      last_name: lastName,
-      email,
-      phone: phone || null,
-      company: (formData.get("company") as string)?.trim() || null,
-      address1,
-      address2: billingAddress.address2 || null,
-      city,
-      state_or_province: state || null,
-      postal_code: postalCode,
-      country,
-      country_code: country,
-      // Residential vs commercial for THIS delivery (card HMtUxvwZ). Derived by the
-      // details lookup from the shopper's own Places pick and posted as a hidden field;
-      // null when nothing was picked or the pick said nothing, which reads commercial —
-      // exactly how every order behaves today. It refuses NOTHING: it is what lets the
-      // order screen print RESIDENTIAL ADDRESS and raise the commercial-only flag on an
-      // order raised here, which is the highest-volume way an order is created at all.
-      address_type: shippingAddressType,
-      shipping_method: heldForSpecialised
-        ? "Specialised delivery — to be quoted"
-        : deliveryServiceType === "curbside"
-          ? "Curbside delivery"
-          : shippingIncTax > 0
-            ? "Storefront delivery"
-            : "Free delivery",
-      base_cost: String(shippingExTax),
-      cost_ex_tax: String(shippingExTax),
-      cost_inc_tax: String(shippingIncTax),
-      cost_tax: String(shippingTax),
-      items_total: totalItems,
-    });
+    await orderShippingAddressService.createForParent(order.id, shippingAddressRow());
   } catch (e) {
     console.error("[placeOrder] shipping address insert failed (non-fatal):", e);
   }

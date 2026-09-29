@@ -35,10 +35,18 @@ export interface OpenCardOrder {
  * (stamping the contact on it) or replaces it (cancelling its payment, as for any re-priced order).
  * An order stamped with ANOTHER person's contact is never returned, so a cart uuid can never hand
  * one person another person's order. Their own order wins over a guest one when both exist.
+ *
+ * …INCLUDING A GUEST ORDER THAT WAS LINKED AT CREATION. `OrderService.create` links a guest order to
+ * the storefront's PASSWORDLESS contact for the billing email (the guest-checkout contact). A shopper
+ * who then signs in with that same email owns it too, so a signed-in lookup also matches an order
+ * whose contact is a passwordless, accountless contact of THIS storefront with the shopper's email.
+ * A contact with a password is someone's login and is never matched this way.
  */
 export async function findOpenCardOrderForCart(
   cartUuid: string,
   contactId: number | null | undefined,
+  /** The signed-in shopper's email — matches their passwordless guest-checkout contact. */
+  email: string | null | undefined,
   /** Test seam: the client and channel to read with. Omitted = the live pool and this storefront. */
   deps: { client?: SqlClient; channelId?: number } = {}
 ): Promise<OpenCardOrder | null> {
@@ -53,8 +61,17 @@ export async function findOpenCardOrderForCart(
        AND payment_status = 'awaiting_payment'
        AND lower(coalesce(status, '')) NOT IN ('canceled', 'cancelled', 'voided')
        AND metafields ->> 'cart_uuid' = ${cartUuid}
-       AND (${contactId ?? null}::int IS NULL OR contact_id = ${contactId ?? null}::int OR contact_id IS NULL)
-     ORDER BY (contact_id IS NOT NULL) DESC, id DESC
+       AND (
+         ${contactId ?? null}::int IS NULL
+         OR contact_id = ${contactId ?? null}::int
+         OR contact_id IS NULL
+         OR (${email ?? null}::text IS NOT NULL AND contact_id IN (
+               SELECT g.id FROM contacts g
+                WHERE g.password_hash IS NULL AND g.account_id IS NULL
+                  AND g.origin_channel_id = ${channelId}
+                  AND lower(g.email) = lower(${email ?? null}::text)))
+       )
+     ORDER BY (contact_id IS NOT DISTINCT FROM ${contactId ?? null}::int) DESC, id DESC
      LIMIT 1`) as OpenCardOrder[];
   return rows[0] ?? null;
 }
