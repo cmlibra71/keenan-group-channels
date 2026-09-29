@@ -16,6 +16,8 @@ import {
   getDefaultListingSort,
 } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
+import { loadCatalogAttributeContext } from "@keenan/services";
+import { CHANNEL_ID as ATTR_CHANNEL_ID } from "@/lib/channel";
 import { getListingPricing } from "@/lib/member";
 import { categoryRobots } from "@/lib/seo";
 import { ProductGrid } from "@/components/product/ProductGrid";
@@ -158,7 +160,7 @@ export default async function CategoryPage({
   // these selections go into. An attribute the category does not offer simply
   // matches nothing extra, because the products that would satisfy it are the
   // ones carrying the value.
-  const attributeSelections = parseAttributeSelections(sp as Record<string, string | undefined>);
+  const attributeSelections = parseAttributeSelections(sp as Record<string, string | undefined>, (await loadCatalogAttributeContext(ATTR_CHANNEL_ID)).attributes);
   const attributeParams = Object.keys(attributeSelections).map(attributeParam);
   // Availability is no longer a shopper-facing facet at all: "In stock" was
   // retired first and Clearance followed (clearance products are browsed via the
