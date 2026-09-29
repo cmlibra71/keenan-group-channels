@@ -396,3 +396,13 @@ body:has([data-node-id="ikp-bundle-bar"]) .ik-specialist-float {
     bottom: calc(var(--ik-bundle-bar-h-lg, 128px) + 1.25rem);
   }
 }
+/* The space under the whole page (footer included) while Zoey's fixed bundle bar is on screen —
+   the bar is ≈97px on a phone and ≈114px on desktop. */
+body:has([data-node-id="ikp-bundle-bar"]) {
+  padding-bottom: 104px;
+}
+@media (min-width: 1024px) {
+  body:has([data-node-id="ikp-bundle-bar"]) {
+    padding-bottom: 128px;
+  }
+}

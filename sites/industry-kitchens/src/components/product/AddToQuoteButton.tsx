@@ -8,6 +8,9 @@ import type { KitChoice } from "@/lib/product-kit";
 import type { AddonSelectionInput } from "@keenan/services/product-addons";
 import { tileRefusalDestination } from "@/lib/product/addon-panel";
 
+/** The words a press shows when its request never came back. */
+export const QUOTE_ADD_FAILED = "We couldn't add this to your quote — please check your connection and try again.";
+
 /** What one Add to Quote press returns to its caller (a template action shows it as a toast). */
 export type QuoteAddResult = { success?: boolean; error?: string } & Record<string, unknown>;
 
@@ -32,7 +35,14 @@ export function useQuoteAdd(productId: number) {
     new Promise((resolve) => {
       setRefusal(null);
       startTransition(async () => {
-        const res = (await addToQuote(productId, opts.variantId, opts.kitChoices ?? null, opts.addons ?? null, opts.quantity ?? null)) as QuoteAddResult | undefined;
+        let res: QuoteAddResult | undefined;
+        try {
+          res = (await addToQuote(productId, opts.variantId, opts.kitChoices ?? null, opts.addons ?? null, opts.quantity ?? null)) as QuoteAddResult | undefined;
+        } catch {
+          // The request never came back (offline, a dropped connection, a server fault). Say so,
+          // and settle, so no caller — this button or the bundle bar — is left pending forever.
+          res = { error: QUOTE_ADD_FAILED };
+        }
         // Fresh count from the action → badge updates without a route re-render,
         // and the quote panel pops out showing what was just added. A failed add
         // returns `{ error }`, so it stays closed.
