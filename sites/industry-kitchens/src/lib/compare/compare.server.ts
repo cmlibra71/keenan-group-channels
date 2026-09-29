@@ -13,6 +13,8 @@ import { compareBuyButtons } from "./compare-buy";
 import { tileRequiredQuestions } from "@keenan/services";
 import { isProductId } from "./compare-list";
 import { readProductKit, tileKitChoices, type KitChoice } from "@/lib/product-kit";
+import { readChannelRules } from "@keenan/services/channel-rules";
+import { getSession } from "@/lib/auth";
 
 // ============================================================================
 // The compare page's data (IK parity, root cause `compare-feature`).
@@ -156,11 +158,14 @@ export async function loadCompareData(requested: number[]): Promise<CompareData>
   const ordered = ids.map((id) => byId.get(id)).filter((r): r is ListRow => r != null);
   const visibleIds = ordered.map((r) => r.id);
 
-  const [details, definitions, memberPrices] = await Promise.all([
+  const [details, definitions, memberPrices, session] = await Promise.all([
     readDetails(visibleIds).catch(() => new Map<number, DetailRow>()),
     readDefinitions().catch(() => []),
     getListingMemberPrices(ordered).catch(() => ({}) as Record<number, number>),
+    getSession().catch(() => null),
   ]);
+  // The guest rule depends on who is looking; the cart guard reads a missing session as a guest too.
+  const viewer = { loggedIn: session != null };
 
   const products: CompareProduct[] = ordered.map((r) => {
     const price = cardPrice(r);
@@ -179,6 +184,9 @@ export async function loadCompareData(requested: number[]): Promise<CompareData>
       // Any required question (the Zoey options imported for this storefront, default or not):
       // the column opens the product page instead, as Zoey's tile does.
       requiredQuestions: d ? tileRequiredQuestions({ metafields: d.metafields, channelId: CHANNEL_ID }) : null,
+      // This storefront's Zoey rules (quote_only / cart_disabled / out_of_stock / guest quote-only).
+      channelRules: d ? readChannelRules(d.metafields, CHANNEL_ID) : null,
+      viewer,
     });
     return {
       id: r.id,

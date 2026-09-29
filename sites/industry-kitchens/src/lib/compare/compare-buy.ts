@@ -1,4 +1,5 @@
 import { canPurchaseQuantity } from "@keenan/services/backorder";
+import { channelRuleEffects, type ChannelPurchaseRules, type ChannelRuleViewer } from "@keenan/services/channel-rules";
 import { tileControlsOf } from "@keenan/services/tile-controls";
 import type { ProductKit } from "@/lib/product-kit";
 
@@ -21,6 +22,10 @@ import type { ProductKit } from "@/lib/product-kit";
 //     (`ProductDetail`) never offers a cart on any bundle — "a bundle is never
 //     bought straight off the page, the configuration goes to a rep". Both are
 //     honoured: no bundle gets a cart here.
+//   * this storefront's Zoey rules do not refuse it for THIS viewer (services channel-rules, the ONE
+//     reader the product page, tiles and the cart guard use): quote_only ($0 / POA — also hides the
+//     price), cart_disabled (no basket for anyone, price shown), out_of_stock, and guest_quote_only
+//     for a guest.
 // Add to Quote is offered unless `restrict_add_to_quote` (`quoteOffered`).
 //
 // PURE apart from the two pure services helpers; pinned by compare-buy.test.ts.
@@ -44,6 +49,10 @@ export interface CompareBuyFacts {
    * buttons, as Zoey's tile does (the page still starts on the default). Absent ⇒ none.
    */
   requiredQuestions?: readonly string[] | null;
+  /** This storefront's Zoey rules for the product (`readChannelRules(metafields, CHANNEL_ID)`). */
+  channelRules?: ChannelPurchaseRules | null;
+  /** Who is looking — the guest rule depends on it. Absent reads as a guest (as the cart guard does). */
+  viewer?: ChannelRuleViewer | null;
 }
 
 export interface CompareBuy {
@@ -64,7 +73,9 @@ export function compareBuyButtons(f: CompareBuyFacts): CompareBuy {
     restrictAddToQuote: f.restrictAddToQuote,
     purchasingDisabled: f.purchasingDisabled,
   });
-  const hasPrice = !f.hidePrice && f.shownPrice > 0;
+  const rules = channelRuleEffects(f.channelRules ?? null, f.viewer ?? null);
+  const priceHidden = f.hidePrice || rules.priceHidden;
+  const hasPrice = !priceHidden && f.shownPrice > 0;
   const blockedByStock = !canPurchaseQuantity(
     {
       inventoryTracking: f.inventoryTracking ?? null,
@@ -76,9 +87,9 @@ export function compareBuyButtons(f: CompareBuyFacts): CompareBuy {
   const isBundle = f.kit?.kind === "bundle" || f.kit?.quoteOnly === true;
   const answerRequired = (f.requiredQuestions?.length ?? 0) > 0;
   return {
-    cart: hasPrice && !controls.cartRefused && !blockedByStock && !isBundle && !answerRequired,
+    cart: hasPrice && !controls.cartRefused && !rules.cartRefused && !blockedByStock && !isBundle && !answerRequired,
     quote: !controls.quoteRefused && !answerRequired,
-    priceHidden: f.hidePrice,
+    priceHidden,
     answerRequired,
   };
 }
