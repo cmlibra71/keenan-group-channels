@@ -258,9 +258,9 @@ export function SortSelectWidget({ ctx }: { attrs: Record<string, unknown>; ctx?
   // that the sort box SHOWS the effective order.
   const extras =
     ctx?.record?.kind === "category"
-      ? ((ctx.record.extras ?? {}) as { defaultSort?: ListingSort })
+      ? ((ctx.record.extras ?? {}) as { defaultSort?: ListingSort; sortOptions?: { value: string; label: string }[] })
       : {};
-  return <SortSelect defaultSort={extras.defaultSort} />;
+  return <SortSelect options={extras.sortOptions} defaultSort={extras.defaultSort} />;
 }
 
 export function LoadMoreWidget({ ctx }: { attrs: Record<string, unknown>; ctx?: RenderContext }) {

@@ -5,6 +5,7 @@ import {
   bestVisiblePrice,
   financeApplyFundingTypes,
   productFinanceOffer,
+  productFinanceScope,
 } from "./product-finance.ts";
 import {
   weeklyRent,
@@ -225,4 +226,27 @@ test("the SilverChef application keeps the whole list, as it shipped", () => {
   assert.ok(silverchef.includes(FUNDING_TYPE_HAS_SILVERCHEF_ACCOUNT));
   assert.ok(silverchef.includes(FUNDING_TYPE_SKOPE));
   assert.ok(silverchef.length > financeApplyFundingTypes("skope").length);
+});
+
+test("the template facts (purchase.finance*) are the sealed panel's offer, field for field", () => {
+  const sc = productFinanceOffer({ price: { displayPrice: 5000 }, sku: "ABC-1", pricesIncludeTax: true });
+  assert.deepEqual(productFinanceScope(sc), {
+    financeShown: true,
+    financeFunder: "silverchef",
+    financeIsSkope: false,
+    financeAmount: sc!.amount,
+    financeWeekly: sc!.weekly,
+    financeApplyPath: FINANCE_APPLY_PATH.silverchef,
+  });
+  const sk = productFinanceOffer({ price: { displayPrice: 5000 }, sku: "SKO-BME1200", pricesIncludeTax: true });
+  assert.equal(productFinanceScope(sk).financeIsSkope, true);
+  assert.equal(productFinanceScope(sk).financeApplyPath, FINANCE_APPLY_PATH.skope);
+  assert.deepEqual(productFinanceScope(null), {
+    financeShown: false,
+    financeFunder: "",
+    financeIsSkope: false,
+    financeAmount: "",
+    financeWeekly: null,
+    financeApplyPath: "",
+  });
 });

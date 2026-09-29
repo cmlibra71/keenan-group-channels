@@ -10,6 +10,7 @@ import {
   attachFromPrices,
 } from "@/lib/store";
 import { CHANNEL_ID } from "@/lib/channel";
+import { getListingDisplay } from "@/lib/listing-display";
 import { getMemberContext, applyAccountPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
 import { attachBrandLogos } from "@/lib/brand-logo-fallback";
@@ -18,6 +19,7 @@ import {
   composeCategoryPagePayload,
   loadJsSandbox,
   computeCallResults,
+  templateOwnedNames,
   type NodeTree,
 } from "@keenan/services/builder";
 import { cmsFunctionService } from "@keenan/services/services";
@@ -108,6 +110,22 @@ export interface CategoryNodeBranchArgs {
  * Every read here is the same `cache()`d load the branch itself does, so calling
  * both on one request costs one fetch.
  */
+/**
+ * Does the authored Category Page Template place the WHOLE approved copy block — intro and
+ * questions — itself? It says so by declaring `seo-copy` in its root's `data-kg-template-owns`
+ * (IK hidden-conditionals C23). The route then prints only the questions' JSON-LD (structured data
+ * stays code-owned) and no foot block. Same flag gate and the same cached template read as above.
+ */
+export async function categoryTreeOwnsSeoCopy(draft: boolean): Promise<boolean> {
+  const catTemplate = (await getCmsTemplate("category_layout", draft).catch(() => null)) as {
+    node_tree?: unknown;
+  } | null;
+  const nodeTree = (catTemplate?.node_tree as NodeTree | null) ?? null;
+  if (!nodeTree?.root) return false;
+  if (!draft && !(await getFeatureFlag("node_category_template_enabled"))) return false;
+  return templateOwnedNames(nodeTree).has("seo-copy");
+}
+
 export async function categoryTreePlacesSeoCopy(draft: boolean): Promise<boolean> {
   const catTemplate = (await getCmsTemplate("category_layout", draft).catch(() => null)) as {
     node_tree?: unknown;
@@ -158,7 +176,13 @@ export async function renderCategoryNodeBranch({
   // tree that never had one — Industry Kitchens' is authored clean — so this
   // shared module changes exactly one storefront. See
   // `builder/category-banner-backdrop.ts`.
-  const stripped = stripCategoryBannerBackdrop(storedTree);
+  // A stored template can AUTHOR what these passes do (IK hidden-conditionals C20–C22): naming
+  // `banner-backdrop`, `subcategory-tiles` or `facets` in its root's `data-kg-template-owns` means
+  // the pass does not run on it — the template's own nodes and Show-ifs decide.
+  const owns = templateOwnedNames(storedTree);
+  const stripped = owns.has("banner-backdrop")
+    ? { tree: storedTree, removed: [] as string[] }
+    : stripCategoryBannerBackdrop(storedTree);
 
   // Card MN702iBv (Steve, 2026-08-24): "IK - Increase size of images". The
   // subcategory tile was a 48px thumbnail beside a wide white card; it is now a
@@ -167,9 +191,11 @@ export async function renderCategoryNodeBranch({
   // Chefs Depot keeps the tile it has. See `builder/subcategory-tile-size.ts`.
   // `subcategoryCount` is the cap: above it the children are a directory, not a
   // strip, and the big tile buries the listing (`/categories/brands` has 395).
-  const enlarged = enlargeSubcategoryTiles(stripped.tree, CHANNEL_ID, {
-    subcategoryCount: subcategories?.length,
-  });
+  const enlarged = owns.has("subcategory-tiles")
+    ? { tree: stripped.tree, rewritten: [] as string[], applied: false }
+    : enlargeSubcategoryTiles(stripped.tree, CHANNEL_ID, {
+        subcategoryCount: subcategories?.length,
+      });
   const nodeTree = enlarged.tree;
 
   // The post-condition, and it is not belt-and-braces. The strip matches on node
@@ -181,7 +207,7 @@ export async function renderCategoryNodeBranch({
   // silent regression announces itself in the logs of the site it happened on.
   // It cannot fire on a subcategory tile or the `/categories` index: those bind
   // the same field in flow, without the full-bleed positioning.
-  const survivingBackdrop = findBannerBackdropNodes(nodeTree);
+  const survivingBackdrop = owns.has("banner-backdrop") ? [] : findBannerBackdropNodes(nodeTree);
   if (survivingBackdrop.length > 0) {
     console.warn(
       `[TnQJpunl] category banner backdrop survived the strip: ${survivingBackdrop.join(", ")}` +
@@ -251,6 +277,9 @@ export async function renderCategoryNodeBranch({
     gst: { inclusive: gstInclusive, pricesIncludeTax },
     memberPricingAvailable: memberPricingEnabled,
     draft,
+    // Price-band wording and the sort list from Settings → Storefront Listings (S18); today's with
+    // no setting.
+    listingDisplay: await getListingDisplay(),
   });
 
   // This storefront's Zoey rules (`channelRules`, portal PR #1028) for the rows the CLIENT wrapper

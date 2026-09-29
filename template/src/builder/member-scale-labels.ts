@@ -1,4 +1,5 @@
 import type { NodeTree, BuilderNode } from "@keenan/services/builder";
+import { templateOwns } from "@keenan/services/builder";
 
 // ============================================================================
 // Price WORDING on the authored trees while the Chefs Depot member price scale
@@ -131,6 +132,9 @@ export interface MemberScaleLabelOptions {
  */
 export function withMemberScaleLabelsInTree<T extends NodeTree>(tree: T, opts: MemberScaleLabelOptions = {}): T {
   if (!tree?.root) return tree;
+  // A tree that declares `member-scale` in `data-kg-template-owns` words its own labels and
+  // percentages — nothing is rewritten (IK hidden-conditionals audit C11).
+  if (templateOwns(tree, "member-scale")) return tree;
   const root = walk(tree.root, opts.relabelRrp !== false);
   return root === tree.root ? tree : ({ ...tree, root } as T);
 }

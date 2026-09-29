@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import BuilderImage from "./builder-image";
 import type { NodeTree, ProductPagePayload } from "@keenan/services/builder";
+import { componentRendersFor } from "@keenan/services/component-renders";
 import {
   ProductPurchaseProvider,
   useProductPurchase,
@@ -26,6 +27,8 @@ import { BuilderTree, type NativeComponents } from "@keenan/services/builder-rea
 import { BuilderActionsProvider } from "@keenan/services/builder-react";
 import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 import { productNatives } from "./product-natives";
+import { productFinanceOffer, productFinanceScope } from "@/lib/finance/product-finance";
+import { useFinanceRates } from "@/lib/finance/finance-rates-context";
 
 // ============================================================================
 // The product page rendered from a node tree. Thin wrapper over the SHARED
@@ -136,7 +139,26 @@ function ActionsBridge({
     addToQuote: countingAddToQuote,
     onOptionsRequired,
   });
-  const scope = useProductPageScope(payload, { inclusive, pricesIncludeTax });
+  const baseScope = useProductPageScope(payload, { inclusive, pricesIncludeTax });
+  // The weekly-rent offer as `purchase.finance*` (IK hidden-conditionals C8): the SAME call, on the
+  // same inputs, as the sealed SilverChefPanel, so a template that authors the panel quotes the
+  // same rent. Additive — a tree that never reads these renders exactly as before.
+  const financeRates = useFinanceRates();
+  const scope = React.useMemo(() => {
+    const offer = productFinanceOffer({
+      price: {
+        displayPrice: purchase.financeDisplayPrice ?? purchase.displayPrice,
+        displaySalePrice:
+          purchase.financeDisplaySalePrice !== undefined ? purchase.financeDisplaySalePrice : purchase.displaySalePrice,
+        memberPrice: purchase.financeMemberPrice !== undefined ? purchase.financeMemberPrice : purchase.activeMemberPrice,
+      },
+      sku: purchase.activeVariant?.sku ?? purchase.product.sku,
+      brand: purchase.product.brandName ?? null,
+      pricesIncludeTax,
+      rates: financeRates,
+    });
+    return { ...baseScope, purchase: { ...baseScope.purchase, ...productFinanceScope(offer) } };
+  }, [baseScope, purchase, pricesIncludeTax, financeRates]);
   // Overlay the live GST toggle onto context.gst so any card-rail price-block
   // masters (related products) resolve ex/inc labels from the live state.
   const livePayload = React.useMemo(
@@ -188,6 +210,25 @@ function ActionsBridge({
   // one is set (card XBOxpQmd). Identity-returning when the page carries no
   // form, which is almost every page.
   const confirmed = useFormConfirmations(tree, components);
+  // Does THIS template draw the extras panel for this product? Answered from the rendered tree
+  // itself — the same Show-if chain the renderer walks, on the same payload + scope — so the buy
+  // row's "no dead button" fact (`purchase.requiredQuestionsUnanswerable`) follows whatever the
+  // author did with the panel: moved, re-conditioned or deleted (IK hidden-conditionals batch 3,
+  // judge on batch 2). Deterministic, so server and browser agree on first paint.
+  const pageScope = React.useMemo(() => {
+    const drawn = componentRendersFor(
+      confirmed.tree as NodeTree,
+      confirmed.components as Record<string, NodeTree>,
+      "product-addons",
+      livePayload,
+      scope
+    );
+    const p = scope.purchase as Record<string, unknown>;
+    return {
+      ...scope,
+      purchase: { ...p, requiredQuestionsUnanswerable: p.requiredQuestionsWithoutDefault === true && !drawn },
+    };
+  }, [confirmed, livePayload, scope]);
   const actionHandlers = React.useMemo(
     () => ({
       ...handlers,
@@ -237,7 +278,7 @@ function ActionsBridge({
         nativeComponents={nativeComponents}
         linkComponent={Link as unknown as React.ComponentType<Record<string, unknown>>}
         imageComponent={BuilderImage}
-        scope={scope}
+        scope={pageScope}
       />
       {optionsPrompt ? (
         <div

@@ -57,6 +57,12 @@ export interface BrandNodeBranchArgs {
   memberPricingEnabled: boolean;
   /** draftMode() OR the `x-kg-json` parity header. */
   draft: boolean;
+  /**
+   * Extra top-level payload facts for a tree that is not the brand page itself — the Brand Range
+   * Template's `range` / `brand_picture` / `pager` (IK hidden-conditionals C24,
+   * `composeBrandRangeSlice`). Merged over the brand payload; absent for the brand page.
+   */
+  payloadExtras?: Record<string, unknown>;
 }
 
 /**
@@ -96,6 +102,7 @@ export async function renderBrandNodeBranch({
   pricing,
   memberPricingEnabled,
   draft,
+  payloadExtras,
 }: BrandNodeBranchArgs): Promise<React.ReactElement | null> {
   if (!(await brandNodePathApplies({ brandCms, draft }))) return null;
   const nodeTree = (brandCms as { node_tree?: unknown } | null)!.node_tree as NodeTree;
@@ -118,7 +125,7 @@ export async function renderBrandNodeBranch({
   ]);
   const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
 
-  const payload = composeBrandPagePayload({
+  const basePayload = composeBrandPagePayload({
     channelId: CHANNEL_ID,
     brand,
     products: scoped as unknown as Record<string, unknown>[],
@@ -132,6 +139,7 @@ export async function renderBrandNodeBranch({
     memberPricingAvailable: memberPricingEnabled,
     draft,
   });
+  const payload = (payloadExtras ? { ...basePayload, ...payloadExtras } : basePayload) as typeof basePayload;
 
   // This storefront's Zoey rules (`channelRules`, portal PR #1028) for the rows the CLIENT wrapper
   // receives (grid, "load more", GA4 view_item_list): zero-price shows no price (GA4 reports none),

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  optionalRadioNoneRow,
   extrasPanelGroups,
   customisationGroups,
   customisationOffered,
@@ -258,4 +259,42 @@ test("the email lines are the order line's own words: one per group, no money", 
   ]);
   assert.deepEqual(lines, ["Gas Type: LPG", "Baskets: Twin, Single"]);
   assert.ok(lines.every((l) => !l.includes("$")));
+});
+
+// Zoey's "None" answer on an OPTIONAL radio group (judge, batch 1: unit-test the row). The selection
+// each group opens on is the shared provider's own `defaultAddonSelection`, so these are the rows a
+// shopper actually sees on first paint.
+import { defaultAddonSelection } from "@keenan/services/product-addons";
+
+test("optional radio with no default opens on a ticked None (Hatco GRAH 'Optional Controller')", () => {
+  const addons = readProductAddons({
+    addons: { groups: [{ key: "ctl", label: "Optional Controller", control: "radio", required: false, options: [
+      { key: "a", label: "Built-in Control Unit", price: 170 },
+      { key: "b", label: "Remote Control", price: 325 },
+    ] }] },
+  })!;
+  const picks = defaultAddonSelection(addons);
+  assert.deepEqual(optionalRadioNoneRow(addons.groups[0], picks.ctl ?? [], true), { shown: true, checked: true });
+});
+
+test("optional radio WITH a default shows None unticked (Speed Queen LDG3TR 'Venting Option', as Zoey)", () => {
+  const addons = readProductAddons({
+    addons: { groups: [{ key: "vent", label: "Venting Option", control: "radio", required: false, options: [
+      { key: "std", label: "Standard Rear Venting $0", price: 0, no_charge: true, default: true },
+      { key: "left", label: "Left Venting", price: 414 },
+    ] }] },
+  })!;
+  const picks = defaultAddonSelection(addons);
+  assert.deepEqual(picks.vent, ["std"]);
+  assert.deepEqual(optionalRadioNoneRow(addons.groups[0], picks.vent ?? [], true), { shown: true, checked: false });
+  // …and picking None again clears it: the row reads ticked once nothing is chosen.
+  assert.deepEqual(optionalRadioNoneRow(addons.groups[0], [], true), { shown: true, checked: true });
+});
+
+test("no None on a required group, a dropdown, tick-boxes, or a storefront that did not ask", () => {
+  const radio = { control: "radio" as const, required: false };
+  assert.equal(optionalRadioNoneRow({ ...radio, required: true }, [], true).shown, false);
+  assert.equal(optionalRadioNoneRow({ ...radio, control: "dropdown" }, [], true).shown, false);
+  assert.equal(optionalRadioNoneRow({ ...radio, control: "checkbox" }, [], true).shown, false);
+  assert.deepEqual(optionalRadioNoneRow(radio, [], false), { shown: false, checked: false });
 });

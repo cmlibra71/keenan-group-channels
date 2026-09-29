@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import { draftMode, headers } from "next/headers";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsPage, getCmsTemplate, getSiteConfig } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsPage, getCmsTemplate, getSiteConfig, getChannelSetting } from "@/lib/store";
 import { stripHiddenPrices } from "@keenan/services/price-visibility";
 import type { Metadata } from "next";
 import type { RenderContext } from "@keenan/services";
@@ -24,6 +24,7 @@ import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductOfferTiers } from "@/components/product/ProductOfferTiers";
 import { readProductKit } from "@/lib/product-kit";
+import { readWarrantyDirectory, WARRANTY_DIRECTORY_SETTING_KEY } from "@keenan/services/warranty-directory";
 import { readProductAddons } from "@keenan/services/product-addons";
 import { channelRulesOfRow } from "@keenan/services/channel-rules";
 import { channelRulesRefuseCartFor } from "@/lib/product/channel-rule-cart";
@@ -312,6 +313,9 @@ export default async function ProductPage({
       nativeData: {
         // Grouped / bundle contents, for the sealed `product-kit` leaf.
         kit: readProductKit(product.metafields, CHANNEL_ID),
+        // The Warranty & Service Directory (C14): this channel's `warranty_directory` setting, with
+        // the shipped list as the fallback (`readWarrantyDirectory`).
+        warranty: readWarrantyDirectory(await getChannelSetting(WARRANTY_DIRECTORY_SETTING_KEY).catch(() => null)),
       },
     });
     // The node branch renders the JSON-LD it was handed; og:type rides beside it.

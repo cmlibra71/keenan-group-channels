@@ -1,4 +1,5 @@
 import type { NodeTree, BuilderNode } from "@keenan/services/builder";
+import { templateOwns } from "@keenan/services/builder";
 
 // ============================================================================
 // Putting the per-category attribute filters and the price SLIDER on an
@@ -178,6 +179,9 @@ function swapPriceRepeat(node: BuilderNode): BuilderNode {
  */
 export function withCategoryFacetNodes(tree: NodeTree): NodeTree {
   if (!tree?.root) return tree;
+  // A rail (or page) that declares `facets` in `data-kg-template-owns` places the attribute
+  // sections and the price slider itself (IK hidden-conditionals C22) — nothing is injected.
+  if (templateOwns(tree, "facets")) return tree;
   if (!containsFacetRepeat(tree.root)) return tree;
 
   let root = tree.root;
