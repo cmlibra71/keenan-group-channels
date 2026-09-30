@@ -123,7 +123,13 @@ export async function addToQuote(
    * How many to add, in units — a listing tile's quantity box (IK parity, product cards). Absent
    * (every caller before it) adds one pack, exactly as before. Snapped up to whole packs.
    */
-  quantity?: number | null
+  quantity?: number | null,
+  /**
+   * The shared product page passes a gift card's details here. Only Industry Kitchens sells its
+   * gift card with amounts (`channel_gift_cards["1"]`); Chefs Depot has no gift card configuration,
+   * so it is accepted and ignored and this storefront's Add to Quote is unchanged.
+   */
+  _giftCard?: unknown
 ) {
   // getById returns snake_case — read sale_price (reading salePrice was undefined,
   // so quotes silently used RRP instead of the catalog sale price).

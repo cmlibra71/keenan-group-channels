@@ -29,6 +29,7 @@ import {
   quantityRefusedCheckoutMessage,
 } from "@/lib/cart/restricted-message";
 import { onlineOrderingOff } from "@/lib/cart/online-purchase";
+import { isGiftCardProduct } from "@keenan/services/gift-card";
 import { normaliseAddressType } from "@keenan/services/residential";
 import { getLineCosts } from "@/lib/store";
 import { sendStaffNotification } from "@/lib/staff-email";
@@ -244,6 +245,27 @@ export async function placeOrder(
       error:
         "Some items are no longer available on your account and have been removed from your cart. Please review your cart and try again.",
     };
+  }
+
+  // A GIFT CARD is sold by quote only (IK, Zoey parity) — never charged through the cart, whatever a
+  // stale cart line or a lapsed channel rule says. Checked strictly, apart from the buying controls
+  // below (which fail open on a lookup error): a gift card line must never become a paid order at a
+  // catalogue $0 or at its "Starting at" price. The issuing path that would honour one is not on.
+  {
+    const ids = [...new Set((fullCart.items as { product_id: number }[]).map((i) => i.product_id))];
+    for (const id of ids) {
+      let row: { metafields?: unknown; zoey_raw?: unknown; name?: string | null } | null;
+      try {
+        row = (await productService.getById(id)) as typeof row;
+      } catch (e) {
+        // Fail CLOSED: nothing has been written or charged yet, and a press after a blip is cheap.
+        console.error("[placeOrder] gift card check could not read a product — refusing:", e);
+        return { error: "We couldn't check the items in your cart just now. Nothing was charged — please try again." };
+      }
+      if (row && isGiftCardProduct(row, CHANNEL_ID)) {
+        return { error: `${row.name ?? "A gift card"} is sold by quote only. Please remove it from your cart and add it to a quote instead.` };
+      }
+    }
   }
 
   // Per-product buying controls (card 7vu2iEEZ), re-checked HERE because this is where the money

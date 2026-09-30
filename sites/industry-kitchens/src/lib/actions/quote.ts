@@ -41,6 +41,17 @@ import { slidingWindowAllow } from "@/lib/rate-limit";
 import { resolveCustomerRequestState } from "@keenan/services";
 import { decideQuoteLineWrite } from "@/lib/quotes/addon-line-write";
 import {
+  giftCardRefusal,
+  giftCardUnitPrice,
+  readQuoteLineGiftCard,
+  isGiftCardProduct,
+  readGiftCardConfig,
+  validateGiftCardSelection,
+  type GiftCardSelectionInput,
+} from "@keenan/services/gift-card";
+import { giftCardPressQuantity, planGiftCardQuoteWrite, giftCardQuoteNote } from "@/lib/quotes/gift-card-quote-line";
+import { channelPricesIncludeTax } from "@/lib/promotions/tax-basis";
+import {
   quoteHidesPrices,
   resolveQuoteAcceptState,
   isQuoteExpired,
@@ -109,6 +120,73 @@ async function countQuoteItems(quoteId: number): Promise<number> {
   return (full?.items ?? []).reduce((sum, i) => sum + (i.quantity ?? 0), 0);
 }
 
+/**
+ * Pre-link the quote to the signed-in contact. Best-effort convenience only — it must never block
+ * adding the item (a stale session would otherwise throw an FK error and 500 the add).
+ */
+async function linkQuoteToSession(quote: { id: number; contact_id?: number | null }): Promise<void> {
+  const session = await getSession();
+  if (session && !quote.contact_id) {
+    try {
+      await quoteService.update(quote.id, { contactId: session.contactId, email: session.email });
+    } catch (e) {
+      console.error("[addToQuote] customer link failed (non-fatal):", e);
+    }
+  }
+}
+
+/** The gift card half of {@link addToQuote} (IK, Zoey parity). */
+async function addGiftCardToQuote(
+  productId: number,
+  variantId: number | null,
+  product: { metafields?: unknown; zoey_raw?: unknown; url_path?: string | null },
+  giftCard: GiftCardSelectionInput | null,
+  /** The Qty box, in cards (Zoey honours it on the gift card). */
+  quantity: number | null | undefined
+) {
+  const config = readGiftCardConfig({ metafields: product.metafields, zoeyRaw: product.zoey_raw }, CHANNEL_ID);
+  if (!config) {
+    return { error: "This gift card can't be added to a quote right now. Please contact us about it." };
+  }
+  // A listing tile or the related rail posts no card: the amount and the people are asked on the
+  // product page, so that is where the shopper is sent.
+  if (giftCard == null) {
+    const productPage = productPageForRefusal(product.url_path);
+    const error = "Open the gift card's page to choose the amount and who it's for before adding it to a quote.";
+    return productPage ? { error, productPage } : { error };
+  }
+  const verdict = validateGiftCardSelection(config, giftCard);
+  if (!verdict.ok) return { error: giftCardRefusal(verdict) };
+  const unitPrice = giftCardUnitPrice(verdict.line.amount_inc_tax, await channelPricesIncludeTax());
+
+  const quote = await getOrCreateQuote();
+  await linkQuoteToSession(quote);
+  // THIS product's lines already on the quote — one per card (see gift-card-quote-line.ts).
+  const full = (await quoteService.getWithItems(quote.id)) as { items?: Array<Record<string, unknown>> } | null;
+  const lines = (full?.items ?? [])
+    .filter((i) => Number(i.product_id) === productId)
+    .map((i) => ({ id: Number(i.id), product_id: Number(i.product_id), quantity: Number(i.quantity) || 0, attributes: i.attributes }));
+  const write = planGiftCardQuoteWrite({ lines, line: verdict.line, unitPrice, addUnits: giftCardPressQuantity(quantity) });
+  if (write.kind === "refuse") return { error: write.error };
+  if (write.kind === "create") {
+    await quoteItemService.createForParent(quote.id, {
+      productId,
+      variantId: variantId || null,
+      quantity: write.quantity,
+      listPrice: write.listPrice,
+      salePrice: null,
+      // The customer's chosen FACE VALUE, not a catalogue price: `manual` is what keeps every
+      // engine reprice path from re-deriving it off the product's $0 (see gift-card-quote-line.ts).
+      priceSource: "manual",
+      attributes: write.attributes,
+      customerNotes: write.customerNotes,
+    });
+  } else {
+    await quoteItemService.updateForParent(quote.id, write.itemId, { quantity: write.quantity });
+  }
+  return { success: true, quoteCount: await countQuoteItems(quote.id) };
+}
+
 export async function addToQuote(
   productId: number,
   variantId?: number | null,
@@ -127,7 +205,13 @@ export async function addToQuote(
    * How many to add, in units — a listing tile's quantity box (IK parity, product cards). Absent
    * (every caller before it) adds one pack, exactly as before. Snapped up to whole packs.
    */
-  quantity?: number | null
+  quantity?: number | null,
+  /**
+   * IK gift cards (Zoey parity): the amount and recipient / sender details the product page's gift
+   * card panel collected. A CLAIM — re-validated below against the product's own configuration, and
+   * only read for a product this storefront sells as a gift card.
+   */
+  giftCard?: GiftCardSelectionInput | null
 ) {
   // getById returns snake_case — read sale_price (reading salePrice was undefined,
   // so quotes silently used RRP instead of the catalog sale price).
@@ -143,6 +227,7 @@ export async function addToQuote(
     restrict_add_to_quote?: boolean | null;
     sell_pack_size?: number | null;
     sell_pack_unit?: string | null;
+    zoey_raw?: unknown;
   } | null;
   if (!product) return { error: "Product not found" };
 
@@ -151,6 +236,14 @@ export async function addToQuote(
   // its own restricted products, rather than trusting the page that drew the button.
   if (product.restrict_add_to_quote === true) {
     return { error: "This product can't be added to a quote. Please contact us about it." };
+  }
+
+  // ── IK GIFT CARDS (Zoey parity) — quote only, carrying the card the customer chose ─────────
+  // Handled on its own path because nothing else about this action applies to it: it has no kit,
+  // no extras, no pack, and its price is the CHOSEN face value — never the catalogue's $0 and never
+  // a group price. See `lib/quotes/gift-card-quote-line.ts` for the money and the one-line rule.
+  if (isGiftCardProduct(product, CHANNEL_ID)) {
+    return addGiftCardToQuote(productId, variantId ?? null, product, giftCard ?? null, quantity);
   }
 
   // ── Kit products (Zoey grouped / bundle, authored in the portal) ──────────────────────────
@@ -513,6 +606,9 @@ export async function updateQuoteItem(itemId: number, quantity: number) {
     return { success: true, quoteCount };
   } catch (e) {
     console.error("[updateQuoteItem] failed (non-fatal):", e);
+    // The gift card cap (services QuoteItemService) says its own sentence.
+    const capped = giftCardCapMessage(e);
+    if (capped) return { error: capped };
     return { error: "Could not update quote" };
   }
 }
@@ -1075,6 +1171,8 @@ export async function updateAccountQuoteItem(
     await quoteService.markChangeRequested(quoteId, { changeSummary: "Quantity changed" });
   } catch (e) {
     console.error("[updateAccountQuoteItem] failed:", e);
+    const capped = giftCardCapMessage(e);
+    if (capped) return { error: capped };
     return { error: "Could not update this quote." };
   }
 
@@ -1156,11 +1254,28 @@ export async function duplicateQuote(quoteId: number) {
         // The copy keeps the original line's provenance, and a line with none
         // recorded is the customer's own (card laFQveZT).
         priceSource: (it.price_source as string) || "customer",
+        // A GIFT CARD line (IK) carries who the card is for: the copy keeps the card and its note,
+        // or it would be a priced card for nobody.
+        ...copiedGiftCard(it),
       });
     } catch { /* skip a failing line */ }
   }
   revalidatePath("/account/quotes");
   return { success: true, quoteId: copy.id };
+}
+
+/** The gift card cap's own sentence, when that is why a quantity change was refused. */
+function giftCardCapMessage(e: unknown): string | null {
+  const m = e instanceof Error ? e.message : "";
+  return /gift card line can hold at most/i.test(m) ? m : null;
+}
+
+/** The gift card (and the storefront's note for it) a duplicated line keeps; nothing for any other line. */
+function copiedGiftCard(it: Record<string, unknown>): Record<string, unknown> {
+  const card = readQuoteLineGiftCard(it.attributes);
+  if (!card) return {};
+  const note = giftCardQuoteNote(card);
+  return { attributes: { gift_card: card, storefront_note: note }, customerNotes: note };
 }
 
 // ── Customer requests on a quote: more time, a change, a message ─────────────

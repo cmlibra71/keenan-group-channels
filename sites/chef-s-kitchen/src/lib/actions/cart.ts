@@ -43,6 +43,14 @@ import {
   productPageForRefusal,
 } from "@/lib/product/addon-panel";
 import { customisationRefusal } from "@/lib/product-customisation";
+import { isGiftCardProduct } from "@keenan/services/gift-card";
+
+/**
+ * IK gift cards are sold by QUOTE ONLY (Zoey parity: Zoey withholds Add to Basket on its gift card,
+ * and this storefront keeps that `cart_disabled` rule). Refused here as well, whatever the product's
+ * channel rules say, because a cart line would need the issuing path, which is not switched on.
+ */
+const GIFT_CARD_CART_REFUSAL = "Gift cards are added to a quote. Please use Add to Quote.";
 
 async function getOrCreateCart() {
   const uuid = await getCartUuid();
@@ -360,8 +368,11 @@ async function readAddonsForAdd(
         sale_price?: string | null;
         hide_price?: boolean | null;
         url_path?: string | null;
+        zoey_raw?: unknown;
       }
     | null;
+  // A gift card is never a cart line (see GIFT_CARD_CART_REFUSAL) — decided off the same one read.
+  if (isGiftCardProduct(product, CHANNEL_ID)) return { resolved: [], refusal: GIFT_CARD_CART_REFUSAL };
   // THIS storefront's definition: the shared groups plus any scoped to CHANNEL_ID
   // (`metafields.channel_addons` — the Zoey options imported for Industry Kitchens only).
   const definition = readProductAddons(product?.metafields, { channelId: CHANNEL_ID });
