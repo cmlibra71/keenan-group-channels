@@ -19,6 +19,7 @@ import { CHANNEL_ID } from "../channel";
 import type { StockFacts } from "@keenan/services/backorder";
 import { effectivePackFacts, readChannelPackEntry, type PackFacts } from "@keenan/services/pack";
 import { backorderPolicyForChannel, readChannelRules, type ChannelPurchaseRules } from "@keenan/services/channel-rules";
+import { liftZeroPriceForRequiredOption } from "@keenan/services";
 
 export type ProductBackorderFacts = StockFacts &
   PackFacts & {
@@ -39,6 +40,12 @@ export type ProductBackorderFacts = StockFacts &
      * product until the portal backfill runs, and every product on Chefs Depot.
      */
     channelRules: ChannelPurchaseRules | null;
+    /**
+     * The product's extras definitions (`metafields.addons` + `metafields.channel_addons`), for the
+     * required-option exception (services `required-option-price.ts`): the cart judges a $0 IK
+     * product sold through its required Zoey option at base + that answer.
+     */
+    addonBag?: { addons: unknown; channel_addons: unknown } | null;
   };
 
 /** A postgres-js tagged-template client (the live pool, a transaction, or a test double). */
@@ -68,7 +75,10 @@ export async function backorderFactsForProducts(
              metafields -> 'zoey_channel_rules' AS zoey_channel_rules,
              -- A person's pack for this storefront (channel_pack_override, audit D12) outranks Zoey's.
              COALESCE(metafields -> 'channel_pack_override' -> ${String(channelId)}, metafields -> 'zoey_channel_pack' -> ${String(channelId)}) AS channel_pack,
-             metafields -> 'channel_rule_overrides' AS channel_rule_overrides
+             metafields -> 'channel_rule_overrides' AS channel_rule_overrides,
+             metafields -> 'addons' AS addons,
+             metafields -> 'channel_addons' AS channel_addons,
+             zoey_raw ->> 'zb2b_product_atq_no_hide_cart' AS zoey_cart_flag
         FROM products
        WHERE id = ANY(${ids})`) as unknown as {
         id: number;
@@ -87,6 +97,9 @@ export async function backorderFactsForProducts(
         zoey_channel_rules: unknown;
         channel_rule_overrides: unknown;
         channel_pack: unknown;
+        addons?: unknown;
+        channel_addons?: unknown;
+        zoey_cart_flag?: string | null;
       }[];
     for (const row of rows) {
       const facts: ProductBackorderFacts = {
@@ -108,6 +121,7 @@ export async function backorderFactsForProducts(
           { zoey_channel_rules: row.zoey_channel_rules, channel_rule_overrides: row.channel_rule_overrides },
           channelId
         ),
+        addonBag: { addons: row.addons ?? null, channel_addons: row.channel_addons ?? null },
         // The SELLING UNIT rides the same batched read (cards O108e4jH / zeMPVcA3): the cart has
         // to snap a quantity to whole packs and say what a pack holds, and both callers of this
         // lookup already have the product in hand. `products.min_purchase_quantity` is NOT read —
@@ -136,6 +150,21 @@ export async function backorderFactsForProducts(
       // Customer" — the cart takes the back order and says nothing, as Zoey's did; IK re-audit
       // #398). Chefs Depot carries no rule, so it reads the column exactly as before.
       facts.backorderPolicy = backorderPolicyForChannel(row.backorder_policy, facts.channelRules);
+      // Zoey's zero-price rule lifted for a $0 product it sells through its required, priced Zoey
+      // option (owner decision 2026-09-30; IK only — Chefs Depot has no scoped groups). The cart
+      // and checkout then refuse it only for what else applies (cart flag No, stock, a guest rule).
+      facts.channelRules = liftZeroPriceForRequiredOption(
+        facts.channelRules,
+        {
+          channel_addons: row.channel_addons ?? null,
+          addons: row.addons ?? null,
+          channel_rule_overrides: row.channel_rule_overrides ?? null,
+        },
+        channelId,
+        // Zoey's cart flag decides the basket in the same step (No ⇒ cart_disabled), so the lift
+        // never makes a product buyable that Zoey does not sell (money judge 2026-09-30).
+        row.zoey_cart_flag ?? null
+      );
       out.set(Number(row.id), facts);
     }
   } catch (e) {

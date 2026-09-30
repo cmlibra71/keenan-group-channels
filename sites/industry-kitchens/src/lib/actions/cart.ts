@@ -36,6 +36,7 @@ import {
   type AddonSelectionInput,
   type ResolvedAddon,
 } from "@keenan/services/product-addons";
+import { requiredChoicePrice, soldByRequiredOption } from "@keenan/services";
 import {
   buyableAddons,
   customisationDefinition,
@@ -385,11 +386,16 @@ async function readAddonsForAdd(
   // surcharge to charge — refusing over a control the shopper cannot see is the failure
   // `sf-product-page` forbids, and resolving the picks anyway would charge extras the page
   // showed as adding nothing.
+  // A $0 Industry Kitchens product priced THROUGH its required, priced-by-default Zoey option
+  // (owner decision 2026-09-30, services `required-option-price.ts`) draws its panel at $0, so
+  // the picks are resolved and charged here too. Only IK's scoped Zoey groups qualify.
+  const viaRequiredOption = soldByRequiredOption(definition);
   let panelShown = addonPanelShown({
     addons: definition,
     hidePrice: product?.hide_price,
     price: product?.price,
     salePrice: product?.sale_price,
+    soldByRequiredOption: viaRequiredOption,
   });
   // A variant product may carry no price of its own; the page reads the ACTIVE variant's.
   // Only taken in that case, so the ordinary add keeps the one product read it always took.
@@ -606,9 +612,17 @@ export async function addToCart(
   // ("Call for Price" on the page). Judged on the price BEFORE extras, so ticked accessories can
   // never lift a $0 machine into the cart. The product-level flags were refused above.
   const variantRow = variantId ? await productVariantService.getById(variantId).catch(() => null) : null;
+  // The ONE exception to "judged before extras" (owner decision 2026-09-30): a $0 IK product sold
+  // through its required, priced-by-default Zoey option is judged at base + the chosen answer of
+  // THAT required group only — never an optional extra (money judge). A $0 total is refused as
+  // for any $0 product. Every other product is judged on the base price alone.
+  const requiredDefinition = readProductAddons(facts?.addonBag, { channelId: CHANNEL_ID });
+  const judgedUnitPrice = soldByRequiredOption(requiredDefinition)
+    ? chargedUnitPrice(basePricing) + requiredChoicePrice(requiredDefinition, resolvedAddons)
+    : chargedUnitPrice(basePricing);
   const quoteOnly = refuseOnlinePurchase(
     facts,
-    chargedUnitPrice(basePricing),
+    judgedUnitPrice,
     // Product OR chosen variant (services `isPurchasingDisabled`), with the page's own sentence.
     purchasingDisabledMessage(facts, variantRow),
     // This storefront's Zoey guest quote-only rule needs to know who is buying (read only when the
