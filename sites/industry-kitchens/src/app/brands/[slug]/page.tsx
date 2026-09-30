@@ -27,6 +27,7 @@ import { borrowedImageFor, ownersNeedingBorrowedImage } from "@/lib/borrowed-ima
 import { getListingMemberPrices } from "@/lib/member";
 import { brandNodePathApplies, brandTreeHasFilterRail, renderBrandNodeBranch } from "@/builder/brand-node-branch";
 import { rangeBelongsToBrand } from "@/lib/brand-range";
+import { brandRailNextPageHref, parseBrandRailSelections } from "@/lib/brand-rail";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BrandIntro } from "@/components/brand/BrandIntro";
@@ -41,7 +42,7 @@ import { BrandIndustryUses } from "@/components/brand/BrandIndustryUses";
 import { BrandFaq } from "@/components/brand/BrandFaq";
 import { BrandCategories } from "@/components/brand/BrandCategories";
 import { FacetRail, FacetChips, SortSelect } from "@/components/category/FilterRail";
-import { enabledFilterIds } from "@/lib/storefront-filters";
+import { applyStorefrontFilters, enabledFilterIds } from "@/lib/storefront-filters";
 import { parsePriceBands, parseRangeParam } from "@/lib/category-attributes";
 import { parseAttributeSelections } from "@keenan/services/services";
 import {
@@ -227,18 +228,9 @@ export default async function BrandPage({
       const listingDisplay = await getListingDisplay();
       const storefrontFilters = await getStorefrontFilters();
       const filtersOn = enabledFilterIds(storefrontFilters);
-      const rawPrice = filtersOn.has("price") ? sp.price : undefined;
-      const railPriceBands = parsePriceBands(rawPrice) as ("lt1000" | "1000to3000" | "gt3000")[];
-      const railPriceRange = railPriceBands.length === 0 ? parseRangeParam(rawPrice) : undefined;
-      const railAttributes = parseAttributeSelections(
-        sp as Record<string, string | undefined>,
-        (await loadCatalogAttributeContext(ATTR_CHANNEL_ID)).attributes
-      );
-      const rawSub = (sp as Record<string, string | undefined>).sub ?? sp[CATEGORY_PARAM];
-      const railCategoryIds = filtersOn.has("sub") ? parseIds(rawSub) : [];
-      const rawLabels = (sp as Record<string, string | undefined>).brand;
-      const railLabels = [...new Set((rawLabels ?? "").split(",").map((l) => l.trim()).filter(Boolean))].slice(0, 20);
-      const railSort = parseBrandSort(sp.sort, defaultListingSort);
+      const spRec = sp as Record<string, string | undefined>;
+      const railAttributes = parseAttributeSelections(spRec, (await loadCatalogAttributeContext(ATTR_CHANNEL_ID)).attributes);
+      const rail = parseBrandRailSelections(spRec, filtersOn, Object.keys(railAttributes).length, defaultListingSort);
       // The Category group lists the brand's RANGES, as Zoey's did: the children of the brand's own
       // category under Brands ("Waldorf 800 619 · Waldorf Bold 567 · Waldorf Jump 1" on the old
       // Waldorf page). A brand with no brand category keeps every menu category it reaches, trimmed
@@ -249,32 +241,36 @@ export default async function BrandPage({
             (c) => rangeBelongsToBrand(c, brand as { slug?: unknown; name?: unknown; metafields?: unknown }, slug)
           ) ?? null)
         : null;
-      const railFiltered =
-        railCategoryIds.length > 0 || railLabels.length > 0 || Boolean(rawPrice) || Object.keys(railAttributes).length > 0;
+      const scope = brandCategory ? { categoryParentId: brandCategory.id } : {};
+      const pageSize = listingDisplay.page_sizes.brand;
       const [railListing, railUnfiltered, railMemberPricing] = await Promise.all([
+        // Cumulative for Load more, as the sealed listing: each press re-asks with a bigger limit, and
+        // `total` + facets stay anchored to page 1 inside getBrandListing.
         getBrandListing(brand.id as number, {
           page: 1,
-          limit: listingDisplay.page_sizes.brand,
-          ...(brandCategory ? { categoryParentId: brandCategory.id } : {}),
-          categoryIds: railCategoryIds,
-          brandLabels: railLabels,
-          priceBands: railPriceBands,
-          priceRange: railPriceRange,
+          limit: pageSize * rail.page,
+          ...scope,
+          categoryIds: rail.categoryIds,
+          brandLabels: rail.labels,
+          priceBands: rail.priceBands,
+          priceRange: rail.priceRange,
           attributes: railAttributes,
-          sort: railSort,
+          sort: rail.sort,
         }),
-        // The hero states how many products the BRAND has, the rail how many match (same cache entry
-        // the unfiltered first load populated).
-        railFiltered
-          ? getBrandListing(brand.id as number, {
-              page: 1,
-              limit: listingDisplay.page_sizes.brand,
-              ...(brandCategory ? { categoryParentId: brandCategory.id } : {}),
-            })
+        // The hero states how many products the BRAND has, the rail how many match — the same cache
+        // entry an unfiltered first load populates (same limit, scope and sort).
+        rail.filtered
+          ? getBrandListing(brand.id as number, { page: 1, limit: pageSize, ...scope, sort: rail.sort })
           : Promise.resolve(null),
         getFeatureFlag("member_pricing_enabled"),
       ]);
       const railProducts = railListing.products as unknown as { id: number }[];
+      const railFacets = railListing.facets as Record<string, unknown> & { categories?: { id: number }[]; attributes?: { code: string }[] };
+      const attributeParams = Object.fromEntries(
+        (railFacets.attributes ?? []).map((a) => [`f_${a.code}`, spRec[`f_${a.code}`] ?? ""]).filter(([, v]) => v)
+      ) as Record<string, string>;
+      const shown = railProducts.length;
+      const hasMore = shown < railListing.total && rail.page < MAX_PAGES;
       const railRendered = await renderBrandNodeBranch({
         brandCms,
         brand: {
@@ -290,25 +286,51 @@ export default async function BrandPage({
         memberPricingEnabled: railMemberPricing,
         draft,
         listing: {
-          facets: {
-            ...(railListing.facets as Record<string, unknown>),
-            categories: brandCategory
-              ? (railListing.facets as { categories?: unknown[] }).categories
-              : ((railListing.facets as { categories?: { id: number }[] }).categories ?? []).filter(
-                  (c, i) => i < 12 || railCategoryIds.includes(c.id)
-                ),
-            filters: storefrontFilters,
-          },
+          // A switched-off facet leaves the rail too (applyStorefrontFilters, as the sealed rail); the
+          // brand's labels ride in `brands` so the same switch governs them.
+          facets: (() => {
+            const categories = brandCategory
+              ? railFacets.categories ?? []
+              : (railFacets.categories ?? []).filter((c, i) => i < 12 || rail.categoryIds.includes(c.id));
+            const gated = applyStorefrontFilters(
+              {
+                subcategories: categories as never,
+                brands: (railFacets.brandLabels ?? []) as never,
+                price: (railFacets.price ?? []) as never,
+                availability: [] as never,
+                priceRange: (railFacets.priceRange ?? null) as never,
+              },
+              storefrontFilters
+            ) as unknown as Record<string, unknown>;
+            return {
+              ...railFacets,
+              categories: gated.subcategories,
+              brandLabels: gated.brands,
+              price: gated.price,
+              priceRange: gated.priceRange,
+              filters: storefrontFilters,
+            };
+          })(),
           filters: storefrontFilters,
           // The rail's "Showing … of N": how many match; the hero keeps the brand's whole count.
           total: railListing.total,
           selections: {
-            sub: railCategoryIds.map(String),
-            brand: railLabels,
-            price: rawPrice ? rawPrice.split(",").filter(Boolean) : [],
+            sub: rail.categoryIds.map(String),
+            brand: rail.labels,
+            price: rail.rawPrice ? rail.rawPrice.split(",").filter(Boolean) : [],
             attributes: railAttributes,
           },
-          sort: railSort,
+          sort: rail.sort,
+          page: rail.page,
+          hasMore,
+          nextPageHref: hasMore
+            ? brandRailNextPageHref({
+                basePath: `${draft && (await headers()).get("x-kg-json") === "1" ? "/json" : ""}/brands/${slug}`,
+                selections: rail,
+                attributeParams,
+                sortParam: spRec.sort,
+              })
+            : "",
           listingDisplay,
         },
       });

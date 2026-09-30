@@ -7,5 +7,5 @@
  */
 export function brandTreeHasFilterRail(tree: unknown): boolean {
   const text = JSON.stringify(tree ?? null);
-  return /"listing\.(facets|activeChips|hasActiveFilters|sort)|"componentKey":\s*"(facet-option|filter-chips|clear-filters|filter-controls|facet-price-slider|category-attribute-facets)"/.test(text);
+  return /"listing\.(facets|activeChips|hasActiveFilters|sort)|"componentKey":\s*"(facet-option|filter-chips|clear-filters|filter-controls|facet-price-slider|category-attribute-facets|brand-filter-rail-content|brand-filter-drawer|filter-rail|filter-drawer|filter-rail-content)"/.test(text);
 }

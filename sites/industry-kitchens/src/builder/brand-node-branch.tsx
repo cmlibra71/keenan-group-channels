@@ -80,6 +80,10 @@ export interface BrandNodeBranchArgs {
     filters?: unknown;
     selections?: FacetSelections;
     sort?: string;
+    /** Cumulative Load more (as the category page): the page shown, more to come, the next address. */
+    page?: number;
+    hasMore?: boolean;
+    nextPageHref?: string;
     listingDisplay?: NonNullable<Parameters<typeof composeBrandPagePayload>[0]["listing"]>["listingDisplay"];
   };
 }
@@ -174,6 +178,9 @@ export async function renderBrandNodeBranch({
             total: listing.total,
             selections: listing.selections,
             sort: listing.sort,
+            page: listing.page,
+            hasMore: listing.hasMore,
+            nextPageHref: listing.nextPageHref,
             listingDisplay: listing.listingDisplay,
           },
         }

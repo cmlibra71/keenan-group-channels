@@ -164,7 +164,17 @@ function BrandPageTree({
         const param = String(args.param ?? "");
         const value = String(args.value ?? "");
         if (!param || !value) return { success: false, error: "Missing facet param/value" };
-        nav.replace(toggleListParam(searchParams, param, value));
+        // An old `?cat=` link selects categories the rail writes as `sub`: fold it in first, so the
+        // box it ticked can be unticked and a second tick does not silently drop it.
+        let base = searchParams;
+        if (param === "sub" && searchParams.get("cat")) {
+          const folded = new URLSearchParams(searchParams.toString());
+          const merged = [...new Set([...(folded.get("sub") ?? "").split(","), ...(folded.get("cat") ?? "").split(",")].filter(Boolean))];
+          folded.delete("cat");
+          folded.set("sub", merged.join(","));
+          base = folded;
+        }
+        nav.replace(toggleListParam(base, param, value));
         return { success: true };
       },
       clearFilters: () => {
