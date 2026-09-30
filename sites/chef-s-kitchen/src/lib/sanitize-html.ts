@@ -68,7 +68,8 @@ const CALCULATOR_FRAME_STYLE = "display:block;width:100%;height:900px;border:1px
 /** The https URL an authored calculator iframe src may keep, or null. Exported for the tests. */
 export function allowedCalculatorEmbedSrc(raw: string | null | undefined): string | null {
   const src = String(raw ?? "").trim();
-  if (!src) return null;
+  // No encoded path separators: the prefix test must mean what it says.
+  if (!src || /%2f|%5c/i.test(src)) return null;
   let url: URL;
   try {
     url = new URL(src.startsWith("//") ? `https:${src}` : src);

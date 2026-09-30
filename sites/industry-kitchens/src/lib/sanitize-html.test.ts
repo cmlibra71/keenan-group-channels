@@ -158,6 +158,8 @@ test("the SilverChef calculator embed survives with our attributes only; look-al
     "http://www.silverchef.finance/en_AU/embed/calculator/1/",
     "https://user:pw@www.silverchef.finance/en_AU/embed/calculator/1/",
     "javascript:alert(1)",
+    "https://www.silverchef.finance/en_AU/embed/calculator/..%2f..%2fapply",
+    "https://www.silverchef.finance/en_AU/embed/calculator/..%5Capply",
   ]) {
     assert.equal(allowedCalculatorEmbedSrc(bad), null, bad);
     assert.doesNotMatch(sanitizeHtml(`<iframe src="${bad}"></iframe>`), /<iframe/, bad);
