@@ -8,8 +8,8 @@ import {
   getChannelSetting,
   getLadderConfig,
   HIDE_MEMBER_SAVING_PCT,
+  getEnabledCmsFunctions,
 } from "@/lib/store";
-import { CHANNEL_ID } from "@/lib/channel";
 import { getPricingGroupId } from "@/lib/member";
 import {
   loadJsSandbox,
@@ -18,7 +18,6 @@ import {
   guardBuyControlsInComponents,
   buildFaqPageJsonLd,
 } from "@keenan/services/builder";
-import { cmsFunctionService } from "@keenan/services/services";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { ProductOfferTiers, loadOfferTierTables } from "@/components/product/ProductOfferTiers";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
@@ -321,8 +320,7 @@ export async function renderProductNodeBranch({
   // JavaScript function library: SSR evaluates call-conditions live (the
   // sandbox is awaited here), and callResults keeps the client's first paint
   // identical until its wasm loads.
-  const jsFunctions = await cmsFunctionService
-    .enabledMapForChannel(CHANNEL_ID)
+  const jsFunctions = await getEnabledCmsFunctions()
     .catch(() => ({}) as Record<string, string>);
   let callResults: Record<string, unknown> = {};
   if (Object.keys(jsFunctions).length > 0) {

@@ -10,6 +10,7 @@ import {
   getChannelSetting,
   attachFromPrices,
   getMemberScaleOn,
+  getEnabledCmsFunctions,
 } from "@/lib/store";
 import { CHANNEL_ID } from "@/lib/channel";
 import { getListingDisplay } from "@/lib/listing-display";
@@ -24,7 +25,6 @@ import {
   templateOwnedNames,
   type NodeTree,
 } from "@keenan/services/builder";
-import { cmsFunctionService } from "@keenan/services/services";
 import { treePlacesSeoCopy } from "@/builder/seo-copy-placement";
 import {
   withCategoryFacetComponents,
@@ -321,8 +321,7 @@ export async function renderCategoryNodeBranch({
       css?: string;
     } | null)?.css ?? "";
 
-  const jsFunctions = await cmsFunctionService
-    .enabledMapForChannel(CHANNEL_ID)
+  const jsFunctions = await getEnabledCmsFunctions()
     .catch(() => ({}) as Record<string, string>);
   let callResults: Record<string, unknown> = {};
   if (Object.keys(jsFunctions).length > 0) {

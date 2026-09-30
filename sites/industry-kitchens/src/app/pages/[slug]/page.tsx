@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import { draftMode, headers } from "next/headers";
 import type { Metadata } from "next";
-import { getContentPage, getCmsPage, getCmsTemplate, getFeatureFlag, getNamedStyles, getComponents, getDraftComponents, getChannelSetting, CHANNEL_ID } from "@/lib/store";
+import { getContentPage, getCmsPage, getCmsTemplate, getFeatureFlag, getNamedStyles, getComponents, getDraftComponents, getChannelSetting, CHANNEL_ID, getEnabledCmsFunctions } from "@/lib/store";
 import { getMemberContext } from "@/lib/member";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { composeContentPagePayload } from "@keenan/services/builder";
@@ -11,7 +11,6 @@ import { chooseContentPageTree } from "@/lib/content-page-tree";
 import { financeApplyFunderForSlug, withFinanceApplyLogo } from "@/lib/finance/finance-apply-logo";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BuilderContentPage } from "@/builder/BuilderContentPage";
-import { cmsFunctionService } from "@keenan/services/services";
 import { loadJsSandbox, computeCallResults, type NodeTree } from "@keenan/services/builder";
 
 export async function generateMetadata({
@@ -120,7 +119,7 @@ export default async function ContentPage({
       const components = (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<string, NodeTree>;
       const builderCss =
         ((await getChannelSetting("builder_published_css").catch(() => null)) as { css?: string } | null)?.css ?? "";
-      const jsFunctions = await cmsFunctionService.enabledMapForChannel(CHANNEL_ID).catch(() => ({}) as Record<string, string>);
+      const jsFunctions = await getEnabledCmsFunctions().catch(() => ({}) as Record<string, string>);
       let callResults: Record<string, unknown> = {};
       if (Object.keys(jsFunctions).length > 0) {
         await loadJsSandbox(jsFunctions).catch(() => null);

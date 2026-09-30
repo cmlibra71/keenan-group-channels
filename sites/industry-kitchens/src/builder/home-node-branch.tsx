@@ -9,6 +9,7 @@ import {
   getDraftComponents,
   getChannelSetting,
   getMemberScaleOn,
+  getEnabledCmsFunctions,
 } from "@/lib/store";
 import { CHANNEL_ID } from "@/lib/channel";
 import { getMemberContext } from "@/lib/member";
@@ -20,7 +21,6 @@ import {
   computeCallResults,
   type NodeTree,
 } from "@keenan/services/builder";
-import { cmsFunctionService } from "@keenan/services/services";
 import { BuilderHomePage } from "@/builder/BuilderHomePage";
 import { loadHomeNativeData } from "@/builder/home-data";
 
@@ -125,8 +125,7 @@ export async function renderHomeNodeBranch(
       css?: string;
     } | null)?.css ?? "";
 
-  const jsFunctions = await cmsFunctionService
-    .enabledMapForChannel(CHANNEL_ID)
+  const jsFunctions = await getEnabledCmsFunctions()
     .catch(() => ({}) as Record<string, string>);
   let callResults: Record<string, unknown> = {};
   if (Object.keys(jsFunctions).length > 0) {
