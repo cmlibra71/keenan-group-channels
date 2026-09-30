@@ -169,6 +169,12 @@ function AddonGroup({
             Choose one
           </span>
         ) : null}
+        {/* A required TICK-BOX group (Zoey's required "multiple", e.g. Hallde "Free Discs
+            Inlude"): marked as required; the provider keeps the last tick once one is ticked.
+            A group with no pre-ticked answer is marked but not enforced (known limitation). */}
+        {!single && (group as { atLeastOne?: true }).atLeastOne === true ? (
+          <span className="ml-2 text-xs font-normal text-text-muted">Choose at least one</span>
+        ) : null}
       </legend>
 
       {group.control === "dropdown" ? (
