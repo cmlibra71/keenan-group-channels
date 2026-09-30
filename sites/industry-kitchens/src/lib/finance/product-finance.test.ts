@@ -6,6 +6,7 @@ import {
   financeApplyFundingTypes,
   productFinanceOffer,
   productFinanceScope,
+  requiredOptionFinancePrice,
 } from "./product-finance.ts";
 import {
   weeklyRent,
@@ -249,4 +250,32 @@ test("the template facts (purchase.finance*) are the sealed panel's offer, field
     financeWeekly: null,
     financeApplyPath: "",
   });
+});
+
+const skopeWarranty = [
+  {
+    key: "zoey_8067", required: true, control: "radio",
+    options: [
+      { key: "zoey_28794", price: "215.00", isDefault: true },
+      { key: "zoey_28795", price: "280.00" },
+    ],
+  },
+];
+
+test("requiredOptionFinancePrice: the held answer, else the default (29797 SKOPE warranty)", () => {
+  assert.equal(requiredOptionFinancePrice(skopeWarranty, {}), 215);
+  assert.equal(requiredOptionFinancePrice(skopeWarranty, { zoey_8067: ["zoey_28795"] }), 280);
+  // Fed to the offer it reads as SKOPE's "Own Me" line.
+  const offer = productFinanceOffer({ price: { displayPrice: 215 }, sku: "SKO-Skope-Extended-Warranty", brand: "SKOPE", pricesIncludeTax: false });
+  assert.equal(offer?.funder, "skope");
+});
+
+test("requiredOptionFinancePrice: nothing to quote without a priced answer for every required group", () => {
+  assert.equal(requiredOptionFinancePrice([], {}), 0);
+  assert.equal(requiredOptionFinancePrice([{ ...skopeWarranty[0], required: false }], {}), 0);
+  const noDefault = [{ key: "g", required: true, control: "radio", options: [{ key: "a", price: "10" }] }];
+  assert.equal(requiredOptionFinancePrice(noDefault, {}), 0);
+  const zero = [{ key: "g", required: true, control: "radio", options: [{ key: "a", price: "0.00", isDefault: true }] }];
+  assert.equal(requiredOptionFinancePrice(zero, {}), 0);
+  assert.equal(requiredOptionFinancePrice([...skopeWarranty, ...noDefault], {}), 0);
 });
