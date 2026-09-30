@@ -102,9 +102,11 @@ function ActionsBridge({
       addons?: AddonSelectionInput,
       // IK gift cards (Zoey parity): the amount and recipient / sender details — re-validated by
       // the action against the product's own configuration.
-      giftCard?: GiftCardSelectionInput
+      giftCard?: GiftCardSelectionInput,
+      // The Qty box — sent by the bridge with a gift card only (how many cards).
+      quantity?: number
     ) => {
-      const res = await addToQuote(pid, variantId, null, addons, null, giftCard ?? null);
+      const res = await addToQuote(pid, variantId, null, addons, giftCard ? (quantity ?? null) : null, giftCard ?? null);
       if (res && "quoteCount" in res && typeof res.quoteCount === "number") {
         setQuoteCount(res.quoteCount);
         open("quote");

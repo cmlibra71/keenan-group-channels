@@ -24,6 +24,7 @@
  * same values either way.
  */
 import { gstSplit } from "@keenan/services/calc";
+import { giftCardOrderOptionsFromAttributes } from "@keenan/services/gift-card";
 import {
   withQuoteBillingEmail,
   carriedLineMeasurement,
@@ -379,7 +380,12 @@ export function planOrderFromPaidQuote(
     const extSale = it.extended_sale_price ? String(it.extended_sale_price) : extList;
     const unitT = split(salePrice);
     const extT = split(extSale);
-    const addonOptions = addonsAsOrderOptions(quoteLinePicks(it.attributes));
+    // A GIFT CARD line (IK) carries the card itself — amount, recipient, sender, message — onto the
+    // order line in Zoey's labels, so whoever issues the card has every detail on the ORDER.
+    const addonOptions = {
+      ...addonsAsOrderOptions(quoteLinePicks(it.attributes)),
+      ...giftCardOrderOptionsFromAttributes(it.attributes),
+    };
     return {
       source_item_id: Number(it.id),
       payload: {

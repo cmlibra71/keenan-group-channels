@@ -125,9 +125,9 @@ export async function addToQuote(
    */
   quantity?: number | null,
   /**
-   * The shared product page passes a gift card's details here (Industry Kitchens only). Chefs
-   * Depot sells no gift card, so it is accepted and ignored — this storefront's behaviour is
-   * unchanged.
+   * The shared product page passes a gift card's details here. Only Industry Kitchens sells its
+   * gift card with amounts (`channel_gift_cards["1"]`); Chefs Depot has no gift card configuration,
+   * so it is accepted and ignored and this storefront's Add to Quote is unchanged.
    */
   _giftCard?: unknown
 ) {

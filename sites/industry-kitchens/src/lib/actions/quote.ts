@@ -43,12 +43,13 @@ import { decideQuoteLineWrite } from "@/lib/quotes/addon-line-write";
 import {
   giftCardRefusal,
   giftCardUnitPrice,
+  readQuoteLineGiftCard,
   isGiftCardProduct,
   readGiftCardConfig,
   validateGiftCardSelection,
   type GiftCardSelectionInput,
 } from "@keenan/services/gift-card";
-import { planGiftCardQuoteWrite } from "@/lib/quotes/gift-card-quote-line";
+import { giftCardPressQuantity, planGiftCardQuoteWrite, giftCardQuoteNote } from "@/lib/quotes/gift-card-quote-line";
 import { channelPricesIncludeTax } from "@/lib/promotions/tax-basis";
 import {
   quoteHidesPrices,
@@ -139,7 +140,9 @@ async function addGiftCardToQuote(
   productId: number,
   variantId: number | null,
   product: { metafields?: unknown; zoey_raw?: unknown; url_path?: string | null },
-  giftCard: GiftCardSelectionInput | null
+  giftCard: GiftCardSelectionInput | null,
+  /** The Qty box, in cards (Zoey honours it on the gift card). */
+  quantity: number | null | undefined
 ) {
   const config = readGiftCardConfig({ metafields: product.metafields, zoeyRaw: product.zoey_raw }, CHANNEL_ID);
   if (!config) {
@@ -158,13 +161,13 @@ async function addGiftCardToQuote(
 
   const quote = await getOrCreateQuote();
   await linkQuoteToSession(quote);
-  const existing = (await quoteItemService.findByProductVariant(quote.id, productId, variantId)) as {
-    id: number;
-    quantity: number;
-    customer_notes?: string | null;
-    attributes?: unknown;
-  } | null;
-  const write = planGiftCardQuoteWrite({ existing, line: verdict.line, unitPrice, addUnits: 1 });
+  // THIS product's lines already on the quote — one per card (see gift-card-quote-line.ts).
+  const full = (await quoteService.getWithItems(quote.id)) as { items?: Array<Record<string, unknown>> } | null;
+  const lines = (full?.items ?? [])
+    .filter((i) => Number(i.product_id) === productId)
+    .map((i) => ({ id: Number(i.id), product_id: Number(i.product_id), quantity: Number(i.quantity) || 0, attributes: i.attributes }));
+  const write = planGiftCardQuoteWrite({ lines, line: verdict.line, unitPrice, addUnits: giftCardPressQuantity(quantity) });
+  if (write.kind === "refuse") return { error: write.error };
   if (write.kind === "create") {
     await quoteItemService.createForParent(quote.id, {
       productId,
@@ -173,21 +176,13 @@ async function addGiftCardToQuote(
       listPrice: write.listPrice,
       salePrice: null,
       // The customer's chosen FACE VALUE, not a catalogue price: `manual` is what keeps every
-      // reprice path from re-deriving it off the product's $0 (see gift-card-quote-line.ts).
+      // engine reprice path from re-deriving it off the product's $0 (see gift-card-quote-line.ts).
       priceSource: "manual",
       attributes: write.attributes,
       customerNotes: write.customerNotes,
     });
-  } else if (existing && write.kind === "increment") {
-    await quoteItemService.updateForParent(quote.id, existing.id, { quantity: write.quantity });
-  } else if (existing && write.kind === "reconfigure") {
-    await quoteItemService.updateForParent(quote.id, existing.id, {
-      listPrice: write.listPrice,
-      salePrice: null,
-      priceSource: "manual",
-      attributes: write.attributes,
-      ...(write.customerNotes !== undefined ? { customerNotes: write.customerNotes } : {}),
-    });
+  } else {
+    await quoteItemService.updateForParent(quote.id, write.itemId, { quantity: write.quantity });
   }
   return { success: true, quoteCount: await countQuoteItems(quote.id) };
 }
@@ -248,7 +243,7 @@ export async function addToQuote(
   // no extras, no pack, and its price is the CHOSEN face value — never the catalogue's $0 and never
   // a group price. See `lib/quotes/gift-card-quote-line.ts` for the money and the one-line rule.
   if (isGiftCardProduct(product, CHANNEL_ID)) {
-    return addGiftCardToQuote(productId, variantId ?? null, product, giftCard ?? null);
+    return addGiftCardToQuote(productId, variantId ?? null, product, giftCard ?? null, quantity);
   }
 
   // ── Kit products (Zoey grouped / bundle, authored in the portal) ──────────────────────────
@@ -1254,11 +1249,22 @@ export async function duplicateQuote(quoteId: number) {
         // The copy keeps the original line's provenance, and a line with none
         // recorded is the customer's own (card laFQveZT).
         priceSource: (it.price_source as string) || "customer",
+        // A GIFT CARD line (IK) carries who the card is for: the copy keeps the card and its note,
+        // or it would be a priced card for nobody.
+        ...copiedGiftCard(it),
       });
     } catch { /* skip a failing line */ }
   }
   revalidatePath("/account/quotes");
   return { success: true, quoteId: copy.id };
+}
+
+/** The gift card (and the storefront's note for it) a duplicated line keeps; nothing for any other line. */
+function copiedGiftCard(it: Record<string, unknown>): Record<string, unknown> {
+  const card = readQuoteLineGiftCard(it.attributes);
+  if (!card) return {};
+  const note = giftCardQuoteNote(card);
+  return { attributes: { gift_card: card, storefront_note: note }, customerNotes: note };
 }
 
 // ── Customer requests on a quote: more time, a change, a message ─────────────
