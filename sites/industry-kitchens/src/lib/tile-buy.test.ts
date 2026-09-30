@@ -51,3 +51,36 @@ test("out of stock in Zoey (stock managed, is_in_stock 0 — KH 97213): no butto
   // A required question on an out-of-stock product (Xtracta 1800): still nothing — no View Details.
   assert.deepEqual(tileBuyFacts({ price: "2730", answerRequired: true, zoeyOutOfStock: true }), { viewDetails: false, cart: false, quote: false });
 });
+
+test("View Product stands in place of Add to Basket (IK, old site 2026-09-30): no-basket products with a required option show Add to Quote only", () => {
+  // Search rows as they reach the grid: rules folded (restrictAddToCart), derived facts kept.
+  const benxon = { price: "0", answerRequired: true, zoeyTileButtons: true, restrictAddToCart: true, zoeyCartDisabled: true, zeroPriceLift: "no" };
+  const polar = { price: "2639.90", salePrice: "2276.91", answerRequired: true, zoeyTileButtons: true, restrictAddToCart: true, zoeyCartDisabled: true };
+  const skope = { price: "0", answerRequired: true, zoeyTileButtons: true, restrictAddToCart: true, zeroPriceLift: "yes", cartRefusedByZeroPriceOnly: true };
+  assert.deepEqual(tileBuyFacts(benxon), { viewDetails: false, cart: false, quote: true });
+  assert.deepEqual(tileBuyFacts(polar), { viewDetails: false, cart: false, quote: true });
+  assert.deepEqual(tileBuyFacts(skope), { viewDetails: true, cart: false, quote: true });
+  // A basket-offered product with a required question keeps View Product (Deep Fryers, Display Fridges).
+  assert.deepEqual(tileBuyFacts({ price: "1200", answerRequired: true, zoeyTileButtons: true }), { viewDetails: true, cart: false, quote: true });
+  // A clearance row still carrying its rules object reads cart_disabled from it.
+  assert.equal(tileBuyFacts({ price: "10", answerRequired: true, zoeyTileButtons: true, channelRules: { cart_disabled: true } }).viewDetails, false);
+  // Not an IK-stamped row: unchanged (View Product whenever a question is asked).
+  assert.equal(tileBuyFacts({ price: "10", answerRequired: true, restrictAddToCart: true, zoeyCartDisabled: true }).viewDetails, true);
+  // A configurable ("Starting From") still opens the page whatever the basket.
+  assert.equal(tileBuyFacts({ price: "10", fromPrice: "10", answerRequired: false, zoeyTileButtons: true, zoeyCartDisabled: true }).viewDetails, true);
+});
+
+test("the $0 required-option exemption covers ONLY the zero-price reason (money judge round 3)", () => {
+  const base = { price: "0", answerRequired: true, zoeyTileButtons: true, restrictAddToCart: true, zeroPriceLift: "yes" };
+  // zero price alone → View Product (SKOPE)
+  assert.equal(tileBuyFacts({ ...base, cartRefusedByZeroPriceOnly: true }).viewDetails, true);
+  // zero price + a guest rule / stock / staff restrict → the services fact is absent → quote only
+  assert.deepEqual(tileBuyFacts(base), { viewDetails: false, cart: false, quote: true });
+  // availability switched off → quote only even with the fact
+  assert.equal(tileBuyFacts({ ...base, cartRefusedByZeroPriceOnly: true, availability: "disabled" }).viewDetails, false);
+  // cart flag No → quote only even with the fact
+  assert.equal(tileBuyFacts({ ...base, cartRefusedByZeroPriceOnly: true, zoeyCartDisabled: true }).viewDetails, false);
+  // a clearance row carrying rules: lifted zero price alone → View Product; + out of stock → no buttons (Zoey OOS)
+  assert.equal(tileBuyFacts({ price: "0", answerRequired: true, zoeyTileButtons: true, zeroPriceLift: "yes", channelRules: { quote_only: true } }).viewDetails, true);
+  assert.equal(tileBuyFacts({ price: "0", answerRequired: true, zoeyTileButtons: true, zeroPriceLift: "yes", channelRules: { quote_only: true, guest_quote_only: true } }).viewDetails, false);
+});
