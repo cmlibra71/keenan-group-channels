@@ -18,7 +18,7 @@ import { getCommerceClient } from "@keenan/services";
 import { CHANNEL_ID } from "../channel";
 import type { StockFacts } from "@keenan/services/backorder";
 import { effectivePackFacts, readChannelPackEntry, type PackFacts } from "@keenan/services/pack";
-import { readChannelRules, type ChannelPurchaseRules } from "@keenan/services/channel-rules";
+import { backorderPolicyForChannel, readChannelRules, type ChannelPurchaseRules } from "@keenan/services/channel-rules";
 
 export type ProductBackorderFacts = StockFacts &
   PackFacts & {
@@ -89,7 +89,7 @@ export async function backorderFactsForProducts(
         channel_pack: unknown;
       }[];
     for (const row of rows) {
-      out.set(Number(row.id), {
+      const facts: ProductBackorderFacts = {
         inventoryTracking: row.inventory_tracking,
         inventoryLevel: row.inventory_level == null ? null : Number(row.inventory_level),
         backorderPolicy: row.backorder_policy,
@@ -130,7 +130,13 @@ export async function backorderFactsForProducts(
         // by the shopper's group row exactly as the product page does (`resolvePackSize(facts,
         // group)`). None carry any today; absent → the base pack, as before.
         qtyIncrementGroups: row.qty_increment_groups ?? null,
-      });
+      };
+      // The product's own policy when a person set one; else THIS storefront's Zoey
+      // `backorder_silent` rule (Industry Kitchens: Zoey "Allow Qty Below 0" without "Notify
+      // Customer" — the cart takes the back order and says nothing, as Zoey's did; IK re-audit
+      // #398). Chefs Depot carries no rule, so it reads the column exactly as before.
+      facts.backorderPolicy = backorderPolicyForChannel(row.backorder_policy, facts.channelRules);
+      out.set(Number(row.id), facts);
     }
   } catch (e) {
     console.error("[backorder] product stock lookup failed (non-fatal):", e);

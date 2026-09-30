@@ -11,6 +11,7 @@ import {
 import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
 import { readAcquisitionUtm } from "@/lib/acquisition";
 import { getSession } from "@/lib/auth";
+import { channelRulesRefuseQuote, readChannelRules } from "@keenan/services/channel-rules";
 import { layerCartPrice } from "@/lib/pricing/cart-pricing";
 import { effectivePackFacts, readChannelPack, resolvePackSize, snapToPack } from "@keenan/services/pack";
 import { usesParentPrice } from "@keenan/services/catalog-price";
@@ -151,6 +152,18 @@ export async function addToQuote(
   // its own restricted products, rather than trusting the page that drew the button.
   if (product.restrict_add_to_quote === true) {
     return { error: "This product can't be added to a quote. Please contact us about it." };
+  }
+
+  // Zoey B2B withholds Add to Quote from GUESTS on some products (`guest_quote_hidden`, IK re-audit:
+  // the Opinel range shows a guest no buttons at all). The page and the tiles draw no button for a
+  // guest; a stale tab or a hand-posted action is refused here. The session is read only for a
+  // product carrying the rule; a signed-in customer quotes as before.
+  const channelRules = readChannelRules(product.metafields, CHANNEL_ID);
+  if (
+    channelRules?.guestQuoteHidden &&
+    channelRulesRefuseQuote(channelRules, { loggedIn: (await getSession().catch(() => null)) != null })
+  ) {
+    return { error: "This product can't be added to a quote online. Please contact us about it." };
   }
 
   // ── Kit products (Zoey grouped / bundle, authored in the portal) ──────────────────────────
