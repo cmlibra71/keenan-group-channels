@@ -829,6 +829,8 @@ export type FooterSetting = {
   /** Finance-partner logos the footer links out to (Industry Kitchens carries
    *  SilverChef and SKOPE Funding). */
   partners?: { name: string; image_url?: string; href?: string }[];
+  /** Publuu flip-book embeds under the partner logos (normalised by the Footer). */
+  embeds?: unknown;
   legal?: string;
 };
 
