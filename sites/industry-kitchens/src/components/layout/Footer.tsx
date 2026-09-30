@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { normalizeFooterEmbeds } from "@keenan/services/footer-embeds";
 import {
   Facebook,
   Instagram,
@@ -30,6 +31,10 @@ export type FooterConfig = {
   social?: FooterSocial[];
   payment_badges?: FooterBadge[];
   partners?: FooterBadge[];
+  /** Framed Publuu flip-books (the Industry Kitchens catalogue) under the partner logos, as the old
+   *  Zoey footer carried it after the SKOPE Funding logo on every page. Edited on the portal's
+   *  Navigation › Footer menu tab; `normalizeFooterEmbeds` re-checks every URL (publuu.com only). */
+  embeds?: unknown;
   legal?: string;
 };
 
@@ -155,6 +160,7 @@ export function Footer({
   const partners = config?.partners ?? [];
   const paymentBadges = config?.payment_badges ?? [];
   const social = config?.social ?? [];
+  const embeds = normalizeFooterEmbeds(config?.embeds);
 
   return (
     <footer className="border-t border-zinc-200 bg-zinc-50">
@@ -249,6 +255,27 @@ export function Footer({
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Publuu flip-books — the catalogue the old footer framed after the SKOPE Funding logo. */}
+        {embeds.length > 0 && (
+          <div className="mt-8 space-y-6 border-t border-zinc-200 pt-8" data-footer-embeds="">
+            {embeds.map((e) => (
+              <iframe
+                key={e.src}
+                src={e.src}
+                title={e.title}
+                width="100%"
+                height={e.height}
+                loading="lazy"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allow="clipboard-write; autoplay; fullscreen"
+                allowFullScreen
+                className="block w-full border-0"
+                style={{ height: e.height }}
+              />
+            ))}
           </div>
         )}
 

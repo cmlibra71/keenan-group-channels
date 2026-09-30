@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useRef, useState } from "react";
+import { useListingNav } from "@/lib/listing-nav";
 import { ChevronDown, X, SlidersHorizontal } from "lucide-react";
 import {
   normalizeStorefrontFilters,
@@ -271,9 +271,8 @@ export function MobileFilterRail({ facets }: { facets: CategoryFacets }) {
 
 /** "Clear all" for the authored rail header (renders nothing when inactive). */
 export function ClearFiltersButton() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const nav = useListingNav();
+  const searchParams = nav.params;
   // Every rail param, including whichever attribute sections this category
   // offers — they are decided from the data, so they cannot be listed here.
   const clearParams = [
@@ -289,7 +288,7 @@ export function ClearFiltersButton() {
       onClick={() => {
         const next = new URLSearchParams(searchParams.toString());
         [...clearParams, "page"].forEach((p) => next.delete(p));
-        router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+        nav.replace(next);
       }}
       className="text-xs font-semibold text-accent hover:text-accent-hover"
     >
@@ -304,10 +303,8 @@ export function FilterRail({ facets }: { facets: CategoryFacets }) {
 }
 
 function useFacetParam(param: string) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const [, startTransition] = useTransition();
+  const nav = useListingNav();
+  const searchParams = nav.params;
 
   const selected = (searchParams.get(param)?.split(",").filter(Boolean) ?? []) as string[];
 
@@ -319,16 +316,15 @@ function useFacetParam(param: string) {
     if (set.size > 0) next.set(param, [...set].join(","));
     else next.delete(param);
     next.delete("page"); // filters reset pagination
-    startTransition(() => router.replace(`${pathname}?${next.toString()}`, { scroll: false }));
+    nav.replace(next);
   };
 
   return { selected, toggle };
 }
 
 function RailContent({ groups, clearParams }: { groups: FacetGroupDef[]; clearParams: string[] }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const nav = useListingNav();
+  const searchParams = nav.params;
   // "Clear all" acts on every attribute param actually ON THE URL, not only the
   // ones this category's facets happen to name. An attribute the other filters
   // left with no values has no facet to be listed from, and a Clear all that
@@ -350,7 +346,7 @@ function RailContent({ groups, clearParams }: { groups: FacetGroupDef[]; clearPa
             onClick={() => {
               const next = new URLSearchParams(searchParams.toString());
               [...allClearParams, "page"].forEach((p) => next.delete(p));
-              router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+              nav.replace(next);
             }}
             className="text-xs font-semibold text-accent hover:text-accent-hover"
           >
@@ -402,10 +398,8 @@ function RangeFacet({
   title: string;
   range: { min: number; max: number; unit?: string; money?: boolean };
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const [, startTransition] = useTransition();
+  const nav = useListingNav();
+  const searchParams = nav.params;
 
   // A legacy band token (?price=lt1000) is shown as the window it covers, so
   // the thumbs never sit at full travel while the grid is actually narrowed.
@@ -438,13 +432,29 @@ function RangeFacet({
     if (value === null) params.delete(param);
     else params.set(param, value);
     params.delete("page");
-    startTransition(() => router.replace(`${pathname}?${params.toString()}`, { scroll: false }));
+    nav.replace(params);
   };
 
   const move = (which: 0 | 1) => (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = Number(event.target.value);
     setDragging(true);
     setDraft(([a, b]) => (which === 0 ? [Math.min(value, b), b] : [a, Math.max(value, a)]));
+  };
+  // A click anywhere on the line (not only a drag of a thumb) moves the NEAREST
+  // thumb to that spot and applies it at once. The inputs let clicks through
+  // except on their thumbs, so a press on a thumb is still a native drag.
+  const trackRef = useRef<HTMLDivElement>(null);
+  const clickTrack = (event: React.PointerEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).tagName === "INPUT" || !trackRef.current) return;
+    const rect = trackRef.current.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    const snapped = travel.min + Math.round((ratio * (travel.max - travel.min)) / step) * step;
+    const value = Math.min(travel.max, Math.max(travel.min, snapped));
+    const which = value < low ? 0 : value > high ? 1 : value - low <= high - value ? 0 : 1;
+    const next: [number, number] = which === 0 ? [Math.min(value, high), high] : [low, Math.max(value, low)];
+    setDraft(next);
+    commit(next);
   };
   const release = () => {
     if (!dragging) return;
@@ -464,7 +474,7 @@ function RangeFacet({
           {high >= travel.max ? "+" : ""}
         </span>
       </div>
-      <div className="relative h-6">
+      <div ref={trackRef} onPointerDown={clickTrack} className="relative h-6 cursor-pointer">
         <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-steel-200" />
         <div
           className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full"
@@ -553,7 +563,7 @@ export function FacetCheckbox({ param, value, label, count }: { param: string; v
  * `RailContent`.
  */
 export function AttributeFacetSections({ facets }: { facets: CategoryFacets }) {
-  const searchParams = useSearchParams();
+  const searchParams = useListingNav().params;
   const groups = attributeGroups(facets);
   if (groups.length === 0) return null;
   return (
@@ -626,9 +636,8 @@ export function FacetChips({
   groups: FacetGroupDef[];
   selected?: Record<string, string[]>;
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const nav = useListingNav();
+  const searchParams = nav.params;
 
   // Last resort when no option carries this value: the value itself is a
   // percent-encoded NAME, so decode it rather than printing "Chef%20Inox ×" at
@@ -676,7 +685,7 @@ export function FacetChips({
     if (set.size > 0) next.set(param, [...set].join(","));
     else next.delete(param);
     next.delete("page");
-    router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+    nav.replace(next);
   };
 
   return (
@@ -719,9 +728,8 @@ export function SortSelect({
    *  high-to-low would sit under a dropdown reading "Relevance". */
   defaultSort?: ListingSort;
 } = {}) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const nav = useListingNav();
+  const searchParams = nav.params;
   // Normalised, not read raw: the server runs `parseListingSort` on the same
   // parameter, so `?sort=banana` runs in the storefront's own order. Handing the
   // raw value to the <select> would leave it with no matching option and the
@@ -744,7 +752,7 @@ export function SortSelect({
           if (param === null) next.delete("sort");
           else next.set("sort", param);
           next.delete("page");
-          router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+          nav.replace(next);
         }}
         className="rounded-btn border border-border bg-white px-2.5 py-1.5 text-[13px] font-medium text-text-primary focus:border-accent focus:outline-none"
       >

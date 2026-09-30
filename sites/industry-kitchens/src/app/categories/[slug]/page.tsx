@@ -39,6 +39,7 @@ import {
 } from "@keenan/services/services";
 import { parsePriceBands, parseRangeParam } from "@/lib/category-attributes";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
+import { ListingNavProvider } from "@/lib/listing-nav";
 import { parseListingSort } from "@/lib/listing-sort";
 import { RichContent } from "@/components/content/RichContent";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
@@ -222,7 +223,9 @@ export default async function CategoryPage({
       // can no longer disagree.
       limit: perPage * page,
       subcategoryIds: filtersOn.has("sub") ? parseIds(sp.sub) : [],
-      brandIds: filtersOn.has("brand") ? parseIds(sp.brand) : [],
+      // Brand filter TOKENS, not ids: "459" is every Waldorf product, "459~Waldorf Bold" only the
+      // products Zoey labels with that sub-line — the old site's Brand filter lists them apart.
+      brandTokens: filtersOn.has("brand") ? (sp.brand?.split(",").filter(Boolean) ?? []) : [],
       priceBands,
       priceRange,
       attributes: attributeSelections,
@@ -526,6 +529,7 @@ export default async function CategoryPage({
       {aboveBlocks.length > 0 && <BlockRenderer blocks={aboveBlocks} draft={draft} />}
 
       {/* ═══ Rail + grid ═══ */}
+      <ListingNavProvider>
       <div className="flex gap-6">
         <FilterRail facets={facets} />
 
@@ -564,6 +568,7 @@ export default async function CategoryPage({
           )}
         </div>
       </div>
+      </ListingNavProvider>
 
       {/* ═══ CMS: below-listing content (empty unless set) ═══ */}
       {belowBlocks.length > 0 && <BlockRenderer blocks={belowBlocks} draft={draft} />}
