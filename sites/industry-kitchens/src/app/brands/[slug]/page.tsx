@@ -18,13 +18,16 @@ import {
   getCmsPage,
   getDefaultListingSort,
   getCategoryBySlug,
+  getSubcategories,
   // Product photographs a pictureless brand can borrow (InEoeMZh).
   getBorrowedImageCandidates,
   applyBorrowedCategoryImages,
 } from "@/lib/store";
 import { borrowedImageFor, ownersNeedingBorrowedImage } from "@/lib/borrowed-image";
 import { getListingMemberPrices } from "@/lib/member";
-import { brandNodePathApplies, renderBrandNodeBranch } from "@/builder/brand-node-branch";
+import { brandNodePathApplies, brandTreeHasFilterRail, renderBrandNodeBranch } from "@/builder/brand-node-branch";
+import { rangeBelongsToBrand } from "@/lib/brand-range";
+import { brandRailNextPageHref, parseBrandRailSelections } from "@/lib/brand-rail";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BrandIntro } from "@/components/brand/BrandIntro";
@@ -39,7 +42,7 @@ import { BrandIndustryUses } from "@/components/brand/BrandIndustryUses";
 import { BrandFaq } from "@/components/brand/BrandFaq";
 import { BrandCategories } from "@/components/brand/BrandCategories";
 import { FacetRail, FacetChips, SortSelect } from "@/components/category/FilterRail";
-import { enabledFilterIds } from "@/lib/storefront-filters";
+import { applyStorefrontFilters, enabledFilterIds } from "@/lib/storefront-filters";
 import { parsePriceBands, parseRangeParam } from "@/lib/category-attributes";
 import { parseAttributeSelections } from "@keenan/services/services";
 import {
@@ -215,6 +218,124 @@ export default async function BrandPage({
   // for the faceted listing here would hand a designed page 24 rows where it
   // shows 48, with nothing on screen to page or filter them.
   if (await brandNodePathApplies({ brandCms, draft })) {
+    // ── The authored filter rail (IK parity: the old brand pages' Category / attributes / Price /
+    // Brand rail). Only a tree that PLACES one pays for the faceted listing; the rows it lists are
+    // the filtered ones, the hero keeps the brand's whole count. Selections: `sub` (the brand's
+    // categories; an old `cat` link still works), `brand` (the brand's display labels, services
+    // #240), `price` (bands or the slider's window), `f_<code>` attributes. A switched-off facet
+    // (portal: Products > Filtering) stops filtering, not merely displaying (NfYe3P3G).
+    if (brandTreeHasFilterRail((brandCms as { node_tree?: unknown } | null)?.node_tree)) {
+      const listingDisplay = await getListingDisplay();
+      const storefrontFilters = await getStorefrontFilters();
+      const filtersOn = enabledFilterIds(storefrontFilters);
+      const spRec = sp as Record<string, string | undefined>;
+      const railAttributes = parseAttributeSelections(spRec, (await loadCatalogAttributeContext(ATTR_CHANNEL_ID)).attributes);
+      const rail = parseBrandRailSelections(spRec, filtersOn, Object.keys(railAttributes).length, defaultListingSort);
+      // The Category group lists the brand's RANGES, as Zoey's did: the children of the brand's own
+      // category under Brands ("Waldorf 800 619 · Waldorf Bold 567 · Waldorf Jump 1" on the old
+      // Waldorf page). A brand with no brand category keeps every menu category it reaches, trimmed
+      // to the top 12 below (a ticked one is always kept, so it can be unticked).
+      const brandsRoot = (await getCategoryBySlug("brands").catch(() => null)) as { id?: number } | null;
+      const brandCategory = brandsRoot?.id
+        ? (((await getSubcategories(brandsRoot.id).catch(() => [])) as { id: number; slug?: string | null; name?: string | null }[]).find(
+            (c) => rangeBelongsToBrand(c, brand as { slug?: unknown; name?: unknown; metafields?: unknown }, slug)
+          ) ?? null)
+        : null;
+      const scope = brandCategory ? { categoryParentId: brandCategory.id } : {};
+      const pageSize = listingDisplay.page_sizes.brand;
+      const [railListing, railUnfiltered, railMemberPricing] = await Promise.all([
+        // Cumulative for Load more, as the sealed listing: each press re-asks with a bigger limit, and
+        // `total` + facets stay anchored to page 1 inside getBrandListing.
+        getBrandListing(brand.id as number, {
+          page: 1,
+          limit: pageSize * rail.page,
+          ...scope,
+          categoryIds: rail.categoryIds,
+          brandLabels: rail.labels,
+          priceBands: rail.priceBands,
+          priceRange: rail.priceRange,
+          attributes: railAttributes,
+          sort: rail.sort,
+        }),
+        // The hero states how many products the BRAND has, the rail how many match — the same cache
+        // entry an unfiltered first load populates (same limit, scope and sort).
+        rail.filtered
+          ? getBrandListing(brand.id as number, { page: 1, limit: pageSize, ...scope, sort: rail.sort })
+          : Promise.resolve(null),
+        getFeatureFlag("member_pricing_enabled"),
+      ]);
+      const railProducts = railListing.products as unknown as { id: number }[];
+      const railFacets = railListing.facets as Record<string, unknown> & { categories?: { id: number }[]; attributes?: { code: string }[] };
+      const attributeParams = Object.fromEntries(
+        (railFacets.attributes ?? []).map((a) => [`f_${a.code}`, spRec[`f_${a.code}`] ?? ""]).filter(([, v]) => v)
+      ) as Record<string, string>;
+      const shown = railProducts.length;
+      const hasMore = shown < railListing.total && rail.page < MAX_PAGES;
+      const railRendered = await renderBrandNodeBranch({
+        brandCms,
+        brand: {
+          ...(brand as unknown as Record<string, unknown>),
+          metafields: {
+            ...((brand.metafields as Record<string, unknown> | null) ?? {}),
+            product_lines: productLines,
+          },
+        },
+        products: railProducts,
+        total: (railUnfiltered ?? railListing).total,
+        pricing: { memberPriceMap: await getListingMemberPrices(railProducts) },
+        memberPricingEnabled: railMemberPricing,
+        draft,
+        listing: {
+          // A switched-off facet leaves the rail too (applyStorefrontFilters, as the sealed rail); the
+          // brand's labels ride in `brands` so the same switch governs them.
+          facets: (() => {
+            const categories = brandCategory
+              ? railFacets.categories ?? []
+              : (railFacets.categories ?? []).filter((c, i) => i < 12 || rail.categoryIds.includes(c.id));
+            const gated = applyStorefrontFilters(
+              {
+                subcategories: categories as never,
+                brands: (railFacets.brandLabels ?? []) as never,
+                price: (railFacets.price ?? []) as never,
+                availability: [] as never,
+                priceRange: (railFacets.priceRange ?? null) as never,
+              },
+              storefrontFilters
+            ) as unknown as Record<string, unknown>;
+            return {
+              ...railFacets,
+              categories: gated.subcategories,
+              brandLabels: gated.brands,
+              price: gated.price,
+              priceRange: gated.priceRange,
+              filters: storefrontFilters,
+            };
+          })(),
+          filters: storefrontFilters,
+          // The rail's "Showing … of N": how many match; the hero keeps the brand's whole count.
+          total: railListing.total,
+          selections: {
+            sub: rail.categoryIds.map(String),
+            brand: rail.labels,
+            price: rail.rawPrice ? rail.rawPrice.split(",").filter(Boolean) : [],
+            attributes: railAttributes,
+          },
+          sort: rail.sort,
+          page: rail.page,
+          hasMore,
+          nextPageHref: hasMore
+            ? brandRailNextPageHref({
+                basePath: `${draft && (await headers()).get("x-kg-json") === "1" ? "/json" : ""}/brands/${slug}`,
+                selections: rail,
+                attributeParams,
+                sortParam: spRec.sort,
+              })
+            : "",
+          listingDisplay,
+        },
+      });
+      if (railRendered) return railRendered;
+    }
     const [{ products: nodeProducts, total: nodeTotal }, nodeMemberPricing] = await Promise.all([
       // The authored tree has no sort control, so the order is the storefront's
       // own default and nothing else (card InEoeMZh). Unset that is still the
