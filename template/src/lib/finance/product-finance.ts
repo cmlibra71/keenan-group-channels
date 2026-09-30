@@ -189,6 +189,36 @@ export function productFinanceOffer(input: {
 }
 
 /**
+ * The price a $0 QUOTE-ONLY product's weekly rent is quoted from when its REQUIRED Zoey options carry
+ * the money (Chris 2026-09-30; SKOPE Fridge Extended Warranty 29797, where Zoey prints "Own Me $1.80 a
+ * week" off the $215 "Fridge Warranty" answer). The sum, over every required pick-one group, of the
+ * answer the shopper holds, else the group's default. Any required group with neither (or a $0 answer)
+ * ⇒ 0, and no rent is quoted. Only groups the quote-extras box is showing count, and those print
+ * their prices already, so the figure publishes nothing the page hides.
+ */
+export function requiredOptionFinancePrice(
+  groups: ReadonlyArray<{
+    key: string;
+    required?: boolean;
+    control?: string;
+    options: ReadonlyArray<{ key: string; price?: string | number | null; isDefault?: boolean }>;
+  }>,
+  selected: Readonly<Record<string, readonly string[] | undefined>>
+): number {
+  const required = groups.filter((g) => g.required === true && g.control !== "checkbox" && g.control !== "text");
+  if (required.length === 0) return 0;
+  let sum = 0;
+  for (const g of required) {
+    const held = selected[g.key]?.[0];
+    const opt = g.options.find((o) => o.key === held) ?? g.options.find((o) => o.isDefault === true);
+    const n = opt ? Number(opt.price ?? NaN) : NaN;
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    sum += n;
+  }
+  return Math.round(sum * 100) / 100;
+}
+
+/**
  * The offer as `purchase.finance*` facts, so a product TEMPLATE can author the weekly-rent panel
  * itself (IK hidden-conditionals audit C8) — its Show-if, its funder branches and its words — while
  * the money stays here. Built from the SAME `productFinanceOffer` call, with the same inputs, as the
