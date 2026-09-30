@@ -56,7 +56,7 @@ test("View Product stands in place of Add to Basket (IK, old site 2026-09-30): n
   // Search rows as they reach the grid: rules folded (restrictAddToCart), derived facts kept.
   const benxon = { price: "0", answerRequired: true, zoeyTileButtons: true, restrictAddToCart: true, zoeyCartDisabled: true, zeroPriceLift: "no" };
   const polar = { price: "2639.90", salePrice: "2276.91", answerRequired: true, zoeyTileButtons: true, restrictAddToCart: true, zoeyCartDisabled: true };
-  const skope = { price: "0", answerRequired: true, zoeyTileButtons: true, restrictAddToCart: true, zeroPriceLift: "yes" };
+  const skope = { price: "0", answerRequired: true, zoeyTileButtons: true, restrictAddToCart: true, zeroPriceLift: "yes", cartRefusedByZeroPriceOnly: true };
   assert.deepEqual(tileBuyFacts(benxon), { viewDetails: false, cart: false, quote: true });
   assert.deepEqual(tileBuyFacts(polar), { viewDetails: false, cart: false, quote: true });
   assert.deepEqual(tileBuyFacts(skope), { viewDetails: true, cart: false, quote: true });
@@ -68,4 +68,19 @@ test("View Product stands in place of Add to Basket (IK, old site 2026-09-30): n
   assert.equal(tileBuyFacts({ price: "10", answerRequired: true, restrictAddToCart: true, zoeyCartDisabled: true }).viewDetails, true);
   // A configurable ("Starting From") still opens the page whatever the basket.
   assert.equal(tileBuyFacts({ price: "10", fromPrice: "10", answerRequired: false, zoeyTileButtons: true, zoeyCartDisabled: true }).viewDetails, true);
+});
+
+test("the $0 required-option exemption covers ONLY the zero-price reason (money judge round 3)", () => {
+  const base = { price: "0", answerRequired: true, zoeyTileButtons: true, restrictAddToCart: true, zeroPriceLift: "yes" };
+  // zero price alone → View Product (SKOPE)
+  assert.equal(tileBuyFacts({ ...base, cartRefusedByZeroPriceOnly: true }).viewDetails, true);
+  // zero price + a guest rule / stock / staff restrict → the services fact is absent → quote only
+  assert.deepEqual(tileBuyFacts(base), { viewDetails: false, cart: false, quote: true });
+  // availability switched off → quote only even with the fact
+  assert.equal(tileBuyFacts({ ...base, cartRefusedByZeroPriceOnly: true, availability: "disabled" }).viewDetails, false);
+  // cart flag No → quote only even with the fact
+  assert.equal(tileBuyFacts({ ...base, cartRefusedByZeroPriceOnly: true, zoeyCartDisabled: true }).viewDetails, false);
+  // a clearance row carrying rules: lifted zero price alone → View Product; + out of stock → no buttons (Zoey OOS)
+  assert.equal(tileBuyFacts({ price: "0", answerRequired: true, zoeyTileButtons: true, zeroPriceLift: "yes", channelRules: { quote_only: true } }).viewDetails, true);
+  assert.equal(tileBuyFacts({ price: "0", answerRequired: true, zoeyTileButtons: true, zeroPriceLift: "yes", channelRules: { quote_only: true, guest_quote_only: true } }).viewDetails, false);
 });
