@@ -15,6 +15,8 @@ import { applyCatalogScope } from "@/lib/catalog-scope";
 import { attachBrandLogos } from "@/lib/brand-logo-fallback";
 import {
   composeBrandPagePayload,
+  brandFacetsAsListingFacets,
+  type FacetSelections,
   loadJsSandbox,
   computeCallResults,
   type NodeTree,
@@ -64,7 +66,25 @@ export interface BrandNodeBranchArgs {
    * `composeBrandRangeSlice`). Merged over the brand payload; absent for the brand page.
    */
   payloadExtras?: Record<string, unknown>;
+  /**
+   * The faceted brand listing's filter state, for a brand tree that places a filter rail (IK parity:
+   * the old brand pages' Category / attributes / Price / Brand rail). `facets` is
+   * `listBrandFaceted`'s raw facets; `filters` is this storefront's rail configuration (portal:
+   * Products > Filtering), which the price slider and attribute sections read. Absent → the payload
+   * carries no `listing` and the page renders exactly as before (every Chefs Depot brand page).
+   */
+  listing?: {
+    facets: unknown;
+    /** How many products match the selections (the brand's whole count is `total`). */
+    total?: number;
+    filters?: unknown;
+    selections?: FacetSelections;
+    sort?: string;
+    listingDisplay?: NonNullable<Parameters<typeof composeBrandPagePayload>[0]["listing"]>["listingDisplay"];
+  };
 }
+
+export { brandTreeHasFilterRail } from "./brand-filter-rail";
 
 /**
  * Does the node path apply to this brand page — a tree authored, and the flag on
@@ -104,6 +124,7 @@ export async function renderBrandNodeBranch({
   memberPricingEnabled,
   draft,
   payloadExtras,
+  listing,
 }: BrandNodeBranchArgs): Promise<React.ReactElement | null> {
   if (!(await brandNodePathApplies({ brandCms, draft }))) return null;
   const nodeTree = (brandCms as { node_tree?: unknown } | null)!.node_tree as NodeTree;
@@ -146,6 +167,17 @@ export async function renderBrandNodeBranch({
     gst: { inclusive: gstInclusive, pricesIncludeTax },
     memberPricingAvailable: memberPricingEnabled,
     draft,
+    ...(listing
+      ? {
+          listing: {
+            facets: listing.facets,
+            total: listing.total,
+            selections: listing.selections,
+            sort: listing.sort,
+            listingDisplay: listing.listingDisplay,
+          },
+        }
+      : {}),
   });
   const payload = (payloadExtras ? { ...basePayload, ...payloadExtras } : basePayload) as typeof basePayload;
 
@@ -192,6 +224,9 @@ export async function renderBrandNodeBranch({
         jsFunctions={jsFunctions}
         callResults={callResults}
         draft={draft}
+        // The price slider and attribute sections read the facets with this storefront's rail
+        // configuration beside them, as they do on a category page.
+        listingFacets={listing ? { ...brandFacetsAsListingFacets(listing.facets), filters: listing.filters } : undefined}
       />
     </>
   );
