@@ -44,6 +44,16 @@ export interface TileBuyRow {
   channelRules?: unknown;
   /** The derived out-of-stock fact, on rows whose rules were already folded (search). */
   zoeyOutOfStock?: boolean;
+  /** The derived "Zoey says no basket" fact (cart flag No → `cart_disabled`), on rows whose rules were
+   *  already folded (search) — services `applyChannelRulesToTileRows`. */
+  zoeyCartDisabled?: boolean;
+  /** services `attachTileFacts`: a $0 product Zoey prices through its required option — "yes" means
+   *  Zoey offers it for sale (the SKOPE warranty), "no" means no basket (Industry Kitchens only). */
+  zeroPriceLift?: "yes" | "no" | string;
+  /** services `attachTileFacts`: this row follows Zoey's tile button rule (Industry Kitchens only). */
+  zoeyTileButtons?: boolean;
+  /** services `applyChannelRulesToTileRows`: ZERO PRICE is the only reason this row's basket is refused. */
+  cartRefusedByZeroPriceOnly?: boolean;
 }
 
 export interface TileBuyFacts {
@@ -63,8 +73,25 @@ export function tileBuyFacts(row: TileBuyRow): TileBuyFacts {
   // Out of stock in Zoey (stock managed, is_in_stock 0): no action at all, not even View Details.
   if (row.zoeyOutOfStock === true || channelRulesOfRow(row)?.outOfStock === true) return NO_BUTTONS;
   const price = cardPrice({ price: row.price, salePrice: row.salePrice, fromPrice: row.fromPrice, fromSalePrice: row.fromSalePrice });
-  const viewDetails = price.from || row.answerRequired === true || row.answer_required === true;
   const controls = tileControlsOf(row);
+  // Zoey's tile puts "View Product" IN PLACE OF Add to Basket: a product that asks a required
+  // question but that Zoey will not sell online (cart flag No, a $0 quote-only product, stock, a
+  // guest rule) shows just Add to Quote. The $0 product Zoey DOES sell through its required option
+  // (`zeroPriceLift: "yes"`, the SKOPE warranty) keeps View Product. IK rows only
+  // (`zoeyTileButtons`, stamped by services `attachTileFacts` for channel 1). Old site, guest,
+  // 2026-09-30: Benxon lids ×5 and Polar GE632-A → ADD TO QUOTE only; SKOPE → VIEW PRODUCT + ADD TO QUOTE.
+  //
+  // The lift exempts ONLY the zero-price reason (money judge round 3): a search row says so with
+  // `cartRefusedByZeroPriceOnly` (its rules arrive folded into `restrictAddToCart`); a clearance row
+  // still carrying its rules object is lifted inside `tileControlsOf`. Any other refusal — a guest
+  // rule, stock, the cart flag, a staff restriction, availability switched off — keeps quote only.
+  const zoeyNoBasket =
+    row.zoeyCartDisabled === true || channelRulesOfRow(row)?.cartDisabled === true || row.zeroPriceLift === "no";
+  const zeroPriceOnlyExempt = row.zeroPriceLift === "yes" && row.cartRefusedByZeroPriceOnly === true;
+  const basketRefused =
+    zoeyNoBasket || row.availability === "disabled" || (controls.cartRefused && !zeroPriceOnlyExempt);
+  const asksQuestion = row.answerRequired === true || row.answer_required === true;
+  const viewDetails = price.from || (asksQuestion && !(row.zoeyTileButtons === true && basketRefused));
   const buttons = tileButtons(controls, price.list > 0, row.availability === "disabled");
   return {
     viewDetails,
