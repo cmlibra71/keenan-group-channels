@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import {
   loadLineCosts,
   loadPromotionsForChannel,
@@ -8,6 +9,21 @@ import {
 import { floorUnitPrice, DEFAULT_MARGIN_FLOOR_PCT } from "@keenan/services/margin-floor";
 import { CHANNEL_ID, productService } from "@/lib/store";
 import { OfferTierTables, type OfferTierTable } from "@/components/product/OfferTierTables";
+
+/**
+ * This channel's live promotions, shared by every shopper and every product page: the list
+ * depends only on the channel and the clock, never on who is looking. It was one promotions +
+ * coupons + redemptions query on every product view (the busiest page on Chefs Depot, measured
+ * 2026-09-30); now once a minute. The portal's promotion screens purge nothing on the storefront,
+ * so an offer that starts, ends or is edited shows here within the same 60 s. The CART never
+ * reads this copy — it evaluates `loadPromotionsForChannel` live — and a promotion's spent use
+ * cap is still counted live below.
+ */
+const loadChannelPromotions = unstable_cache(
+  async () => loadPromotionsForChannel(CHANNEL_ID),
+  [`offer-tier-promotions-${CHANNEL_ID}`],
+  { revalidate: 60, tags: [`channel-${CHANNEL_ID}`, "promotions"] }
+);
 
 /**
  * The carton-tier table on a product page (card p6YVxc4P, display requirement 6).
@@ -64,7 +80,7 @@ export async function loadOfferTierTables({
   try {
     const id = typeof productId === "number" && Number.isFinite(productId) ? productId : null;
     const [loaded, settings, costs, product] = await Promise.all([
-      loadPromotionsForChannel(CHANNEL_ID),
+      loadChannelPromotions(),
       loadProductPromotionSettings(id == null ? [] : [id]),
       loadLineCosts(id == null ? [] : [{ productId: id, variantId: null }]),
       unitPrice == null && id != null

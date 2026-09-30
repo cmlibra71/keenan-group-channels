@@ -5,7 +5,7 @@ import { withPromoTagInComponents } from "@/builder/promo-tag-node";
 import { guardTileBuyControlsInComponents } from "@keenan/services/builder";
 import { withMemberScaleLabels } from "@/builder/member-scale-labels";
 import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
-import { initCommerceDb, createChannelStore, getCommerceClient, setStripeClientOptions } from "@keenan/services";
+import { initCommerceDb, createChannelStore, createRenderConfigCache, getCommerceClient, setStripeClientOptions } from "@keenan/services";
 import {
   channelService,
   siteService,
@@ -250,10 +250,16 @@ export const getDraftComponents = async (): Promise<ComponentMap> =>
 // rather than site code — see docs/architecture/seam-audit.md §2c.
 // ============================================================================
 
+// Page-render settings (finance rates, builder CSS, listing settings, nav, footer…)
+// and the CMS function library come from ONE cached read per channel — 60 s, busted
+// by the portal's settings-save and publish purges (services `render-config-cache.ts`).
+// They were 3–5 uncached round trips on every page view (measured 2026-09-30). Any
+// key not on that list still reads live, exactly as before.
+const _renderConfig = createRenderConfigCache(CHANNEL_ID, unstable_cache);
+
 export const getChannelSetting = async (key: string): Promise<unknown> => {
   try {
-    const setting = await channelSettingsService.getByKey(CHANNEL_ID, key);
-    return setting.setting_value;
+    return await _renderConfig.getSettingValue(key);
   } catch {
     return null;
   }
@@ -273,11 +279,15 @@ export const getChannelSettings = async (
   keys: readonly string[]
 ): Promise<Record<string, unknown>> => {
   try {
-    return await channelSettingsService.getValuesByKeys(CHANNEL_ID, keys);
+    return await _renderConfig.getSettingValues(keys);
   } catch {
     return {};
   }
 };
+
+/** The channel's enabled CMS function library (name → source), cached with the settings above. */
+export const getEnabledCmsFunctions = (): Promise<Record<string, string>> =>
+  _renderConfig.getEnabledCmsFunctions();
 
 export type { MegaMenuNode, MegaMenuFeatured, ContentPage } from "@keenan/services";
 

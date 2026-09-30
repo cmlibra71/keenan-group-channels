@@ -6,7 +6,7 @@ import { CHANNEL_ID,
   getNamedStyles,
   getComponents, getDraftComponents,
   getCmsTemplate,
-  getChannelSetting,
+  channelSettingsService,
 } from "@/lib/store";
 import { getMemberContext } from "@/lib/member";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
@@ -84,9 +84,14 @@ export default async function NodePreviewProductPage({
     await loadJsSandbox(jsFunctions).catch(() => null);
     callResults = await computeCallResults(nodeTree.root, jsFunctions, payload as object).catch(() => ({}));
   }
-  // Same authored-class CSS the live route injects (compiled by the portal).
+  // Same authored-class CSS the live route injects (compiled by the portal). Read LIVE, not
+  // through the 60 s render-config cache: this is the designer's draft preview, and the portal
+  // recompiles the CSS on every component save without purging the storefront.
   const builderCss =
-    ((await getChannelSetting("builder_published_css").catch(() => null)) as { css?: string } | null)?.css ?? "";
+    ((await channelSettingsService
+      .getByKey(CHANNEL_ID, "builder_published_css")
+      .then((s) => s.setting_value)
+      .catch(() => null)) as { css?: string } | null)?.css ?? "";
   return (
     <>
       {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
