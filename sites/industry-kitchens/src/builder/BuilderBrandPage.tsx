@@ -17,6 +17,9 @@ import { useGst } from "@/lib/gst";
 import { overlayLiveGst } from "./live-gst";
 import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 import { brandNatives } from "./brand-natives";
+import { categoryNatives } from "./category-natives";
+import { ListingNavProvider, useListingNav } from "@/lib/listing-nav";
+import { overlayPendingFilters, toggleListParam } from "@/lib/listing-pending";
 
 /**
  * What the engine itself needs from a brand product — only enough to emit the
@@ -40,20 +43,9 @@ export interface BrandGridProduct {
 // identical to the designer's sample).
 // ============================================================================
 
-export function BuilderBrandPage({
-  tree,
-  payload,
-  products,
-  pricing,
-  memberPricingAvailable,
-  namedStyles = {},
-  jsFunctions,
-  callResults,
-  components = {},
-  draft = false,
-}: {
+type BuilderBrandPageProps = {
   tree: NodeTree;
-  /** composeBrandPagePayload output ({ context, brand, products, total }). */
+  /** composeBrandPagePayload output ({ context, brand, products, total[, listing] }). */
   payload: object;
   /** Viewer-scoped, account-priced rows for the sealed grid. */
   products: BrandGridProduct[];
@@ -64,15 +56,51 @@ export function BuilderBrandPage({
   callResults?: Record<string, unknown>;
   components?: Record<string, NodeTree>;
   draft?: boolean;
-}) {
+  /**
+   * The facets the price slider and attribute sections draw (category facet shape + this storefront's
+   * rail configuration). Only for a tree that places a filter rail; absent → no rail natives.
+   */
+  listingFacets?: unknown;
+};
+
+/** A brand tree with a filter rail gets one listing navigation for the page, as a category page does,
+ *  so the authored tick boxes, the price slider and the sort read the same pending change
+ *  (lib/listing-nav.tsx). A tree without one renders exactly as before — no provider, no wrapper
+ *  element (every Chefs Depot brand page). */
+export function BuilderBrandPage(props: BuilderBrandPageProps) {
+  if (!props.listingFacets) return <BrandPageTree {...props} />;
+  return (
+    <ListingNavProvider>
+      <BrandPageTree {...props} />
+    </ListingNavProvider>
+  );
+}
+
+function BrandPageTree({
+  tree,
+  payload,
+  products,
+  pricing,
+  memberPricingAvailable,
+  namedStyles = {},
+  jsFunctions,
+  callResults,
+  components = {},
+  draft = false,
+  listingFacets,
+}: BuilderBrandPageProps) {
   const router = useRouter();
+  const nav = useListingNav();
+  const searchParams = nav.params;
   const addToCart = useAddToCartHandler();
   const addToQuote = useAddToQuoteHandler();
   const { inclusive, pricesIncludeTax } = useGst();
-  const livePayload = React.useMemo(
-    () => overlayLiveGst(payload, inclusive, pricesIncludeTax),
-    [payload, inclusive, pricesIncludeTax]
-  );
+  // While a filter change loads, the authored tick boxes and chips read the address the shopper just
+  // asked for (a payload without `listing` passes through untouched).
+  const livePayload = React.useMemo(() => {
+    const gst = overlayLiveGst(payload, inclusive, pricesIncludeTax);
+    return nav.pending ? overlayPendingFilters(gst, nav.params) : gst;
+  }, [payload, inclusive, pricesIncludeTax, nav.pending, nav.params]);
   // masterLeafNatives is engine — every dependency it has exists on both
   // sites. Only the products grid is site-specific, so only that is delegated:
   // shared keys, each site's own look.
@@ -92,6 +120,31 @@ export function BuilderBrandPage({
       brandSlug: brandIdentity.slug,
       brandName: brandIdentity.name,
     }),
+    // The filter rail's two data-driven leaves (price slider, attribute sections) — the category
+    // page's own, fed this brand's facets. Only these two keys: neither is a master, so nothing
+    // authored is shadowed, and a brand tree without a rail never places them.
+    ...(listingFacets
+      ? (() => {
+          const natives = categoryNatives({
+            listing: {
+              products: [],
+              total: 0,
+              shown: 0,
+              facets: listingFacets,
+              hasMore: false,
+              nextPageHref: "",
+              memberPricingAvailable,
+              pricing,
+              categoryName: brandIdentity.name,
+              categorySlug: brandIdentity.slug,
+            },
+          });
+          return {
+            "facet-price-slider": natives["facet-price-slider"],
+            "category-attribute-facets": natives["category-attribute-facets"],
+          } as NativeComponents;
+        })()
+      : {}),
   };
   const formHandlers = useFormHandlers();
   // A form success panel shows its form's authored confirmation message when
@@ -105,8 +158,45 @@ export function BuilderBrandPage({
       addToCart,
       addToQuote,
       enquire: enquireHandler(router),
+      // The filter rail's Actions — the category page's, same URL semantics (comma-list params,
+      // paging reset, replace without scroll). Unused on a brand tree without a rail.
+      toggleFacet: (args: Record<string, unknown>) => {
+        const param = String(args.param ?? "");
+        const value = String(args.value ?? "");
+        if (!param || !value) return { success: false, error: "Missing facet param/value" };
+        // An old `?cat=` link selects categories the rail writes as `sub`: fold it in first, so the
+        // box it ticked can be unticked and a second tick does not silently drop it.
+        let base = searchParams;
+        if (param === "sub" && searchParams.get("cat")) {
+          const folded = new URLSearchParams(searchParams.toString());
+          const merged = [...new Set([...(folded.get("sub") ?? "").split(","), ...(folded.get("cat") ?? "").split(",")].filter(Boolean))];
+          folded.delete("cat");
+          folded.set("sub", merged.join(","));
+          base = folded;
+        }
+        nav.replace(toggleListParam(base, param, value));
+        return { success: true };
+      },
+      clearFilters: () => {
+        const nextParams = new URLSearchParams(searchParams.toString());
+        for (const key of [...nextParams.keys()]) {
+          if (key.startsWith("f_")) nextParams.delete(key);
+        }
+        ["sub", "cat", "brand", "price", "stock", "page"].forEach((p) => nextParams.delete(p));
+        nav.replace(nextParams);
+        return { success: true };
+      },
+      setSort: (args: Record<string, unknown>) => {
+        const value = String(args.value ?? "");
+        const next = new URLSearchParams(searchParams.toString());
+        if (value) next.set("sort", value);
+        else next.delete("sort");
+        next.delete("page");
+        nav.replace(next);
+        return { success: true };
+      },
     }),
-    [formHandlers, addToCart, addToQuote, router]
+    [formHandlers, addToCart, addToQuote, router, nav, searchParams]
   );
   return (
     <BuilderActionsProvider

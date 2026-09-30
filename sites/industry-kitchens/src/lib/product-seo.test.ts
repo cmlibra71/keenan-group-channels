@@ -7,6 +7,7 @@ import {
   productJsonLd,
   productMainImage,
   productMetaDescription,
+  productMetaKeywords,
   productPageTitle,
   publicDisplayPrice,
   publicPrice,
@@ -270,4 +271,11 @@ test("Zoey 'Use Child Price: No': every variation is offered at the parent's pri
   assert.equal(publicPrice(zip)?.low, 4975);
   // A $0 parent keeps the per-choice range even when flagged.
   assert.equal(publicPrice({ ...zip, price: "0", salePrice: null, parentPriced: true })?.low, 4975);
+});
+
+test("productMetaKeywords: staff's own words, else Zoey's meta_keyword, else nothing", () => {
+  assert.equal(productMetaKeywords({ metaKeywords: "Own, Words", zoeyRaw: { meta_keyword: "Zoey" } }), "Own, Words");
+  assert.equal(productMetaKeywords({ zoeyRaw: { meta_keyword: "Unox, Unox_Australia,  Combi" } }), "Unox, Unox_Australia, Combi");
+  assert.equal(productMetaKeywords({ zoeyRaw: { meta_keyword: null } }), "");
+  assert.equal(productMetaKeywords({}), "");
 });

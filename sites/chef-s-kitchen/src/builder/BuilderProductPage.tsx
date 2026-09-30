@@ -24,11 +24,13 @@ import { useGst } from "@/lib/gst";
 import { overlayLiveGst } from "./live-gst";
 import { useCartQuoteCounts, useHeaderPanels } from "@/lib/cart-quote-counts";
 import { sanitizeHtml } from "@/lib/sanitize-html";
+import { FINANCE_FROM_REQUIRED_OPTION, KEEP_TEXT_COLOR } from "@/lib/zoey-parity-site";
 import { BuilderTree, type NativeComponents } from "@keenan/services/builder-react";
 import { BuilderActionsProvider } from "@keenan/services/builder-react";
 import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 import { productNatives } from "./product-natives";
-import { productFinanceOffer, productFinanceScope } from "@/lib/finance/product-finance";
+import { productFinanceOffer, productFinanceScope, requiredOptionFinancePrice } from "@/lib/finance/product-finance";
+import { quoteExtrasGroups } from "@keenan/services/product-addons";
 import { useFinanceRates } from "@/lib/finance/finance-rates-context";
 import { barQuantity, KIT_ADD_TO_QUOTE_EVENT, type KitAddToQuoteDetail } from "@/lib/kit-bar-event";
 
@@ -152,13 +154,22 @@ function ActionsBridge({
   // same rent. Additive — a tree that never reads these renders exactly as before.
   const financeRates = useFinanceRates();
   const scope = React.useMemo(() => {
+    // A $0 quote-only product whose required Zoey option carries the price (29797): quote the rent
+    // off that option, whose price the quote-extras box already prints. Per-site switch.
+    const shownPrice = purchase.financeDisplayPrice ?? purchase.displayPrice;
+    const optionPrice =
+      FINANCE_FROM_REQUIRED_OPTION && purchase.quoteExtrasShown && !(shownPrice > 0)
+        ? requiredOptionFinancePrice(quoteExtrasGroups(purchase.product.addons ?? null), purchase.selectedAddons)
+        : 0;
     const offer = productFinanceOffer({
-      price: {
-        displayPrice: purchase.financeDisplayPrice ?? purchase.displayPrice,
-        displaySalePrice:
-          purchase.financeDisplaySalePrice !== undefined ? purchase.financeDisplaySalePrice : purchase.displaySalePrice,
-        memberPrice: purchase.financeMemberPrice !== undefined ? purchase.financeMemberPrice : purchase.activeMemberPrice,
-      },
+      price: optionPrice > 0
+        ? { displayPrice: optionPrice, displaySalePrice: null, memberPrice: null }
+        : {
+            displayPrice: shownPrice,
+            displaySalePrice:
+              purchase.financeDisplaySalePrice !== undefined ? purchase.financeDisplaySalePrice : purchase.displaySalePrice,
+            memberPrice: purchase.financeMemberPrice !== undefined ? purchase.financeMemberPrice : purchase.activeMemberPrice,
+          },
       sku: purchase.activeVariant?.sku ?? purchase.product.sku,
       brand: purchase.product.brandName ?? null,
       pricesIncludeTax,
@@ -360,7 +371,7 @@ export function BuilderProductPage({
     }),
     [payload, kitQuoteOnly]
   );
-  const enriched = React.useMemo(() => enrichProductPayload(payload, { sanitizeHtml }), [payload]);
+  const enriched = React.useMemo(() => enrichProductPayload(payload, { sanitizeHtml, keepTextColor: KEEP_TEXT_COLOR }), [payload]);
   return (
     <ProductPurchaseProvider
       product={product}

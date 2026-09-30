@@ -12,6 +12,7 @@ import {
   getProducts,
   getRemovedCategoryNames,
   shouldSuppressCatalogSalePrice,
+  withBrandDisplayNames,
 } from "@/lib/store";
 import {
   SORT_MAP,
@@ -157,10 +158,14 @@ export async function fetchSearchChunk(
         sku: hit.sku ?? null,
         brandName: hit.brandName ?? null,
       }));
+    // The index carries the parent brand; the tile prints THIS storefront's label (a Zoey sub-line
+    // such as "Waldorf Bold", or staff's override), read for this page of hits in one query. The
+    // Postgres fallback below already selects the label (listForChannel).
+    const labelled = await withBrandDisplayNames(mapped);
     return {
       consumed,
       exhausted: consumed < opts.limit || opts.offset + consumed >= result.estimatedTotalHits,
-      products: rulesById.size > 0 ? await withChannelRules(mapped, rulesById) : mapped,
+      products: rulesById.size > 0 ? await withChannelRules(labelled, rulesById) : labelled,
       total: result.estimatedTotalHits,
     };
   } catch {

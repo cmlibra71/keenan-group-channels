@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchProducts } from "@keenan/services/search";
-import { applyGroupPrices, getChannelRulesForProducts, shouldSuppressCatalogSalePrice } from "@/lib/store";
+import { applyGroupPrices, getChannelRulesForProducts, shouldSuppressCatalogSalePrice, withBrandDisplayNames } from "@/lib/store";
 import { getPricingGroupId } from "@/lib/member";
 import { applyChannelRulesToTileRows } from "@keenan/services/channel-rules";
 import { CHANNEL_ID } from "@/lib/channel";
@@ -123,6 +123,15 @@ export async function GET(request: NextRequest) {
       result.hits = result.hits.map((hit) =>
         "salePrice" in hit ? { ...hit, salePrice: null } : hit
       ) as typeof result.hits;
+    }
+
+    // The brand name THIS storefront prints (a Zoey sub-line such as "Waldorf Bold", or staff's
+    // override — services brandDisplaySql.ts) over the shared index's parent brand, for this page of
+    // hits in one query. Identity on a storefront that defines no labels (Chefs Depot).
+    if (result.hits.length > 0) {
+      result.hits = (await withBrandDisplayNames(
+        result.hits as unknown as { id: number; brandName?: string | null }[]
+      )) as unknown as typeof result.hits;
     }
 
     // This storefront's Zoey rules (`metafields.zoey_channel_rules[CHANNEL_ID]`, portal PR #1028):

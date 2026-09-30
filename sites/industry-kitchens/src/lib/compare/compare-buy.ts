@@ -88,7 +88,9 @@ export function compareBuyButtons(f: CompareBuyFacts): CompareBuy {
   const answerRequired = (f.requiredQuestions?.length ?? 0) > 0;
   return {
     cart: hasPrice && !controls.cartRefused && !rules.cartRefused && !blockedByStock && !isBundle && !answerRequired,
-    quote: !controls.quoteRefused && !answerRequired,
+    // …and a guest loses it on a guest_quote_hidden product (Zoey's guest Add to Quote list) —
+    // `rules` is judged for this viewer.
+    quote: !controls.quoteRefused && !rules.quoteRefused && !answerRequired,
     priceHidden,
     answerRequired,
   };

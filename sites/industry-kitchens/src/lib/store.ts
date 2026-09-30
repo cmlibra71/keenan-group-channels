@@ -122,6 +122,9 @@ export const {
   getCategoryStats,
   // This storefront's Zoey rules for rows from a source that carries none (Meilisearch hits).
   getChannelRulesForProducts,
+  // This storefront's printed brand names (Zoey sub-line labels) over rows from the shared search
+  // index, which carries the parent brand. Identity on a storefront without labels (Chefs Depot).
+  withBrandDisplayNames,
   getCategoryBreadcrumbs,
   getProductBreadcrumbs,
   // Names of the categories REMOVED from this storefront (channel_settings

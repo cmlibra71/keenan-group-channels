@@ -20,7 +20,7 @@ import {
   RENDER_PATH_TIMEOUT_MS,
   type SavedCard,
 } from "@keenan/services";
-import { gstSplit } from "@keenan/services/calc";
+import { gstOnExWholeCents, gstSplit } from "@keenan/services/calc";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
 import { canTakeCardPayment } from "@/lib/payments/stripe-gateways";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
@@ -151,8 +151,11 @@ export default async function CheckoutPage() {
     const taxSetting = await channelSettingsService.getByKey(CHANNEL_ID, "prices_include_tax");
     pricesIncludeTax = taxSetting.setting_value === true || taxSetting.setting_value === "true";
   } catch {}
-  // GST display amount via gstSplit (single source of tax math — services D4).
-  const gstAmount = Math.round(gstSplit(subtotal, pricesIncludeTax).tax * 100) / 100;
+  // GST display amount — the same whole-cent rule as the cart and the product page on an ex-GST
+  // store (`gstOnExWholeCents`, money judge 2026-09-30); `gstSplit` on a GST-inclusive store.
+  const gstAmount = pricesIncludeTax
+    ? Math.round(gstSplit(subtotal, true).tax * 100) / 100
+    : gstOnExWholeCents(subtotal).tax;
 
   // ── SilverChef / Finance (card VAjaPj0t) ──────────────────────────────────
   // Offered only above this storefront's finance minimum (inc GST, default

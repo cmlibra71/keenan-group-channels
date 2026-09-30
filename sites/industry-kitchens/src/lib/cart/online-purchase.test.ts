@@ -64,9 +64,17 @@ const LIB = join(dirname(fileURLToPath(import.meta.url)), "..");
 test("addToCart refuses quote-only products BEFORE the extras are priced on", () => {
   const src = readFileSync(join(LIB, "actions/cart.ts"), "utf8");
   const refuse = src.indexOf("refuseOnlinePurchase(");
-  const surcharge = src.indexOf("withAddonSurcharge(basePricing");
+  const surcharge = src.indexOf("const pricing = withAddonSurcharge(basePricing");
   assert.ok(refuse > 0, "addToCart calls refuseOnlinePurchase");
   assert.ok(surcharge > refuse, "the refusal is judged on the price before extras");
+  // ONE exception (owner decision 2026-09-30): a $0 IK product sold through its required, priced
+  // Zoey option is judged at base + that answer — and ONLY when the services predicate says so.
+  assert.match(
+    src,
+    /const judgedUnitPrice = soldByRequiredOption\(requiredDefinition\)\s*\? chargedUnitPrice\(basePricing\) \+ requiredChoicePrice\(requiredDefinition, resolvedAddons\)\s*: chargedUnitPrice\(basePricing\);/
+  );
+  // …judged on the REQUIRED choice only: no whole-selection surcharge feeds the refusal.
+  assert.doesNotMatch(src, /refuseOnlinePurchase\([^)]*withAddonSurcharge/);
   assert.match(src, /if \(onlineOrderingOff\(facts, viewer\)\) return CART_RESTRICTED_ERROR;/);
   // Product OR variant quote-only, through the services helper.
   assert.match(src, /purchasingDisabledMessage\(facts, variantRow\)/);

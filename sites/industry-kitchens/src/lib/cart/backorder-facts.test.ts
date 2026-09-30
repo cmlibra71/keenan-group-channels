@@ -167,3 +167,26 @@ test("backorder_silent (IK #398): unset policy reads allow_silent on IK; a perso
   const forcedOff = { ...silent, id: 23, channel_rule_overrides: { "1": { backorder_silent: false } } };
   assert.equal((await backorderFactsForProducts([23], { client: fakeClient([forcedOff]).client, channelId: IK })).get(23)?.backorderPolicy, null);
 });
+
+test("required-option exception (owner decision 2026-09-30): IK lifts Zoey's zero-price rule for a $0 product sold through its required priced Zoey option; cart flag No still refuses; Chefs Depot unchanged", async () => {
+  const group = { key: "zoey_8067", label: "SKOPE Fridge", source: "zoey", control: "radio", required: true, options: [{ key: "a", url: null, label: "Fridge Warranty", price: "215.00", isDefault: true }] };
+  const warranty = { ...row(31, null, null), zoey_channel_rules: { "1": { quote_only: true } }, channel_addons: { "1": { groups: [group] } }, zoey_cart_flag: "Yes" };
+  const ik = (await backorderFactsForProducts([31], { client: fakeClient([warranty]).client, channelId: IK })).get(31);
+  assert.equal(ik?.channelRules?.quoteOnly, false);
+  assert.equal(onlineOrderingOff(ik, GUEST), false);
+  // BLOCKING case (money judge): the lids' stored rules have NO cart_disabled yet (importer not run);
+  // Zoey's cart flag No alone must keep the basket refused.
+  const lids = { ...warranty, id: 32, zoey_channel_rules: { "1": { quote_only: true } }, zoey_cart_flag: "No" };
+  const lidsFacts = (await backorderFactsForProducts([32], { client: fakeClient([lids]).client, channelId: IK })).get(32);
+  assert.equal(lidsFacts?.channelRules?.quoteOnly, false);
+  assert.equal(onlineOrderingOff(lidsFacts, SIGNED_IN), true);
+  // Chefs Depot: no rules and no scoped groups for channel 2.
+  const cd = (await backorderFactsForProducts([31], { client: fakeClient([warranty]).client, channelId: CD })).get(31);
+  assert.equal(cd?.channelRules ?? null, null);
+  // An unknown cart flag lifts nothing.
+  const noFlag = { ...warranty, id: 34, zoey_cart_flag: null };
+  assert.equal((await backorderFactsForProducts([34], { client: fakeClient([noFlag]).client, channelId: IK })).get(34)?.channelRules?.quoteOnly, true);
+  // A plain $0 product (no required priced option) keeps the rule.
+  const plain = { ...row(33, { quote_only: true }, null) };
+  assert.equal((await backorderFactsForProducts([33], { client: fakeClient([plain]).client, channelId: IK })).get(33)?.channelRules?.quoteOnly, true);
+});
