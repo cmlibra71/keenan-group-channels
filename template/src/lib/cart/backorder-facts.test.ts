@@ -154,3 +154,16 @@ test("Zoey's multiples of N (Packaging off) reaches the cart as a pieces rule, n
   // Zoey names nothing beside a multiples box: the entry is marked silent for the cart row.
   assert.equal(facts?.silentMultiples, true);
 });
+
+test("backorder_silent (IK #398): unset policy reads allow_silent on IK; a person's policy wins; Chefs Depot unchanged", async () => {
+  const silent = { ...row(21, null, null), zoey_channel_rules: { "1": { backorder_silent: true } }, inventory_tracking: "product", inventory_level: -1 };
+  const ik = (await backorderFactsForProducts([21], { client: fakeClient([silent]).client, channelId: IK })).get(21);
+  assert.equal(ik?.backorderPolicy, "allow_silent");
+  const picked = { ...silent, id: 22, backorder_policy: "allow_notify" };
+  assert.equal((await backorderFactsForProducts([22], { client: fakeClient([picked]).client, channelId: IK })).get(22)?.backorderPolicy, "allow_notify");
+  const cd = (await backorderFactsForProducts([21], { client: fakeClient([silent]).client, channelId: CD })).get(21);
+  assert.equal(cd?.backorderPolicy, null);
+  // Forced off by staff: back to the stored column (null ⇒ the default, which tells the customer).
+  const forcedOff = { ...silent, id: 23, channel_rule_overrides: { "1": { backorder_silent: false } } };
+  assert.equal((await backorderFactsForProducts([23], { client: fakeClient([forcedOff]).client, channelId: IK })).get(23)?.backorderPolicy, null);
+});

@@ -55,7 +55,7 @@ test("any required question, default or not: no cart, no quote — the column op
 });
 
 test("this storefront's Zoey rules (services channel-rules), per viewer", () => {
-  const rules = (r: Record<string, boolean>) => ({ quoteOnly: false, guestQuoteOnly: false, outOfStock: false, searchOnly: false, cartDisabled: false, ...r });
+  const rules = (r: Record<string, boolean>) => ({ quoteOnly: false, guestQuoteOnly: false, outOfStock: false, searchOnly: false, cartDisabled: false, guestQuoteHidden: false, backorderSilent: false, ...r });
   const member = { loggedIn: true };
   // cart_disabled: no basket for anyone, price stays, quote stays.
   assert.deepEqual(compareBuyButtons({ ...plain, channelRules: rules({ cartDisabled: true }), viewer: member }), { cart: false, quote: true, priceHidden: false, answerRequired: false });
