@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useListingNav } from "@/lib/listing-nav";
 import { ChevronDown, X, SlidersHorizontal } from "lucide-react";
 import {
@@ -440,6 +440,22 @@ function RangeFacet({
     setDragging(true);
     setDraft(([a, b]) => (which === 0 ? [Math.min(value, b), b] : [a, Math.max(value, a)]));
   };
+  // A click anywhere on the line (not only a drag of a thumb) moves the NEAREST
+  // thumb to that spot and applies it at once. The inputs let clicks through
+  // except on their thumbs, so a press on a thumb is still a native drag.
+  const trackRef = useRef<HTMLDivElement>(null);
+  const clickTrack = (event: React.PointerEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).tagName === "INPUT" || !trackRef.current) return;
+    const rect = trackRef.current.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    const snapped = travel.min + Math.round((ratio * (travel.max - travel.min)) / step) * step;
+    const value = Math.min(travel.max, Math.max(travel.min, snapped));
+    const which = value < low ? 0 : value > high ? 1 : value - low <= high - value ? 0 : 1;
+    const next: [number, number] = which === 0 ? [Math.min(value, high), high] : [low, Math.max(value, low)];
+    setDraft(next);
+    commit(next);
+  };
   const release = () => {
     if (!dragging) return;
     setDragging(false);
@@ -458,7 +474,7 @@ function RangeFacet({
           {high >= travel.max ? "+" : ""}
         </span>
       </div>
-      <div className="relative h-6">
+      <div ref={trackRef} onPointerDown={clickTrack} className="relative h-6 cursor-pointer">
         <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-steel-200" />
         <div
           className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full"
