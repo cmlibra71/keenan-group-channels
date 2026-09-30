@@ -223,7 +223,9 @@ export default async function CategoryPage({
       // can no longer disagree.
       limit: perPage * page,
       subcategoryIds: filtersOn.has("sub") ? parseIds(sp.sub) : [],
-      brandIds: filtersOn.has("brand") ? parseIds(sp.brand) : [],
+      // Brand filter TOKENS, not ids: "459" is every Waldorf product, "459~Waldorf Bold" only the
+      // products Zoey labels with that sub-line — the old site's Brand filter lists them apart.
+      brandTokens: filtersOn.has("brand") ? (sp.brand?.split(",").filter(Boolean) ?? []) : [],
       priceBands,
       priceRange,
       attributes: attributeSelections,

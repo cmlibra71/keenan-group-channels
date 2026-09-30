@@ -47,7 +47,8 @@ export interface FacetGroupDef {
 
 export interface CategoryFacets {
   subcategories: { id: number; name: string; slug: string; count: number }[];
-  brands: { id: number; name: string; count: number }[];
+  /** `token` = the option's URL value ("459" or "459~Waldorf Bold" for a Zoey sub-line label). */
+  brands: { id: number; name: string; count: number; token?: string }[];
   price: { key: string; count: number }[];
   availability: { key: string; count: number }[];
   /** Slider travel for the Price facet; absent on a payload computed before
@@ -99,7 +100,7 @@ function categoryGroups(facets: CategoryFacets): FacetGroupDef[] {
     if (id === "sub")
       return facets.subcategories.map((f) => ({ value: String(f.id), label: f.name, count: f.count }));
     if (id === "brand")
-      return facets.brands.map((f) => ({ value: String(f.id), label: f.name, count: f.count }));
+      return facets.brands.map((f) => ({ value: f.token ?? String(f.id), label: f.name, count: f.count }));
     return facets.price.map((f) => ({ value: f.key, label: PRICE_LABELS[f.key] ?? f.key, count: f.count }));
   };
 

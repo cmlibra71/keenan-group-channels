@@ -29,9 +29,19 @@ const getDepartmentTopBrands = (categoryId: number) =>
   unstable_cache(
     async (): Promise<{ id: number; name: string }[]> => {
       const listing = (await getCategoryListing(categoryId)) as {
-        facets?: { brands?: { id: number; name: string }[] };
+        facets?: { brands?: { id: number; name: string; brandName?: string }[] };
       };
-      return (listing.facets?.brands ?? []).map((b) => ({ id: Number(b.id), name: b.name }));
+      // A brand with Zoey sub-line labels arrives as one facet row per label (Waldorf, Waldorf
+      // Bold, …); the menu links to the BRAND, so it lists the brand once, under its own name.
+      const seen = new Set<number>();
+      const out: { id: number; name: string }[] = [];
+      for (const b of listing.facets?.brands ?? []) {
+        const id = Number(b.id);
+        if (seen.has(id)) continue;
+        seen.add(id);
+        out.push({ id, name: b.brandName ?? b.name });
+      }
+      return out;
     },
     [`mega-menu-top-brands-${CHANNEL_ID}-${categoryId}`],
     { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "brands", "categories"] }
