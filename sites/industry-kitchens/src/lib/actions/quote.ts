@@ -606,6 +606,9 @@ export async function updateQuoteItem(itemId: number, quantity: number) {
     return { success: true, quoteCount };
   } catch (e) {
     console.error("[updateQuoteItem] failed (non-fatal):", e);
+    // The gift card cap (services QuoteItemService) says its own sentence.
+    const capped = giftCardCapMessage(e);
+    if (capped) return { error: capped };
     return { error: "Could not update quote" };
   }
 }
@@ -1168,6 +1171,8 @@ export async function updateAccountQuoteItem(
     await quoteService.markChangeRequested(quoteId, { changeSummary: "Quantity changed" });
   } catch (e) {
     console.error("[updateAccountQuoteItem] failed:", e);
+    const capped = giftCardCapMessage(e);
+    if (capped) return { error: capped };
     return { error: "Could not update this quote." };
   }
 
@@ -1257,6 +1262,12 @@ export async function duplicateQuote(quoteId: number) {
   }
   revalidatePath("/account/quotes");
   return { success: true, quoteId: copy.id };
+}
+
+/** The gift card cap's own sentence, when that is why a quantity change was refused. */
+function giftCardCapMessage(e: unknown): string | null {
+  const m = e instanceof Error ? e.message : "";
+  return /gift card line can hold at most/i.test(m) ? m : null;
 }
 
 /** The gift card (and the storefront's note for it) a duplicated line keeps; nothing for any other line. */
