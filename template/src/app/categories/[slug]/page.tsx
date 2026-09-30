@@ -31,6 +31,7 @@ import {
 } from "@keenan/services/services";
 import { parsePriceBands, parseRangeParam } from "@/lib/category-attributes";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
+import { ListingNavProvider } from "@/lib/listing-nav";
 import { parseListingSort } from "@/lib/listing-sort";
 import { RichContent } from "@/components/content/RichContent";
 import { CategorySeo } from "@/components/category/CategorySeo";
@@ -378,6 +379,7 @@ export default async function CategoryPage({
       )}
 
       {/* ═══ Rail + grid ═══ */}
+      <ListingNavProvider>
       <div className="flex gap-6">
         <FilterRail facets={facets} />
 
@@ -415,6 +417,7 @@ export default async function CategoryPage({
           )}
         </div>
       </div>
+      </ListingNavProvider>
 
       </div>
 

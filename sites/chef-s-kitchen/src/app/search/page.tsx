@@ -7,6 +7,7 @@ import { SearchTypeahead } from "@/components/search/SearchTypeahead";
 import { SearchResultsFeed } from "@/components/search/SearchResultsFeed";
 import { SearchClickLogger } from "@/components/search/SearchClickLogger";
 import { FacetRail, FacetChips, SortSelect, type FacetGroupDef } from "@/components/category/FilterRail";
+import { ListingNavProvider } from "@/lib/listing-nav";
 import Link from "next/link";
 import {
   MAX_PAGES,
@@ -231,6 +232,7 @@ export default async function SearchPage({
         {query && results && visible.length === 0 && !feedHasMore && emptyState}
 
         {results && (visible.length > 0 || feedHasMore) && (
+          <ListingNavProvider>
           <div className={showRail ? "flex gap-6" : ""}>
             {showRail && <FacetRail groups={groups} clearParams={["category", "brand", "price"]} />}
 
@@ -279,6 +281,7 @@ export default async function SearchPage({
               </SearchClickLogger>
             </div>
           </div>
+          </ListingNavProvider>
         )}
       </div>
     </div>

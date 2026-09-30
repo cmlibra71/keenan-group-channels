@@ -35,6 +35,7 @@ import {
   type CategoryListingPricing,
 } from "@/builder/category-node-branch";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
+import { ListingNavProvider } from "@/lib/listing-nav";
 import { parseListingSort } from "@/lib/listing-sort";
 import { RichContent } from "@/components/content/RichContent";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
@@ -436,6 +437,7 @@ export default async function CategoryPage({
 
       {/* ═══ Rail + grid ═══ */}
       <div className="container-page py-8">
+        <ListingNavProvider>
         <div className="flex gap-6">
           <FilterRail facets={facets} />
 
@@ -471,6 +473,7 @@ export default async function CategoryPage({
             )}
           </div>
         </div>
+        </ListingNavProvider>
       </div>
 
       {/* ═══ CMS: below-listing content (empty unless set) ═══ */}

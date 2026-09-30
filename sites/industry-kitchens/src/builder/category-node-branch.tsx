@@ -1,3 +1,4 @@
+import { withListingGridMarks, withListingGridMarksAll } from "@/lib/listing-pending";
 import { cookies } from "next/headers";
 import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
 import {
@@ -306,12 +307,15 @@ export async function renderCategoryNodeBranch({
   // carry a section for them; this is the same pure, idempotent, nothing-stored
   // pass the illustrative-image banner uses on the product tree (82HgV23q). A
   // component that does not repeat over the listing's facets is untouched.
-  const components = withCategoryFacetComponents(
+  // …and the element holding the product cards is tagged `data-listing-grid`,
+  // so while a filter change loads each card becomes a loader of the same size
+  // (lib/listing-nav.tsx). Same kind of pure, nothing-stored pass.
+  const components = withListingGridMarksAll(withCategoryFacetComponents(
     (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<
       string,
       NodeTree
     >
-  );
+  ));
   const builderCss =
     ((await getChannelSetting("builder_published_css").catch(() => null)) as {
       css?: string;
@@ -332,7 +336,7 @@ export async function renderCategoryNodeBranch({
     <>
       {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
       <BuilderCategoryPage
-        tree={withCategoryFacetNodes(nodeTree)}
+        tree={withListingGridMarks(withCategoryFacetNodes(nodeTree))}
         payload={payload}
         listing={{
           products: clientRows,

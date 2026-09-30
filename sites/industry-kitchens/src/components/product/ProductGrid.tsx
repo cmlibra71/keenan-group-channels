@@ -115,8 +115,10 @@ export async function ProductGrid({
   // primary-key lookup per grid.
   const brandLogos = await getBrandLogos(products.map((p) => p.id));
 
+  // data-listing-grid: while a filter change loads, each card becomes a loader of
+  // the same size (lib/listing-nav.tsx + globals.css).
   return (
-    <div className={wrapperClassName}>
+    <div data-listing-grid="" className={wrapperClassName}>
       <Ga4ViewItemList
         listId={listId}
         listName={listName}

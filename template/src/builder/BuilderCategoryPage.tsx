@@ -2,7 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import BuilderImage from "./builder-image";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import type { NodeTree } from "@keenan/services/builder";
 import { BuilderTree, BuilderActionsProvider, type NativeComponents } from "@keenan/services/builder-react";
 import { Ga4ViewItemList } from "@/components/analytics/Ga4ViewItemList";
@@ -17,6 +17,8 @@ import { useGst } from "@/lib/gst";
 import { overlayLiveGst } from "./live-gst";
 import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 import { categoryNatives } from "./category-natives";
+import { ListingNavProvider, useListingNav } from "@/lib/listing-nav";
+import { overlayPendingFilters, toggleListParam } from "@/lib/listing-pending";
 
 // ============================================================================
 // The category page rendered from the 'category_layout' node template — ENGINE.
@@ -62,16 +64,7 @@ export interface CategoryListingCtx {
   categorySlug: string;
 }
 
-export function BuilderCategoryPage({
-  tree,
-  payload,
-  listing,
-  namedStyles = {},
-  jsFunctions,
-  callResults,
-  components = {},
-  draft = false,
-}: {
+type BuilderCategoryPageProps = {
   tree: NodeTree;
   /** composeCategoryPagePayload output. */
   payload: object;
@@ -81,17 +74,41 @@ export function BuilderCategoryPage({
   callResults?: Record<string, unknown>;
   components?: Record<string, NodeTree>;
   draft?: boolean;
-}) {
+};
+
+/** One listing navigation for the whole page: the authored tick boxes, the
+ *  sealed slider and the grid's loaders all read the same pending change
+ *  (see lib/listing-nav.tsx). */
+export function BuilderCategoryPage(props: BuilderCategoryPageProps) {
+  return (
+    <ListingNavProvider>
+      <CategoryPageTree {...props} />
+    </ListingNavProvider>
+  );
+}
+
+function CategoryPageTree({
+  tree,
+  payload,
+  listing,
+  namedStyles = {},
+  jsFunctions,
+  callResults,
+  components = {},
+  draft = false,
+}: BuilderCategoryPageProps) {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const nav = useListingNav();
+  const searchParams = nav.params;
   // Overlay the live GST toggle onto context.gst so the price-block masters in
   // the card grid re-render ex/inc labels the instant the shopper flips it.
   const { inclusive, pricesIncludeTax } = useGst();
-  const livePayload = React.useMemo(
-    () => overlayLiveGst(payload, inclusive, pricesIncludeTax),
-    [payload, inclusive, pricesIncludeTax]
-  );
+  // While a filter change loads, the authored tick boxes, sort select and
+  // Clear all read the address the shopper just asked for, not the old one.
+  const livePayload = React.useMemo(() => {
+    const gst = overlayLiveGst(payload, inclusive, pricesIncludeTax);
+    return nav.pending ? overlayPendingFilters(gst, nav.params) : gst;
+  }, [payload, inclusive, pricesIncludeTax, nav.pending, nav.params]);
 
   // App-tier Actions the interactive MASTERS run (facet-option's click →
   // toggleFacet, clear-filters' click → clearFilters). Same URL semantics as
@@ -114,14 +131,7 @@ export function BuilderCategoryPage({
         const param = String(args.param ?? "");
         const value = String(args.value ?? "");
         if (!param || !value) return { success: false, error: "Missing facet param/value" };
-        const next = new URLSearchParams(searchParams.toString());
-        const set = new Set(next.get(param)?.split(",").filter(Boolean) ?? []);
-        if (set.has(value)) set.delete(value);
-        else set.add(value);
-        if (set.size > 0) next.set(param, [...set].join(","));
-        else next.delete(param);
-        next.delete("page"); // filters reset pagination
-        router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+        nav.replace(toggleListParam(searchParams, param, value));
         return { success: true };
       },
       // Clears EVERY filter the listing can be narrowed by, not just the three
@@ -136,7 +146,7 @@ export function BuilderCategoryPage({
           if (key.startsWith("f_")) nextParams.delete(key);
         }
         ["sub", "brand", "price", "stock", "page"].forEach((p) => nextParams.delete(p));
-        router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false });
+        nav.replace(nextParams);
         return { success: true };
       },
       // filter-controls master's sort <select> → ?sort= (same as SortSelect).
@@ -154,12 +164,12 @@ export function BuilderCategoryPage({
         if (value) next.set("sort", value);
         else next.delete("sort");
         next.delete("page");
-        router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+        nav.replace(next);
         return { success: true };
       },
       selectItem: selectItemHandler(listing.categorySlug, listing.categoryName),
     }),
-    [addToCart, addToQuote, router, pathname, searchParams, listing.categorySlug, listing.categoryName]
+    [addToCart, addToQuote, router, nav, searchParams, listing.categorySlug, listing.categoryName]
   );
 
   const nativeComponents: NativeComponents = {

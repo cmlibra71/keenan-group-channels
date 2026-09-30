@@ -700,3 +700,63 @@ body {
    no bracket and never matched; the routes that render this copy without a node
    tree set `max-w-none` themselves. */
 [data-kg-nodes] [class*="max-w-[70ch]"]:has(:is(.kg-category-copy, .kg-page-copy)) { max-width: none; }
+
+
+/* ── Listing loaders (lib/listing-nav.tsx) ───────────────────────────────────
+   While a filter change loads, every card in a `data-listing-grid` becomes a
+   Chefs Depot whisk-and-bowl loader of EXACTLY its own size: the card stays in the layout with its
+   content hidden, and a layer on top draws a grey card with the animation where
+   the photo goes. Nothing shows for the first 0.3 s, so a fast answer never
+   flashes. Seven copies of the animation, each with its own start point and
+   speed, are dealt out by :nth-child(7n + k) so the grid never moves in step
+   (7 divides none of the 2, 3, 4 or 5 column layouts). Sizes use cqw — 100cqw is
+   the card's own width, which is also the height of its square photo.
+   A Site Builder card sits inside a `display: contents` component wrapper, which
+   has no box to draw on, so the loader goes on the first real box inside it;
+   the timing copy is set on the grid child and inherited. */
+[data-listing-pending] :is([data-listing-grid] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > [style*="contents"] > *) {
+  position: relative;
+  container-type: inline-size;
+}
+[data-listing-pending] :is([data-listing-grid] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > [style*="contents"] > *) > * {
+  animation: kl-hide 0s linear 0.3s both;
+}
+[data-listing-pending] :is([data-listing-grid] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > [style*="contents"] > *)::after,
+[data-listing-pending] :is([data-listing-grid] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > [style*="contents"] > *)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  pointer-events: none;
+  animation: kl-show 0.15s ease-out 0.3s both;
+}
+[data-listing-pending] :is([data-listing-grid] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > [style*="contents"] > *)::after {
+  z-index: 1;
+  box-shadow: inset 0 0 0 1px #DDE2E8;
+  background:
+    var(--kl-img, url(/loading/whisk-bowl-1.svg)) center calc(12px + (100cqw - 2 * 12px) * 0.2) / calc((100cqw - 2 * 12px) * 0.6) no-repeat,
+    linear-gradient(#e9edf1, #e9edf1) 12px calc(100cqw + 12px) / calc((100cqw - 2 * 12px) * 0.92) 11px no-repeat,
+    linear-gradient(#e9edf1, #e9edf1) 12px calc(100cqw + 30px) / calc((100cqw - 2 * 12px) * 0.64) 11px no-repeat,
+    linear-gradient(#e9edf1, #e9edf1) 12px calc(100cqw + 52px) / calc((100cqw - 2 * 12px) * 0.34) 11px no-repeat,
+    linear-gradient(#F6F8FA, #F6F8FA) 12px 12px / calc(100cqw - 2 * 12px) calc(100cqw - 2 * 12px) no-repeat,
+    #fff;
+}
+[data-listing-pending] :is([data-listing-grid] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > [style*="contents"] > *)::before {
+  z-index: 2;
+  background: linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.65) 50%, transparent 65%) 0 0 / 250% 100% no-repeat;
+  animation: kl-show 0.15s ease-out 0.3s both, kl-shine 1.6s ease-in-out var(--kl-shine-delay, 0s) infinite;
+}
+[data-listing-pending] [data-listing-grid] > :nth-child(7n + 1) { --kl-img: url(/loading/whisk-bowl-1.svg); --kl-shine-delay: -0.59s; }
+[data-listing-pending] [data-listing-grid] > :nth-child(7n + 2) { --kl-img: url(/loading/whisk-bowl-2.svg); --kl-shine-delay: -1.18s; }
+[data-listing-pending] [data-listing-grid] > :nth-child(7n + 3) { --kl-img: url(/loading/whisk-bowl-3.svg); --kl-shine-delay: -0.18s; }
+[data-listing-pending] [data-listing-grid] > :nth-child(7n + 4) { --kl-img: url(/loading/whisk-bowl-4.svg); --kl-shine-delay: -0.77s; }
+[data-listing-pending] [data-listing-grid] > :nth-child(7n + 5) { --kl-img: url(/loading/whisk-bowl-5.svg); --kl-shine-delay: -1.36s; }
+[data-listing-pending] [data-listing-grid] > :nth-child(7n + 6) { --kl-img: url(/loading/whisk-bowl-6.svg); --kl-shine-delay: -0.35s; }
+[data-listing-pending] [data-listing-grid] > :nth-child(7n + 7) { --kl-img: url(/loading/whisk-bowl-7.svg); --kl-shine-delay: -0.94s; }
+@keyframes kl-hide { to { visibility: hidden; } }
+@keyframes kl-show { from { opacity: 0; } to { opacity: 1; } }
+@keyframes kl-shine { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  [data-listing-pending] [data-listing-grid] > *:nth-child(n) { --kl-img: url(/loading/whisk-bowl-still.svg); }
+  [data-listing-pending] :is([data-listing-grid] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > [style*="contents"] > *)::before { display: none; }
+}

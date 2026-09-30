@@ -64,7 +64,9 @@ export function ProductGridClient({
   }
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+    // data-listing-grid: while a filter change loads, each card becomes a loader of
+    // the same size (lib/listing-nav.tsx + globals.css).
+    <div data-listing-grid="" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
       <Ga4ViewItemList
         listId={listId}
         listName={listName}
