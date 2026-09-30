@@ -11,7 +11,13 @@ import {
   getEnabledCmsFunctions,
 } from "@/lib/store";
 import { getPricingGroupId } from "@/lib/member";
-import { loadJsSandbox, computeCallResults, guardBuyControls, guardBuyControlsInComponents } from "@keenan/services/builder";
+import {
+  loadJsSandbox,
+  computeCallResults,
+  guardBuyControls,
+  guardBuyControlsInComponents,
+  buildFaqPageJsonLd,
+} from "@keenan/services/builder";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
 import { ProductOfferTiers, loadOfferTierTables } from "@/components/product/ProductOfferTiers";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
@@ -125,6 +131,13 @@ export async function renderProductNodeBranch({
     draft,
   }).catch(() => null);
   if (!payload) return null;
+
+  // FAQPage structured data from the product layout's FAQ pairs (IK parity #190: Zoey's Zip Water,
+  // Melbourne Coffee Beans and DIHR layouts published it). Null — no script at all — for every
+  // product whose layout has none, which is every Chefs Depot product (no layouts there).
+  const faqJsonLd = buildFaqPageJsonLd(
+    (payload.product as { layout?: { faqs?: { question: string; answer: string }[] } | null } | undefined)?.layout?.faqs
+  );
 
   // Card tSrCcnvx (Tim, 2026-08-19): the related-products rail places the same
   // `product-card` master a category grid does, so its rows need the same
@@ -323,6 +336,12 @@ export async function renderProductNodeBranch({
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
+        />
+      )}
+      {faqJsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd).replace(/</g, "\\u003c") }}
         />
       )}
       {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
