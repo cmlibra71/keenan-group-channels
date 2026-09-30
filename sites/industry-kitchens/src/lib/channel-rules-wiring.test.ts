@@ -13,7 +13,7 @@ const read = (rel: string) => readFileSync(join(SRC, rel), "utf8");
 test("search results (Meilisearch + Postgres fallback) apply the channel rules", () => {
   const src = read("app/search/search-query.ts");
   assert.match(src, /const rulesById = await getChannelRulesForProducts\(result\.hits\.map/);
-  assert.match(src, /products: rulesById\.size > 0 \? await withChannelRules\(mapped, rulesById\) : mapped/);
+  assert.match(src, /products: rulesById\.size > 0 \? await withChannelRules\(labelled, rulesById\) : labelled/);
   assert.match(src, /const products = await withChannelRules\(rows as unknown as SearchProduct\[\]\)/);
 });
 
