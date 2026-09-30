@@ -56,6 +56,30 @@ const EMBED_WRAPPER_STYLE =
   "display:block;position:relative;width:100%;max-width:100%;padding-bottom:56.25%;height:0;overflow:hidden;margin:1rem 0";
 const EMBED_FRAME_STYLE = "position:absolute;top:0;left:0;width:100%;height:100%;border:0";
 
+/**
+ * The SilverChef finance calculator — the ONE non-video embed authored content may carry (IK parity:
+ * Zoey's Förje layout puts it at the top of LEASE OPTIONS, 49 products). Same discipline as the video
+ * hosts: real URL parsing, exact host, fixed path prefix, and every author attribute thrown away.
+ */
+const CALCULATOR_EMBED_HOST = "www.silverchef.finance";
+const CALCULATOR_EMBED_PATH = /^\/en_AU\/embed\/calculator\//;
+const CALCULATOR_FRAME_STYLE = "display:block;width:100%;height:900px;border:1px solid #000;margin:1rem 0";
+
+/** The https URL an authored calculator iframe src may keep, or null. Exported for the tests. */
+export function allowedCalculatorEmbedSrc(raw: string | null | undefined): string | null {
+  const src = String(raw ?? "").trim();
+  if (!src) return null;
+  let url: URL;
+  try {
+    url = new URL(src.startsWith("//") ? `https:${src}` : src);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" || url.username || url.password || url.port) return null;
+  if (url.hostname.toLowerCase() !== CALCULATOR_EMBED_HOST || !CALCULATOR_EMBED_PATH.test(url.pathname)) return null;
+  return url.toString();
+}
+
 /** The https URL an authored iframe src may keep, or null. Exported for the tests. */
 export function allowedVideoEmbedSrc(raw: string | null | undefined): string | null {
   const src = String(raw ?? "").trim();
@@ -78,6 +102,18 @@ export function allowedVideoEmbedSrc(raw: string | null | undefined): string | n
 function finishVideoEmbeds(root: HTMLElement): void {
   const doc = root.ownerDocument;
   for (const frame of Array.from(root.querySelectorAll("iframe"))) {
+    const calculator = allowedCalculatorEmbedSrc(frame.getAttribute("src"));
+    if (calculator) {
+      for (const attr of Array.from(frame.attributes)) frame.removeAttribute(attr.name);
+      frame.setAttribute("src", calculator);
+      frame.setAttribute("title", "SilverChef finance calculator");
+      frame.setAttribute("loading", "lazy");
+      frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+      frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox");
+      frame.setAttribute("style", CALCULATOR_FRAME_STYLE);
+      frame.textContent = "";
+      continue;
+    }
     const src = allowedVideoEmbedSrc(frame.getAttribute("src"));
     if (!src) {
       frame.remove();
