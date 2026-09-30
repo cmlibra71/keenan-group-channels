@@ -469,6 +469,35 @@ describe("planOrderFromPaidQuote — what the customer chose travels (card tkvnt
     assert.deepEqual(plan.items[0].payload.product_options, { "Gas Type": "Natural Gas" });
   });
 
+  test("a GIFT CARD line (IK) carries the card onto the order line, money untouched", () => {
+    const quote = baseQuote();
+    const items = quote.items as Record<string, unknown>[];
+    const before = planOrderFromPaidQuote(baseQuote(), CTX).items[0].payload;
+    items[0] = {
+      ...items[0],
+      attributes: {
+        gift_card: {
+          amount_inc_tax: "50.00",
+          recipient_name: "Sam",
+          recipient_email: "sam@example.com",
+          sender_name: "Alex",
+          sender_email: "alex@example.com",
+          message: null,
+        },
+        storefront_note: "Gift card",
+      },
+    };
+    const plan = planOrderFromPaidQuote(quote, CTX);
+    assert.deepEqual(plan.items[0].payload.product_options, {
+      Amount: "$50.00 inc GST",
+      "Recipient Name": "Sam",
+      "Recipient Email": "sam@example.com",
+      "Sender Name": "Alex",
+      "Sender Email": "alex@example.com",
+    });
+    assert.equal(plan.items[0].payload.total_inc_tax, before.total_inc_tax);
+  });
+
   test("a line with no picks carries no product_options key at all", () => {
     const plan = planOrderFromPaidQuote(baseQuote(), CTX);
     assert.equal("product_options" in plan.items[0].payload, false);
