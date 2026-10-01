@@ -14,34 +14,21 @@ import {
 } from "./product-seo.ts";
 
 // Titles measured on the OLD site (www.industrykitchens.com.au) on 2026-09-28 — the oracle.
-test("title matches the old site: page_title as imported, which already names the store", () => {
-  assert.equal(
-    productPageTitle({
-      name: "Hoshizaki IM-30CNE-25 Cube Ice Maker 15kg/day",
-      pageTitle: "Hoshizaki IM-30CNE-25 Cube Ice Maker 18kg/day | Industry Kitchens",
-    }),
-    "Hoshizaki IM-30CNE-25 Cube Ice Maker 18kg/day | Industry Kitchens"
-  );
-  assert.equal(
-    productPageTitle({
-      name: "Hoshizaki KMD-270AB Crescent Ice Maker 255kg/day - BUNDLE",
-      pageTitle: "Hoshizaki KMD-270AB Crescent Ice Maker 255kg/day | Industry Kitchens",
-    }),
-    "Hoshizaki KMD-270AB Crescent Ice Maker 255kg/day | Industry Kitchens"
-  );
+test("productPageTitle: the template's CMS expression decides; no suffix is added in code", () => {
+  const p = { name: "HALLDE RG-100 Grater/Shredder 8mm", pageTitle: "HALLDE RG-100 Grater/Shredder 8mm" };
+  // the old site prints page_title as-is (round-3: 20 pages with no " | Industry Kitchens")
+  assert.equal(productPageTitle(p, "product.pageTitle || product.name"), "HALLDE RG-100 Grater/Shredder 8mm");
+  assert.equal(productPageTitle({ name: "Opinel knife", pageTitle: "Opinel | Industry Kitchens" }, "product.pageTitle || product.name"), "Opinel | Industry Kitchens");
+  assert.equal(productPageTitle({ name: "Frymate Filter", pageTitle: "   " }, "product.pageTitle || product.name"), "Frymate Filter");
+  // staff can compose one
+  assert.equal(productPageTitle({ name: "Knife", sku: "OPI-1" }, 'product.name + " – " + product.sku'), "Knife – OPI-1");
 });
 
-test("no page_title: '<name> | Industry Kitchens'", () => {
-  assert.equal(
-    productPageTitle({ name: "Rational Duo iCombi Pro 6-1/1 GN Gas Combi Oven", pageTitle: null }),
-    "Rational Duo iCombi Pro 6-1/1 GN Gas Combi Oven | Industry Kitchens"
-  );
-  assert.equal(productPageTitle({ name: "Frymate Filter", pageTitle: "   " }), "Frymate Filter | Industry Kitchens");
-});
-
-test("a page_title without the store name gets it appended, never twice", () => {
-  assert.equal(productPageTitle({ name: "x", pageTitle: "Custom SEO title" }), "Custom SEO title | Industry Kitchens");
-  assert.equal(productPageTitle({ name: "x", pageTitle: "Buy at Industry Kitchens" }), "Buy at Industry Kitchens");
+test("productPageTitle: no template expression, a broken one, or an empty result falls back to page_title else name", () => {
+  assert.equal(productPageTitle({ name: "Rational Duo", pageTitle: null }), "Rational Duo");
+  assert.equal(productPageTitle({ name: "x", pageTitle: "Custom SEO title" }, null), "Custom SEO title");
+  assert.equal(productPageTitle({ name: "x", pageTitle: "T" }, "product.(("), "T");
+  assert.equal(productPageTitle({ name: "x", pageTitle: "T" }, "product.nothing"), "T");
 });
 
 test("meta description: the product's own, else a clean excerpt, else a sentence naming the product", () => {
@@ -54,7 +41,7 @@ test("meta description: the product's own, else a clean excerpt, else a sentence
   assert.equal(productMetaDescription({ descriptionShort: "Short &amp; sweet" }), "Short & sweet");
   assert.equal(
     productMetaDescription({ name: "Widget" }),
-    "Widget — commercial kitchen equipment from Industry Kitchens."
+    "Widget"
   );
 });
 

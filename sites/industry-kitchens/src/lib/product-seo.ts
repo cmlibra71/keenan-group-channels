@@ -5,11 +5,12 @@
  *
  * Until this, the product route had no `generateMetadata` at all, so every one of
  * the ~39k product pages carried the site's generic title and description. The old
- * site (www.industrykitchens.com.au, the oracle) titles a product page
- * "<name> | Industry Kitchens" — measured on three pages, and it is exactly what
- * the Zoey import wrote into `products.page_title` for 38,685 products. So the
- * title is `page_title` as imported, else the product name, with the store name
- * appended only when it is not already there.
+ * site (www.industrykitchens.com.au, the oracle) prints Zoey's `page_title` as-is: most
+ * already end "| Industry Kitchens" (the Zoey import wrote that into 38,685), and the
+ * rest (round-3 re-audit: 20 pages) print WITHOUT it. So nothing is appended in code:
+ * the title is the product template's own "SEO meta title" — a CMS expression over the
+ * product (`product.pageTitle || product.name` reproduces the old site) — and, when the
+ * template has none (or it yields nothing), `page_title` else the product name.
  *
  * The price in the structured data is the price THIS PAGE SHOWS a visitor with no
  * account — the shared catalogue resolver's effective price (a sale only when it is
@@ -26,11 +27,10 @@
  */
 
 import { resolveCatalogPrice, resolveFromPrice, type MoneyLike, type PriceRow } from "@keenan/services/catalog-price";
+import { evalExpr, parseExpr } from "@keenan/services/builder";
 
-export const STORE_NAME = "Industry Kitchens";
 export const PRODUCT_META_MAX = 160;
 
-const STORE_NAME_RE = /industry\s*kitchens?/i;
 
 /** HTML to one line of plain text. */
 export function plainText(text: unknown): string {
@@ -63,20 +63,40 @@ export interface ProductSeoSource {
   description?: unknown;
 }
 
-/** "<page_title or name> | Industry Kitchens" — the old site's pattern. */
-export function productPageTitle(product: ProductSeoSource): string {
-  const base = plainText(product.pageTitle) || plainText(product.name) || "Product";
-  return STORE_NAME_RE.test(base) ? base : `${base} | ${STORE_NAME}`;
+/**
+ * The product page <title>. `titleExpr` is the product template's "SEO meta title" (CMS data): an
+ * expression over `product.pageTitle`, `product.name` and `product.sku` — e.g.
+ * `product.pageTitle || product.name`, or `product.name + " – " + product.sku`. A missing, broken or empty result falls back to
+ * `page_title`, else the product name. Nothing is appended in code.
+ */
+export function productPageTitle(product: ProductSeoSource & { sku?: unknown }, titleExpr?: string | null): string {
+  const fallback = plainText(product.pageTitle) || plainText(product.name) || "Product";
+  const source = String(titleExpr ?? "").trim();
+  if (!source) return fallback;
+  const parsed = parseExpr(source);
+  if (!parsed.ok) return fallback;
+  const vars: Record<string, unknown> = {
+    pageTitle: plainText(product.pageTitle) || null,
+    name: plainText(product.name) || null,
+    sku: plainText(product.sku) || null,
+  };
+  try {
+    const out = evalExpr(parsed.ast, (path: string) => (path.startsWith("product.") ? vars[path.slice(8)] ?? null : null));
+    const text = typeof out === "string" || typeof out === "number" ? plainText(out) : "";
+    return text || fallback;
+  } catch {
+    return fallback;
+  }
 }
 
-/** The product's own meta description, else a clean excerpt of its copy. */
+/** The product's own meta description, else a clean excerpt of its copy, else its name (no wording
+ *  is invented in code). */
 export function productMetaDescription(product: ProductSeoSource): string {
   const own = plainText(product.metaDescription);
   if (own) return own;
   const copy = plainText(product.descriptionShort) || plainText(product.description);
   if (copy) return excerpt(copy);
-  const name = plainText(product.name) || "Product";
-  return `${name} — commercial kitchen equipment from ${STORE_NAME}.`;
+  return plainText(product.name) || "Product";
 }
 
 /**

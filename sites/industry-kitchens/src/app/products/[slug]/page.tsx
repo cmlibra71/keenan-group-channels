@@ -63,9 +63,10 @@ export async function generateMetadata({
   if (!product) return { title: "Product not found" };
   // A product this viewer may not see 404s in the page; its <head> must not name it either.
   if (!(await isProductVisibleToViewer(product.id))) return { title: "Product not found" };
-  const { site } = await getSiteConfig();
+  const [{ site }, template] = await Promise.all([getSiteConfig(), getCmsTemplate("product")]);
   const base = siteBaseUrl(site?.url);
-  const title = productPageTitle(product);
+  // The product template's own "SEO meta title" (CMS) is the title rule — see productPageTitle.
+  const title = productPageTitle(product, template?.meta_title ?? null);
   const description = productMetaDescription(product);
   const url = productCanonicalUrl(product.urlPath || slug, base);
   const image = productMainImage(product.images, base);
@@ -82,7 +83,8 @@ export async function generateMetadata({
       title,
       description,
       url,
-      siteName: "Industry Kitchens",
+      // The site's own name (Storefront › Sites), not a word typed in code.
+      ...(site?.siteName ? { siteName: site.siteName } : {}),
       locale: "en_AU",
       images,
     },
