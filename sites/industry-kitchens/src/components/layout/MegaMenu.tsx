@@ -223,7 +223,10 @@ function renderItem(
   const rows = Math.ceil(children.length / columnCount);
   const linkHighlighted = ikIsHighlighted(item, linkHref, false);
   return (
-    <li key={`l-${i}`} data-nav-item className="group/nav relative shrink-0">
+    // A long list's panel spans the BAR (the li is not its positioning box), centred in the page
+    // like the department panels, so it can never run past the viewport (judge: a panel centred on
+    // the Brands item overflowed by up to 199px at 1280px). A short list stays under its own item.
+    <li key={`l-${i}`} data-nav-item className={`group/nav shrink-0 ${long ? "" : "relative"}`}>
       <Link
         id={`nav-item-${i}`}
         href={linkHref}
@@ -238,37 +241,47 @@ function renderItem(
           <ChevronDown className="h-[11px] w-[11px] opacity-70" strokeWidth={2} />
         )}
       </Link>
-      {children.length > 0 && (
-        <div
-          className={`mega-panel invisible absolute h-0 overflow-hidden top-full z-50 rounded-b-lg border border-zinc-200 bg-white py-2 opacity-0 shadow-lg transition-all delay-0 duration-150 group-hover/nav:visible group-hover/nav:h-auto group-hover/nav:opacity-100 group-hover/nav:delay-[300ms] group-focus-within/nav:visible group-focus-within/nav:h-auto group-focus-within/nav:opacity-100 ${
-            long
-              ? "left-1/2 w-[min(1000px,92vw)] -translate-x-1/2 group-hover/nav:max-h-[calc(100vh-14rem)] group-hover/nav:overflow-y-auto group-focus-within/nav:max-h-[calc(100vh-14rem)] group-focus-within/nav:overflow-y-auto"
-              : "left-0 min-w-[220px] group-hover/nav:overflow-visible group-focus-within/nav:overflow-visible"
-          }`}
-        >
-          {long && (
-            <a
-              href={skipHref}
-              className="sr-only focus:not-sr-only focus:block focus:px-4 focus:py-1.5 focus:text-[13px] focus:text-zinc-800"
-            >
-              Skip the {item.label} menu
-            </a>
-          )}
-          <div
-            className={long ? "grid grid-flow-col gap-x-4" : undefined}
-            style={long ? { gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, auto)` } : undefined}
-          >
-            {children.map((child, j) => (
-              <Link
-                key={j}
-                href={itemHref(child, byId)}
-                target={child.newTab ? "_blank" : undefined}
-                className={`block px-4 text-[13.5px] text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-[#C73629] ${long ? "py-1" : "py-2"}`}
+      {children.length > 0 && long && (
+        <div className="mega-panel pointer-events-none invisible absolute left-0 right-0 top-full z-[110] h-0 overflow-hidden opacity-0 transition-all delay-0 duration-150 group-hover/nav:visible group-hover/nav:h-auto group-hover/nav:overflow-visible group-hover/nav:opacity-100 group-hover/nav:delay-[300ms] group-focus-within/nav:visible group-focus-within/nav:h-auto group-focus-within/nav:overflow-visible group-focus-within/nav:opacity-100">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="pointer-events-none max-h-[calc(100vh-14rem)] max-w-[1100px] overflow-y-auto rounded-b-lg border border-zinc-200 border-t-[3px] border-t-[#D94B2B] bg-white py-3 shadow-lg group-hover/nav:pointer-events-auto group-focus-within/nav:pointer-events-auto">
+              <a
+                href={skipHref}
+                className="sr-only focus:not-sr-only focus:block focus:px-4 focus:py-1.5 focus:text-[13px] focus:text-zinc-800"
               >
-                {child.label}
-              </Link>
-            ))}
+                Skip the {item.label} menu
+              </a>
+              <div
+                className="grid grid-flow-col gap-x-4"
+                style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, auto)` }}
+              >
+                {children.map((child, j) => (
+                  <Link
+                    key={j}
+                    href={itemHref(child, byId)}
+                    target={child.newTab ? "_blank" : undefined}
+                    className="block px-4 py-1 text-[13.5px] text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-[#C73629]"
+                  >
+                    {child.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
           </div>
+        </div>
+      )}
+      {children.length > 0 && !long && (
+        <div className="mega-panel invisible absolute left-0 top-full z-50 h-0 min-w-[220px] overflow-hidden rounded-b-lg border border-zinc-200 bg-white py-2 opacity-0 shadow-lg transition-all delay-0 duration-150 group-hover/nav:visible group-hover/nav:h-auto group-hover/nav:overflow-visible group-hover/nav:opacity-100 group-hover/nav:delay-[300ms] group-focus-within/nav:visible group-focus-within/nav:h-auto group-focus-within/nav:overflow-visible group-focus-within/nav:opacity-100">
+          {children.map((child, j) => (
+            <Link
+              key={j}
+              href={itemHref(child, byId)}
+              target={child.newTab ? "_blank" : undefined}
+              className="block px-4 py-2 text-[13.5px] text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-[#C73629]"
+            >
+              {child.label}
+            </Link>
+          ))}
         </div>
       )}
     </li>
