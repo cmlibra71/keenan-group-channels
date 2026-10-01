@@ -19,6 +19,7 @@ import {
   buildFaqPageJsonLd,
 } from "@keenan/services/builder";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
+import { PRODUCT_COPY_DISPLAY_SETTING_KEY, readProductCopyDisplaySettings } from "@keenan/services";
 import { ProductOfferTiers, loadOfferTierTables } from "@/components/product/ProductOfferTiers";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { withReviewsBlockInComponents } from "@/builder/product-reviews-node";
@@ -317,6 +318,12 @@ export async function renderProductNodeBranch({
       css?: string;
     } | null)?.css ?? "";
 
+  // Plain-text descriptions keep their line breaks where the site says so (channel setting
+  // `product_copy_display`, edited in the portal; no row = off, so a site that never set it is unchanged).
+  const { plain_text_line_breaks: plainTextLineBreaks } = readProductCopyDisplaySettings(
+    await getChannelSetting(PRODUCT_COPY_DISPLAY_SETTING_KEY).catch(() => null)
+  );
+
   // JavaScript function library: SSR evaluates call-conditions live (the
   // sandbox is awaited here), and callResults keeps the client's first paint
   // identical until its wasm loads.
@@ -358,6 +365,7 @@ export async function renderProductNodeBranch({
         jsFunctions={jsFunctions}
         callResults={callResults}
         nativeData={{ ...(nativeData ?? {}), cdMembership, offerTiers: { tables: offerTierTables } }}
+        plainTextLineBreaks={plainTextLineBreaks}
       />
       {/* Carton tiers this product is in (card p6YVxc4P). The node tree is the
           path the LIVE Industry Kitchens product page takes, so the table has to
