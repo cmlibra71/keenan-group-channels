@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sanitizeHtml } from "./sanitize-html";
+import { allowedCalculatorEmbedSrc, sanitizeHtml } from "./sanitize-html";
 
 // The Zoey-era information pages (Industry Kitchens warranty, "find your
 // manufacturer") are written in semantic structure with a native <details>
@@ -143,4 +143,25 @@ test("an embed wrapped in a paragraph keeps its surrounding text", () => {
   assert.match(out, /Before /);
   assert.match(out, / after/);
   assert.match(out, /^<p>Before <span class="kg-video-embed"[^>]*><iframe [^>]*><\/iframe><\/span> after<\/p>$/);
+});
+
+test("the SilverChef calculator embed survives with our attributes only; look-alikes do not", () => {
+  const ok = sanitizeHtml(`<p><iframe loading="lazy" src="https://www.silverchef.finance/en_AU/embed/calculator/10000/?&amp;affiliateLink=https://go.silverchef.com.au/Industry-Kitchens/Calculator-Apply" style="border:1px solid black; width: 100%; height: 900px" onload="alert(1)"></iframe></p>`);
+  assert.match(ok, /<iframe[^>]*src="https:\/\/www\.silverchef\.finance\/en_AU\/embed\/calculator\/10000\//);
+  assert.match(ok, /title="SilverChef finance calculator"/);
+  assert.match(ok, /sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"/);
+  assert.doesNotMatch(ok, /onload|alert/);
+  for (const bad of [
+    "https://www.silverchef.finance.evil.example/en_AU/embed/calculator/1/",
+    "https://evil.example/en_AU/embed/calculator/1/",
+    "https://www.silverchef.finance/en_AU/apply/",
+    "http://www.silverchef.finance/en_AU/embed/calculator/1/",
+    "https://user:pw@www.silverchef.finance/en_AU/embed/calculator/1/",
+    "javascript:alert(1)",
+    "https://www.silverchef.finance/en_AU/embed/calculator/..%2f..%2fapply",
+    "https://www.silverchef.finance/en_AU/embed/calculator/..%5Capply",
+  ]) {
+    assert.equal(allowedCalculatorEmbedSrc(bad), null, bad);
+    assert.doesNotMatch(sanitizeHtml(`<iframe src="${bad}"></iframe>`), /<iframe/, bad);
+  }
 });
