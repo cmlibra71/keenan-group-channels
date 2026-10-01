@@ -192,8 +192,13 @@ async function layerItemPricing(
   const accountId = await getAccountId();
   if (accountId) {
     const key = accountLineKey({ productId, variantId });
+    // A catalog price rule can still undercut the contract: the customer pays the lower (services
+    // `resolveAccountLinePrices` ruleContext; nothing changes while the channel's rule switch is off).
     const record = (
-      await resolveAccountLinePrices(accountId, [{ productId, variantId }])
+      await resolveAccountLinePrices(accountId, [{ productId, variantId }], {
+        channelId: CHANNEL_ID,
+        groupId: await getPricingGroupId(),
+      })
     ).get(key);
     if (record) return { listPrice: record.price, salePrice: record.salePrice };
   }

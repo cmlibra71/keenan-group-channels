@@ -9,7 +9,7 @@ import {
 } from "@keenan/services/product-addons";
 import { cartItemService, productService, CHANNEL_ID } from "@/lib/store";
 import { decideAccountPriceWrite } from "./account-prices-policy";
-import { getAccountId } from "@/lib/member";
+import { getAccountId, getPricingGroupId } from "@/lib/member";
 
 /** The cart-line shape checkout works with (snake_case, straight off cartService.getWithItems). */
 export interface CartLine {
@@ -59,9 +59,11 @@ export async function applyAccountPricesToCart(cartId: number, lines: CartLine[]
   const accountId = await getAccountId();
   if (!accountId || lines.length === 0) return;
 
+  // Contract vs catalog price rule: the lower (inert while the channel's rule switch is off).
   const prices = await resolveAccountLinePrices(
     accountId,
-    lines.map((l) => ({ productId: l.product_id, variantId: l.variant_id }))
+    lines.map((l) => ({ productId: l.product_id, variantId: l.variant_id })),
+    { channelId: CHANNEL_ID, groupId: await getPricingGroupId() }
   );
   if (prices.size === 0) return;
 
