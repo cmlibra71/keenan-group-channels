@@ -203,7 +203,7 @@ test("component map: only masters holding a products grid change", () => {
 });
 
 
-test("a Zoey price band is one choice: another replaces it, the same clears it, paging resets", async () => {
+test("a Zoey price band: another top band replaces it, the same clears it, paging resets", async () => {
   const { togglePriceWindow } = await import("./listing-pending");
   const a = togglePriceWindow(new URLSearchParams("brand=Waldorf&page=3"), "5000-5999.99");
   assert.equal(a.get("price"), "5000-5999.99");
@@ -211,6 +211,32 @@ test("a Zoey price band is one choice: another replaces it, the same clears it, 
   assert.equal(a.get("brand"), "Waldorf");
   assert.equal(togglePriceWindow(a, "6000-6999.99").get("price"), "6000-6999.99");
   assert.equal(togglePriceWindow(a, "5000-5999.99").get("price"), null);
+});
+
+test("a band chosen inside the chosen band joins the trail; choosing it again steps back one level", async () => {
+  const { togglePriceWindow } = await import("./listing-pending");
+  const a = togglePriceWindow(new URLSearchParams("price=5000-6000"), "5000-5500");
+  assert.equal(a.get("price"), "5000-6000,5000-5500");
+  const b = togglePriceWindow(a, "5250-5500");
+  assert.equal(b.get("price"), "5000-6000,5000-5500,5250-5500");
+  assert.equal(togglePriceWindow(b, "5250-5500").get("price"), "5000-6000,5000-5500");
+  assert.equal(togglePriceWindow(a, "5000-5500").get("price"), "5000-6000");
+  // Open-ended windows: the first band (`-4999.99`) and the last (`9000-`) nest too.
+  assert.equal(togglePriceWindow(new URLSearchParams("price=9000-"), "9000-12000").get("price"), "9000-,9000-12000");
+  assert.equal(togglePriceWindow(new URLSearchParams("price=-5000"), "1000-2000").get("price"), "-5000,1000-2000");
+  // A band outside the chosen one (the slider, a stale link) starts a new trail.
+  assert.equal(togglePriceWindow(a, "7000-8000").get("price"), "7000-8000");
+});
+
+test("a price trail: valid windows only, last one filters, bounded", async () => {
+  const { priceWindowTrail, lastPriceWindow, MAX_PRICE_TRAIL } = await import("./category-attributes");
+  assert.deepEqual(priceWindowTrail("5000-6000,lt1000,junk,5000-5500"), ["5000-6000", "5000-5500"]);
+  assert.deepEqual(lastPriceWindow("5000-6000,5000-5500"), { min: 5000, max: 5500 });
+  assert.deepEqual(lastPriceWindow("2990-9440"), { min: 2990, max: 9440 });
+  assert.equal(lastPriceWindow("lt1000"), undefined);
+  assert.equal(lastPriceWindow(undefined), undefined);
+  const long = Array.from({ length: MAX_PRICE_TRAIL + 3 }, (_, i) => `${i}-100`).join(",");
+  assert.equal(priceWindowTrail(long).length, MAX_PRICE_TRAIL);
 });
 
 test("an old cat link folds into sub; a page's filters are split by rail slot", async () => {

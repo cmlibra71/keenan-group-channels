@@ -10,7 +10,7 @@
 // switched off in the portal (Products > Filtering) stops FILTERING, not merely displaying (NfYe3P3G).
 // ============================================================================
 
-import { parseRangeParam, parsePriceBands } from "./category-attributes";
+import { lastPriceWindow, parsePriceBands, priceWindowTrail } from "./category-attributes";
 import { parseBrandPage, parseBrandSort, parseIds, type BrandSort } from "./brand-listing";
 
 /** Most labels a URL may select (a brand has a handful). */
@@ -22,6 +22,9 @@ export interface BrandRailSelections {
   rawPrice: string | undefined;
   priceBands: ("lt1000" | "1000to3000" | "gt3000")[];
   priceRange: { min?: number; max?: number } | undefined;
+  /** What the Price chip(s) name: the coded bands as ticked, or a window trail's LAST window only
+   *  (Zoey showed one Price chip; removing it steps back one level). */
+  priceChips: string[];
   sort: BrandSort;
   page: number;
   /** Anything narrowing the listing (the hero then needs the brand's own count). */
@@ -42,13 +45,16 @@ export function parseBrandRailSelections(
     : [];
   const rawPrice = filtersOn.has("price") && sp.price ? sp.price : undefined;
   const priceBands = parsePriceBands(rawPrice) as BrandRailSelections["priceBands"];
-  const priceRange = priceBands.length === 0 ? parseRangeParam(rawPrice) : undefined;
+  // A window trail (`5000-6000,5000-5500`, Zoey's prior intervals) filters by its LAST window.
+  const priceRange = priceBands.length === 0 ? lastPriceWindow(rawPrice) : undefined;
+  const trail = priceBands.length === 0 ? priceWindowTrail(rawPrice) : [];
   return {
     categoryIds,
     labels,
     rawPrice,
     priceBands,
     priceRange,
+    priceChips: priceBands.length ? priceBands : trail.slice(-1),
     sort: parseBrandSort(sp.sort, defaultSort),
     page: parseBrandPage(sp.page),
     filtered: categoryIds.length > 0 || labels.length > 0 || Boolean(rawPrice) || attributeCount > 0,

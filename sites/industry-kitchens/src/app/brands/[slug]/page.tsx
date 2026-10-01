@@ -44,7 +44,7 @@ import { BrandFaq } from "@/components/brand/BrandFaq";
 import { BrandCategories } from "@/components/brand/BrandCategories";
 import { FacetRail, FacetChips, SortSelect } from "@/components/category/FilterRail";
 import { applyStorefrontFilters, enabledFilterIds } from "@/lib/storefront-filters";
-import { parsePriceBands, parseRangeParam } from "@/lib/category-attributes";
+import { lastPriceWindow, parsePriceBands } from "@/lib/category-attributes";
 import { parseAttributeSelections } from "@keenan/services/services";
 import {
   CATEGORY_PARAM,
@@ -351,7 +351,7 @@ export default async function BrandPage({
           selections: {
             sub: rail.categoryIds.map(String),
             brand: rail.labels,
-            price: rail.rawPrice ? rail.rawPrice.split(",").filter(Boolean) : [],
+            price: rail.priceChips,
             attributes: railAttributes,
           },
           sort: rail.sort,
@@ -422,7 +422,7 @@ export default async function BrandPage({
 
   const rawPrice = priceEnabled ? sp.price : undefined;
   const priceBands = parsePriceBands(rawPrice) as ("lt1000" | "1000to3000" | "gt3000")[];
-  const priceRange = priceBands.length === 0 ? parseRangeParam(rawPrice) : undefined;
+  const priceRange = priceBands.length === 0 ? lastPriceWindow(rawPrice) : undefined;
   const attributeSelections = parseAttributeSelections(sp as Record<string, string | undefined>, (await loadCatalogAttributeContext(ATTR_CHANNEL_ID)).attributes);
   const selectedCategoryIds = categoryEnabled ? parseIds(sp[CATEGORY_PARAM]) : [];
 
