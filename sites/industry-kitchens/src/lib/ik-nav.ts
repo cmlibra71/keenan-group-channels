@@ -1,4 +1,4 @@
-import { resolveNavItems, type MegaMenuNodeLike, type MegaNavItem } from "@/lib/mega-menu";
+import { resolveNavItems, type MegaMenuNodeLike, type MegaNavItem } from "./mega-menu";
 
 /**
  * The Industry Kitchens department list — ONE function, so the dark bar, the
@@ -26,8 +26,12 @@ export function ikNavItems(input: {
   departments: MegaMenuNodeLike[];
   items?: MegaNavItem[] | null;
   hiddenCategoryIds?: number[] | null;
+  /** `mega_menu_settings.all_categories_launcher` (default on). Off: the bar shows only what the
+   *  editor and the departments give it, as the old Zoey bar did (IK menu parity, 2026-10-01). */
+  allCategoriesLauncher?: boolean;
 }): MegaNavItem[] {
   const resolved = resolveNavItems(input);
+  if (input.allCategoriesLauncher === false) return resolved;
   if (resolved.some((i) => i.type === "categories")) return resolved;
   return [{ type: "categories", label: "All Categories" }, ...resolved];
 }

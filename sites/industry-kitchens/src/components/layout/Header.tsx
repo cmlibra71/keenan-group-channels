@@ -4,7 +4,7 @@ import { Phone, Mail } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
-import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, getMegaMenuNav, getMegaMenuHidden, drawEntryService, CHANNEL_ID } from "@/lib/store";
+import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, getMegaMenuNav, getMegaMenuHidden, getMegaMenuSettings, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import type { HeaderConfig } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 import { HeaderPanels } from "./HeaderPanels";
@@ -30,12 +30,13 @@ export async function Header({
   // wrong loading the site"), and it re-runs on every refresh()
   // from a cart/quote mutation. Degrade gracefully (empty badge / nav) on a
   // transient DB failure instead of taking down the whole storefront.
-  const [cart, quote, megaMenu, megaNav, hiddenDepartments] = await Promise.all([
+  const [cart, quote, megaMenu, megaNav, hiddenDepartments, megaSettings] = await Promise.all([
     getCart().catch(() => null),
     getQuote().catch(() => null),
     getMegaMenu().catch(() => ({ departments: [], featured: {} })),
     getMegaMenuNav().catch(() => []),
     getMegaMenuHidden().catch(() => []),
+    getMegaMenuSettings().catch(() => undefined),
   ]);
   // The drop-downs' Brands columns (card HaWBvySC). Free unless somebody has
   // added one in Storefront > Navigation; a failure drops the brands, never the
@@ -183,6 +184,7 @@ export async function Header({
                     items={megaNav}
                     hiddenCategoryIds={hiddenDepartments}
                     brandColumns={brandColumns}
+                    settings={megaSettings}
                   />
                 </span>
                 <MobileNav signedIn={signedIn} />
@@ -261,6 +263,7 @@ export async function Header({
           items={megaNav}
           hiddenCategoryIds={hiddenDepartments}
           brandColumns={brandColumns}
+          settings={megaSettings}
         />
       </header>
 

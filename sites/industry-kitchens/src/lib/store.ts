@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import { readIkMegaMenuSettings } from "@/lib/ik-mega-panel";
 import { cache } from "react";
 import { normalizeNavItems, type MegaNavItem } from "./mega-menu";
 import { initCommerceDb, createChannelStore, createRenderConfigCache, getCommerceClient, setStripeClientOptions } from "@keenan/services";
@@ -709,6 +710,14 @@ export const getMegaMenuHidden = unstable_cache(
     return Array.isArray(value) ? value.filter((v): v is number => typeof v === "number") : [];
   },
   [`mega-menu-hidden-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
+/** The drop-downs' settings (`mega_menu_settings`: column link limit, All Categories launcher),
+ *  edited in Storefront > Navigation > Mega menu. Read defensively — today's behaviour when unset. */
+export const getMegaMenuSettings = unstable_cache(
+  async () => readIkMegaMenuSettings(await getJsonSetting<unknown>("mega_menu_settings", null)),
+  [`mega-menu-settings-${CHANNEL_ID}`],
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
 );
 
