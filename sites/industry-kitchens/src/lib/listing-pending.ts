@@ -33,6 +33,8 @@ const FACET_PARAMS: Record<string, string> = {
   subcategories: "sub",
   brands: "brand",
   price: "price",
+  // A brand page's Zoey price bands (value = the price window) answer to the same param.
+  price_bands: "price",
   availability: "stock",
 };
 

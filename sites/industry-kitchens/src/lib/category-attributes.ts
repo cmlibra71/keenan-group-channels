@@ -31,6 +31,8 @@ export interface AttributeFacet {
   min?: number;
   max?: number;
   options?: AttributeFacetOption[];
+  /** Options only — draw the tick boxes without counts (a brand page's own list, services brandRail). */
+  hideCounts?: true;
 }
 
 export interface RangeWindow {

@@ -125,23 +125,37 @@ function BrandPageTree({
     // authored is shadowed, and a brand tree without a rail never places them.
     ...(listingFacets
       ? (() => {
-          const natives = categoryNatives({
-            listing: {
-              products: [],
-              total: 0,
-              shown: 0,
-              facets: listingFacets,
-              hasMore: false,
-              nextPageHref: "",
-              memberPricingAvailable,
-              pricing,
-              categoryName: brandIdentity.name,
-              categorySlug: brandIdentity.slug,
-            },
-          });
+          const ctx = (facets: unknown) =>
+            categoryNatives({
+              listing: {
+                products: [],
+                total: 0,
+                shown: 0,
+                facets,
+                hasMore: false,
+                nextPageHref: "",
+                memberPricingAvailable,
+                pricing,
+                categoryName: brandIdentity.name,
+                categorySlug: brandIdentity.slug,
+              },
+            });
+          const natives = ctx(listingFacets);
+          // A brand page's own filter list places each section in a slot among Category / Price /
+          // Brand (Zoey's per-page order — services brandRail `slot`); the rail places one of these
+          // per slot (prop `slot`). A section without a slot sits before Price.
+          const BrandRailAttributes = (props: Record<string, unknown>) => {
+            const slot = String(props.slot ?? "before_price");
+            const f = listingFacets as { attributes?: Array<{ railSlot?: string }> };
+            const Section = ctx({ ...f, attributes: (f.attributes ?? []).filter((a) => (a.railSlot ?? "before_price") === slot) })[
+              "category-attribute-facets"
+            ];
+            return Section ? <Section /> : null;
+          };
           return {
             "facet-price-slider": natives["facet-price-slider"],
             "category-attribute-facets": natives["category-attribute-facets"],
+            "brand-rail-attributes": BrandRailAttributes,
           } as NativeComponents;
         })()
       : {}),
@@ -173,6 +187,16 @@ function BrandPageTree({
           folded.delete("cat");
           folded.set("sub", merged.join(","));
           base = folded;
+        }
+        // A price WINDOW (a Zoey band, `5000-5999.99`) is one choice, as Zoey's Price group was:
+        // picking another replaces it, picking it again clears it. The coded bands stay a list.
+        if (param === "price" && value.includes("-")) {
+          const next = new URLSearchParams(base.toString());
+          if (next.get("price") === value) next.delete("price");
+          else next.set("price", value);
+          next.delete("page");
+          nav.replace(next);
+          return { success: true };
         }
         nav.replace(toggleListParam(base, param, value));
         return { success: true };

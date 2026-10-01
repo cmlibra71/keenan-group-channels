@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { loadCatalogAttributeContext } from "@keenan/services";
+import { loadCatalogAttributeContext, readBrandRailSettings, brandRailAttributeDefs } from "@keenan/services";
 import { CHANNEL_ID as ATTR_CHANNEL_ID } from "@/lib/channel";
 import { getListingDisplay } from "@/lib/listing-display";
 import { visibleSortOptions } from "@keenan/services/listing-display-settings";
@@ -19,6 +19,7 @@ import {
   getDefaultListingSort,
   getCategoryBySlug,
   getSubcategories,
+  getChannelSetting,
   // Product photographs a pictureless brand can borrow (InEoeMZh).
   getBorrowedImageCandidates,
   applyBorrowedCategoryImages,
@@ -229,7 +230,13 @@ export default async function BrandPage({
       const storefrontFilters = await getStorefrontFilters();
       const filtersOn = enabledFilterIds(storefrontFilters);
       const spRec = sp as Record<string, string | undefined>;
-      const railAttributes = parseAttributeSelections(spRec, (await loadCatalogAttributeContext(ATTR_CHANNEL_ID)).attributes);
+      // This brand page's own rail settings (brand › Filter rail; IK parity with Zoey's per-page
+      // layered navigation): which products it lists, the Price filter's style, its attribute list.
+      const railSettings = readBrandRailSettings(brand.metafields);
+      const attrContext = await loadCatalogAttributeContext(ATTR_CHANNEL_ID);
+      const pageAttributeDefs = railSettings.attributes?.length ? brandRailAttributeDefs(railSettings.attributes, attrContext) : null;
+      const railAttributes = parseAttributeSelections(spRec, pageAttributeDefs ?? attrContext.attributes);
+      const priceStyle = (railSettings.price ?? listingDisplay.brand_price_style) === "zoey_bands" ? ("zoey_bands" as const) : undefined;
       const rail = parseBrandRailSelections(spRec, filtersOn, Object.keys(railAttributes).length, defaultListingSort);
       // The Category group lists the brand's RANGES, as Zoey's did: the children of the brand's own
       // category under Brands ("Waldorf 800 619 · Waldorf Bold 567 · Waldorf Jump 1" on the old
@@ -241,7 +248,27 @@ export default async function BrandPage({
             (c) => rangeBelongsToBrand(c, brand as { slug?: unknown; name?: unknown; metafields?: unknown }, slug)
           ) ?? null)
         : null;
-      const scope = brandCategory ? { categoryParentId: brandCategory.id } : {};
+      // Zoey listed a brand page from its CATEGORY (whole subtree, or only products filed directly in
+      // it); `source` reproduces that where the page says so. Products filter on it, the rail too.
+      const source =
+        brandCategory && (railSettings.source === "category_tree" || railSettings.source === "category_direct")
+          ? { categoryId: brandCategory.id, subtree: railSettings.source === "category_tree" }
+          : undefined;
+      const scope = {
+        ...(brandCategory ? { categoryParentId: brandCategory.id } : {}),
+        ...(source ? { source } : {}),
+        ...(priceStyle ? { priceStyle } : {}),
+        ...(railSettings.attributes?.length ? { attributeList: railSettings.attributes } : {}),
+        // The band labels' wording is the storefront's data (Settings › Storefront Listings).
+        ...(priceStyle ? { priceBandLabels: listingDisplay.zoey_band_labels } : {}),
+        // Zoey's admin option order per field (data captured from Zoey's attribute catalogue).
+        ...(railSettings.attributes?.length
+          ? {
+              zoeyOptionOrder:
+                ((await getChannelSetting("zoey_attribute_options").catch(() => null)) as Record<string, string[]> | null) ?? undefined,
+            }
+          : {}),
+      };
       const pageSize = listingDisplay.page_sizes.brand;
       const [railListing, railUnfiltered, railMemberPricing] = await Promise.all([
         // Cumulative for Load more, as the sealed listing: each press re-asks with a bigger limit, and
@@ -308,6 +335,10 @@ export default async function BrandPage({
               brandLabels: gated.brands,
               price: gated.price,
               priceRange: gated.priceRange,
+              // Zoey's bands go with the Price switch too; the slider is not offered beside them.
+              ...(Array.isArray(railFacets.priceBands)
+                ? { priceBands: filtersOn.has("price") ? railFacets.priceBands : [], priceRange: null }
+                : {}),
               filters: storefrontFilters,
             };
           })(),

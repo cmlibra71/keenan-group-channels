@@ -43,6 +43,8 @@ export interface FacetGroupDef {
   /** Present = this group is a min-max SLIDER, not a tick list (C8G4f4U8).
    *  `min`/`max` are the slider's travel; `money` prints the labels as dollars. */
   range?: { min: number; max: number; unit?: string; money?: boolean };
+  /** Draw the tick boxes without counts (a brand page's own list chose so — Zoey's Fuel Type). */
+  hideCounts?: boolean;
 }
 
 export interface CategoryFacets {
@@ -172,7 +174,7 @@ function attributeGroups(facets: CategoryFacets): FacetGroupDef[] {
         count: o.count,
       }));
       if (options.length === 0) continue;
-      groups.push({ param: attributeParam(attr.code), title: attr.label, options, defaultOpen: true });
+      groups.push({ param: attributeParam(attr.code), title: attr.label, options, defaultOpen: true, ...(attr.hideCounts ? { hideCounts: true } : {}) });
     }
   }
   return groups;
@@ -467,7 +469,7 @@ function FacetGroup({
   );
 }
 
-function FacetCheckbox({ param, value, label, count }: { param: string; value: string; label: string; count: number }) {
+function FacetCheckbox({ param, value, label, count }: { param: string; value: string; label: string; count?: number }) {
   const { selected, toggle } = useFacetParam(param);
   const checked = selected.includes(value);
   return (
@@ -479,7 +481,7 @@ function FacetCheckbox({ param, value, label, count }: { param: string; value: s
         className="h-3.5 w-3.5 rounded-sm border-zinc-300 accent-[#D94B2B]"
       />
       <span className="flex-1">{label}</span>
-      <span className="text-xs text-zinc-400">{count}</span>
+      {count !== undefined && <span className="text-xs text-zinc-400">{count}</span>}
     </label>
   );
 }
@@ -519,7 +521,7 @@ export function AttributeFacetSections({ facets }: { facets: CategoryFacets }) {
         return (
           <FacetGroup key={g.param} title={g.title} defaultOpen={g.defaultOpen}>
             {opts.map((o) => (
-              <FacetCheckbox key={o.value} param={g.param} value={o.value} label={o.label} count={o.count} />
+              <FacetCheckbox key={o.value} param={g.param} value={o.value} label={o.label} count={g.hideCounts ? undefined : o.count} />
             ))}
           </FacetGroup>
         );
