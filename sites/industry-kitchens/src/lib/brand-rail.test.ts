@@ -40,3 +40,15 @@ test("Load more carries every selection and the next cumulative page", () => {
     "/brands/waldorf?sub=839&brand=Waldorf+Bold&price=1000-5000&f_fuel_type=gas&sort=price_asc&page=2"
   );
 });
+
+test("a Zoey price trail filters by its last window, names one chip, and Load more keeps the trail", () => {
+  const t = parseBrandRailSelections({ price: "5000-6000,5000-5500" }, all, 0, "price_desc");
+  assert.deepEqual(t.priceRange, { min: 5000, max: 5500 });
+  assert.deepEqual(t.priceChips, ["5000-5500"]);
+  assert.equal(t.filtered, true);
+  const href = brandRailNextPageHref({ basePath: "/brands/waldorf", selections: t, attributeParams: {} });
+  assert.equal(new URL(href, "https://x").searchParams.get("price"), "5000-6000,5000-5500");
+  const coded = parseBrandRailSelections({ price: "lt1000,gt3000" }, all, 0, "price_desc");
+  assert.deepEqual(coded.priceChips, ["lt1000", "gt3000"]);
+  assert.equal(coded.priceRange, undefined);
+});

@@ -19,7 +19,7 @@ import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 import { brandNatives } from "./brand-natives";
 import { categoryNatives } from "./category-natives";
 import { ListingNavProvider, useListingNav } from "@/lib/listing-nav";
-import { overlayPendingFilters, toggleListParam } from "@/lib/listing-pending";
+import { attributesForSlot, foldCatIntoSub, overlayPendingFilters, toggleListParam, togglePriceWindow } from "@/lib/listing-pending";
 
 /**
  * What the engine itself needs from a brand product — only enough to emit the
@@ -125,23 +125,37 @@ function BrandPageTree({
     // authored is shadowed, and a brand tree without a rail never places them.
     ...(listingFacets
       ? (() => {
-          const natives = categoryNatives({
-            listing: {
-              products: [],
-              total: 0,
-              shown: 0,
-              facets: listingFacets,
-              hasMore: false,
-              nextPageHref: "",
-              memberPricingAvailable,
-              pricing,
-              categoryName: brandIdentity.name,
-              categorySlug: brandIdentity.slug,
-            },
-          });
+          const ctx = (facets: unknown) =>
+            categoryNatives({
+              listing: {
+                products: [],
+                total: 0,
+                shown: 0,
+                facets,
+                hasMore: false,
+                nextPageHref: "",
+                memberPricingAvailable,
+                pricing,
+                categoryName: brandIdentity.name,
+                categorySlug: brandIdentity.slug,
+              },
+            });
+          const natives = ctx(listingFacets);
+          // A brand page's own filter list places each section in a slot among Category / Price /
+          // Brand (Zoey's per-page order — services brandRail `slot`); the rail places one of these
+          // per slot (prop `slot`). A section without a slot sits before Price.
+          const BrandRailAttributes = (props: Record<string, unknown>) => {
+            const slot = String(props.slot ?? "before_price");
+            const f = listingFacets as { attributes?: Array<{ railSlot?: string }> };
+            const Section = ctx({ ...f, attributes: attributesForSlot(f.attributes, slot) })[
+              "category-attribute-facets"
+            ];
+            return Section ? <Section /> : null;
+          };
           return {
             "facet-price-slider": natives["facet-price-slider"],
             "category-attribute-facets": natives["category-attribute-facets"],
+            "brand-rail-attributes": BrandRailAttributes,
           } as NativeComponents;
         })()
       : {}),
@@ -166,13 +180,12 @@ function BrandPageTree({
         if (!param || !value) return { success: false, error: "Missing facet param/value" };
         // An old `?cat=` link selects categories the rail writes as `sub`: fold it in first, so the
         // box it ticked can be unticked and a second tick does not silently drop it.
-        let base = searchParams;
-        if (param === "sub" && searchParams.get("cat")) {
-          const folded = new URLSearchParams(searchParams.toString());
-          const merged = [...new Set([...(folded.get("sub") ?? "").split(","), ...(folded.get("cat") ?? "").split(",")].filter(Boolean))];
-          folded.delete("cat");
-          folded.set("sub", merged.join(","));
-          base = folded;
+        const base = param === "sub" ? foldCatIntoSub(new URLSearchParams(searchParams.toString())) : searchParams;
+        // A price WINDOW (a Zoey band, `5000-5999.99`) is one choice, as Zoey's Price group was:
+        // picking another replaces it, picking it again clears it. The coded bands stay a list.
+        if (param === "price" && value.includes("-")) {
+          nav.replace(togglePriceWindow(base, value));
+          return { success: true };
         }
         nav.replace(toggleListParam(base, param, value));
         return { success: true };

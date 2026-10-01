@@ -1,4 +1,5 @@
 import type { BuilderNode, NodeTree } from "@keenan/services/builder";
+import { MAX_PRICE_TRAIL, parseRangeParam, priceWindowTrail } from "./category-attributes";
 
 // ============================================================================
 // Pure helpers behind the instant filter controls (see ./listing-nav.tsx).
@@ -33,6 +34,8 @@ const FACET_PARAMS: Record<string, string> = {
   subcategories: "sub",
   brands: "brand",
   price: "price",
+  // A brand page's Zoey price bands (value = the price window) answer to the same param.
+  price_bands: "price",
   availability: "stock",
 };
 
@@ -184,4 +187,51 @@ export function withListingGridMarksAll(components: Record<string, NodeTree>): R
     out[key] = next;
   }
   return changed ? out : components;
+}
+
+
+/**
+ * A Zoey price band (a price WINDOW, `5000-5999.99`), as Zoey's (Magento 1.9) Price group: a band
+ * chosen INSIDE the chosen band joins the trail (`5000-6000,5000-5500`); choosing the last band
+ * again (or removing its chip) steps back one level; any other band replaces the trail. Paging
+ * resets. Pure (BuilderBrandPage).
+ */
+export function togglePriceWindow(params: URLSearchParams, value: string): URLSearchParams {
+  const next = new URLSearchParams(params.toString());
+  const trail = priceWindowTrail(next.get("price"));
+  const last = trail[trail.length - 1];
+  let out: string[];
+  if (last === value) out = trail.slice(0, -1);
+  else if (last !== undefined && windowInside(value, last)) out = [...trail, value].slice(-MAX_PRICE_TRAIL);
+  else out = [value];
+  if (out.length) next.set("price", out.join(","));
+  else next.delete("price");
+  next.delete("page");
+  return next;
+}
+
+/** True when window `inner` lies within window `outer` (an open end is unbounded). */
+function windowInside(inner: string, outer: string): boolean {
+  const i = parseRangeParam(inner);
+  const o = parseRangeParam(outer);
+  if (!i || !o) return false;
+  const lo = o.min ?? -Infinity;
+  const hi = o.max ?? Infinity;
+  return (i.min ?? -Infinity) >= lo && (i.max ?? Infinity) <= hi;
+}
+
+/** An old `?cat=` brand link's categories folded into `sub` (the rail writes `sub`). Pure. */
+export function foldCatIntoSub(params: URLSearchParams): URLSearchParams {
+  if (!params.get("cat")) return params;
+  const next = new URLSearchParams(params.toString());
+  const merged = [...new Set([...(next.get("sub") ?? "").split(","), ...(next.get("cat") ?? "").split(",")].filter(Boolean))];
+  next.delete("cat");
+  next.set("sub", merged.join(","));
+  return next;
+}
+
+/** A brand page's own filter sections for one rail slot (services brandRail `slot`; none = before
+ *  Price). Pure. */
+export function attributesForSlot<T extends { railSlot?: string }>(attributes: readonly T[] | undefined, slot: string): T[] {
+  return (attributes ?? []).filter((a) => (a.railSlot ?? "before_price") === slot);
 }
