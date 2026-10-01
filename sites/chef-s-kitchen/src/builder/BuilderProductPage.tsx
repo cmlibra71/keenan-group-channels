@@ -342,6 +342,7 @@ export function BuilderProductPage({
   callResults,
   components = {},
   nativeData,
+  plainTextLineBreaks = false,
 }: {
   tree: NodeTree;
   payload: ProductPagePayload;
@@ -351,6 +352,9 @@ export function BuilderProductPage({
   components?: Record<string, NodeTree>;
   /** Route-owned data for this site's sealed product natives. */
   nativeData?: Record<string, unknown>;
+  /** The site's `product_copy_display.plain_text_line_breaks` setting (portal → Storefront Listings):
+   *  plain-text descriptions keep their line breaks as Zoey's nl2br printed them. Absent = off. */
+  plainTextLineBreaks?: boolean;
 }) {
   // The BRAND rides into the purchase scope because the sealed SilverChef panel
   // has to know whether this is a SKOPE machine, and since Steve widened that
@@ -371,7 +375,7 @@ export function BuilderProductPage({
     }),
     [payload, kitQuoteOnly]
   );
-  const enriched = React.useMemo(() => enrichProductPayload(payload, { sanitizeHtml, keepTextColor: KEEP_TEXT_COLOR }), [payload]);
+  const enriched = React.useMemo(() => enrichProductPayload(payload, { sanitizeHtml, keepTextColor: KEEP_TEXT_COLOR, plainTextLineBreaks }), [payload, plainTextLineBreaks]);
   return (
     <ProductPurchaseProvider
       product={product}
