@@ -164,14 +164,34 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // purchase state — they move the headline price, the weekly finance figure and what
     // Add to Cart sends — and an authored tree can hold neither state nor money. Renders
     // nothing for a product with no extras, so the node is safe on every product page.
-    "product-addons": () => <ProductAddons optionalRadioNone zoeyGroups />,
+    // Wording from the node's props (CMS): see `AddonLabels` in ProductAddons.tsx.
+    "product-addons": (props?: Record<string, unknown>) => {
+      const str = (v: unknown) => (typeof v === "string" ? v : null);
+      const keys = ["choose_one", "required_message", "choose_many", "required_marker", "placeholder_required", "placeholder_optional", "none_label", "optional_heading", "optional_hint", "extras_total"] as const;
+      return <ProductAddons optionalRadioNone zoeyGroups labels={Object.fromEntries(keys.map((k) => [k, str(props?.[k])]))} />;
+    },
     // "Add to Compare" / "View Compare" + "Compare products here" (IK parity plan decision 12,
     // root cause `compare-feature`). Sealed because the visitor's compare list is client state
     // (a cookie) that an authored tree cannot hold. Placed under the buy row by the shared
     // `withCompareNode` pass, which only runs where `lib/compare-site.ts` is on — this site.
     // The template lane may place a `product-compare` component node itself; the pass then
     // leaves that placement alone. Chefs Depot does not register this key.
-    [COMPARE_NODE_KEY]: () => <AddToCompare />,
+    // Wording/shape from the node's props (CMS): see `CompareLabels` in AddToCompare.tsx.
+    [COMPARE_NODE_KEY]: (props?: Record<string, unknown>) => {
+      const str = (v: unknown) => (typeof v === "string" ? v : null);
+      return (
+        <AddToCompare
+          labels={{
+            label_add: str(props?.label_add),
+            label_view: str(props?.label_view),
+            label_here: str(props?.label_here),
+            sidebar_title: str(props?.sidebar_title),
+            sidebar_empty: str(props?.sidebar_empty),
+            sidebar_compare: str(props?.sidebar_compare),
+          }}
+        />
+      );
+    },
     // "Add to Compare" under each RAIL tile (related / upsell) — IK parity, product cards: Zoey's
     // related rail carries the link on most product layouts. Placed beside every `product-card`
     // by `builder/tile-compare-node.ts` (via lib/store.ts), `productId` bound to the tile's row.

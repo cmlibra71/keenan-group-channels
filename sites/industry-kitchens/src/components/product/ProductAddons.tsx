@@ -126,6 +126,7 @@ function AddonGroup({
   optionalRadioNone = false,
   bareNoCharge = false,
   hideZero = false,
+  labels = {},
 }: {
   group: ProductAddonGroup;
   chosen: string[];
@@ -141,6 +142,8 @@ function AddonGroup({
   optionalRadioNone?: boolean;
   /** See `ProductAddons`' `zoeyGroups`. */
   hideZero?: boolean;
+  /** See `AddonLabels`. */
+  labels?: AddonLabels;
 }) {
   const single = group.control !== "checkbox";
   // Zoey's "None" answer on an OPTIONAL radio group — see `optionalRadioNoneRow`.
@@ -155,25 +158,26 @@ function AddonGroup({
   return (
     <fieldset className={first ? "" : "mt-4"}>
       <legend className="text-sm font-semibold text-text-primary">
+        {group.required && word(labels.required_marker, "") ? <em className="mr-0.5 not-italic text-red-700">{word(labels.required_marker, "")}</em> : null}
         {group.label}
         {/* The button greys while a required group is unanswered (the provider folds
             it into allOptionsSelected), so the reason has to be ON THE SCREEN — a
             disabled control with no wording next to it is exactly what
             sf-product-page forbids. */}
-        {group.required && single ? (
+        {group.required && single && (unanswered ? word(labels.required_message, word(labels.choose_one, "Choose one")) : word(labels.choose_one, "Choose one")) ? (
           <span
             className={`ml-2 text-xs font-normal ${
               unanswered ? "text-red-700" : "text-text-muted"
             }`}
           >
-            Choose one
+            {unanswered ? word(labels.required_message, word(labels.choose_one, "Choose one")) : word(labels.choose_one, "Choose one")}
           </span>
         ) : null}
         {/* A required TICK-BOX group (Zoey's required "multiple", e.g. Hallde "Free Discs
             Inlude"): marked as required; the provider keeps the last tick once one is ticked.
             A group with no pre-ticked answer is marked but not enforced (known limitation). */}
-        {!single && (group as { atLeastOne?: true }).atLeastOne === true ? (
-          <span className="ml-2 text-xs font-normal text-text-muted">Choose at least one</span>
+        {!single && (group as { atLeastOne?: true }).atLeastOne === true && word(labels.choose_many, "Choose at least one") ? (
+          <span className="ml-2 text-xs font-normal text-text-muted">{word(labels.choose_many, "Choose at least one")}</span>
         ) : null}
       </legend>
 
@@ -193,7 +197,7 @@ function AddonGroup({
             onToggle(key, true);
           }}
         >
-          <option value="">{group.required ? "Please choose…" : "None"}</option>
+          <option value="">{group.required ? word(labels.placeholder_required, "Please choose…") : word(labels.placeholder_optional, "None")}</option>
           {group.options.map((o) => (
             <option key={o.key} value={o.key}>
               {priced && !(bareNoCharge && o.noCharge) && !(hideZero && !(Number(o.price) > 0)) ? `${o.label} (+$${money(o.price)})` : o.label}
@@ -222,7 +226,7 @@ function AddonGroup({
                 className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-brand,#000)]"
               />
               <span className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-                <span className="min-w-0 text-sm text-text-primary">None</span>
+                <span className="min-w-0 text-sm text-text-primary">{word(labels.none_label, "None")}</span>
               </span>
             </label>
           ) : null}
@@ -255,10 +259,32 @@ function AddonGroup({
   );
 }
 
+/**
+ * The extras panel's wording, from the template node's props (CMS data). Unset = today's words;
+ * "" = draw nothing. `required_message` is shown only while a required pick-one group is unanswered
+ * (the reason the buy button greys — sf-product-page forbids a disabled control with no reason).
+ */
+export interface AddonLabels {
+  choose_one?: string | null;
+  required_message?: string | null;
+  choose_many?: string | null;
+  required_marker?: string | null;
+  placeholder_required?: string | null;
+  placeholder_optional?: string | null;
+  none_label?: string | null;
+  optional_heading?: string | null;
+  optional_hint?: string | null;
+  extras_total?: string | null;
+}
+const word = (v: string | null | undefined, fallback: string) => (typeof v === "string" ? v : fallback);
+
 export function ProductAddons({
   optionalRadioNone = false,
   zoeyGroups = false,
+  labels = {},
 }: {
+  /** See `AddonLabels`. */
+  labels?: AddonLabels;
   /**
    * Draw Zoey's "None" answer at the top of every OPTIONAL radio group, ticked while nothing
    * else is (IK parity: Hatco GRAH "Optional Controller" reads None / Built-in Control Unit /
@@ -340,6 +366,7 @@ export function ProductAddons({
               first={i === 0}
               optionalRadioNone={optionalRadioNone}
               hideZero={zoeyGroups}
+              labels={labels}
               chosen={purchase.selectedAddons[group.key] ?? []}
               onToggle={(optionKey, on) => purchase.toggleAddon(group.key, optionKey, on)}
             />
@@ -359,6 +386,7 @@ export function ProductAddons({
               first={i === 0}
               optionalRadioNone={optionalRadioNone}
               hideZero={zoeyGroups}
+              labels={labels}
               bareNoCharge
               chosen={purchase.selectedAddons[group.key] ?? []}
               onToggle={(optionKey, on) => purchase.toggleAddon(group.key, optionKey, on)}
@@ -380,16 +408,19 @@ export function ProductAddons({
               first={i === 0}
               optionalRadioNone={optionalRadioNone}
               hideZero={zoeyGroups}
+              labels={labels}
               chosen={purchase.selectedAddons[group.key] ?? []}
               onToggle={(optionKey, on) => purchase.toggleAddon(group.key, optionKey, on)}
             />
           ))}
           {optionalGroups.length > 0 ? (
             <>
-              <p className={`${requiredGroups.length > 0 ? "mt-4 " : ""}text-sm font-semibold text-text-primary`}>Optional extras</p>
-              <p className="mt-0.5 text-xs text-text-secondary">
-                Tick what you need — the price updates as you go.
-              </p>
+              {word(labels.optional_heading, "Optional extras") ? (
+                <p className={`${requiredGroups.length > 0 ? "mt-4 " : ""}text-sm font-semibold text-text-primary`}>{word(labels.optional_heading, "Optional extras")}</p>
+              ) : null}
+              {word(labels.optional_hint, "Tick what you need — the price updates as you go.") ? (
+                <p className="mt-0.5 text-xs text-text-secondary">{word(labels.optional_hint, "Tick what you need — the price updates as you go.")}</p>
+              ) : null}
             </>
           ) : null}
 
@@ -399,14 +430,15 @@ export function ProductAddons({
               group={group}
               optionalRadioNone={optionalRadioNone}
               hideZero={zoeyGroups}
+              labels={labels}
               chosen={purchase.selectedAddons[group.key] ?? []}
               onToggle={(optionKey, on) => purchase.toggleAddon(group.key, optionKey, on)}
             />
           ))}
 
-          {purchase.addonTotal > 0 ? (
+          {purchase.addonTotal > 0 && word(labels.extras_total, "Extras added") ? (
             <p className="mt-4 flex items-baseline justify-between border-t border-border pt-3 text-sm">
-              <span className="text-text-secondary">Extras added</span>
+              <span className="text-text-secondary">{word(labels.extras_total, "Extras added")}</span>
               <span className="font-semibold text-text-primary">
                 + <Price amount={purchase.addonTotal} gst />
               </span>
