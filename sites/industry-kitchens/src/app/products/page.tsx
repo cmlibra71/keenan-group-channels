@@ -2,6 +2,7 @@ import { getProducts, getFeatureFlag, getMegaMenu, getMegaMenuNav, getMegaMenuHi
 import { getListingDisplay } from "@/lib/listing-display";
 import { flattenTree } from "@/lib/mega-menu";
 import { ikNavItems } from "@/lib/ik-nav";
+import { ikBarHref } from "@/lib/ik-mega-panel";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { getCatalogScope } from "@/lib/catalog-scope";
@@ -100,7 +101,9 @@ export default async function ProductsPage({
     if (!node) return [];
     // The same wording the bar prints: Industry Kitchens shows the editor's own
     // label in both places (it does not shorten the way Chefs Depot does).
-    return [{ id: node.id, name: item.label || node.name, slug: node.slug, image_url: node.image_url }];
+    // The bar's own address for the department (the editor's url wins, e.g. Brands -> /brands).
+    const href = ikBarHref(item, byId);
+    return [{ id: node.id, name: item.label || node.name, slug: node.slug, image_url: node.image_url, ...(href !== `/categories/${node.slug}` ? { href } : {}) }];
   });
 
   // Departments are a way IN to the tree, so a department the viewer may not

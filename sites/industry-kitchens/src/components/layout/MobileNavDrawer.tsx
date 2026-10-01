@@ -8,12 +8,18 @@ import {
   flattenTree,
   itemHref,
   panelBrandColumn,
-  panelExtras,
   type MegaBrandLike,
   type MegaMenuNodeLike,
   type MegaNavItem,
 } from "@/lib/mega-menu";
 import { ikNavItems } from "@/lib/ik-nav";
+import {
+  DEFAULT_IK_MEGA_MENU_SETTINGS,
+  ikBarHref,
+  ikIsHighlighted,
+  ikPanelGroups,
+  type IkMegaMenuSettings,
+} from "@/lib/ik-mega-panel";
 
 /**
  * Below xl the nav becomes a hamburger → full-height drawer.
@@ -31,17 +37,20 @@ export function MobileNavDrawer({
   items,
   hiddenCategoryIds,
   brandColumns = {},
+  settings = DEFAULT_IK_MEGA_MENU_SETTINGS,
 }: {
   departments: MegaMenuNodeLike[];
   items?: MegaNavItem[];
   hiddenCategoryIds?: number[];
   /** Each department's Brands column, as the desktop bar shows it (card HaWBvySC). */
   brandColumns?: Record<number, MegaBrandLike[]>;
+  /** `channel_settings.mega_menu_settings`, the same the desktop bar reads. */
+  settings?: IkMegaMenuSettings;
 }) {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const navItems = ikNavItems({ departments, items, hiddenCategoryIds });
+  const navItems = ikNavItems({ departments, items, hiddenCategoryIds, allCategoriesLauncher: settings.allCategoriesLauncher });
   const byId = flattenTree(departments);
   const close = () => setOpen(false);
 
@@ -74,8 +83,10 @@ export function MobileNavDrawer({
                 const dept = item.type === "category" && item.categoryId ? byId.get(item.categoryId) : undefined;
                 if (item.type === "category" && !dept) return null;
 
-                const extras = panelExtras(item);
-                const groups = dept?.children ?? [];
+                // The desktop panel's own columns (sub-categories + the editor's column links), so the
+                // drawer lists what the drop-down lists: each column heading, then its links.
+                const panel = dept ? ikPanelGroups(dept, item, byId, settings) : { groups: [], extras: [] };
+                const extras = panel.extras;
                 // The same Brands column the desktop drop-down carries: a heading,
                 // the brands, then View all brands (card HaWBvySC).
                 const brandColumn = dept ? panelBrandColumn(item) : null;
@@ -92,7 +103,11 @@ export function MobileNavDrawer({
                       ]
                     : [];
                 const childLinks: { key: string; href: string; label: string; newTab?: boolean; heading?: boolean }[] = [
-                  ...groups.map((g) => ({ key: `g${g.id}`, href: `/categories/${g.slug}`, label: g.name })),
+                  ...panel.groups.flatMap((g) => [
+                    { key: g.key, href: g.href, label: g.label, newTab: g.newTab, heading: true },
+                    ...g.links.map((l) => ({ key: l.key, href: l.href, label: l.label, newTab: l.newTab })),
+                    ...(g.moreHref ? [{ key: `${g.key}-more`, href: g.moreHref, label: "View all" }] : []),
+                  ]),
                   ...brandLinks,
                   ...extras.map((e, j) => ({
                     key: `e${j}`,
@@ -109,8 +124,9 @@ export function MobileNavDrawer({
                         newTab: c.newTab,
                       }))),
                 ];
-                const href = dept ? `/categories/${dept.slug}` : itemHref(item, byId);
-                const isClearance = href === "/clearance";
+                const href = ikBarHref(item, byId);
+                // The bar's own rule: the editor's highlight flag, else Clearance as a trailing plain link.
+                const isClearance = ikIsHighlighted(item, href, !dept && !(item.children ?? []).length);
 
                 return (
                   <div key={key} className="border-b border-zinc-200">
@@ -148,9 +164,11 @@ export function MobileNavDrawer({
                             target={child.newTab ? "_blank" : undefined}
                             onClick={close}
                             className={
+                              // A column heading is a full-size tap target (it is a link to its page),
+                              // its links sit indented under it.
                               child.heading
-                                ? "block px-6 pb-1 pt-3 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-500"
-                                : "block px-6 py-2.5 text-sm text-zinc-700 hover:text-[#D94B2B]"
+                                ? "block px-6 py-2.5 text-sm font-semibold text-zinc-900 hover:text-[#D94B2B]"
+                                : "block py-2 pl-9 pr-6 text-sm text-zinc-700 hover:text-[#D94B2B]"
                             }
                           >
                             {child.label}

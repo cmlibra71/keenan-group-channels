@@ -10,15 +10,23 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-export type FooterLink = { label: string; href: string };
+export type FooterLink = { label: string; href: string; /** Open in a new tab (the editor's switch). */ newTab?: boolean };
 export type FooterColumn = {
   heading: string;
+  /** The heading's own address, when the editor gave the column one (the old Zoey footer's headings
+   *  were links). Absent = a plain heading. */
+  href?: string;
+  /** Open the heading's address in a new tab. */
+  newTab?: boolean;
   links: FooterLink[];
   /** A second headed group stacked under the column's own links. The portal's
    *  Navigation editor writes it when a footer link holds links of its own
    *  (card aveLhTwr); a storefront that ignored it would silently drop every
    *  link staff put under that heading. */
   extraHeading?: string;
+  /** The sub-heading's own address (the old footer's "Knowledge Hub" -> /essentials). */
+  extraHref?: string;
+  extraNewTab?: boolean;
   extraLinks?: FooterLink[];
 };
 export type FooterContact = { phone?: string; email?: string; address?: string };
@@ -120,8 +128,8 @@ const PAYMENT_LOGOS: Record<string, React.ReactElement> = {
   ),
 };
 
-function SmartLink({ href, className, children }: { href: string; className?: string; children: React.ReactNode }) {
-  if (/^https?:\/\//.test(href)) {
+function SmartLink({ href, className, newTab, children }: { href: string; className?: string; newTab?: boolean; children: React.ReactNode }) {
+  if (/^https?:\/\//.test(href) || newTab) {
     return (
       <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
         {children}
@@ -140,7 +148,7 @@ function LinkList({ links }: { links: FooterLink[] }) {
     <ul className="mt-3 space-y-2">
       {links.map((l) => (
         <li key={l.href + l.label}>
-          <SmartLink href={l.href} className="text-sm text-zinc-500 hover:text-[#D94B2B]">
+          <SmartLink href={l.href} newTab={l.newTab} className="text-sm text-zinc-500 hover:text-[#D94B2B]">
             {l.label}
           </SmartLink>
         </li>
@@ -170,13 +178,25 @@ export function Footer({
           {columns.map((col) => (
             <div key={col.heading}>
               <h4 className="text-sm font-bold uppercase tracking-wide text-zinc-900">
-                {col.heading}
+                {col.href ? (
+                  <SmartLink href={col.href} newTab={col.newTab} className="hover:text-[#D94B2B]">
+                    {col.heading}
+                  </SmartLink>
+                ) : (
+                  col.heading
+                )}
               </h4>
               <LinkList links={col.links ?? []} />
               {col.extraHeading && col.extraLinks && col.extraLinks.length > 0 && (
                 <>
                   <h4 className="mt-6 text-sm font-bold uppercase tracking-wide text-zinc-900">
-                    {col.extraHeading}
+                    {col.extraHref ? (
+                      <SmartLink href={col.extraHref} newTab={col.extraNewTab} className="hover:text-[#D94B2B]">
+                        {col.extraHeading}
+                      </SmartLink>
+                    ) : (
+                      col.extraHeading
+                    )}
                   </h4>
                   <LinkList links={col.extraLinks} />
                 </>
