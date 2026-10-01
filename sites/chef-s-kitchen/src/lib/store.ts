@@ -705,6 +705,12 @@ export async function getGuestOrdersForEmail(
  * archive) — which is why it is exported. Two copies of this
  * CASE expression would drift, and a drift here is not cosmetic: a looser copy
  * WIDENS who can read an order, a tighter one 404s an order the list is showing.
+ *
+ * Index: the inbox expression below is served AS WRITTEN by the expression index
+ * `idx_orders_guest_email_inbox` ((<this CASE … || split_part(…)>, channel_id) WHERE
+ * customer_id IS NULL AND contact_id IS NULL), proposed 2026-10-01: ~1,800 heap pages
+ * read per lookup without it, ~5 with it. Postgres only uses an expression index whose
+ * expression the query repeats, so change this text and that index together.
  */
 export function guestOrderForEmailCondition(
   sql: NonNullable<ReturnType<typeof getCommerceClient>>,
