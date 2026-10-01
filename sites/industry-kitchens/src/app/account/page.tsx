@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Package, FileText, MapPin, LogOut, Crown, Trophy, Gift, ArrowRight, Calendar, Ticket, KeyRound, Wallet } from "lucide-react";
+import { Package, FileText, MapPin, LogOut, Crown, Trophy, Gift, ArrowRight, Calendar, Ticket, KeyRound, Wallet, Heart } from "lucide-react";
 import { getSession, readRememberedEmail } from "@/lib/auth";
 import { formatMemberSince } from "@/lib/member-date";
 import { contactService, getFeatureFlag, getActiveSubscriptionForContact,
@@ -271,6 +271,16 @@ export default async function AccountPage({
           <div>
             <h3 className="font-semibold text-zinc-900">My Quotes</h3>
             <p className="text-sm text-zinc-500">View and track your quotes</p>
+          </div>
+        </Link>
+        <Link
+          href="/account/wishlist"
+          className="flex items-center gap-4 border border-zinc-200 rounded-lg p-6 hover:border-zinc-400 transition-colors"
+        >
+          <Heart className="h-8 w-8 text-zinc-400" />
+          <div>
+            <h3 className="font-semibold text-zinc-900">My Wishlist</h3>
+            <p className="text-sm text-zinc-500">Products you saved for later</p>
           </div>
         </Link>
         {statementAccess.visible && (

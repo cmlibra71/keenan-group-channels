@@ -12,6 +12,7 @@ const ACCOUNT_LINKS: { label: string; href: string }[] = [
   { label: "Re-Order", href: "/account/orders" },
   { label: "My Account", href: "/account" },
   { label: "My Quotes", href: "/account/quotes" },
+  { label: "My Wishlist", href: "/account/wishlist" },
   { label: "My Cart", href: "/cart" },
   { label: "Checkout", href: "/checkout" },
 ];

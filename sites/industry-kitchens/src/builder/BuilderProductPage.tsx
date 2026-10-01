@@ -19,6 +19,7 @@ import type { GiftCardSelectionInput } from "@keenan/services/gift-card";
 import { missingAnswerSentence, tileRefusalDestination } from "@/lib/product/addon-panel";
 import { COMBINATION_UNAVAILABLE_TEXT } from "@/components/product/ProductCombinationNotice";
 import { addToQuote } from "@/lib/actions/quote";
+import { addToWishlist } from "@/lib/actions/wishlist";
 import { submitReview } from "@/lib/actions/reviews";
 import { useGst } from "@/lib/gst";
 import { overlayLiveGst } from "./live-gst";
@@ -283,6 +284,13 @@ function ActionsBridge({
           // one gets the same trap for free (card qxVqy5Dn).
           honeypot: str("website"),
         });
+      },
+      // Zoey's "Add to Wishlist" on up-sell tiles (the template shows guests a sign-in link instead;
+      // a session that lapsed meanwhile is sent to sign in and comes back here).
+      addToWishlist: async (args?: Record<string, unknown>) => {
+        const res = await addToWishlist(Number(args?.productId ?? productId), window.location.pathname);
+        if (res.signIn) router.push(res.signIn);
+        return res.signIn ? { error: "Sign in to save to your wishlist." } : res;
       },
       enquire: (args?: Record<string, unknown>) => {
         const pid = args?.product_id ?? productId;
