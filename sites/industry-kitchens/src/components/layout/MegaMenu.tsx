@@ -26,6 +26,10 @@ import {
 import { MegaMenuShell } from "./MegaMenuShell";
 
 /**
+ * BAR TYPE AND SPACING ARE DESIGN TOKENS (IK menu parity, 2026-10-01): `--nav-font-size`,
+ * `--nav-item-pl`, `--nav-item-pr`, `--nav-item-py`, set in the storefront's design tokens (custom
+ * group) and emitted on <html> by the root layout. Unset = the values this bar has always used.
+ *
  * Dark nav bar with CSS-driven mega panels — Industry Kitchens' own styling
  * (red accent, `xl` breakpoint) over the SHARED composition (card mOTgYEvX).
  *
@@ -79,24 +83,19 @@ export function MegaMenu({
           >
             <button
               type="button"
-              className="flex h-full items-center gap-1.5 whitespace-nowrap px-4 py-[13px] text-[13.5px] font-semibold text-zinc-200 transition-colors duration-200 group-hover/nav:bg-black/30 group-hover/nav:text-white group-focus-within/nav:bg-black/30"
+              className="flex h-full items-center gap-1.5 whitespace-nowrap pl-[var(--nav-item-pl,1rem)] pr-[var(--nav-item-pr,1rem)] py-[var(--nav-item-py,13px)] text-[length:var(--nav-font-size,13.5px)] font-semibold text-zinc-200 transition-colors duration-200 group-hover/nav:bg-black/30 group-hover/nav:text-white group-focus-within/nav:bg-black/30"
               aria-haspopup="true"
             >
               More
-              <ChevronDown className="h-[11px] w-[11px] opacity-70" strokeWidth={2} />
+              <ChevronDown className="h-[0.815em] w-[0.815em] opacity-70" strokeWidth={2} />
             </button>
-            <div className="mega-panel invisible absolute h-0 overflow-hidden right-0 top-full z-[110] min-w-[220px] rounded-b-lg border border-zinc-200 bg-white py-2 opacity-0 shadow-lg transition-all delay-0 duration-150 group-hover/nav:visible group-hover/nav:h-auto group-hover/nav:overflow-visible group-hover/nav:opacity-100 group-hover/nav:delay-[150ms] group-focus-within/nav:visible group-focus-within/nav:h-auto group-focus-within/nav:overflow-visible group-focus-within/nav:opacity-100">
+            <div className="mega-panel invisible absolute h-0 overflow-hidden right-0 top-full z-[110] min-w-[260px] max-w-[min(420px,90vw)] rounded-b-lg border border-zinc-200 bg-white py-2 opacity-0 shadow-lg transition-all delay-0 duration-150 group-hover/nav:visible group-hover/nav:h-auto group-hover/nav:max-h-[calc(100vh-14rem)] group-hover/nav:overflow-y-auto group-hover/nav:opacity-100 group-hover/nav:delay-[150ms] group-focus-within/nav:visible group-focus-within/nav:h-auto group-focus-within/nav:max-h-[calc(100vh-14rem)] group-focus-within/nav:overflow-y-auto group-focus-within/nav:opacity-100">
               {left.map((item, i) => (
-                <Link
-                  key={`m-${i}`}
-                  data-more-index={i}
-                  style={{ display: "none" }}
-                  href={ikBarHref(item, byId)}
-                  target={item.newTab ? "_blank" : undefined}
-                  className="block px-4 py-2 text-[13.5px] text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-[#C73629]"
-                >
-                  {item.label}
-                </Link>
+                // Fallback when the bar still runs out of room: an item tucked under More keeps
+                // its drop-down as an expandable entry (headings and links), not a bare link.
+                <div key={`m-${i}`} data-more-index={i} style={{ display: "none" }}>
+                  <MoreEntry item={item} byId={byId} settings={settings} brandColumns={brandColumns} />
+                </div>
               ))}
             </div>
           </li>
@@ -119,15 +118,15 @@ export function MegaMenu({
                   id={i === 0 ? "nav-right" : undefined}
                   href={href}
                   target={item.newTab ? "_blank" : undefined}
-                  className={`flex h-full items-center gap-1.5 whitespace-nowrap px-3 py-[13px] text-[13px] transition-colors duration-200 ${
+                  className={`flex h-full items-center gap-1.5 whitespace-nowrap pl-[var(--nav-item-pl,0.75rem)] pr-[var(--nav-item-pr,0.75rem)] py-[var(--nav-item-py,13px)] text-[length:var(--nav-font-size,13px)] transition-colors duration-200 ${
                     isClearance
                       ? "font-bold text-amber-400 hover:text-amber-300"
                       : "font-semibold text-zinc-200 hover:text-white"
                   }`}
                 >
-                  {isClearance && <Star className="h-3.5 w-3.5 fill-current" />}
+                  {isClearance && <Star className="h-[1.077em] w-[1.077em] fill-current" />}
                   {item.label}
-                  {kids.length > 0 && <ChevronDown className="h-[11px] w-[11px] opacity-70" strokeWidth={2} />}
+                  {kids.length > 0 && <ChevronDown className="h-[0.815em] w-[0.815em] opacity-70" strokeWidth={2} />}
                 </Link>
                 {kids.length > 0 && (
                   <div className="mega-panel invisible absolute right-0 top-full z-50 h-0 min-w-[220px] overflow-hidden rounded-b-lg border border-zinc-200 bg-white py-2 opacity-0 shadow-lg transition-all delay-0 duration-150 group-hover/nav:visible group-hover/nav:h-auto group-hover/nav:overflow-visible group-hover/nav:opacity-100 group-hover/nav:delay-[300ms] group-focus-within/nav:visible group-focus-within/nav:h-auto group-focus-within/nav:overflow-visible group-focus-within/nav:opacity-100">
@@ -170,7 +169,7 @@ function renderItem(
       <li key={`l-${i}`} data-nav-item className="shrink-0">
         <Link
           href="/categories"
-          className="flex h-full items-center gap-2 whitespace-nowrap bg-[#D94B2B] px-4 py-[13px] text-[13.5px] font-bold text-white transition-colors duration-200 hover:bg-[#C73629]"
+          className="flex h-full items-center gap-2 whitespace-nowrap bg-[#D94B2B] pl-[var(--nav-item-pl,1rem)] pr-[var(--nav-item-pr,1rem)] py-[var(--nav-item-py,13px)] text-[length:var(--nav-font-size,13.5px)] font-bold text-white transition-colors duration-200 hover:bg-[#C73629]"
         >
           <Menu className="h-4 w-4" strokeWidth={2.2} />
           {item.label || "All Categories"}
@@ -193,11 +192,11 @@ function renderItem(
           id={`nav-item-${i}`}
           href={barHref}
           target={item.newTab ? "_blank" : undefined}
-          className={`flex h-full items-center gap-1.5 whitespace-nowrap px-4 py-[13px] text-[13.5px] transition-colors duration-200 group-hover/nav:bg-black/30 group-focus-within/nav:bg-black/30 ${
+          className={`flex h-full items-center gap-1.5 whitespace-nowrap pl-[var(--nav-item-pl,1rem)] pr-[var(--nav-item-pr,1rem)] py-[var(--nav-item-py,13px)] text-[length:var(--nav-font-size,13.5px)] transition-colors duration-200 group-hover/nav:bg-black/30 group-focus-within/nav:bg-black/30 ${
             highlighted ? "font-bold text-amber-400 group-hover/nav:text-amber-300" : "font-semibold text-zinc-200 group-hover/nav:text-white"
           }`}
         >
-          {highlighted && <Star className="h-3.5 w-3.5 fill-current" />}
+          {highlighted && <Star className="h-[1.04em] w-[1.04em] fill-current" />}
           {/* The bar prints the wording somebody actually chose. Chefs Depot
               shortens its department labels (`shortNavLabel`) to squeeze more
               onto one row; Industry Kitchens does not, and never has — its
@@ -208,7 +207,7 @@ function renderItem(
               below takes whatever does not fit. Card mOTgYEvX. */}
           {item.label || dept.name}
           {hasPanel && (
-            <ChevronDown className="h-[11px] w-[11px] opacity-70" strokeWidth={2} />
+            <ChevronDown className="h-[0.815em] w-[0.815em] opacity-70" strokeWidth={2} />
           )}
         </Link>
 
@@ -249,14 +248,14 @@ function renderItem(
         id={`nav-item-${i}`}
         href={linkHref}
         target={item.newTab ? "_blank" : undefined}
-        className={`flex h-full items-center gap-1.5 whitespace-nowrap px-4 py-[13px] text-[13.5px] transition-colors duration-200 group-hover/nav:bg-black/30 group-focus-within/nav:bg-black/30 ${
+        className={`flex h-full items-center gap-1.5 whitespace-nowrap pl-[var(--nav-item-pl,1rem)] pr-[var(--nav-item-pr,1rem)] py-[var(--nav-item-py,13px)] text-[length:var(--nav-font-size,13.5px)] transition-colors duration-200 group-hover/nav:bg-black/30 group-focus-within/nav:bg-black/30 ${
           linkHighlighted ? "font-bold text-amber-400 group-hover/nav:text-amber-300" : "font-semibold text-zinc-200 group-hover/nav:text-white"
         }`}
       >
-        {linkHighlighted && <Star className="h-3.5 w-3.5 fill-current" />}
+        {linkHighlighted && <Star className="h-[1.04em] w-[1.04em] fill-current" />}
         {item.label}
         {children.length > 0 && (
-          <ChevronDown className="h-[11px] w-[11px] opacity-70" strokeWidth={2} />
+          <ChevronDown className="h-[0.815em] w-[0.815em] opacity-70" strokeWidth={2} />
         )}
       </Link>
       {children.length > 0 && long && (
@@ -478,5 +477,76 @@ function MegaPanel({
         </div>
       </div>
     </div>
+  );
+}
+
+/** One item under the bar's More menu: a plain link, or — when it has a drop-down — an expandable
+ *  entry listing that drop-down's headings and links (option 3 of the IK menu decision). Pure server
+ *  markup (<details>), so it works without JavaScript and by keyboard. */
+function MoreEntry({
+  item,
+  byId,
+  settings,
+  brandColumns,
+}: {
+  item: MegaNavItem;
+  byId: Map<number, MegaMenuNodeLike>;
+  settings: IkMegaMenuSettings;
+  brandColumns: Record<number, MegaBrandLike[]>;
+}) {
+  const href = ikBarHref(item, byId);
+  const dept = item.type === "category" && item.categoryId ? byId.get(item.categoryId) : undefined;
+  const panel = dept ? ikPanelGroups(dept, item, byId, settings) : null;
+  const brandColumn = dept ? panelBrandColumn(item) : null;
+  const groups: IkPanelGroup[] = panel
+    ? [
+        ...panel.groups,
+        // The bar panel's Brands column and information links, so the More entry lists everything
+        // the drop-down does (judge note).
+        ...(brandColumn
+          ? [{ key: "brands", label: brandColumn.label || "Brands", href: ALL_BRANDS_HREF, links: (brandColumns[dept!.id] ?? []).map((b) => ({ key: `b${b.id}`, label: b.name, href: `/brands/${b.slug}` })), total: 0 }]
+          : []),
+        ...panel.extras.map((e, j) => ({ key: `e${j}`, label: e.label, href: itemHref(e, byId), newTab: e.newTab || undefined, links: [], total: 0 })),
+      ]
+    : (item.children ?? [])
+        .filter((c) => c.label)
+        .map((c, j) => ({ key: `c${j}`, label: c.label, href: itemHref(c, byId), newTab: c.newTab || undefined, links: [], total: 0 }));
+  const rowClass = "block px-4 py-2 text-[13.5px] text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-[#C73629]";
+  if (groups.length === 0) {
+    return (
+      <Link href={href} target={item.newTab ? "_blank" : undefined} className={rowClass}>
+        {item.label}
+      </Link>
+    );
+  }
+  return (
+    <details className="group/more">
+      <summary className="flex cursor-pointer list-none items-center [&::-webkit-details-marker]:hidden justify-between px-4 py-2 text-[13.5px] text-zinc-700 hover:bg-zinc-50 hover:text-[#C73629]">
+        {item.label}
+        <ChevronDown className="h-3 w-3 opacity-60 transition-transform group-open/more:rotate-180" strokeWidth={2} />
+      </summary>
+      <div className="border-l-2 border-zinc-100 ml-4 pb-1">
+        <Link href={href} target={item.newTab ? "_blank" : undefined} className="block px-3 py-1.5 text-[13px] font-semibold text-[#D94B2B] hover:text-[#C73629]">
+          All {item.label}
+        </Link>
+        {groups.map((g) => (
+          <div key={g.key}>
+            <Link href={g.href} target={g.newTab ? "_blank" : undefined} className={`block px-3 py-1.5 text-[13px] ${g.links.length ? "font-semibold text-zinc-900" : "text-zinc-700"} hover:text-[#D94B2B]`}>
+              {g.label}
+            </Link>
+            {g.links.map((l) => (
+              <Link key={l.key} href={l.href} target={l.newTab ? "_blank" : undefined} className="block py-1 pl-6 pr-3 text-[12.5px] text-zinc-600 hover:text-[#D94B2B]">
+                {l.label}
+              </Link>
+            ))}
+            {g.moreHref && (
+              <Link href={g.moreHref} className="block py-1 pl-6 pr-3 text-[12.5px] font-semibold text-[#D94B2B]">
+                View all →
+              </Link>
+            )}
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
