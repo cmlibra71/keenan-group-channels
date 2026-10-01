@@ -7,6 +7,7 @@ import {
   ikIsHighlighted,
   ikPanelGroups,
   readIkMegaMenuSettings,
+  ikSplitNavItems,
 } from "./ik-mega-panel";
 import { flattenTree, panelColumns, type MegaMenuNodeLike, type MegaNavItem } from "./mega-menu";
 import { ikNavItems } from "./ik-nav";
@@ -112,4 +113,19 @@ test("ordered layout: the editor's columns fill top to bottom in order, balanced
   assert.deepEqual(ikBalanceColumns(mixed, 3, true).flat().map((x) => x.label), ["a", "b", "c", "d", "e"]);
   // Not ordered: the legacy greedy layout.
   assert.deepEqual(ikBalanceColumns(groups, 3, false).map((c) => c.map((x) => x.label)), [["B0", "B3", "B6"], ["B1", "B4", "B7"], ["B2", "B5", "B8"]]);
+});
+
+test("bar split: a highlighted item with a drop-down stays in the right slot; other drop-downs stay left", () => {
+  const items: MegaNavItem[] = [
+    { type: "category", label: "Business Type", categoryId: 238 },
+    { type: "link", label: "Brands", url: "/brands", children: [{ type: "link", label: "Hallde", url: "/brands/hallde" }] },
+    { type: "link", label: "Clearance Sale", url: "/clearance", highlight: true, children: [{ type: "link", label: "Special Offer", url: "/clearance?type=new" }] },
+    { type: "link", label: "Finance", url: "/pages/flexi-commercial" },
+  ];
+  const { left, right } = ikSplitNavItems(items);
+  assert.deepEqual(left.map((i) => i.label), ["Business Type", "Brands"]);
+  assert.deepEqual(right.map((i) => i.label), ["Clearance Sale", "Finance"]);
+  // Unhighlighted drop-down: left, as the shared rule.
+  const plain = items.map((i) => (i.label === "Clearance Sale" ? { ...i, highlight: undefined } : i));
+  assert.deepEqual(ikSplitNavItems(plain).right.map((i) => i.label), ["Finance"]);
 });

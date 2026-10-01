@@ -7,7 +7,6 @@ import {
   flattenTree,
   itemHref,
   panelBrandColumn,
-  splitNavItems,
   subcategoryColumnCount,
   type MegaBrandLike,
   type MegaMenuNodeLike,
@@ -20,6 +19,7 @@ import {
   ikBarHref,
   ikIsHighlighted,
   ikPanelGroups,
+  ikSplitNavItems,
   type IkMegaMenuSettings,
   type IkPanelGroup,
 } from "@/lib/ik-mega-panel";
@@ -63,7 +63,7 @@ export function MegaMenu({
   // `ikNavItems`, which also owns the red "All Categories" launcher.
   const navItems = ikNavItems({ departments, items, hiddenCategoryIds, allCategoriesLauncher: settings.allCategoriesLauncher });
   const byId = flattenTree(departments);
-  const { left, right } = splitNavItems(navItems);
+  const { left, right } = ikSplitNavItems(navItems);
 
   return (
     <MegaMenuShell className="relative hidden bg-zinc-900 xl:block">
@@ -107,11 +107,14 @@ export function MegaMenu({
             // The right-hand slot is the CLEARANCE slot, and only Clearance
             // wears its amber promotion styling. Anything else that lands there
             // (IK's saved header ends with a Finance page link) is an ordinary
-            // nav item and must not read as an offer — card mOTgYEvX.
+            // nav item and must not read as an offer — card mOTgYEvX. A
+            // highlighted item keeps its small drop-down here (the old bar's
+            // Clearance Sale), opening leftwards so it stays on screen.
             const href = ikBarHref(item, byId);
             const isClearance = ikIsHighlighted(item, href, true);
+            const kids = item.children ?? [];
             return (
-              <li key={`r-${i}`} data-nav-right className="shrink-0">
+              <li key={`r-${i}`} data-nav-right className="group/nav relative shrink-0">
                 <Link
                   id={i === 0 ? "nav-right" : undefined}
                   href={href}
@@ -124,7 +127,22 @@ export function MegaMenu({
                 >
                   {isClearance && <Star className="h-3.5 w-3.5 fill-current" />}
                   {item.label}
+                  {kids.length > 0 && <ChevronDown className="h-[11px] w-[11px] opacity-70" strokeWidth={2} />}
                 </Link>
+                {kids.length > 0 && (
+                  <div className="mega-panel invisible absolute right-0 top-full z-50 h-0 min-w-[220px] overflow-hidden rounded-b-lg border border-zinc-200 bg-white py-2 opacity-0 shadow-lg transition-all delay-0 duration-150 group-hover/nav:visible group-hover/nav:h-auto group-hover/nav:overflow-visible group-hover/nav:opacity-100 group-hover/nav:delay-[300ms] group-focus-within/nav:visible group-focus-within/nav:h-auto group-focus-within/nav:overflow-visible group-focus-within/nav:opacity-100">
+                    {kids.map((child, j) => (
+                      <Link
+                        key={j}
+                        href={itemHref(child, byId)}
+                        target={child.newTab ? "_blank" : undefined}
+                        className="block px-4 py-2 text-[13.5px] text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-[#C73629]"
+                      >
+                        {child.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </li>
             );
           })}

@@ -185,3 +185,18 @@ export function ikBalanceColumns(groups: IkPanelGroup[], count = 3, ordered = fa
   }
   return cols;
 }
+
+/**
+ * Industry Kitchens' bar split: the trailing run of right-slot items sits right of the spacer — a
+ * childless plain link (the shared rule) OR an item the editor HIGHLIGHTED, drop-down or not (the old
+ * bar's Clearance Sale carried a drop-down and stayed at the right). Only when the bar carries
+ * departments; otherwise one left group. Pure.
+ */
+export function ikSplitNavItems(items: MegaNavItem[]): { left: MegaNavItem[]; right: MegaNavItem[] } {
+  const hasDepts = items.some((n) => n.type === "categories" || n.type === "category");
+  const rightEligible = (n: MegaNavItem) =>
+    n.type !== "categories" && n.type !== "category" && (n.highlight === true || !(n.children && n.children.length));
+  let split = items.length;
+  if (hasDepts) while (split > 0 && rightEligible(items[split - 1])) split--;
+  return { left: items.slice(0, split), right: items.slice(split) };
+}
