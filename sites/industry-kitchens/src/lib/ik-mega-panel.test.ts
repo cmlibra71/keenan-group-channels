@@ -101,3 +101,15 @@ test("link order inside a column: the editor's listed entries in its order, then
   assert.equal(bakeryGroup.links[2].href, "/categories/grills");
   assert.equal(bakeryGroup.links.length, 11); // 9 sub-categories (one listed) + 2 editor links
 });
+
+test("ordered layout: the editor's columns fill top to bottom in order, balanced", () => {
+  const g = (label: string, total: number) => ({ key: label, label, href: "#", links: [], total });
+  const groups = Array.from({ length: 9 }, (_, i) => g(`B${i}`, 0));
+  const cols = ikBalanceColumns(groups, 3, true);
+  assert.deepEqual(cols.map((c) => c.map((x) => x.label)), [["B0", "B1", "B2"], ["B3", "B4", "B5"], ["B6", "B7", "B8"]]);
+  // Reading down then across keeps the order whatever the weights.
+  const mixed = [g("a", 10), g("b", 0), g("c", 0), g("d", 10), g("e", 0)];
+  assert.deepEqual(ikBalanceColumns(mixed, 3, true).flat().map((x) => x.label), ["a", "b", "c", "d", "e"]);
+  // Not ordered: the legacy greedy layout.
+  assert.deepEqual(ikBalanceColumns(groups, 3, false).map((c) => c.map((x) => x.label)), [["B0", "B3", "B6"], ["B1", "B4", "B7"], ["B2", "B5", "B8"]]);
+});

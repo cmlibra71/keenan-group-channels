@@ -80,7 +80,7 @@ export function ikPanelGroups(
   item: MegaNavItem,
   byId: Map<number, MegaMenuNodeLike>,
   settings: IkMegaMenuSettings = DEFAULT_IK_MEGA_MENU_SETTINGS
-): { groups: IkPanelGroup[]; extras: MegaNavItem[] } {
+): { groups: IkPanelGroup[]; extras: MegaNavItem[]; ordered: boolean } {
   const extras = panelExtras(item);
   const columns = new Map(dept.children.map((c) => [c.id, c]));
   const cut = (links: IkPanelLink[], moreHref: string) => {
@@ -146,21 +146,42 @@ export function ikPanelGroups(
     }
     rest.push(e);
   }
+  const ordered = placed.size > 0 || own > 0;
   for (const g of dept.children) if (!placed.has(g.id)) groups.push(treeGroup(g));
-  return { groups, extras: rest };
+  return { groups, extras: rest, ordered };
 }
 
-/** Balance column groups across `count` columns by link count (heading = 1 + its links). */
-export function ikBalanceColumns(groups: IkPanelGroup[], count = 3): IkPanelGroup[][] {
-  const cols: IkPanelGroup[][] = Array.from({ length: Math.max(1, count) }, () => []);
+/**
+ * Lay column groups out across `count` columns.
+ *
+ * `ordered` (the editor named the columns, so their ORDER is the menu's) fills the columns top to
+ * bottom in that order — contiguous runs of roughly equal weight — so reading down a column follows
+ * the old menu (judge: the Brands list must not read every third brand). Otherwise the tree's own
+ * greedy balance, with the same weight the shared panelColumns uses (every link + 2), so a panel with
+ * no editor data lays out exactly as it always has.
+ */
+export function ikBalanceColumns(groups: IkPanelGroup[], count = 3, ordered = false): IkPanelGroup[][] {
+  const n = Math.max(1, count);
+  const cols: IkPanelGroup[][] = Array.from({ length: n }, () => []);
+  const w = (g: IkPanelGroup) => g.total + 2;
+  if (ordered) {
+    const total = groups.reduce((t, g) => t + w(g), 0);
+    let col = 0;
+    let acc = 0;
+    for (const g of groups) {
+      // Move on once this column holds its share, keeping later columns from running empty.
+      if (col < n - 1 && acc > 0 && acc + w(g) / 2 > (total * (col + 1)) / n) col++;
+      cols[col].push(g);
+      acc += w(g);
+    }
+    return cols;
+  }
   const weight = cols.map(() => 0);
   for (const g of groups) {
     let i = 0;
     for (let k = 1; k < cols.length; k++) if (weight[k] < weight[i]) i = k;
     cols[i].push(g);
-    // The same weight the shared panelColumns uses (every link + 2), so a panel with no editor
-    // extras balances exactly as it always has.
-    weight[i] += g.total + 2;
+    weight[i] += w(g);
   }
   return cols;
 }

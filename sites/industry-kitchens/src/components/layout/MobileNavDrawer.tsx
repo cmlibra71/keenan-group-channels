@@ -164,9 +164,11 @@ export function MobileNavDrawer({
                             target={child.newTab ? "_blank" : undefined}
                             onClick={close}
                             className={
+                              // A column heading is a full-size tap target (it is a link to its page),
+                              // its links sit indented under it.
                               child.heading
-                                ? "block px-6 pb-1 pt-3 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-500"
-                                : "block px-6 py-2.5 text-sm text-zinc-700 hover:text-[#D94B2B]"
+                                ? "block px-6 py-2.5 text-sm font-semibold text-zinc-900 hover:text-[#D94B2B]"
+                                : "block py-2 pl-9 pr-6 text-sm text-zinc-700 hover:text-[#D94B2B]"
                             }
                           >
                             {child.label}
