@@ -19,7 +19,7 @@ import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 import { brandNatives } from "./brand-natives";
 import { categoryNatives } from "./category-natives";
 import { ListingNavProvider, useListingNav } from "@/lib/listing-nav";
-import { overlayPendingFilters, toggleListParam } from "@/lib/listing-pending";
+import { attributesForSlot, foldCatIntoSub, overlayPendingFilters, toggleListParam, togglePriceWindow } from "@/lib/listing-pending";
 
 /**
  * What the engine itself needs from a brand product — only enough to emit the
@@ -147,7 +147,7 @@ function BrandPageTree({
           const BrandRailAttributes = (props: Record<string, unknown>) => {
             const slot = String(props.slot ?? "before_price");
             const f = listingFacets as { attributes?: Array<{ railSlot?: string }> };
-            const Section = ctx({ ...f, attributes: (f.attributes ?? []).filter((a) => (a.railSlot ?? "before_price") === slot) })[
+            const Section = ctx({ ...f, attributes: attributesForSlot(f.attributes, slot) })[
               "category-attribute-facets"
             ];
             return Section ? <Section /> : null;
@@ -180,22 +180,11 @@ function BrandPageTree({
         if (!param || !value) return { success: false, error: "Missing facet param/value" };
         // An old `?cat=` link selects categories the rail writes as `sub`: fold it in first, so the
         // box it ticked can be unticked and a second tick does not silently drop it.
-        let base = searchParams;
-        if (param === "sub" && searchParams.get("cat")) {
-          const folded = new URLSearchParams(searchParams.toString());
-          const merged = [...new Set([...(folded.get("sub") ?? "").split(","), ...(folded.get("cat") ?? "").split(",")].filter(Boolean))];
-          folded.delete("cat");
-          folded.set("sub", merged.join(","));
-          base = folded;
-        }
+        const base = param === "sub" ? foldCatIntoSub(new URLSearchParams(searchParams.toString())) : searchParams;
         // A price WINDOW (a Zoey band, `5000-5999.99`) is one choice, as Zoey's Price group was:
         // picking another replaces it, picking it again clears it. The coded bands stay a list.
         if (param === "price" && value.includes("-")) {
-          const next = new URLSearchParams(base.toString());
-          if (next.get("price") === value) next.delete("price");
-          else next.set("price", value);
-          next.delete("page");
-          nav.replace(next);
+          nav.replace(togglePriceWindow(base, value));
           return { success: true };
         }
         nav.replace(toggleListParam(base, param, value));

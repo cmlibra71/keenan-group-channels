@@ -187,3 +187,32 @@ export function withListingGridMarksAll(components: Record<string, NodeTree>): R
   }
   return changed ? out : components;
 }
+
+
+/**
+ * A Zoey price band (a price WINDOW, `5000-5999.99`) is ONE choice, as Zoey's Price group was:
+ * picking another replaces it, picking it again clears it; paging resets. Pure (BuilderBrandPage).
+ */
+export function togglePriceWindow(params: URLSearchParams, value: string): URLSearchParams {
+  const next = new URLSearchParams(params.toString());
+  if (next.get("price") === value) next.delete("price");
+  else next.set("price", value);
+  next.delete("page");
+  return next;
+}
+
+/** An old `?cat=` brand link's categories folded into `sub` (the rail writes `sub`). Pure. */
+export function foldCatIntoSub(params: URLSearchParams): URLSearchParams {
+  if (!params.get("cat")) return params;
+  const next = new URLSearchParams(params.toString());
+  const merged = [...new Set([...(next.get("sub") ?? "").split(","), ...(next.get("cat") ?? "").split(",")].filter(Boolean))];
+  next.delete("cat");
+  next.set("sub", merged.join(","));
+  return next;
+}
+
+/** A brand page's own filter sections for one rail slot (services brandRail `slot`; none = before
+ *  Price). Pure. */
+export function attributesForSlot<T extends { railSlot?: string }>(attributes: readonly T[] | undefined, slot: string): T[] {
+  return (attributes ?? []).filter((a) => (a.railSlot ?? "before_price") === slot);
+}

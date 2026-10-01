@@ -259,8 +259,11 @@ export default async function BrandPage({
         ...(source ? { source } : {}),
         ...(priceStyle ? { priceStyle } : {}),
         ...(railSettings.attributes?.length ? { attributeList: railSettings.attributes } : {}),
-        // The band labels' wording is the storefront's data (Settings › Storefront Listings).
-        ...(priceStyle ? { priceBandLabels: listingDisplay.zoey_band_labels } : {}),
+        // The band labels' wording and Zoey's division limit are the storefront's data (Settings ›
+        // Storefront Listings).
+        ...(priceStyle
+          ? { priceBandLabels: listingDisplay.zoey_band_labels, priceBandDivisionLimit: listingDisplay.zoey_band_division_limit }
+          : {}),
         // Zoey's admin option order per field (data captured from Zoey's attribute catalogue).
         ...(railSettings.attributes?.length
           ? {

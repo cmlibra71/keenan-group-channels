@@ -201,3 +201,27 @@ test("component map: only masters holding a products grid change", () => {
   const untouched = { "filter-rail": rail };
   assert.equal(withListingGridMarksAll(untouched), untouched);
 });
+
+
+test("a Zoey price band is one choice: another replaces it, the same clears it, paging resets", async () => {
+  const { togglePriceWindow } = await import("./listing-pending");
+  const a = togglePriceWindow(new URLSearchParams("brand=Waldorf&page=3"), "5000-5999.99");
+  assert.equal(a.get("price"), "5000-5999.99");
+  assert.equal(a.get("page"), null);
+  assert.equal(a.get("brand"), "Waldorf");
+  assert.equal(togglePriceWindow(a, "6000-6999.99").get("price"), "6000-6999.99");
+  assert.equal(togglePriceWindow(a, "5000-5999.99").get("price"), null);
+});
+
+test("an old cat link folds into sub; a page's filters are split by rail slot", async () => {
+  const { foldCatIntoSub, attributesForSlot } = await import("./listing-pending");
+  const f = foldCatIntoSub(new URLSearchParams("cat=839,1243&sub=839&brand=x"));
+  assert.equal(f.get("cat"), null);
+  assert.equal(f.get("sub"), "839,1243");
+  assert.equal(foldCatIntoSub(new URLSearchParams("sub=1")).toString(), "sub=1");
+  const attrs = [{ code: "capacity" }, { code: "series", railSlot: "after_price" }, { code: "type", railSlot: "after_brand" }];
+  assert.deepEqual(attributesForSlot(attrs, "before_price").map((a) => a.code), ["capacity"]);
+  assert.deepEqual(attributesForSlot(attrs, "after_price").map((a) => a.code), ["series"]);
+  assert.deepEqual(attributesForSlot(attrs, "after_brand").map((a) => a.code), ["type"]);
+  assert.deepEqual(attributesForSlot(undefined, "before_price"), []);
+});
