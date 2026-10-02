@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import { draftMode, headers } from "next/headers";
 import Link from "next/link";
-import { getProductBySlug, getProductChannelSeo, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getMemberSavingsPctMap, brandService, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice, getCmsPage, getCmsTemplate } from "@/lib/store";
+import { getProductBySlug, getProductChannelSeo, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getMemberSavingsPctMap, getBrandRowById, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice, getCmsPage, getCmsTemplate } from "@/lib/store";
 import { stripHiddenPrices } from "@keenan/services/price-visibility";
 import type { RenderContext } from "@keenan/services";
 import { getMemberContext, getListingPricing, applyAccountPrices } from "@/lib/member";
@@ -97,7 +97,7 @@ export default async function ProductPage({
     getProductVideos(product.id),
     getRelatedProducts(product.id, product.categoryIds ?? []),
     product.brandId != null
-      ? (brandService.getById(product.brandId) as Promise<{ name?: string | null; slug?: string | null } | null>)
+      ? (getBrandRowById(product.brandId) as Promise<{ name?: string | null; slug?: string | null } | null>)
       : Promise.resolve(null),
   ]);
 

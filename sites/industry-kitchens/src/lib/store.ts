@@ -139,6 +139,8 @@ export const {
   getCategoryById,
   getBrandsForChannel,
   getBrandBySlug,
+  // The shared brand row by id, cached (product pages read it on every view).
+  getBrandRowById,
   getBrandListing,
   getProductReviews,
   getProductAttachments,
