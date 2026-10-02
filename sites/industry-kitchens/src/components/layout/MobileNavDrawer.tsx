@@ -1,25 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Menu, X, ChevronDown, Star } from "lucide-react";
-import {
-  ALL_BRANDS_HREF,
-  flattenTree,
-  itemHref,
-  panelBrandColumn,
-  type MegaBrandLike,
-  type MegaMenuNodeLike,
-  type MegaNavItem,
-} from "@/lib/mega-menu";
-import { ikNavItems } from "@/lib/ik-nav";
-import {
-  DEFAULT_IK_MEGA_MENU_SETTINGS,
-  ikBarHref,
-  ikIsHighlighted,
-  ikPanelGroups,
-  type IkMegaMenuSettings,
-} from "@/lib/ik-mega-panel";
+import { drawerRows, type DrawerRowHead } from "@/lib/nav-model";
+import { useNavData } from "@/lib/nav-data-client";
 
 /**
  * Below xl the nav becomes a hamburger → full-height drawer.
@@ -32,32 +17,27 @@ import {
  * A department expands into its sub-categories plus any information pages
  * tucked inside it; a custom link with children expands into those.
  */
-export function MobileNavDrawer({
-  departments,
-  items,
-  hiddenCategoryIds,
-  brandColumns = {},
-  settings = DEFAULT_IK_MEGA_MENU_SETTINGS,
-}: {
-  departments: MegaMenuNodeLike[];
-  items?: MegaNavItem[];
-  hiddenCategoryIds?: number[];
-  /** Each department's Brands column, as the desktop bar shows it (card HaWBvySC). */
-  brandColumns?: Record<number, MegaBrandLike[]>;
-  /** `channel_settings.mega_menu_settings`, the same the desktop bar reads. */
-  settings?: IkMegaMenuSettings;
-}) {
+export function MobileNavDrawer({ rows }: { rows: DrawerRowHead[] }) {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const navItems = ikNavItems({ departments, items, hiddenCategoryIds, allCategoriesLauncher: settings.allCategoriesLauncher });
-  const byId = flattenTree(departments);
+  // The rows themselves come with the page (labels and links only); what each
+  // expands into is drawn from the menu data, loaded on first open at the latest
+  // (lib/nav-model.ts — it used to ship the whole category tree as props).
+  const { model, load } = useNavData();
+  const childrenByKey = useMemo(
+    () => new Map(model ? drawerRows(model).map((r) => [r.key, r.children]) : []),
+    [model]
+  );
   const close = () => setOpen(false);
 
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          load();
+          setOpen(true);
+        }}
         className="text-zinc-600 transition-colors duration-200 hover:text-zinc-900 xl:hidden"
         aria-label="Open menu"
       >
@@ -78,74 +58,28 @@ export function MobileNavDrawer({
             </div>
 
             <div className="flex-1 overflow-y-auto">
-              {navItems.map((item, i) => {
-                const key = `${item.type}-${item.categoryId ?? item.pageSlug ?? item.url ?? i}`;
-                const dept = item.type === "category" && item.categoryId ? byId.get(item.categoryId) : undefined;
-                if (item.type === "category" && !dept) return null;
-
-                // The desktop panel's own columns (sub-categories + the editor's column links), so the
-                // drawer lists what the drop-down lists: each column heading, then its links.
-                const panel = dept ? ikPanelGroups(dept, item, byId, settings) : { groups: [], extras: [] };
-                const extras = panel.extras;
-                // The same Brands column the desktop drop-down carries: a heading,
-                // the brands, then View all brands (card HaWBvySC).
-                const brandColumn = dept ? panelBrandColumn(item) : null;
-                const brandLinks: { key: string; href: string; label: string; heading?: boolean }[] =
-                  brandColumn && dept
-                    ? [
-                        { key: "bh", href: ALL_BRANDS_HREF, label: brandColumn.label || "Brands", heading: true },
-                        ...(brandColumns[dept.id] ?? []).map((b) => ({
-                          key: `b${b.id}`,
-                          href: `/brands/${b.slug}`,
-                          label: b.name,
-                        })),
-                        { key: "ba", href: ALL_BRANDS_HREF, label: "View all brands" },
-                      ]
-                    : [];
-                const childLinks: { key: string; href: string; label: string; newTab?: boolean; heading?: boolean }[] = [
-                  ...panel.groups.flatMap((g) => [
-                    { key: g.key, href: g.href, label: g.label, newTab: g.newTab, heading: true },
-                    ...g.links.map((l) => ({ key: l.key, href: l.href, label: l.label, newTab: l.newTab })),
-                    ...(g.moreHref ? [{ key: `${g.key}-more`, href: g.moreHref, label: "View all" }] : []),
-                  ]),
-                  ...brandLinks,
-                  ...extras.map((e, j) => ({
-                    key: `e${j}`,
-                    href: itemHref(e, byId),
-                    label: e.label,
-                    newTab: e.newTab,
-                  })),
-                  ...(dept
-                    ? []
-                    : (item.children ?? []).map((c, j) => ({
-                        key: `c${j}`,
-                        href: itemHref(c, byId),
-                        label: c.label,
-                        newTab: c.newTab,
-                      }))),
-                ];
-                const href = ikBarHref(item, byId);
-                // The bar's own rule: the editor's highlight flag, else Clearance as a trailing plain link.
-                const isClearance = ikIsHighlighted(item, href, !dept && !(item.children ?? []).length);
+              {rows.map((row) => {
+                const { key, href, label, newTab, isClearance, hasChildren } = row;
+                const childLinks = childrenByKey.get(key) ?? [];
 
                 return (
                   <div key={key} className="border-b border-zinc-200">
                     <div className="flex items-center">
                       <Link
                         href={href}
-                        target={item.newTab ? "_blank" : undefined}
+                        target={newTab ? "_blank" : undefined}
                         onClick={close}
                         className={`flex flex-1 items-center gap-2 px-4 py-3.5 text-sm font-semibold ${
                           isClearance ? "text-amber-600" : "text-zinc-900"
                         }`}
                       >
                         {isClearance && <Star className="h-4 w-4 fill-current" />}
-                        {item.label}
+                        {label}
                       </Link>
-                      {childLinks.length > 0 && (
+                      {hasChildren && (
                         <button
                           onClick={() => setExpanded(expanded === key ? null : key)}
-                          aria-label={`Expand ${item.label}`}
+                          aria-label={`Expand ${label}`}
                           aria-expanded={expanded === key}
                           className="px-4 py-3.5 text-zinc-600"
                         >

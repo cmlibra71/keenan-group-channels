@@ -4,12 +4,14 @@ import { Search } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
-import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, getHeaderNav, getMegaMenuHidden, drawEntryService, CHANNEL_ID } from "@/lib/store";
+import { getActiveSubscriptionForContact, getFeatureFlag, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 import { HeaderPanels } from "./HeaderPanels";
 import { MegaMenu } from "./MegaMenu";
-import { getMegaMenuBrandColumns } from "@/lib/mega-menu-brands";
 import { MobileNavDrawer } from "./MobileNavDrawer";
+import { loadNavData, NAV_DATA_PATH } from "@/lib/nav-data";
+import { drawerRowHeads, navModel } from "@/lib/nav-model";
+import { NavDataProvider } from "@/lib/nav-data-client";
 import { SearchTypeahead } from "../search/SearchTypeahead";
 
 /**
@@ -23,19 +25,12 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
   // wrong loading the site"), and it re-runs on every refresh()
   // from a cart/quote mutation. Degrade gracefully (empty badge / nav) on a
   // transient DB failure instead of taking down the whole storefront.
-  const [cart, quote, megaMenu, headerNav, hiddenDepartments] = await Promise.all([
+  // loadNavData degrades its own reads the same way (an empty menu, never a throw).
+  const [cart, quote, nav] = await Promise.all([
     getCart().catch(() => null),
     getQuote().catch(() => null),
-    getMegaMenu().catch(() => ({ departments: [], featured: {} })),
-    getHeaderNav().catch(() => []),
-    getMegaMenuHidden().catch(() => []),
+    loadNavData(),
   ]);
-  // The drop-downs' Brands columns (card HaWBvySC). Free unless somebody has
-  // added one in Storefront > Navigation; a failure drops the brands, never the
-  // header.
-  const brandColumns = await getMegaMenuBrandColumns(headerNav, megaMenu.departments).catch(
-    () => ({})
-  );
   const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   // QuoteService.getWithItems types its items loosely (Record<string,unknown>) unlike
   // CartService — precise typing there is a separate cleanup. quantity is runtime-correct.
@@ -73,6 +68,9 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
 
   return (
     <>
+      {/* Loads the drop-downs' and drawer's contents in the browser, once per menu
+          version (lib/nav-model.ts). Renders no element of its own. */}
+      <NavDataProvider src={`${NAV_DATA_PATH}?v=${nav.version}`}>
       <header className="sticky top-0 z-[100]">
         {/* Masthead — brand green */}
         <div className="bg-brand">
@@ -83,12 +81,7 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
                 box below (card bf2w6JFe) the bar settles at 166px on desktop
                 instead of the 331px Tim called too large. */}
             <div className="flex min-h-[72px] items-center gap-5 py-2 lg:min-h-[78px] lg:gap-6">
-              <MobileNavDrawer
-                departments={megaMenu.departments}
-                items={headerNav}
-                hiddenCategoryIds={hiddenDepartments}
-                brandColumns={brandColumns}
-              />
+              <MobileNavDrawer rows={drawerRowHeads(navModel(nav.data))} />
 
               {/* Logo — the portal's Storefront > Logo setting when one is set
                   (same shape as Industry Kitchens), else the bundled white
@@ -155,14 +148,9 @@ export async function Header({ storeName, logoUrl, logoAlt }: { storeName: strin
 
         {/* Department nav — every department by default, in the editor's order,
             minus the ones switched off (card 9wau4Tx9) */}
-        <MegaMenu
-          departments={megaMenu.departments}
-          featured={megaMenu.featured}
-          items={headerNav}
-          hiddenCategoryIds={hiddenDepartments}
-          brandColumns={brandColumns}
-        />
+        <MegaMenu data={nav.data} />
       </header>
+      </NavDataProvider>
 
       {/* The header's slide-out panels — rendered ONCE, outside <header>, so
           exactly one is ever visible and none inherits a breakpoint-hidden
