@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import { draftMode, headers } from "next/headers";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsPage, getCmsTemplate, getSiteConfig, getChannelSetting, applyGroupPrices, resolveViewerPricingGroupId } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, getBrandRowById, CHANNEL_ID, getProductBreadcrumbs, getCmsPage, getCmsTemplate, getSiteConfig, getChannelSetting, applyGroupPrices, resolveViewerPricingGroupId } from "@/lib/store";
 import { usesParentPrice } from "@keenan/services/catalog-price";
 import { stripHiddenPrices } from "@keenan/services/price-visibility";
 import type { Metadata } from "next";
@@ -129,48 +129,28 @@ export default async function ProductPage({
   // Per-account product prices override EVERY other price. The cached product row is shared by all
   // shoppers, so the account's price is overlaid onto a copy at read time (never into the cache).
   const accountId = await getAccountId();
-  // An account price must not put a figure back on a product whose price is HIDDEN: the row is
-  // re-hidden AFTER the overlay, so no price is serialised into this page for it (audit S19).
-  const [product] = (await applyAccountPrices([cachedProduct])).map(stripHiddenPrices);
+  // The reads below do not depend on one another, so they go together rather than one after the
+  // other (measured 2026-10-02: 8–9 database round trips back to back before the page could render).
+  const [[product], [reviews, attachmentsRaw, videos, relatedRaw, brandRow], seoRow, breadcrumbs, seoSiteConfig] =
+    await Promise.all([
+      // An account price must not put a figure back on a product whose price is HIDDEN: the row is
+      // re-hidden AFTER the overlay, so no price is serialised into this page for it (audit S19).
+      applyAccountPrices([cachedProduct]).then((rows) => rows.map(stripHiddenPrices)),
+      productReads(cachedProduct),
+      guestPricedRow(cachedProduct),
+      // Breadcrumb trail scoped to this channel's own category tree. A product's
+      // category assignments can span other channels' trees, so resolving through
+      // the channel guarantees every crumb links to a category page that exists here.
+      getProductBreadcrumbs(cachedProduct.id) as Promise<{ id: number; name: string; slug: string }[]>,
+      getSiteConfig(),
+    ]);
   const priceHidden = product.hidePrice === true;
 
-  // Reviews are PROJECTED BEFORE THEY ARE AWAITED. `getProductReviews` returns the
-  // whole `product_reviews` row — `author_email` (stamped on every signed-in
-  // reviewer since card qxVqy5Dn), `contact_id`, `customer_id`, the moderation
-  // status — and a dev build serialises every AWAITED value into the page, so a
-  // cast or a `.map()` after the await strips nothing: the raw row is already in
-  // the flight payload by then (measured on this page 2026-09-16, review id 89's
-  // whole row with `author_email` and `contact_id` in it). Projecting on the
-  // PROMISE means nothing unprojected is ever awaited here, and the rows handed to
-  // `ProductTabs` ("use client") and to `RenderContext.extras` carry only the six
-  // fields this page renders. (PRODUCT-BRIEF §3: on a customer-facing surface,
-  // load only what you render; register rule owned by card BIig1Zo1.)
-  const [reviews, attachmentsRaw, videos, relatedRaw, brandRow] = await Promise.all([
-    getProductReviews(product.id).then(publicReviews),
-    getProductAttachments(product.id),
-    getProductVideos(product.id),
-    getRelatedProducts(product.id, product.categoryIds ?? []),
-    product.brandId != null
-      ? (brandService.getById(product.brandId) as Promise<{ name: string | null; metafields: ProductBrandMetafields | null } | null>)
-      : Promise.resolve(null),
-  ]);
-  // Related/upsell rail: hidden products are dropped at the SOURCE, so they cannot reach the grid,
-  // the builder payload or any serialized props.
-  const relatedProducts = await applyAccountPrices(await applyCatalogScope(relatedRaw));
   const brandMeta = (brandRow?.metafields ?? {}) as ProductBrandMetafields;
   const brandName = brandRow?.name ?? undefined;
 
-  // Product structured data (root cause `product-seo-head`). Built from the SHARED product row,
-  // not the account-priced copy: the offer is the price a visitor with no account sees, and a
-  // quote-only / Call for Price product gets no offer at all (lib/product-seo.ts).
-  // The offer is what a GUEST pays — on this storefront that is the NOT LOGGED IN price list
-  // (customer-group pricing, services `groupPricing.ts`), exactly what the page shows a crawler.
-  // Priced onto a copy of the shared row; the viewer's own group never reaches the markup.
-  const guestPricingGroupId = await resolveViewerPricingGroupId({ accountId: null, contactId: null }).catch(() => null);
-  const [seoRow] = guestPricingGroupId
-    ? await applyGroupPrices([cachedProduct], guestPricingGroupId)
-    : [cachedProduct];
-  const seoBase = siteBaseUrl((await getSiteConfig()).site?.url);
+  // Product structured data (root cause `product-seo-head`), priced by `guestPricedRow` above.
+  const seoBase = siteBaseUrl(seoSiteConfig.site?.url);
   const productUrl = productCanonicalUrl(cachedProduct.urlPath || slug, seoBase);
   const jsonLd = productJsonLd({
     name: cachedProduct.name,
@@ -201,15 +181,6 @@ export default async function ProductPage({
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }} />
     </>
   );
-
-  // Breadcrumb trail scoped to this channel's own category tree. A product's
-  // category assignments can span other channels' trees, so resolving through
-  // the channel guarantees every crumb links to a category page that exists here.
-  const breadcrumbs = (await getProductBreadcrumbs(product.id)) as {
-    id: number;
-    name: string;
-    slug: string;
-  }[];
 
   // Fetch member pricing if feature is enabled
   let memberPrice: number | null = null;
@@ -339,6 +310,12 @@ export default async function ProductPage({
       </>
     );
   }
+
+  // Related/upsell rail: hidden products are dropped at the SOURCE, so they cannot reach the grid,
+  // the builder payload or any serialized props. Only the CMS-template and legacy paths below draw
+  // this rail — the node path prices its own inside `getProductPageData` — so it is priced HERE,
+  // after the node branch, rather than on every view (3 round trips the node path never used).
+  const relatedProducts = await applyAccountPrices(await applyCatalogScope(relatedRaw));
 
   // ═══ CMS product TEMPLATE path (kill switch: flag off → legacy) ═══
   // The whole page as a block document; this route stays the data owner — the
@@ -536,6 +513,47 @@ export default async function ProductPage({
       {belowDetail.length > 0 && <BlockRenderer blocks={belowDetail} draft={draft} />}
     </div>
   );
+}
+
+/**
+ * The product's own cached reads, together.
+ *
+ * Reviews are PROJECTED BEFORE THEY ARE AWAITED. `getProductReviews` returns the
+ * whole `product_reviews` row — `author_email` (stamped on every signed-in
+ * reviewer since card qxVqy5Dn), `contact_id`, `customer_id`, the moderation
+ * status — and a dev build serialises every AWAITED value into the page, so a
+ * cast or a `.map()` after the await strips nothing: the raw row is already in
+ * the flight payload by then (measured on this page 2026-09-16, review id 89's
+ * whole row with `author_email` and `contact_id` in it). Projecting on the
+ * PROMISE means nothing unprojected is ever awaited here, and the rows handed to
+ * `ProductTabs` ("use client") and to `RenderContext.extras` carry only the six
+ * fields this page renders. (PRODUCT-BRIEF §3: on a customer-facing surface,
+ * load only what you render; register rule owned by card BIig1Zo1.)
+ */
+function productReads(product: { id: number; categoryIds?: number[] | null; brandId?: number | null }) {
+  return Promise.all([
+    getProductReviews(product.id).then(publicReviews),
+    getProductAttachments(product.id),
+    getProductVideos(product.id),
+    getRelatedProducts(product.id, product.categoryIds ?? []),
+    product.brandId != null
+      ? (getBrandRowById(product.brandId) as Promise<{ name: string | null; metafields: ProductBrandMetafields | null } | null>)
+      : Promise.resolve(null),
+  ]);
+}
+
+/**
+ * The SHARED product row priced for the JSON-LD offer (root cause `product-seo-head`). Not the
+ * account-priced copy: the offer is the price a visitor with no account sees, and a
+ * quote-only / Call for Price product gets no offer at all (lib/product-seo.ts).
+ * The offer is what a GUEST pays — on this storefront that is the NOT LOGGED IN price list
+ * (customer-group pricing, services `groupPricing.ts`), exactly what the page shows a crawler.
+ * Priced onto a copy of the shared row; the viewer's own group never reaches the markup.
+ */
+async function guestPricedRow<T extends { id: number }>(cachedProduct: T): Promise<T> {
+  const guestPricingGroupId = await resolveViewerPricingGroupId({ accountId: null, contactId: null }).catch(() => null);
+  const [seoRow] = guestPricingGroupId ? await applyGroupPrices([cachedProduct], guestPricingGroupId) : [cachedProduct];
+  return seoRow;
 }
 
 /** A review row as the SHOPPER may see it — the six fields this page renders. */

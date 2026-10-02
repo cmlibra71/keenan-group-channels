@@ -16,7 +16,7 @@ import { CHANNEL_ID } from "@/lib/channel";
 import { getListingDisplay } from "@/lib/listing-display";
 import { getMemberContext, applyAccountPrices, getPricingGroupId } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
-import { attachBrandLogos } from "@/lib/brand-logo-fallback";
+import { attachBrandLogosAlongside } from "@/lib/brand-logo-fallback";
 import type { AttributeSelections } from "@keenan/services/services";
 import {
   composeCategoryPagePayload,
@@ -243,12 +243,16 @@ export async function renderCategoryNodeBranch({
   // configurable-from-price (services #182): AFTER the per-viewer price overlays, a configurable
   // row gets its "Starting From" list/sale, which the `product-card` enrichment reads — without it
   // a $0-parent configurable tile says "Call for Price".
-  const scoped = (await attachBrandLogos(
-    await attachFromPrices(await applyAccountPrices(await applyCatalogScope(products as { id: number }[])), {
-      // The viewer's customer-group price list prices each configurable's children (Industry
-      // Kitchens); null on a channel without it.
-      pricingGroupId: await getPricingGroupId(),
-    })
+  // The logo read runs BESIDE the price overlays — it is keyed by product id alone.
+  const visible = await applyCatalogScope(products as { id: number }[]);
+  const scoped = (await attachBrandLogosAlongside(
+    visible,
+    (async () =>
+      attachFromPrices(await applyAccountPrices(visible), {
+        // The viewer's customer-group price list prices each configurable's children (Industry
+        // Kitchens); null on a channel without it.
+        pricingGroupId: await getPricingGroupId(),
+      }))()
   )) as unknown as CategoryGridProduct[];
   const memberCtx = await getMemberContext().catch(() => null);
   // GST facts for the price-block masters: the composer emits both ex/inc

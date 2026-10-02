@@ -134,6 +134,8 @@ export const {
   getCategoryById,
   getBrandsForChannel,
   getBrandBySlug,
+  // The shared brand row by id, cached (product pages read it on every view).
+  getBrandRowById,
   getBrandListing,
   getProductReviews,
   getProductAttachments,
@@ -421,6 +423,19 @@ export const getChannelSettings = async (
 /** The channel's enabled CMS function library (name → source), cached with the settings above. */
 export const getEnabledCmsFunctions = (): Promise<Record<string, string>> =>
   _renderConfig.getEnabledCmsFunctions();
+
+// The home hero's "N products · M brands" — the same two counts for every visitor, and the brand
+// one is a 200 ms join over every product on the channel (measured 2026-10-02). Held 300 s, the
+// listings' own window, and dropped by every product save's purge.
+export const getCatalogCounts = unstable_cache(
+  async (): Promise<[number, number]> =>
+    Promise.all([
+      productChannelAssignmentService.countForChannel(CHANNEL_ID),
+      productChannelAssignmentService.countBrandsForChannel(CHANNEL_ID),
+    ]),
+  [`catalog-counts-${CHANNEL_ID}`],
+  { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "products"] }
+);
 
 // CMS-editable footer content (the `footer` channel setting). Empty object →
 // the Footer component falls back to DEFAULT_FOOTER (current content).
