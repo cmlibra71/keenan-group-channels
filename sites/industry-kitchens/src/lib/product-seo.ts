@@ -26,6 +26,7 @@
  */
 
 import { resolveCatalogPrice, resolveFromPrice, type MoneyLike, type PriceRow } from "@keenan/services/catalog-price";
+import { exprPreview } from "@keenan/services/builder";
 
 export const STORE_NAME = "Industry Kitchens";
 export const PRODUCT_META_MAX = 160;
@@ -63,9 +64,26 @@ export interface ProductSeoSource {
   description?: unknown;
 }
 
-/** "<page_title or name> | Industry Kitchens" — the old site's pattern. */
-export function productPageTitle(product: ProductSeoSource): string {
-  const base = plainText(product.pageTitle) || plainText(product.name) || "Product";
+/**
+ * The product page <title>.
+ *
+ * `expression` is the channel's `product_title_expression` (Settings › Storefront Listings), a CMS
+ * expression over `page_title`, `name` and `store_name` — Industry Kitchens stores `page_title || name`,
+ * because the old site printed `products.page_title` VERBATIM (round-4 re-audit: 78 of 78 captured
+ * pages, typos and all). An empty, invalid or blank-valued expression falls back to the built-in
+ * "<page_title or name> | Industry Kitchens" (store name appended only when absent).
+ */
+export function productPageTitle(product: ProductSeoSource, expression?: string | null): string {
+  const pageTitle = plainText(product.pageTitle);
+  const name = plainText(product.name);
+  const expr = typeof expression === "string" ? expression.trim() : "";
+  if (expr) {
+    const vars: Record<string, string> = { page_title: pageTitle, name, store_name: STORE_NAME };
+    const r = exprPreview(expr, (path) => vars[path] ?? "");
+    const value = r.ok && (typeof r.value === "string" || typeof r.value === "number") ? plainText(String(r.value)) : "";
+    if (value) return value;
+  }
+  const base = pageTitle || name || "Product";
   return STORE_NAME_RE.test(base) ? base : `${base} | ${STORE_NAME}`;
 }
 
