@@ -34,6 +34,7 @@
 // customer's picks travel with whatever button they press").
 // ============================================================================
 
+import { createContext, useContext } from "react";
 import { useProductPurchase } from "@keenan/services/product-page";
 import type { ProductAddonGroup } from "@keenan/services/product-addons";
 import { Price } from "@/components/ui/Price";
@@ -117,6 +118,34 @@ function OptionLabel({
   );
 }
 
+/**
+ * The words this block prints of its own (round-4 parity: the old Industry Kitchens page printed no
+ * "Optional extras" heading and no "Tick what you need" line). Node props on the `product-addons`
+ * node of the product template; unset = today's words, an EMPTY string = print nothing.
+ */
+export interface ProductAddonsLabels {
+  extrasHeading?: string | null;
+  extrasHelp?: string | null;
+  chooseOne?: string | null;
+  chooseMany?: string | null;
+}
+const DEFAULT_ADDON_LABELS = {
+  extrasHeading: "Optional extras",
+  extrasHelp: "Tick what you need — the price updates as you go.",
+  chooseOne: "Choose one",
+  chooseMany: "Choose at least one",
+} as const;
+const AddonLabelsContext = createContext<Required<{ [K in keyof ProductAddonsLabels]: string }>>({ ...DEFAULT_ADDON_LABELS });
+function resolveAddonLabels(labels: ProductAddonsLabels | undefined) {
+  const pick = (v: string | null | undefined, d: string) => (typeof v === "string" ? v : d);
+  return {
+    extrasHeading: pick(labels?.extrasHeading, DEFAULT_ADDON_LABELS.extrasHeading),
+    extrasHelp: pick(labels?.extrasHelp, DEFAULT_ADDON_LABELS.extrasHelp),
+    chooseOne: pick(labels?.chooseOne, DEFAULT_ADDON_LABELS.chooseOne),
+    chooseMany: pick(labels?.chooseMany, DEFAULT_ADDON_LABELS.chooseMany),
+  };
+}
+
 function AddonGroup({
   group,
   chosen,
@@ -147,6 +176,7 @@ function AddonGroup({
   const noneRow = optionalRadioNoneRow(group, chosen, optionalRadioNone);
   const unanswered = single && group.required && chosen.length === 0;
   const money = useAddonMoney();
+  const labels = useContext(AddonLabelsContext);
   // A <select> can hold no anchor, so a dropdown group's link is rendered UNDER the list, for
   // the choice currently held. Without this a group the author set to Dropdown offered no link
   // at all, and the matrix asks for the link and the three controls as one row.
@@ -160,20 +190,20 @@ function AddonGroup({
             it into allOptionsSelected), so the reason has to be ON THE SCREEN — a
             disabled control with no wording next to it is exactly what
             sf-product-page forbids. */}
-        {group.required && single ? (
+        {group.required && single && labels.chooseOne ? (
           <span
             className={`ml-2 text-xs font-normal ${
               unanswered ? "text-red-700" : "text-text-muted"
             }`}
           >
-            Choose one
+            {labels.chooseOne}
           </span>
         ) : null}
         {/* A required TICK-BOX group (Zoey's required "multiple", e.g. Hallde "Free Discs
             Inlude"): marked as required; the provider keeps the last tick once one is ticked.
             A group with no pre-ticked answer is marked but not enforced (known limitation). */}
-        {!single && (group as { atLeastOne?: true }).atLeastOne === true ? (
-          <span className="ml-2 text-xs font-normal text-text-muted">Choose at least one</span>
+        {!single && (group as { atLeastOne?: true }).atLeastOne === true && labels.chooseMany ? (
+          <span className="ml-2 text-xs font-normal text-text-muted">{labels.chooseMany}</span>
         ) : null}
       </legend>
 
@@ -258,7 +288,10 @@ function AddonGroup({
 export function ProductAddons({
   optionalRadioNone = false,
   zoeyGroups = false,
+  labels,
 }: {
+  /** This block's own words, from the template node (see `ProductAddonsLabels`). */
+  labels?: ProductAddonsLabels;
   /**
    * Draw Zoey's "None" answer at the top of every OPTIONAL radio group, ticked while nothing
    * else is (IK parity: Hatco GRAH "Optional Controller" reads None / Built-in Control Unit /
@@ -324,9 +357,10 @@ export function ProductAddons({
   const requiredGroups = zoeyGroups ? groups.filter((g) => g.required) : [];
   const optionalGroups = zoeyGroups ? groups.filter((g) => !g.required) : groups;
   if (questions.length === 0 && groups.length === 0 && quoteExtras.length === 0) return null;
+  const words = resolveAddonLabels(labels);
 
   return (
-    <>
+    <AddonLabelsContext.Provider value={words}>
       {questions.length > 0 ? (
         <div
           className="mt-5 rounded-[12px] border border-border bg-surface-primary px-4 py-3"
@@ -384,12 +418,12 @@ export function ProductAddons({
               onToggle={(optionKey, on) => purchase.toggleAddon(group.key, optionKey, on)}
             />
           ))}
-          {optionalGroups.length > 0 ? (
+          {optionalGroups.length > 0 && (words.extrasHeading || words.extrasHelp) ? (
             <>
-              <p className={`${requiredGroups.length > 0 ? "mt-4 " : ""}text-sm font-semibold text-text-primary`}>Optional extras</p>
-              <p className="mt-0.5 text-xs text-text-secondary">
-                Tick what you need — the price updates as you go.
-              </p>
+              {words.extrasHeading ? (
+                <p className={`${requiredGroups.length > 0 ? "mt-4 " : ""}text-sm font-semibold text-text-primary`}>{words.extrasHeading}</p>
+              ) : null}
+              {words.extrasHelp ? <p className="mt-0.5 text-xs text-text-secondary">{words.extrasHelp}</p> : null}
             </>
           ) : null}
 
@@ -414,6 +448,6 @@ export function ProductAddons({
           ) : null}
         </div>
       ) : null}
-    </>
+    </AddonLabelsContext.Provider>
   );
 }

@@ -11,6 +11,7 @@ import { getSession } from "@/lib/auth";
 import { getAccountId, applyAccountPrices } from "@/lib/member";
 import { assertProductVisible, applyCatalogScope, isProductVisibleToViewer } from "@/lib/catalog-scope";
 import { siteBaseUrl } from "@/lib/seo";
+import { getListingDisplay } from "@/lib/listing-display";
 import {
   jsonLdScript,
   productCanonicalUrl,
@@ -65,7 +66,8 @@ export async function generateMetadata({
   if (!(await isProductVisibleToViewer(product.id))) return { title: "Product not found" };
   const { site } = await getSiteConfig();
   const base = siteBaseUrl(site?.url);
-  const title = productPageTitle(product);
+  // The channel's title expression (Settings › Storefront Listings); empty = the built-in pattern.
+  const title = productPageTitle(product, (await getListingDisplay()).product_title_expression);
   const description = productMetaDescription(product);
   const url = productCanonicalUrl(product.urlPath || slug, base);
   const image = productMainImage(product.images, base);

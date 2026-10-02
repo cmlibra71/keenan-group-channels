@@ -44,6 +44,16 @@ test("a page_title without the store name gets it appended, never twice", () => 
   assert.equal(productPageTitle({ name: "x", pageTitle: "Buy at Industry Kitchens" }), "Buy at Industry Kitchens");
 });
 
+test("title expression (channel setting): page_title verbatim, name when empty; bad or blank falls back", () => {
+  const expr = "page_title || name";
+  assert.equal(productPageTitle({ name: "x", pageTitle: "Rational iCombi Pro| Industy Kitchens" }, expr), "Rational iCombi Pro| Industy Kitchens");
+  assert.equal(productPageTitle({ name: "Frymate Filter", pageTitle: "  " }, expr), "Frymate Filter");
+  assert.equal(productPageTitle({ name: "Hatco GRAH", pageTitle: "Hatco GRAH Heat Lamp" }, 'page_title + " | " + store_name'), "Hatco GRAH Heat Lamp | Industry Kitchens");
+  assert.equal(productPageTitle({ name: "x", pageTitle: "Custom SEO title" }, "page_title ||"), "Custom SEO title | Industry Kitchens", "an invalid expression falls back");
+  assert.equal(productPageTitle({ name: "x", pageTitle: "Custom SEO title" }, ""), "Custom SEO title | Industry Kitchens", "no setting = today's title");
+  assert.equal(productPageTitle({ name: "", pageTitle: "" }, expr), "Product | Industry Kitchens", "a blank result falls back");
+});
+
 test("meta description: the product's own, else a clean excerpt, else a sentence naming the product", () => {
   assert.equal(productMetaDescription({ metaDescription: "  Own <b>words</b>  " }), "Own words");
   const long = `<p>${"Heavy duty stainless steel ".repeat(20)}</p>`;
