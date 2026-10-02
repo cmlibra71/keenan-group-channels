@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { createRequire } from "node:module";
 import path from "node:path";
 import {
   buildLiveBuilderCss,
@@ -33,8 +32,11 @@ import {
 // alias `tailwind-builder-node` (root package.json) so the site's own
 // Tailwind can move independently. It is loaded through a runtime require so
 // nothing is bundled and a published page never touches it; if it cannot be
-// loaded (an image without it) the draft falls back to the published sheet
-// alone — exactly the behaviour before this existed.
+// loaded the draft falls back to the published sheet alone — exactly the
+// behaviour before this existed. That is the case in the standalone production
+// image today (the runtime require is not traced into it), so on the live site
+// a draft preview still shows only published classes; local builds (`next
+// build && next start` with full node_modules, the parity harness) compile.
 //
 // Draft-only. Never called for a published render.
 // ============================================================================
@@ -53,6 +55,9 @@ function loadCompiler(): Promise<{ compile: CompileFn; base: string } | null> {
   if (!loader) {
     loader = (async () => {
       try {
+        // Through process.getBuiltinModule so the bundler neither traces nor
+        // warns about this require: it is meant to happen at runtime only.
+        const { createRequire } = process.getBuiltinModule("node:module") as typeof import("node:module");
         const req = createRequire(path.join(process.cwd(), "package.json"));
         // The package exports no ./package.json — find its folder from the entry.
         let base = path.dirname(req.resolve(ALIAS));
@@ -109,7 +114,10 @@ export async function draftBuilderCss(input: {
   }
 }
 
-/** Short content hash — the `href` React dedupes/hoists the <style> by. */
+/** Short content hash — the `href` React dedupes/hoists the <style> by. React
+ *  hoists it into <head> right after the published sheet's <link> and renders it
+ *  as `<style data-precedence="kg-builder" data-href="kg-draft-…">` — the marker
+ *  an audit can look for to prove a draft render compiled its own classes. */
 export function draftCssId(css: string): string {
   return "kg-draft-" + createHash("sha256").update(css).digest("hex").slice(0, 16);
 }

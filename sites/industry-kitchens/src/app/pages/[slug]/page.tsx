@@ -137,7 +137,7 @@ export default async function ContentPage({
         <>
           <BuilderCssLink css={builderCss} />
           {draftCss ? (
-            <style id="kg-builder-draft-css" href={draftCssId(draftCss)} precedence="kg-builder">
+            <style href={draftCssId(draftCss)} precedence="kg-builder">
               {draftCss}
             </style>
           ) : null}
