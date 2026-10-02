@@ -11,7 +11,7 @@ import { wishlistWord } from "@/lib/wishlist/wishlist-copy";
 import { useAddToWishlist } from "./use-add-to-wishlist";
 
 export function WishlistTileLink(props: Record<string, unknown>) {
-  const { add, pending, error } = useAddToWishlist();
+  const { add, pending, error } = useAddToWishlist(wishlistWord(props, "label_error"));
   const id = typeof props.productId === "number" ? props.productId : Number(props.productId);
   const label = wishlistWord(props, "label_add");
   if (!label || !Number.isInteger(id) || id <= 0) return null;

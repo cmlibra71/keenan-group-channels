@@ -29,6 +29,8 @@ export interface WishlistItemsProps extends Record<string, unknown> {
   initialItems: WishlistLine[];
   /** `?added=<item id>` — the line the page was opened to announce. */
   addedItemId: number | null;
+  /** Told the line count after every change, so the master's Show-ifs (`wishlist.count`) follow. */
+  onCountChange?: (count: number) => void;
 }
 
 type Draft = { quantity: string; comment: string };
@@ -53,6 +55,10 @@ export function WishlistItems(props: WishlistItemsProps) {
   const { setCartCount, setQuoteCount } = useCartQuoteCounts();
   const { open } = useHeaderPanels();
   const claimed = useRef(false);
+  const { onCountChange } = props;
+  useEffect(() => {
+    onCountChange?.(items.length);
+  }, [items.length, onCountChange]);
 
   // The add a guest asked for before signing in — claimed once, by POST, after first paint.
   useEffect(() => {
@@ -102,7 +108,8 @@ export function WishlistItems(props: WishlistItemsProps) {
       try {
         await fn();
       } catch {
-        setNotice({ tone: "error", text: "Something went wrong. Please try again." });
+        const failed = wishlistWord(props, "label_error");
+        setNotice(failed ? { tone: "error", text: failed } : null);
       }
     });
   };

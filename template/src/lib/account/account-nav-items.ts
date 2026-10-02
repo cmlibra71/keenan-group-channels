@@ -39,10 +39,11 @@ export interface AccountNavFlags {
    */
   statementVisible?: boolean;
   /**
-   * The wishlist (2026-10-02): the channel setting `wishlist_enabled`. Absent means no, so a store
-   * without the feature never shows the item (Chefs Depot).
+   * The wishlist item's label — the CMS word (`label_nav` on the channel's `account-wishlist`
+   * master), passed only while the channel's `wishlist_enabled` is on. Absent/empty = no item, so a
+   * store without the feature (Chefs Depot) never shows it and no label is written in code.
    */
-  wishlistEnabled?: boolean;
+  wishlistLabel?: string | null;
 }
 
 /**
@@ -61,8 +62,8 @@ export function buildAccountNavItems(flags: AccountNavFlags): AccountNavItem[] {
     { key: "contact", label: "Contact your rep", href: "/account/contact" },
   ];
 
-  if (flags.wishlistEnabled) {
-    items.push({ key: "wishlist", label: "My Wishlist", href: "/account/wishlist" });
+  if (flags.wishlistLabel && flags.wishlistLabel.trim()) {
+    items.push({ key: "wishlist", label: flags.wishlistLabel.trim(), href: "/account/wishlist" });
   }
 
   if (flags.subscriptionsEnabled) {

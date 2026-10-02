@@ -141,7 +141,9 @@ test("a sibling route with a shared prefix is not marked current", () => {
 test("the wishlist item appears only where the store has the wishlist, under Contact your rep", () => {
   const off = buildAccountNavItems(ALL_ON).map((i) => i.key);
   assert.ok(!off.includes("wishlist"), "absent flag = no item");
-  const on = buildAccountNavItems({ ...ALL_ON, wishlistEnabled: true });
+  assert.ok(!buildAccountNavItems({ ...ALL_ON, wishlistLabel: "  " }).some((i) => i.key === "wishlist"), "blank label = no item");
+  const on = buildAccountNavItems({ ...ALL_ON, wishlistLabel: "Saved for later" });
+  assert.equal(on.find((i) => i.key === "wishlist")?.label, "Saved for later", "the CMS word, not a coded one");
   const keys = on.map((i) => i.key);
   assert.equal(keys.indexOf("wishlist"), keys.indexOf("contact") + 1);
   assert.equal(on.find((i) => i.key === "wishlist")?.href, "/account/wishlist");

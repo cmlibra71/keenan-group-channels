@@ -1,5 +1,6 @@
 import { cache } from "react";
-import { getFeatureFlag } from "@/lib/store";
+import { getFeatureFlag, getComponents } from "@/lib/store";
+import { accountWishlistNavLabel } from "@/lib/wishlist/wishlist-copy";
 import { buildAccountNavItems } from "@/lib/account/account-nav-items";
 import { readStatementAccess } from "@/lib/account/statement-visibility";
 import { AccountNav } from "./AccountNav";
@@ -32,7 +33,12 @@ export const readAccountNavFlags = cache(async () => {
     getFeatureFlag("partner_offers_enabled"),
     getFeatureFlag("wishlist_enabled"),
   ]);
-  return { subscriptionsEnabled, drawsEnabled, partnerOffersEnabled, wishlistEnabled };
+  // The wishlist item's words are CMS data (`label_nav` on the `account-wishlist` master); the
+  // component library is read only on a channel with the wishlist switched on.
+  const wishlistLabel = wishlistEnabled
+    ? accountWishlistNavLabel((await getComponents().catch(() => ({})) as Record<string, unknown>)["account-wishlist"])
+    : null;
+  return { subscriptionsEnabled, drawsEnabled, partnerOffersEnabled, wishlistLabel };
 });
 
 export async function AccountShell({ children }: { children: React.ReactNode }) {

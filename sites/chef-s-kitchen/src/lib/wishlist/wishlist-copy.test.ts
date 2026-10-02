@@ -20,3 +20,17 @@ test("placeholders fill as text; unknown ones are left visible", () => {
   assert.equal(fillWishlistWord("{prodcut} added", { product: "X" }), "{prodcut} added");
   assert.equal(fillWishlistWord("<b>{product}</b>", { product: "<script>" }), "<b><script></b>", "a plain string — React escapes it");
 });
+
+import { accountWishlistNavLabel } from "./wishlist-copy.ts";
+test("the account-menu label is the master's label_nav prop, else none", () => {
+  const master = (label?: unknown) => ({
+    v: 1,
+    root: { id: "r", kind: "element", tag: "div", children: [{ id: "h", kind: "element", tag: "h1" }, { id: "n", kind: "component", componentKey: "wishlist-items", props: label === undefined ? {} : { label_nav: label } }] },
+  });
+  assert.equal(accountWishlistNavLabel(master({ kind: "static", value: " My Wishlist " })), "My Wishlist");
+  assert.equal(accountWishlistNavLabel(master()), null);
+  assert.equal(accountWishlistNavLabel(master({ kind: "static", value: "  " })), null);
+  assert.equal(accountWishlistNavLabel(master({ kind: "binding", path: "x" })), null, "only static words");
+  assert.equal(accountWishlistNavLabel(null), null);
+  assert.equal(accountWishlistNavLabel(undefined), null);
+});

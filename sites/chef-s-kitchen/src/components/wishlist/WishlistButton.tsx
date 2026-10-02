@@ -16,7 +16,7 @@ import { useAddToWishlist } from "./use-add-to-wishlist";
 
 export function WishlistButton(props: Record<string, unknown>) {
   const purchase = useProductPurchaseOptional();
-  const { add, pending, error } = useAddToWishlist();
+  const { add, pending, error } = useAddToWishlist(wishlistWord(props, "label_error"));
   const explicit = typeof props.productId === "number" ? props.productId : Number(props.productId);
   const productId = Number.isInteger(explicit) && explicit > 0 ? explicit : Number(purchase?.product?.id);
   const label = wishlistWord(props, "label_add");

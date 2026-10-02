@@ -17,10 +17,11 @@ import { ACCOUNT_WISHLIST_NATIVE, ACCOUNT_WISHLIST_TREE } from "@/builder/wishli
 import { WishlistItems } from "./WishlistItems";
 
 /** The rows the page was rendered with, read by the native below. */
-const WishlistDataCtx = React.createContext<{ items: WishlistLine[]; addedItemId: number | null }>({
-  items: [],
-  addedItemId: null,
-});
+const WishlistDataCtx = React.createContext<{
+  items: WishlistLine[];
+  addedItemId: number | null;
+  onCountChange?: (count: number) => void;
+}>({ items: [], addedItemId: null });
 
 /**
  * The native, as ONE stable component reading the rows from context. It must not be a closure
@@ -29,8 +30,8 @@ const WishlistDataCtx = React.createContext<{ items: WishlistLine[]; addedItemId
  * lose what the claim just announced.
  */
 function WishlistItemsNative(props: Record<string, unknown>) {
-  const { items, addedItemId } = React.useContext(WishlistDataCtx);
-  return <WishlistItems {...props} initialItems={items} addedItemId={addedItemId} />;
+  const { items, addedItemId, onCountChange } = React.useContext(WishlistDataCtx);
+  return <WishlistItems {...props} initialItems={items} addedItemId={addedItemId} onCountChange={onCountChange} />;
 }
 
 const NATIVES: NativeComponents = { [ACCOUNT_WISHLIST_NATIVE]: WishlistItemsNative };
@@ -48,17 +49,22 @@ export function WishlistPageTree({
   namedStyles?: Record<string, string[]>;
   draft?: boolean;
 }) {
-  const data = React.useMemo(() => ({ items, addedItemId }), [items, addedItemId]);
-  // The payload the master's bindings and Show-ifs read: `context.kind` and `wishlist.count`.
+  // `wishlist.count` is LIVE: the list reports every add/remove, and the binding scope (which wins
+  // over the payload) carries it, so a master Show-if such as `wishlist.count == 0` follows edits.
+  const [count, setCount] = React.useState(items.length);
+  React.useEffect(() => setCount(items.length), [items.length]);
+  const data = React.useMemo(() => ({ items, addedItemId, onCountChange: setCount }), [items, addedItemId]);
   const payload = React.useMemo(
     () => ({ context: { kind: "account", page: "wishlist" }, wishlist: { count: items.length } }),
     [items.length]
   );
+  const scope = React.useMemo(() => ({ wishlist: { count } }), [count]);
   return (
     <WishlistDataCtx.Provider value={data}>
       <BuilderTree
         tree={ACCOUNT_WISHLIST_TREE}
         payload={payload}
+        scope={scope}
         namedStyles={namedStyles}
         components={components}
         nativeComponents={NATIVES}
