@@ -9,7 +9,8 @@ import { addToWishlist } from "@/lib/actions/wishlist";
  * added and the shopper lands on their wishlist with it announced; signed out, they are sent to
  * sign in and it is added once they have. A refusal (product gone, rate limit) is shown in place.
  */
-export function useAddToWishlist() {
+/** `errorWord` is the master's `label_error` — shown when the request itself failed; none = silent. */
+export function useAddToWishlist(errorWord: string | null = null) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +24,7 @@ export function useAddToWishlist() {
         else if (res.signIn) router.push(res.signIn);
         else setError(res.error);
       } catch {
-        setError("Something went wrong. Please try again.");
+        setError(errorWord);
       }
     });
   };
