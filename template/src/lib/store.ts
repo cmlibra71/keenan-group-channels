@@ -2,7 +2,7 @@ import { unstable_cache } from "next/cache";
 import { cache } from "react";
 import type { NodeTree } from "@keenan/services/builder";
 import { withPromoTagInComponents } from "@/builder/promo-tag-node";
-import { guardTileBuyControlsInComponents, withSpecialPriceInComponents } from "@keenan/services/builder";
+import { guardTileBuyControlsInComponents, withPromotionBadgeInComponents, withSpecialPriceInComponents } from "@keenan/services/builder";
 import { withMemberScaleLabels } from "@/builder/member-scale-labels";
 import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
 import { initCommerceDb, createChannelStore, createRenderConfigCache, getCommerceClient, setStripeClientOptions } from "@keenan/services";
@@ -224,6 +224,14 @@ const withTileBuyGuard = (components: ComponentMap): ComponentMap =>
   ) as ComponentMap;
 
 /**
+ * Card EIXdjw2s — the Buy X Get Y / free-freight badge on the authored listing tile: a node bound
+ * to the card row's `promo_badge`, present only when the row carries one (the category and brand
+ * branches put it there from `promotionBadgeMap`). Nothing stored; see
+ * `@keenan/services/builder` `promotion-badge.ts`.
+ */
+const withPromotionBadge = (components: ComponentMap): ComponentMap =>
+  withPromotionBadgeInComponents(components as Record<string, NodeTree>) as ComponentMap;
+
 /**
  * Whether this channel cuts member-saving percentages from its stored price
  * masters even with the member price scale off. Chefs Depot only (card
@@ -251,10 +259,12 @@ export const getMemberScaleOn = async (): Promise<boolean> =>
   (await _store.getLadderConfig().catch(() => null))?.enabled === true;
 
 export const getComponents = async (): Promise<ComponentMap> =>
-  withScaleWording(withTileBuyGuard(withPromoTag(await _store.getComponents())));
+  withScaleWording(withPromotionBadge(withTileBuyGuard(withPromoTag(await _store.getComponents()))));
 
 export const getDraftComponents = async (): Promise<ComponentMap> =>
-  withScaleWording(withTileBuyGuard(withPromoTag((await _store.getDraftComponents()) as ComponentMap)));
+  withScaleWording(
+    withPromotionBadge(withTileBuyGuard(withPromoTag((await _store.getDraftComponents()) as ComponentMap)))
+  );
 
 // ============================================================================
 // Channel settings (raw accessor)

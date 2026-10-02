@@ -13,6 +13,7 @@ import {
 import { CHANNEL_ID } from "@/lib/channel";
 import { getMemberContext, applyAccountPrices, getPricingGroupId } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
+import { promotionBadgeMap } from "@/lib/promotions/badges";
 import { attachBrandLogosAlongside } from "@/lib/brand-logo-fallback";
 import {
   composeBrandPagePayload,
@@ -161,15 +162,21 @@ export async function renderBrandNodeBranch({
   ]);
   const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
 
-  // The channel's member price scale (audit C11) — the price masters word "Standard price"/"RRP" on it.
-  const memberScaleOn = await getMemberScaleOn();
+  // The Buy X Get Y / free-freight badge each tile carries (card EIXdjw2s), read for exactly the
+  // products on this page and handed to the tile rows beside the member prices; and the channel's
+  // member price scale (audit C11) — the price masters word "Standard price"/"RRP" on it.
+  const [promoBadgeMap, memberScaleOn] = await Promise.all([
+    promotionBadgeMap(scoped as unknown as { id: number; sku?: string | null }[]),
+    getMemberScaleOn(),
+  ]);
+
   const basePayload = composeBrandPagePayload({
     memberScaleOn,
     channelId: CHANNEL_ID,
     brand,
     products: scoped as unknown as Record<string, unknown>[],
     total,
-    pricing,
+    pricing: { ...pricing, promoBadgeMap },
     customer: {
       isMember: memberCtx?.isMember ?? false,
       loggedIn: memberCtx?.loggedIn ?? false,

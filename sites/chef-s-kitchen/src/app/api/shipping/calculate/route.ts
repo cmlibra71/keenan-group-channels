@@ -1,6 +1,12 @@
 import { currentShopperForOffers } from "@/lib/promotions/shopper";
 import { NextRequest, NextResponse } from "next/server";
-import { summariseLinesFreight, cartService, channelSettingsService } from "@keenan/services";
+import {
+  summariseLinesFreight,
+  cartService,
+  channelSettingsService,
+  applyFreightReward,
+  type FreightGrant,
+} from "@keenan/services";
 import { gstSplit } from "@keenan/services/calc";
 import { calculateShipping, CHANNEL_ID } from "@/lib/store";
 import { cartLineGoodsExTax } from "@/lib/checkout/order-draft";
@@ -39,6 +45,11 @@ export async function POST(request: NextRequest) {
     // A zone can be rated by weight or item count as well as by dollars (BigCommerce table
     // rates, card Wxjp8wpg). The measures come from the shopper's OWN cart on the server —
     // never from the request body — so a quoted price can't be talked down by a crafted post.
+    // A freight PROMOTION this cart earned (card EIXdjw2s), and whether the cart holds a bulky
+    // item — both read from the shopper's own cart on the server, like every measure below, and
+    // applied to the quote with the SAME `applyFreightReward` placeOrder uses.
+    let freightGrant: FreightGrant | null = null;
+    let cartHasBulky = false;
     let measures:
       | {
           weightKg: number | null;
@@ -78,6 +89,7 @@ export async function POST(request: NextRequest) {
           // on the goods value they will actually be charged (card p6YVxc4P, round 4).
           ...(await currentShopperForOffers()),
         });
+        freightGrant = offers.freight;
         const offerByItemId = new Map(offers.lines.map((l) => [l.itemId, l.discount]));
         const summary = await summariseLinesFreight(
           (full.items as Array<Record<string, unknown>>).map((i) => ({
@@ -101,6 +113,7 @@ export async function POST(request: NextRequest) {
         );
         // `has_unweighed_lines` travels WITH the weight: 85% of the catalogue carries no
         // weight, so a part-weighed cart must not be rated on its weighed lines alone.
+        cartHasBulky = (summary.bulky ?? []).length > 0;
         measures = {
           weightKg: summary.weight_kg,
           itemCount: summary.item_count,
@@ -134,6 +147,20 @@ export async function POST(request: NextRequest) {
     // reading the raw rate as inc-GST is exactly the defect this card fixed, and it under-charged
     // every Chefs Depot delivery by 10%. The split comes from the shared `gstSplit`, never a
     // hand-written `* 1.1` (services CONTEXT D4).
+    // The freight promotion, if any, comes off the QUOTED rate — never on a bulky cart, never
+    // outside its zones. A specialised delivery is held for a human quote on the page and never
+    // reaches a rate at all. The customer sees the label; the quoted figure rides along so the
+    // summary can say what was taken off.
+    const reward = result.success
+      ? applyFreightReward(result.cost ?? 0, freightGrant, {
+          zoneId: result.zone_id ?? null,
+          hasBulky: cartHasBulky,
+          specialised: false,
+        })
+      : null;
+    if (reward && reward.givenAwayExTax > 0) {
+      result.cost = reward.chargedExTax;
+    }
     const split = gstSplit(result.cost ?? 0, false);
     // The freight-attribute breakdown is STAFF-ONLY (card Xw9VQmAJ, Chris 2026-09-10: the
     // customer only ever sees a freight TOTAL). This route answers a shopper's browser, so the
@@ -145,6 +172,15 @@ export async function POST(request: NextRequest) {
       cost_ex_tax: split.exTax,
       cost_tax: split.tax,
       cost_inc_tax: split.incTax,
+      ...(reward && reward.givenAwayExTax > 0
+        ? {
+            promotion: {
+              label: reward.label,
+              quoted_ex_tax: reward.quotedExTax,
+              given_away_ex_tax: reward.givenAwayExTax,
+            },
+          }
+        : {}),
     });
   } catch (error) {
     console.error("Shipping calculation error:", error);
