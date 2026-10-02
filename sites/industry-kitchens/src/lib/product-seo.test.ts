@@ -296,3 +296,16 @@ test("productMetaKeywords: staff's own words, else Zoey's meta_keyword, else not
   assert.equal(productMetaKeywords({ zoeyRaw: { meta_keyword: null } }), "");
   assert.equal(productMetaKeywords({}), "");
 });
+
+test("a Partner Special offer states the special (the row's sale figure) and the day it holds until", () => {
+  // The row as `guestPricedRow` hands it over after `applySpecialPrices`: price = the struck
+  // regular figure, salePrice = the special (card tJ4audbu).
+  const url = "https://industrialkitchens.com.au/products/x";
+  const ld = productJsonLd({ name: "x", url, price: "1580.00", salePrice: "1100.00", priceValidUntil: "2026-10-31" });
+  const offer = ld.offers as Record<string, unknown>;
+  assert.equal(offer.price, "1100.00");
+  assert.equal(offer.priceValidUntil, "2026-10-31");
+  // No special, no validity claim.
+  const plain = productJsonLd({ name: "x", url, price: "1580.00", salePrice: "1200.00" }).offers as Record<string, unknown>;
+  assert.equal("priceValidUntil" in plain, false);
+});

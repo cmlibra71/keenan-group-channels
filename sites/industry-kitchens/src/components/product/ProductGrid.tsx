@@ -15,6 +15,13 @@ interface ProductWithImage {
   urlPath: string | null;
   price: string;
   salePrice: string | null;
+  /**
+   * Card tJ4audbu — the PARTNER SPECIAL pricing this product, put on the row by the storefront's
+   * price funnel (`lib/member.ts` `applyAccountPrices` → `applySpecialPrices`). Its `price` /
+   * `salePrice` already carry the was/now; this is what puts Tim's badge on the tile. Absent =
+   * no special.
+   */
+  special?: { badge: string; label: string | null } | null;
   fromPrice?: string | null;
   fromSalePrice?: string | null;
   thumbnailImage?: { urlStandard: string; urlThumbnail: string | null } | null;
@@ -139,6 +146,7 @@ export async function ProductGrid({
             slug={product.urlPath || String(product.id)}
             price={product.price}
             salePrice={product.salePrice}
+            special={product.special ?? null}
             fromPrice={product.fromPrice ?? null}
             fromSalePrice={product.fromSalePrice ?? null}
             imageUrl={product.thumbnailImage?.urlThumbnail || product.thumbnailImage?.urlStandard}

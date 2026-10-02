@@ -36,7 +36,13 @@ export function PriceBlock({
   ladderOn = false,
   size = "card",
   className = "",
+  specialPrice = null,
+  specialBadge = null,
 }: {
+  /** Card tJ4audbu — the Partner Special this product is locked to, ex GST (see price-display). */
+  specialPrice?: number | null;
+  /** Tim's badge wording, printed beside the price on the product page (`size="pdp"`). */
+  specialBadge?: string | null;
   rrp: number;
   memberPrice?: number | null;
   isMember?: boolean;
@@ -88,7 +94,7 @@ export function PriceBlock({
   const scaleOn = ladderOn || channelScaleOn;
   const priceWord = scaleOn ? "Standard price" : "RRP";
 
-  const d = derivePriceDisplay({ rrp, memberPrice, isMember, accountPricing, memberSavingsPct });
+  const d = derivePriceDisplay({ rrp, memberPrice, isMember, accountPricing, memberSavingsPct, specialPrice });
   if (d.hidden) return null;
 
   const big = size === "pdp" ? "text-[33px]" : "text-lg";
@@ -97,7 +103,12 @@ export function PriceBlock({
     <div className={className}>
       {/* Headline: the price this shopper actually gets */}
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className={`${big} font-bold leading-none tracking-[-0.02em] text-text-primary`}>
+        <span
+          className={`${big} font-bold leading-none tracking-[-0.02em] ${
+            // A Partner Special wears the site's clearance colour, like the authored tile (tJ4audbu).
+            d.audience === "special" ? "text-sale" : "text-text-primary"
+          }`}
+        >
           {fmt(d.headline)}
         </span>
         <span className="text-xs font-semibold text-steel-500">{gstLabel}</span>
@@ -114,6 +125,17 @@ export function PriceBlock({
           <span className="text-xs font-semibold text-member-text">Your account price</span>
         )}
       </div>
+
+      {/* Partner Special (card tJ4audbu): the regular price struck through as "Was", and on the
+          product page Tim's badge. Nothing else follows — no saving, no member vocabulary. */}
+      {d.showWas && (
+        <p className={`mt-1 text-steel-500 ${size === "card" ? "text-xs" : "text-[13px]"}`}>
+          Was <s className="text-steel-400">{fmt(rrp)}</s>
+        </p>
+      )}
+      {d.audience === "special" && size === "pdp" && specialBadge && (
+        <p className="special-panel-badge">{specialBadge}</p>
+      )}
 
       {/* Struck RRP — only when something beats it */}
       {d.showStruckRrp && (

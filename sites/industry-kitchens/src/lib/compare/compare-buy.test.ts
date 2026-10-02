@@ -55,7 +55,7 @@ test("any required question, default or not: no cart, no quote — the column op
 });
 
 test("this storefront's Zoey rules (services channel-rules), per viewer", () => {
-  const rules = (r: Record<string, boolean>) => ({ quoteOnly: false, guestQuoteOnly: false, outOfStock: false, searchOnly: false, cartDisabled: false, guestQuoteHidden: false, backorderSilent: false, ...r });
+  const rules = (r: Record<string, boolean>) => ({ quoteOnly: false, guestQuoteOnly: false, outOfStock: false, searchOnly: false, cartDisabled: false, guestQuoteHidden: false, backorderSilent: false, backorderDeny: false, ...r });
   const member = { loggedIn: true };
   // cart_disabled: no basket for anyone, price stays, quote stays.
   assert.deepEqual(compareBuyButtons({ ...plain, channelRules: rules({ cartDisabled: true }), viewer: member }), { cart: false, quote: true, priceHidden: false, answerRequired: false });
@@ -73,8 +73,22 @@ test("this storefront's Zoey rules (services channel-rules), per viewer", () => 
 
 test("guest_quote_hidden: a guest gets no Add to Quote in the compare column; a signed-in customer keeps it", () => {
   const base = { shownPrice: 24.5, hidePrice: false, kit: null };
-  const rules = { quoteOnly: false, guestQuoteOnly: false, outOfStock: false, searchOnly: false, cartDisabled: true, guestQuoteHidden: true, backorderSilent: false };
+  const rules = { quoteOnly: false, guestQuoteOnly: false, outOfStock: false, searchOnly: false, cartDisabled: true, guestQuoteHidden: true, backorderSilent: false, backorderDeny: false };
   assert.deepEqual(compareBuyButtons({ ...base, channelRules: rules, viewer: { loggedIn: false } }), { cart: false, quote: false, priceHidden: false, answerRequired: false });
   assert.deepEqual(compareBuyButtons({ ...base, channelRules: rules }), { cart: false, quote: false, priceHidden: false, answerRequired: false });
   assert.deepEqual(compareBuyButtons({ ...base, channelRules: rules, viewer: { loggedIn: true } }), { cart: false, quote: true, priceHidden: false, answerRequired: false });
+});
+
+test("the compare column reads the back-order policy as THIS storefront applies it (Zoey 'No Backorders')", async () => {
+  const { backorderPolicyForChannel, readChannelRules } = await import("@keenan/services/channel-rules");
+  const meta = { zoey_channel_rules: { "1": { backorder_deny: true } } };
+  const policy = backorderPolicyForChannel(null, readChannelRules(meta, 1));
+  assert.equal(policy, "deny");
+  // 0 in stock on a tracked product: no basket — the same answer the cart gives.
+  assert.equal(compareBuyButtons({ ...plain, backorderPolicy: policy, inventoryTracking: "product", inventoryLevel: 0 }).cart, false);
+  // Chefs Depot never reads IK's key: unchanged.
+  assert.equal(backorderPolicyForChannel(null, readChannelRules(meta, 2)), null);
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("./compare.server.ts", import.meta.url), "utf8");
+  assert.match(src, /backorderPolicy: backorderPolicyForChannel\(r\.backorder_policy, readChannelRules\(meta, CHANNEL_ID\)\)/);
 });

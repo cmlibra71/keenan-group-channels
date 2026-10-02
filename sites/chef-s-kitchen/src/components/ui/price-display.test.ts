@@ -110,3 +110,30 @@ test("no public state ever exposes a member-derived money figure", () => {
     assert.equal(d.headline, RRP, `headline was not RRP for ${JSON.stringify(s)}`);
   }
 });
+
+// ---- Partner Specials (card tJ4audbu) ---------------------------------------
+
+test("a Partner Special is the headline for a guest, with the regular price struck as Was", () => {
+  const d = derivePriceDisplay({ rrp: RRP, specialPrice: 1200, memberSavingsPct: 20 });
+  assert.equal(d.audience, "special");
+  assert.equal(d.headline, 1200);
+  assert.equal(d.showWas, true);
+  // No RRP label, no join pitch, no saving figures beside Tim's "No further discounts".
+  assert.equal(d.showRrpLabel, false);
+  assert.equal(d.showJoin, false);
+  assert.equal(d.savings, 0);
+  assert.equal(d.showMemberBadge, false);
+});
+
+test("a member whose own price is lower still sees (and pays) the special — it is the floor", () => {
+  const d = derivePriceDisplay({ rrp: RRP, memberPrice: 1000, isMember: true, specialPrice: 1200 });
+  assert.equal(d.audience, "special");
+  assert.equal(d.headline, 1200);
+  assert.equal(d.showMemberBadge, false);
+});
+
+test("a special at or above the regular price strikes nothing through", () => {
+  const d = derivePriceDisplay({ rrp: 1000, specialPrice: 1000 });
+  assert.equal(d.headline, 1000);
+  assert.equal(d.showWas, false);
+});

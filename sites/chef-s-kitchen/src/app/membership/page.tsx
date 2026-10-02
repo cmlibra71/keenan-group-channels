@@ -244,7 +244,12 @@ export default async function MembershipLandingPage() {
                 {" independent of your member pricing."}
               </p>
               <p className="mt-3 text-xs text-text-muted">
-                You always land on the lower of the two.
+                {/* Card tJ4audbu (Tim, 21 Sep: "Special Price will be the floor"). This line said
+                    "You always land on the lower of the two", which stopped being true the day a
+                    Partner Special became a locked price: a member whose own price would be lower
+                    still pays the special. Reworded to the rule; Steve/Tim may veto the words. */}
+                A Partner Special is one fixed price for everyone, members included, and no further
+                discount comes off it.
                 {ladderOn
                   ? " Whatever you spend on a Partner Special still counts toward your rolling twelve months."
                   : ""}
@@ -279,8 +284,8 @@ export default async function MembershipLandingPage() {
             {
               title: "Member pricing on every line",
               body: ladderOn
-                ? "Applied automatically across almost 40,000 items, with no codes and no minimum order. Clearance, Partner Specials and special-order lines are priced separately — you always get the better of the two."
-                : "Applied automatically across the range, with no codes and no minimum order. Clearance, Partner Specials and special-order lines are priced separately — you always get the better of the two.",
+                ? "Applied automatically across almost 40,000 items, with no codes and no minimum order. Clearance and special-order lines are priced separately — you always get the better of the two. A Partner Special is one fixed price for everyone."
+                : "Applied automatically across the range, with no codes and no minimum order. Clearance and special-order lines are priced separately — you always get the better of the two. A Partner Special is one fixed price for everyone.",
             },
             {
               title: "Account management",
@@ -446,14 +451,14 @@ export default async function MembershipLandingPage() {
                 {
                   q: "You always get the better price",
                   a: ladderOn
-                    ? "Where a clearance, end-of-line or Partner Special is sharper than your member price, you get the sharper one. Either way the full amount counts toward your spend and moves your pricing further down."
-                    : "Where a clearance, end-of-line or Partner Special is sharper than your member price, you get the sharper one — never both.",
+                    ? "Where a clearance or end-of-line price is sharper than your member price, you get the sharper one. A Partner Special is different: it is one fixed price for everyone, members included, and no further discount comes off it. Either way the full amount counts toward your spend and moves your pricing further down."
+                    : "Where a clearance or end-of-line price is sharper than your member price, you get the sharper one — never both. A Partner Special is different: it is one fixed price for everyone, members included, and no further discount comes off it.",
                 },
                 {
                   q: "Where member pricing applies",
                   a: ladderOn
-                    ? "Member pricing runs across our range of almost 40,000 items. A small number of brands and products sit outside it, and those are flagged on the product page — what you spend on them still counts toward your pricing everywhere else. Clearance, end-of-line, Partner Specials, indent and special-order lines, freight, installation and third-party service are priced on their own terms. Where one of those is sharper than your member price, you pay the sharper one — and everything you spend on goods still counts toward your pricing."
-                    : "Member pricing runs across our range. Clearance, end-of-line, Partner Specials, indent and special-order lines, freight, installation and third-party service are priced on their own terms. Where one of those is sharper than your member price, you pay the sharper one.",
+                    ? "Member pricing runs across our range of almost 40,000 items. A small number of brands and products sit outside it, and those are flagged on the product page — what you spend on them still counts toward your pricing everywhere else. Clearance, end-of-line, Partner Specials, indent and special-order lines, freight, installation and third-party service are priced on their own terms. A Partner Special is one fixed price for everyone; where one of the others is sharper than your member price, you pay the sharper one — and everything you spend on goods still counts toward your pricing."
+                    : "Member pricing runs across our range. Clearance, end-of-line, Partner Specials, indent and special-order lines, freight, installation and third-party service are priced on their own terms. A Partner Special is one fixed price for everyone; where one of the others is sharper than your member price, you pay the sharper one.",
                 },
               ].map((item, i) => (
                 <details key={item.q} className="group py-4" open={i === 0}>

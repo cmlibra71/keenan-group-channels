@@ -168,7 +168,8 @@ function buildClauses(hasYearlyPlan: boolean, ladderOn: boolean, topSpend = 50_0
   {
     heading: "Offers, clearance and Partner Specials",
     body: [
-      "Member pricing does not combine with other offers. Where a clearance, end-of-line, promotional or Partner Special price is lower than your member price, the lower price applies. You receive one or the other, never both.",
+      "Member pricing does not combine with other offers. Where a clearance, end-of-line or promotional price is lower than your member price, the lower price applies. You receive one or the other, never both.",
+      "A Partner Special is a fixed price that applies to every customer, members included. No member price or other discount applies to a Partner Special, even where your member price would otherwise be lower.",
       "Partner Specials are limited by available stock and may be withdrawn or changed at any time. Where a Partner Special is supplied by a third party, that supplier's own terms apply to the goods, and we will identify the supplier at the point of offer.",
       ladderOn
         ? "Indent and special-order lines, freight, installation and third-party services are quoted on their own terms and member pricing does not apply to them. Some brands and products are also excluded from member pricing under our agreements with their suppliers, and we may add or remove a brand from that list as those agreements change. All exclusions are identified on the relevant product page, and what you spend on them still counts toward your pricing on everything else."

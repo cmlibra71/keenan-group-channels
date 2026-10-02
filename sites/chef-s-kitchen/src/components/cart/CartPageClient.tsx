@@ -13,6 +13,7 @@ import {
   matchBrandSpecial,
   type MatchedBrandSpecial,
 } from "@/lib/checkout/free-shipping-brands-policy";
+import { partnerSpecialSaving } from "@/lib/pricing/special-saving";
 
 /**
  * Client island for the /cart page body. Quantity changes update rows and
@@ -40,6 +41,7 @@ export function CartPageClient({
   freeShippingEnabled,
   freeShippingThreshold,
   brandSpecials = [],
+  specialProductIds = [],
   upsell,
 }: {
   initialCart: CartData;
@@ -49,6 +51,8 @@ export function CartPageClient({
   freeShippingThreshold: number;
   /** Brand free-shipping specials running today on this storefront (card 88Ay7UGA). */
   brandSpecials?: MatchedBrandSpecial[];
+  /** Products on a running Partner Special (card tJ4audbu): their saving gets its own row. */
+  specialProductIds?: number[];
   upsell: { planPrice: number; billingInterval: string; ladderOn: boolean } | null;
 }) {
   const [cart, setCart] = useState<CartData>(initialCart);
@@ -103,7 +107,12 @@ export function CartPageClient({
     0
   );
   const charged = parseFloat(cart?.cart_amount ?? "0");
-  const discount = Math.max(0, Math.round((subtotal - charged) * 100) / 100);
+  const allSaving = Math.max(0, Math.round((subtotal - charged) * 100) / 100);
+  // A PARTNER SPECIAL's gap to list is the special's, not a member's or anyone's "discount"
+  // (card tJ4audbu: "No further discounts"), so it is printed on its own row and taken out of
+  // the Discount / Member Discount figure. The two rows still add up to subtotal − charged.
+  const specialSaving = Math.min(allSaving, partnerSpecialSaving(items, new Set(specialProductIds)));
+  const discount = Math.max(0, Math.round((allSaving - specialSaving) * 100) / 100);
   // Offers come OFF what is charged, on top of any member pricing already inside
   // `cart_amount` (card p6YVxc4P). This is the same figure `placeOrder` bills.
   const offerDiscount = Math.max(0, Math.round(((cart?.offers?.totalDiscount ?? 0)) * 100) / 100);
@@ -133,6 +142,7 @@ export function CartPageClient({
           <CartSummary
             subtotal={subtotal}
             discount={discount}
+            specialSaving={specialSaving}
             offerDiscount={offerDiscount}
             total={total}
             isMember={isMember}

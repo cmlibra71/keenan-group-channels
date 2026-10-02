@@ -1,6 +1,6 @@
 import { resolveAccountLinePrices, accountLineKey } from "@keenan/services";
 import { readStoredAddons } from "@keenan/services/product-addons";
-import { cartItemService } from "@/lib/store";
+import { cartItemService, getLiveSpecials } from "@/lib/store";
 import { getAccountId, getPricingGroupId } from "@/lib/member";
 import { groupLinePricing } from "@/lib/pricing/group-line";
 import { resolveLineAddons, type CartLine } from "./account-prices";
@@ -25,6 +25,10 @@ import { decideGroupPriceWrite } from "./group-prices-policy";
  * `customer_group_pricing` (Chefs Depot). Lines carrying an ACCOUNT contract price are left to
  * `applyAccountPricesToCart`, which already reconciled them: an account price beats the group.
  * A line with no price of its own (POA) and a line whose group has no record are left alone.
+ * A line on a live PARTNER SPECIAL is left alone too (card tJ4audbu): the special is locked over
+ * the group price, the cart priced it that way, and `refreshSpecialPricesInCart` has already
+ * re-judged it before this runs — re-deriving it from the group list would charge the group price
+ * under a "no further discounts" badge, or refuse the order in a loop.
  * Mutates the passed lines so the caller's totals see the corrected prices.
  */
 export async function repriceGroupLinesForCheckout(
@@ -42,8 +46,14 @@ export async function repriceGroupLinesForCheckout(
       )
     : new Map();
 
+  // A failed lookup reads as "no special", the fallback every other cart reprice takes.
+  const onSpecial: Map<number, unknown> = await getLiveSpecials([...new Set(lines.map((l) => l.product_id))]).catch(
+    () => new Map()
+  );
+
   let moved = 0;
   for (const line of lines) {
+    if (onSpecial.has(line.product_id)) continue;
     if (accountPriced.has(accountLineKey({ productId: line.product_id, variantId: line.variant_id }))) continue;
     if (!(parseFloat(String(line.list_price ?? "0")) > 0)) continue;
     const grouped = await groupLinePricing(groupId, line.product_id, line.variant_id, line.quantity);

@@ -534,3 +534,17 @@ test("forOrderInsert strips promotionId — order_items has no such column yet",
   assert.equal("promotionId" in rows[0], false);
   assert.equal(rows[0].discountAmount, "5.0000");
 });
+
+// ── A Partner Special is not a membership saving (card tJ4audbu) ──────────────
+
+test("memberSavings leaves a line on a live Partner Special out of the membership saving", () => {
+  const items = [
+    line({ product_id: 816, product_sku: "S", quantity: 1, list_price: "1580", sale_price: "1300" }),
+    line({ product_id: 2, product_sku: "M", quantity: 1, list_price: "100", sale_price: "90" }),
+  ];
+  const s = memberSavings(items, false, new Set([816]));
+  assert.equal(s.savedExTax, 10);
+  assert.deepEqual(s.lines.map((x) => x.productId), [2]);
+  // Without the set it is the old behaviour — the caller must pass it.
+  assert.equal(memberSavings(items, false).savedExTax, 290);
+});
