@@ -1,28 +1,9 @@
 import Link from "next/link";
-import Image from "next/image";
 import { Menu, ChevronDown, Star } from "lucide-react";
-import type { MegaMenuFeatured } from "@/lib/store";
-import {
-  ALL_BRANDS_HREF,
-  flattenTree,
-  itemHref,
-  panelBrandColumn,
-  subcategoryColumnCount,
-  type MegaBrandLike,
-  type MegaMenuNodeLike,
-  type MegaNavItem,
-} from "@/lib/mega-menu";
-import { ikNavItems } from "@/lib/ik-nav";
-import {
-  DEFAULT_IK_MEGA_MENU_SETTINGS,
-  ikBalanceColumns,
-  ikBarHref,
-  ikIsHighlighted,
-  ikPanelGroups,
-  ikSplitNavItems,
-  type IkMegaMenuSettings,
-  type IkPanelGroup,
-} from "@/lib/ik-mega-panel";
+import { itemHref, panelBrandColumn, type MegaMenuNodeLike, type MegaNavItem } from "@/lib/mega-menu";
+import { ikBarHref, ikIsHighlighted, ikPanelGroups, type IkMegaMenuSettings } from "@/lib/ik-mega-panel";
+import { LONG_LINK_DROPDOWN, navItemKey, navModel, type NavData } from "@/lib/nav-model";
+import { LazyDeptPanel, LazyLinkDropdown, LazyMoreEntry, LazyRightDropdown } from "./MegaMenuPanels";
 import { MegaMenuShell } from "./MegaMenuShell";
 
 /**
@@ -42,38 +23,23 @@ import { MegaMenuShell } from "./MegaMenuShell";
  * `@/lib/mega-menu` (shared with template/ and unit-tested); this file is
  * presentation only.
  *
- * Pure server component — panels open on hover and :focus-within, so it is
- * keyboard operable without JS. Hidden below xl (the MobileNavDrawer takes
- * over, from the same resolved items).
+ * Server component for the BAR — every bar link is in the page's HTML. The
+ * drop-downs' CONTENTS are drawn in the browser from the menu data
+ * (MegaMenuPanels.tsx, lib/nav-model.ts): they were ~1.2 MB of every page.
+ * Panels still open on pure-CSS hover and :focus-within. Hidden below xl (the
+ * MobileNavDrawer takes over, from the same resolved items).
  */
-export function MegaMenu({
-  departments,
-  featured,
-  items,
-  hiddenCategoryIds,
-  brandColumns = {},
-  settings = DEFAULT_IK_MEGA_MENU_SETTINGS,
-}: {
-  departments: MegaMenuNodeLike[];
-  featured: Record<string, MegaMenuFeatured>;
-  items?: MegaNavItem[];
-  hiddenCategoryIds?: number[];
-  /** Each Brands column's brands, keyed by department id (`getMegaMenuBrandColumns`). */
-  brandColumns?: Record<number, MegaBrandLike[]>;
-  /** `channel_settings.mega_menu_settings` (column link limit, All Categories launcher). */
-  settings?: IkMegaMenuSettings;
-}) {
+export function MegaMenu({ data }: { data: NavData }) {
   // One list for the bar, the phone drawer and the /products strip — see
   // `ikNavItems`, which also owns the red "All Categories" launcher.
-  const navItems = ikNavItems({ departments, items, hiddenCategoryIds, allCategoriesLauncher: settings.allCategoriesLauncher });
-  const byId = flattenTree(departments);
-  const { left, right } = ikSplitNavItems(navItems);
+  const { left, right, byId } = navModel(data);
+  const settings = data.settings;
 
   return (
     <MegaMenuShell className="relative hidden bg-zinc-900 xl:block">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <ul data-nav-bar className="flex flex-nowrap items-stretch gap-0.5 overflow-hidden">
-          {left.map((item, i) => renderItem(item, i, byId, featured, brandColumns, settings, left.length))}
+          {left.map((item, i) => renderItem(item, i, byId, settings))}
 
           {/* Overflow — shown by MegaMenuShell only when the bar runs out of row */}
           <li
@@ -94,7 +60,7 @@ export function MegaMenu({
                 // Fallback when the bar still runs out of room: an item tucked under More keeps
                 // its drop-down as an expandable entry (headings and links), not a bare link.
                 <div key={`m-${i}`} data-more-index={i} style={{ display: "none" }}>
-                  <MoreEntry item={item} byId={byId} settings={settings} brandColumns={brandColumns} />
+                  <LazyMoreEntry index={i} navKey={navItemKey(item)} />
                 </div>
               ))}
             </div>
@@ -128,20 +94,7 @@ export function MegaMenu({
                   {item.label}
                   {kids.length > 0 && <ChevronDown className="h-[0.815em] w-[0.815em] opacity-70" strokeWidth={2} />}
                 </Link>
-                {kids.length > 0 && (
-                  <div className="mega-panel invisible absolute right-0 top-full z-50 h-0 min-w-[220px] overflow-hidden rounded-b-lg border border-zinc-200 bg-white py-2 opacity-0 shadow-lg transition-all delay-0 duration-150 group-hover/nav:visible group-hover/nav:h-auto group-hover/nav:overflow-visible group-hover/nav:opacity-100 group-hover/nav:delay-[300ms] group-focus-within/nav:visible group-focus-within/nav:h-auto group-focus-within/nav:overflow-visible group-focus-within/nav:opacity-100">
-                    {kids.map((child, j) => (
-                      <Link
-                        key={j}
-                        href={itemHref(child, byId)}
-                        target={child.newTab ? "_blank" : undefined}
-                        className="block px-4 py-2 text-[13.5px] text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-[#C73629]"
-                      >
-                        {child.label}
-                      </Link>
-                    ))}
-                  </div>
-                )}
+                {kids.length > 0 && <LazyRightDropdown index={i} navKey={navItemKey(item)} />}
               </li>
             );
           })}
@@ -155,15 +108,8 @@ function renderItem(
   item: MegaNavItem,
   i: number,
   byId: Map<number, MegaMenuNodeLike>,
-  featured: Record<string, MegaMenuFeatured>,
-  brandColumns: Record<number, MegaBrandLike[]>,
-  settings: IkMegaMenuSettings,
-  count: number
+  settings: IkMegaMenuSettings
 ) {
-  // Keyboard: a panel opens on :focus-within, so a long one (Brands, Business Type) would make the
-  // keyboard walk every link to reach the next department. Each panel starts with a skip link to the
-  // next bar item (the right-hand slot after the last one).
-  const skipHref = i + 1 < count ? `#nav-item-${i + 1}` : "#nav-right";
   if (item.type === "categories") {
     return (
       <li key={`l-${i}`} data-nav-item className="shrink-0">
@@ -181,7 +127,7 @@ function renderItem(
   if (item.type === "category" && item.categoryId) {
     const dept = byId.get(item.categoryId);
     if (!dept) return null; // hidden/deleted category — drop the item
-    const { groups, extras, ordered } = ikPanelGroups(dept, item, byId, settings);
+    const { groups, extras } = ikPanelGroups(dept, item, byId, settings);
     const brandColumn = panelBrandColumn(item);
     const hasPanel = groups.length > 0 || extras.length > 0 || !!brandColumn;
     const barHref = ikBarHref(item, byId);
@@ -211,20 +157,8 @@ function renderItem(
           )}
         </Link>
 
-        {hasPanel && (
-          <MegaPanel
-            dept={dept}
-            label={item.label || dept.name}
-            skipHref={skipHref}
-            groups={groups}
-            ordered={ordered}
-            feat={featured[String(dept.id)]}
-            extras={extras}
-            byId={byId}
-            brandHeading={brandColumn ? brandColumn.label || "Brands" : null}
-            brands={brandColumn ? brandColumns[dept.id] ?? [] : []}
-          />
-        )}
+        {/* The panel's contents are drawn in the browser (MegaMenuPanels.tsx). */}
+        {hasPanel && <LazyDeptPanel index={i} navKey={navItemKey(item)} />}
       </li>
     );
   }
@@ -234,10 +168,7 @@ function renderItem(
   const linkHref = itemHref(item, byId);
   // A long link drop-down (Industry Kitchens' Brands: the old menu's 387 brands) becomes a capped,
   // scrolling panel of columns that read top to bottom; a short one stays the small list it was.
-  const LONG = 12;
-  const long = children.length > LONG;
-  const columnCount = long ? 4 : 1;
-  const rows = Math.ceil(children.length / columnCount);
+  const long = children.length > LONG_LINK_DROPDOWN;
   const linkHighlighted = ikIsHighlighted(item, linkHref, false);
   return (
     // A long list's panel spans the BAR (the li is not its positioning box), centred in the page
@@ -258,295 +189,7 @@ function renderItem(
           <ChevronDown className="h-[0.815em] w-[0.815em] opacity-70" strokeWidth={2} />
         )}
       </Link>
-      {children.length > 0 && long && (
-        <div className="mega-panel pointer-events-none invisible absolute left-0 right-0 top-full z-[110] h-0 overflow-hidden opacity-0 transition-all delay-0 duration-150 group-hover/nav:visible group-hover/nav:h-auto group-hover/nav:overflow-visible group-hover/nav:opacity-100 group-hover/nav:delay-[300ms] group-focus-within/nav:visible group-focus-within/nav:h-auto group-focus-within/nav:overflow-visible group-focus-within/nav:opacity-100">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="pointer-events-none max-h-[calc(100vh-14rem)] max-w-[1100px] overflow-y-auto rounded-b-lg border border-zinc-200 border-t-[3px] border-t-[#D94B2B] bg-white py-3 shadow-lg group-hover/nav:pointer-events-auto group-focus-within/nav:pointer-events-auto">
-              <a
-                href={skipHref}
-                className="sr-only focus:not-sr-only focus:block focus:px-4 focus:py-1.5 focus:text-[13px] focus:text-zinc-800"
-              >
-                Skip the {item.label} menu
-              </a>
-              <div
-                className="grid grid-flow-col gap-x-4"
-                style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, auto)` }}
-              >
-                {children.map((child, j) => (
-                  <Link
-                    key={j}
-                    href={itemHref(child, byId)}
-                    target={child.newTab ? "_blank" : undefined}
-                    className="block px-4 py-1 text-[13.5px] text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-[#C73629]"
-                  >
-                    {child.label}
-                  </Link>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {children.length > 0 && !long && (
-        <div className="mega-panel invisible absolute left-0 top-full z-50 h-0 min-w-[220px] overflow-hidden rounded-b-lg border border-zinc-200 bg-white py-2 opacity-0 shadow-lg transition-all delay-0 duration-150 group-hover/nav:visible group-hover/nav:h-auto group-hover/nav:overflow-visible group-hover/nav:opacity-100 group-hover/nav:delay-[300ms] group-focus-within/nav:visible group-focus-within/nav:h-auto group-focus-within/nav:overflow-visible group-focus-within/nav:opacity-100">
-          {children.map((child, j) => (
-            <Link
-              key={j}
-              href={itemHref(child, byId)}
-              target={child.newTab ? "_blank" : undefined}
-              className="block px-4 py-2 text-[13.5px] text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-[#C73629]"
-            >
-              {child.label}
-            </Link>
-          ))}
-        </div>
-      )}
+      {children.length > 0 && <LazyLinkDropdown index={i} navKey={navItemKey(item)} />}
     </li>
-  );
-}
-
-function MegaPanel({
-  dept,
-  label,
-  skipHref,
-  groups,
-  ordered,
-  feat,
-  extras,
-  byId,
-  brandHeading,
-  brands,
-}: {
-  dept: MegaMenuNodeLike;
-  label: string;
-  /** Where the panel's skip link sends keyboard focus (the next bar item). */
-  skipHref: string;
-  /** The department's columns (`ikPanelGroups`): its sub-categories plus the editor's column links. */
-  groups: IkPanelGroup[];
-  /** The editor named the columns: lay them out top to bottom in that order. */
-  ordered: boolean;
-  feat?: MegaMenuFeatured;
-  extras: MegaNavItem[];
-  byId: Map<number, MegaMenuNodeLike>;
-  /** The Brands column's heading, or null when this department has none. */
-  brandHeading: string | null;
-  brands: MegaBrandLike[];
-}) {
-  // 3 link columns: depth-1 children become column groups, balanced across
-  // columns; their children are the links (the group itself when childless).
-  // A Brands column (card HaWBvySC) takes the last of the three.
-  const columns = ikBalanceColumns(groups, subcategoryColumnCount(brandHeading !== null), ordered);
-
-  // The panel is full-bleed and drops straight over the page below the bar (the
-  // breadcrumb sits ~50px under it), so two guards keep it from stealing clicks
-  // meant for the page: a hover-intent delay, so merely sweeping the pointer
-  // down across a department never opens it (it stays `invisible`, and hidden
-  // means un-hoverable, so the delayed transition is abandoned); and
-  // pointer-events only on the white card, so the transparent gutters beside it
-  // are click-through. Keyboard (:focus-within) opens with no delay.
-  //
-  // A CLOSED panel is ZERO HEIGHT (`h-0 overflow-hidden`), not merely invisible.
-  // `html, body { overflow-x: hidden }` (globals.css) makes BODY its own scroll
-  // container, so an absolutely positioned box hanging below the page still adds
-  // that much scrollable overflow inside it — and the Industry Kitchens Brands
-  // panel is 5,700px tall. On any page shorter than the panel (every /pages/*)
-  // the reader could wheel straight past the footer into empty space with the
-  // menu shut, which is what card Qt0yPLCl reported. The white card is capped at
-  // the viewport and scrolls inside itself, so an OPEN panel cannot hang below
-  // the fold and put the overflow back either.
-  return (
-    <div
-      className="mega-panel pointer-events-none invisible absolute left-0 right-0 top-full z-[110] h-0 translate-y-2 overflow-hidden opacity-0 transition-all delay-0 duration-200
-                 group-hover/nav:visible group-hover/nav:h-auto group-hover/nav:translate-y-0 group-hover/nav:overflow-visible group-hover/nav:opacity-100 group-hover/nav:delay-[300ms]
-                 group-focus-within/nav:visible group-focus-within/nav:h-auto group-focus-within/nav:translate-y-0 group-focus-within/nav:overflow-visible group-focus-within/nav:opacity-100"
-    >
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="pointer-events-none grid max-w-[1100px] grid-cols-[1fr_1fr_1fr_240px] gap-6 max-h-[calc(100vh-14rem)] overflow-y-auto rounded-b-lg border border-zinc-200 border-t-[3px] border-t-[#D94B2B] bg-white p-6 shadow-lg group-hover/nav:pointer-events-auto group-focus-within/nav:pointer-events-auto">
-          <a
-            href={skipHref}
-            className="sr-only focus:not-sr-only focus:col-span-full focus:rounded focus:bg-zinc-100 focus:px-3 focus:py-1.5 focus:text-[13px] focus:text-zinc-800"
-          >
-            Skip the {label} menu
-          </a>
-          {columns.map((col, i) => (
-            <div key={i} className="space-y-5">
-              {col.map((group) => (
-                <div key={group.key}>
-                  <Link
-                    href={group.href}
-                    target={group.newTab ? "_blank" : undefined}
-                    className="mb-2 block border-b border-zinc-200 pb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-[#C73629] hover:text-[#D94B2B]"
-                  >
-                    {group.label}
-                  </Link>
-                  {group.links.map((leaf) => (
-                    <Link
-                      key={leaf.key}
-                      href={leaf.href}
-                      target={leaf.newTab ? "_blank" : undefined}
-                      className="block py-[5px] text-[13px] text-zinc-700 transition-colors duration-200 hover:text-[#D94B2B]"
-                    >
-                      {leaf.label}
-                    </Link>
-                  ))}
-                  {group.moreHref && (
-                    <Link
-                      href={group.moreHref}
-                      className="block py-[5px] text-[13px] font-semibold text-[#D94B2B] hover:text-[#C73629]"
-                    >
-                      View all →
-                    </Link>
-                  )}
-                </div>
-              ))}
-            </div>
-          ))}
-
-          {/* Brands column — words only, no logos (Steve: no pictures in a
-              drop-down). Staff's chosen brands, else this department's busiest
-              brands on this storefront (card HaWBvySC). */}
-          {brandHeading !== null && (
-            <div className="space-y-5">
-              <div>
-                <Link
-                  href={ALL_BRANDS_HREF}
-                  className="mb-2 block border-b border-zinc-200 pb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-[#C73629] hover:text-[#D94B2B]"
-                >
-                  {brandHeading}
-                </Link>
-                {brands.map((brand) => (
-                  <Link
-                    key={brand.id}
-                    href={`/brands/${brand.slug}`}
-                    className="block py-[5px] text-[13px] text-zinc-700 transition-colors duration-200 hover:text-[#D94B2B]"
-                  >
-                    {brand.name}
-                  </Link>
-                ))}
-                <Link
-                  href={ALL_BRANDS_HREF}
-                  className="block py-[5px] text-[13px] font-semibold text-[#D94B2B] hover:text-[#C73629]"
-                >
-                  View all brands →
-                </Link>
-              </div>
-            </div>
-          )}
-
-          <div className="flex flex-col gap-4 self-start">
-            {/* Featured panel — self-start so it stays a compact card (image + copy)
-                instead of stretching to the full mega-menu row height. */}
-            <div className="flex flex-col overflow-hidden rounded-lg bg-zinc-50">
-              <div className="relative grid h-[120px] place-items-center bg-gradient-to-br from-zinc-700 to-zinc-900">
-                {(feat?.image_url ?? dept.image_url) && (
-                  <Image src={(feat?.image_url ?? dept.image_url)!} alt="" fill sizes="240px" className="object-cover" />
-                )}
-              </div>
-              <div className="p-3.5">
-                <b className="mb-0.5 block text-sm text-zinc-900">
-                  {feat?.heading ?? `Shop ${dept.name}`}
-                </b>
-                <p className="mb-2.5 text-xs text-zinc-500">
-                  {feat?.body ?? "Explore the full range."}
-                </p>
-                <Link
-                  href={feat?.cta_href ?? `/categories/${dept.slug}`}
-                  className="inline-flex items-center rounded-md bg-[#D94B2B] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#C73629]"
-                >
-                  {feat?.cta_text ?? "Shop now"}
-                </Link>
-              </div>
-            </div>
-
-            {/* Information pages tucked inside this department by the editor */}
-            {extras.length > 0 && (
-              <div className="border-t border-zinc-200 pt-3">
-                {extras.map((extra, j) => (
-                  <Link
-                    key={j}
-                    href={itemHref(extra, byId)}
-                    target={extra.newTab ? "_blank" : undefined}
-                    className="block py-[5px] text-[13px] font-medium text-zinc-700 transition-colors duration-200 hover:text-[#D94B2B]"
-                  >
-                    {extra.label}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** One item under the bar's More menu: a plain link, or — when it has a drop-down — an expandable
- *  entry listing that drop-down's headings and links (option 3 of the IK menu decision). Pure server
- *  markup (<details>), so it works without JavaScript and by keyboard. */
-function MoreEntry({
-  item,
-  byId,
-  settings,
-  brandColumns,
-}: {
-  item: MegaNavItem;
-  byId: Map<number, MegaMenuNodeLike>;
-  settings: IkMegaMenuSettings;
-  brandColumns: Record<number, MegaBrandLike[]>;
-}) {
-  const href = ikBarHref(item, byId);
-  const dept = item.type === "category" && item.categoryId ? byId.get(item.categoryId) : undefined;
-  const panel = dept ? ikPanelGroups(dept, item, byId, settings) : null;
-  const brandColumn = dept ? panelBrandColumn(item) : null;
-  const groups: IkPanelGroup[] = panel
-    ? [
-        ...panel.groups,
-        // The bar panel's Brands column and information links, so the More entry lists everything
-        // the drop-down does (judge note).
-        ...(brandColumn
-          ? [{ key: "brands", label: brandColumn.label || "Brands", href: ALL_BRANDS_HREF, links: (brandColumns[dept!.id] ?? []).map((b) => ({ key: `b${b.id}`, label: b.name, href: `/brands/${b.slug}` })), total: 0 }]
-          : []),
-        ...panel.extras.map((e, j) => ({ key: `e${j}`, label: e.label, href: itemHref(e, byId), newTab: e.newTab || undefined, links: [], total: 0 })),
-      ]
-    : (item.children ?? [])
-        .filter((c) => c.label)
-        .map((c, j) => ({ key: `c${j}`, label: c.label, href: itemHref(c, byId), newTab: c.newTab || undefined, links: [], total: 0 }));
-  const rowClass = "block px-4 py-2 text-[13.5px] text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-[#C73629]";
-  if (groups.length === 0) {
-    return (
-      <Link href={href} target={item.newTab ? "_blank" : undefined} className={rowClass}>
-        {item.label}
-      </Link>
-    );
-  }
-  return (
-    <details className="group/more">
-      <summary className="flex cursor-pointer list-none items-center [&::-webkit-details-marker]:hidden justify-between px-4 py-2 text-[13.5px] text-zinc-700 hover:bg-zinc-50 hover:text-[#C73629]">
-        {item.label}
-        <ChevronDown className="h-3 w-3 opacity-60 transition-transform group-open/more:rotate-180" strokeWidth={2} />
-      </summary>
-      <div className="border-l-2 border-zinc-100 ml-4 pb-1">
-        <Link href={href} target={item.newTab ? "_blank" : undefined} className="block px-3 py-1.5 text-[13px] font-semibold text-[#D94B2B] hover:text-[#C73629]">
-          All {item.label}
-        </Link>
-        {groups.map((g) => (
-          <div key={g.key}>
-            <Link href={g.href} target={g.newTab ? "_blank" : undefined} className={`block px-3 py-1.5 text-[13px] ${g.links.length ? "font-semibold text-zinc-900" : "text-zinc-700"} hover:text-[#D94B2B]`}>
-              {g.label}
-            </Link>
-            {g.links.map((l) => (
-              <Link key={l.key} href={l.href} target={l.newTab ? "_blank" : undefined} className="block py-1 pl-6 pr-3 text-[12.5px] text-zinc-600 hover:text-[#D94B2B]">
-                {l.label}
-              </Link>
-            ))}
-            {g.moreHref && (
-              <Link href={g.moreHref} className="block py-1 pl-6 pr-3 text-[12.5px] font-semibold text-[#D94B2B]">
-                View all →
-              </Link>
-            )}
-          </div>
-        ))}
-      </div>
-    </details>
   );
 }

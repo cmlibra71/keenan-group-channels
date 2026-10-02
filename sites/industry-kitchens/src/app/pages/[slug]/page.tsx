@@ -11,6 +11,8 @@ import { chooseContentPageTree } from "@/lib/content-page-tree";
 import { financeApplyFunderForSlug, withFinanceApplyLogo } from "@/lib/finance/finance-apply-logo";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BuilderContentPage } from "@/builder/BuilderContentPage";
+import { BuilderCssLink } from "@/builder/builder-css-link";
+import { usedComponents } from "@/builder/used-components";
 import { loadJsSandbox, computeCallResults, type NodeTree } from "@keenan/services/builder";
 
 export async function generateMetadata({
@@ -127,12 +129,12 @@ export default async function ContentPage({
       }
       return (
         <>
-          {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
+          <BuilderCssLink css={builderCss} />
           <BuilderContentPage
             tree={tree}
             payload={payload}
             namedStyles={namedStyles}
-            components={components}
+            components={usedComponents(tree, components)}
             jsFunctions={jsFunctions}
             callResults={callResults}
             draft={draft}

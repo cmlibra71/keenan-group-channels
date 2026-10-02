@@ -139,7 +139,30 @@ export async function attachBrandLogos<T extends { id: number | string }>(
   // two null fields. A channel that has not opted in must be byte-for-byte the
   // storefront it was before this card.
   if (!brandLogoFallbackEnabled()) return rows as WithBrandLogo<T>[];
-  const logos = await getBrandLogos(rows.map((r) => Number(r.id)));
+  return withBrandLogos(rows, await getBrandLogos(rows.map((r) => Number(r.id))));
+}
+
+/**
+ * `attachBrandLogos` over rows that are STILL BEING PRICED. The logo read is keyed by product id
+ * alone, so it runs beside the per-viewer price overlays instead of after them — one database
+ * round trip less on every listing (measured 2026-10-02). `source` carries the ids: the same rows
+ * before pricing (the overlays never add or drop a row). The result is exactly
+ * `attachBrandLogos(await rows)`.
+ */
+export async function attachBrandLogosAlongside<T extends { id: number | string }>(
+  source: { id: number | string }[],
+  rows: Promise<T[]>
+): Promise<WithBrandLogo<T>[]> {
+  if (!brandLogoFallbackEnabled()) return (await rows) as WithBrandLogo<T>[];
+  const [priced, logos] = await Promise.all([rows, getBrandLogos(source.map((r) => Number(r.id)))]);
+  if (!priced || priced.length === 0) return [] as WithBrandLogo<T>[];
+  return withBrandLogos(priced, logos);
+}
+
+function withBrandLogos<T extends { id: number | string }>(
+  rows: T[],
+  logos: Map<number, BrandLogoFallback>
+): WithBrandLogo<T>[] {
   return rows.map((row) => {
     const hit = logos.get(Number(row.id));
     return {

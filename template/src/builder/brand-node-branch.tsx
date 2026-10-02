@@ -13,7 +13,7 @@ import {
 import { CHANNEL_ID } from "@/lib/channel";
 import { getMemberContext, applyAccountPrices, getPricingGroupId } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
-import { attachBrandLogos } from "@/lib/brand-logo-fallback";
+import { attachBrandLogosAlongside } from "@/lib/brand-logo-fallback";
 import {
   composeBrandPagePayload,
   brandFacetsAsListingFacets,
@@ -24,6 +24,8 @@ import {
 } from "@keenan/services/builder";
 import { BuilderBrandPage, type BrandGridProduct } from "@/builder/BuilderBrandPage";
 import { applyChannelRulesToTileRows } from "@keenan/services/channel-rules";
+import { BuilderCssLink } from "@/builder/builder-css-link";
+import { usedComponents } from "@/builder/used-components";
 
 // ============================================================================
 // The brand template's Site Builder branch — ENGINE.
@@ -140,12 +142,16 @@ export async function renderBrandNodeBranch({
   // configurable-from-price (services #182): AFTER the per-viewer price overlays, a configurable
   // row gets its "Starting From" list/sale, which the `product-card` enrichment reads — without it
   // a $0-parent configurable tile says "Call for Price".
-  const scoped = (await attachBrandLogos(
-    await attachFromPrices(await applyAccountPrices(await applyCatalogScope(products as { id: number }[])), {
-      // The viewer's customer-group price list prices each configurable's children (Industry
-      // Kitchens); null on a channel without it.
-      pricingGroupId: await getPricingGroupId(),
-    })
+  // The logo read runs BESIDE the price overlays — it is keyed by product id alone.
+  const visible = await applyCatalogScope(products as { id: number }[]);
+  const scoped = (await attachBrandLogosAlongside(
+    visible,
+    (async () =>
+      attachFromPrices(await applyAccountPrices(visible), {
+        // The viewer's customer-group price list prices each configurable's children (Industry
+        // Kitchens); null on a channel without it.
+        pricingGroupId: await getPricingGroupId(),
+      }))()
   )) as unknown as BrandGridProduct[];
 
   const memberCtx = await getMemberContext().catch(() => null);
@@ -218,7 +224,7 @@ export async function renderBrandNodeBranch({
 
   return (
     <>
-      {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
+      <BuilderCssLink css={builderCss} />
       <BuilderBrandPage
         tree={nodeTree}
         payload={payload}
@@ -226,7 +232,7 @@ export async function renderBrandNodeBranch({
         pricing={pricing}
         memberPricingAvailable={memberPricingEnabled}
         namedStyles={namedStyles}
-        components={components}
+        components={usedComponents(nodeTree, components)}
         jsFunctions={jsFunctions}
         callResults={callResults}
         draft={draft}
