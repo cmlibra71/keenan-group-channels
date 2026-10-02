@@ -30,6 +30,25 @@ export function fillWishlistWord(template: string, values: Record<string, string
   );
 }
 
+/**
+ * The account-menu label: the static `label_nav` prop on the `wishlist-items` native inside the
+ * channel's `account-wishlist` master. Null when the master or the prop is missing — then the menu
+ * shows no wishlist item (a nameless link is worse than none).
+ */
+export function accountWishlistNavLabel(master: unknown, nativeKey = "wishlist-items"): string | null {
+  const stack: unknown[] = [(master as { root?: unknown } | null)?.root];
+  while (stack.length) {
+    const n = stack.pop() as Record<string, unknown> | null | undefined;
+    if (!n || typeof n !== "object") continue;
+    if (n.kind === "component" && n.componentKey === nativeKey) {
+      const v = (n.props as Record<string, { kind?: string; value?: unknown }> | undefined)?.label_nav;
+      return v?.kind === "static" && typeof v.value === "string" && v.value.trim() ? v.value.trim() : null;
+    }
+    for (const c of (n.children as unknown[] | undefined) ?? []) stack.push(c);
+  }
+  return null;
+}
+
 /** The words the account page's list reads, by prop name — documented for authors and tests. */
 export const ACCOUNT_WISHLIST_WORD_KEYS = [
   "label_empty",
@@ -46,4 +65,6 @@ export const ACCOUNT_WISHLIST_WORD_KEYS = [
   "label_update",
   "label_updated",
   "label_continue",
+  "label_error",
+  "label_nav",
 ] as const;
