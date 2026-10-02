@@ -8,30 +8,33 @@ import {
   getChannelSetting,
   getLadderConfig,
   HIDE_MEMBER_SAVING_PCT,
+  getEnabledCmsFunctions,
 } from "@/lib/store";
-import { CHANNEL_ID } from "@/lib/channel";
-import { loadJsSandbox, computeCallResults, guardBuyControls, guardBuyControlsInComponents } from "@keenan/services/builder";
-import { cmsFunctionService } from "@keenan/services/services";
+import { getPricingGroupId } from "@/lib/member";
+import {
+  loadJsSandbox,
+  computeCallResults,
+  templateOwns,
+  guardBuyControls,
+  guardBuyControlsInComponents,
+  buildFaqPageJsonLd,
+} from "@keenan/services/builder";
 import { BuilderProductPage } from "@/builder/BuilderProductPage";
-import { ProductOfferTiers } from "@/components/product/ProductOfferTiers";
+import { PRODUCT_COPY_DISPLAY_SETTING_KEY, readProductCopyDisplaySettings } from "@keenan/services";
+import { ProductOfferTiers, loadOfferTierTables } from "@/components/product/ProductOfferTiers";
 import { ProductPromotionBadge } from "@/components/product/ProductPromotionBadge";
 import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
-import { withSilverChefNode } from "@/builder/silverchef-node";
-import { withItemIdNode } from "@/builder/item-id-node";
-import { withAddonsNode } from "@/builder/product-addons-node";
-import { withProductInstructionsNode } from "@/builder/product-instructions-node";
-import { withImageNoticeNode } from "@/builder/product-image-notice";
-import { withCombinationNoticeNode } from "@/builder/product-combination-notice";
-import { withReviewsBlock, withReviewsBlockInComponents } from "@/builder/product-reviews-node";
-import { withResidentialNoticeNode } from "@/builder/product-residential-notice";
-import { withPackNoteNode } from "@/builder/product-pack-note";
-import { withModularNoticeNode } from "@/builder/modular-notice";
-import { withUpsellBlock } from "@/builder/upsell-node";
+import { withReviewsBlockInComponents } from "@/builder/product-reviews-node";
+import { withCompareNode } from "@/builder/compare-node";
+import { COMPARE_ENABLED } from "@/lib/compare-site";
+import { withWishlistNode, WISHLIST_FLAG, WISHLIST_PLACEMENT } from "@/builder/wishlist-node";
+import { composeProductPlacements, placementPassRuns } from "@/builder/product-placements";
 import { attachBrandLogos } from "@/lib/brand-logo-fallback";
-import { withCdMemberPricingNode } from "@/builder/cd-member-pricing-node";
 import { withMemberScaleLabelsInTree } from "@/builder/member-scale-labels";
 import { buildCdMembershipData, resolveCdLadderShare } from "@/lib/pricing/cd-member-pricing.server";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
+import { BuilderCssLink } from "@/builder/builder-css-link";
+import { usedComponents } from "@/builder/used-components";
 
 // ============================================================================
 // The product template's Site Builder branch — ENGINE.
@@ -128,9 +131,19 @@ export async function renderProductNodeBranch({
     // related cards and its variant pricing are all resolved with the account
     // in scope.
     accountId: member.accountId,
+    // The viewer's customer-group price list (Industry Kitchens' Zoey model) — priced onto the
+    // product row and both rails beneath the account's prices. Null on a channel without it.
+    pricingGroupId: await getPricingGroupId().catch(() => null),
     draft,
   }).catch(() => null);
   if (!payload) return null;
+
+  // FAQPage structured data from the product layout's FAQ pairs (IK parity #190: Zoey's Zip Water,
+  // Melbourne Coffee Beans and DIHR layouts published it). Null — no script at all — for every
+  // product whose layout has none, which is every Chefs Depot product (no layouts there).
+  const faqJsonLd = buildFaqPageJsonLd(
+    (payload.product as { layout?: { faqs?: { question: string; answer: string }[] } | null } | undefined)?.layout?.faqs
+  );
 
   // Card tSrCcnvx (Tim, 2026-08-19): the related-products rail places the same
   // `product-card` master a category grid does, so its rows need the same
@@ -241,44 +254,23 @@ export async function renderProductNodeBranch({
   const scaleWording = <T extends typeof SEED_PRODUCT_TREE>(tree: T): T =>
     scaleOn || HIDE_MEMBER_SAVING_PCT ? withMemberScaleLabelsInTree(tree, { relabelRrp: scaleOn }) : tree;
 
-  const nodeTree = guardBuyControls(
-    withCdMemberPricingNode(
-      withUpsellBlock(
-        // FOUR passes share the `actions-row` anchor and each one inserts BEFORE it, so
-        // whichever runs LAST ends up nearest the buy buttons. The order is decided, not
-        // accidental:
-        //   * the UNMADE-COMBINATION sentence (card VNh9DdYd) is outermost, and therefore the
-        //     very last thing before the buttons — it explains a DEAD button, so nothing may
-        //     come between the two. CXnP1lrL took away every availability string that used to
-        //     explain one (`sf-product-page`).
-        //   * the PRICED EXTRAS (0CDcCYmO) come next: ticking one changes what Add to Cart
-        //     will charge, and a priced control belongs beside the button it moves.
-        //   * the free-text INSTRUCTIONS box (kyMjCmAw) sits above them — it describes what to
-        //     build and moves no money, so the priced control keeps the nearer place.
-        //   * the PACK NOTE (O108e4jH / zeMPVcA3) is innermost: a fact about the price, which
-        //     belongs with the price panel.
-        // Page order is therefore price -> pack sentence -> Instructions -> extras -> "we do
-        // not make that combination" -> buy row. `ProductDetail.tsx` (the non-node fallback
-        // renderer) is hand-ordered to match so the two renderers cannot disagree, and if any
-        // of these anchors moves they all move together (catalogue.md `sf-product-page`).
-        withCombinationNoticeNode(
-          withResidentialNoticeNode(
-            withAddonsNode(
-              withProductInstructionsNode(
-                withPackNoteNode(
-                  withModularNoticeNode(
-                    withReviewsBlock(
-                      withImageNoticeNode(withSilverChefNode(withItemIdNode(scaleWording(storedTree ?? SEED_PRODUCT_TREE))))
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-  );
+  // A placement the stored template declares it authors itself (`data-kg-template-owns` on its
+  // root) is never inserted here, so its node, position and Show-if belong to the CMS alone (IK
+  // hidden-conditionals audit, 2026-09-29). The order of the rest is the one described above —
+  // see `builder/product-placements.ts`.
+  const baseTree = scaleWording(storedTree ?? SEED_PRODUCT_TREE);
+  const composedTree = guardBuyControls(composeProductPlacements(baseTree));
+  // The carton-tier table (card p6YVxc4P) is drawn BELOW the tree unless the template declares it
+  // places the `product-offer-tiers` native itself (C13). Then the tables are loaded here — the SAME
+  // loader, the same inputs — handed to the native through `nativeData`, and `offerTiers.shown` /
+  // `offerTiers.tables` are bindable for the template's own Show-if.
+  const offerTiersInTree = !placementPassRuns(baseTree, "offer-tiers");
+  const offerTierTables = offerTiersInTree
+    ? await loadOfferTierTables({
+        sku: (viewedProduct?.sku as string | null) ?? null,
+        productId: (viewedProduct?.id as number | null) ?? null,
+      })
+    : [];
 
   // The panel's data, resolved ONCE per request. A sealed native cannot read the
   // database, so the prices and this shopper's ladder position ride the route's own
@@ -313,6 +305,22 @@ export async function renderProductNodeBranch({
       >
     )
   );
+  // Add to Compare (IK parity plan decision 12, root cause `compare-feature`) — directly under
+  // the buy row, on the one site whose switch is on (`lib/compare-site.ts`: Industry Kitchens).
+  // Placed AFTER the component library is read so an author who put the `product-compare`
+  // leaf inside a master this page places (e.g. `actions-row`) keeps their placement.
+  const comparedTree = withCompareNode(composedTree, {
+    enabled: COMPARE_ENABLED && placementPassRuns(baseTree, "compare"),
+    components,
+  });
+  // The wishlist (Industry Kitchens, 2026-10-02) — a reference to the channel's `wishlist-add` CMS
+  // master directly after the compare control, on a channel whose `wishlist_enabled` setting is on.
+  // Off (Chefs Depot) returns the same tree. The words and Show-if live in the master.
+  const nodeTree = withWishlistNode(comparedTree, {
+    enabled:
+      !templateOwns(baseTree, WISHLIST_PLACEMENT) && (await getFeatureFlag(WISHLIST_FLAG).catch(() => false)),
+    components,
+  });
   // CSS for AUTHORED classes: the static Tailwind sheet only covers classes in
   // this repo's source, so the portal compiles the channel's designer
   // vocabulary (arbitrary values, lg:/hover: variants, palette colours…) on
@@ -323,11 +331,16 @@ export async function renderProductNodeBranch({
       css?: string;
     } | null)?.css ?? "";
 
+  // Plain-text descriptions keep their line breaks where the site says so (channel setting
+  // `product_copy_display`, edited in the portal; no row = off, so a site that never set it is unchanged).
+  const { plain_text_line_breaks: plainTextLineBreaks } = readProductCopyDisplaySettings(
+    await getChannelSetting(PRODUCT_COPY_DISPLAY_SETTING_KEY).catch(() => null)
+  );
+
   // JavaScript function library: SSR evaluates call-conditions live (the
   // sandbox is awaited here), and callResults keeps the client's first paint
   // identical until its wasm loads.
-  const jsFunctions = await cmsFunctionService
-    .enabledMapForChannel(CHANNEL_ID)
+  const jsFunctions = await getEnabledCmsFunctions()
     .catch(() => ({}) as Record<string, string>);
   let callResults: Record<string, unknown> = {};
   if (Object.keys(jsFunctions).length > 0) {
@@ -345,16 +358,27 @@ export async function renderProductNodeBranch({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
         />
       )}
-      {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
+      {faqJsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd).replace(/</g, "\\u003c") }}
+        />
+      )}
+      <BuilderCssLink css={builderCss} />
       <ViewedProductTracker product={viewedProduct} />
       <BuilderProductPage
         tree={nodeTree}
-        payload={pagePayload}
+        payload={
+          offerTiersInTree
+            ? ({ ...pagePayload, offerTiers: { shown: offerTierTables.length > 0, tables: offerTierTables } } as typeof pagePayload)
+            : pagePayload
+        }
         namedStyles={namedStyles}
-        components={components}
+        components={usedComponents(nodeTree, components)}
         jsFunctions={jsFunctions}
         callResults={callResults}
-        nativeData={{ ...(nativeData ?? {}), cdMembership }}
+        nativeData={{ ...(nativeData ?? {}), cdMembership, offerTiers: { tables: offerTierTables } }}
+        plainTextLineBreaks={plainTextLineBreaks}
       />
       {/* Carton tiers this product is in (card p6YVxc4P). The node tree is the
           path the LIVE Industry Kitchens product page takes, so the table has to
@@ -363,15 +387,18 @@ export async function renderProductNodeBranch({
           and it draws nothing when the product is in no banded offer. */}
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* The Buy X Get Y / free-freight badge (card EIXdjw2s), on this branch for the same
-            reason as the tier table: it is the path the live Industry Kitchens page takes. */}
+            reason as the tier table: it is the path the live Industry Kitchens page takes. It
+            renders whether or not the template places the tier table itself. */}
         <ProductPromotionBadge
           sku={(viewedProduct?.sku as string | null) ?? null}
           productId={(viewedProduct?.id as number | null) ?? null}
         />
-        <ProductOfferTiers
-          sku={(viewedProduct?.sku as string | null) ?? null}
-          productId={(viewedProduct?.id as number | null) ?? null}
-        />
+        {offerTiersInTree ? null : (
+          <ProductOfferTiers
+            sku={(viewedProduct?.sku as string | null) ?? null}
+            productId={(viewedProduct?.id as number | null) ?? null}
+          />
+        )}
       </div>
     </div>
   );

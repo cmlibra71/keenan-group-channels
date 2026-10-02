@@ -18,12 +18,9 @@ export default async function CartPage() {
   const cart = await getCart();
   const items = cart?.items ?? [];
 
-  // Check tax mode
-  let pricesIncludeTax = false;
-  try {
-    const taxSetting = await channelSettingsService.getByKey(CHANNEL_ID, "prices_include_tax");
-    pricesIncludeTax = taxSetting.setting_value === true || taxSetting.setting_value === "true";
-  } catch {}
+  // Check tax mode — the same switch the root layout reads, through the cached flag set
+  // (same true / "true" test, false when unset or unreadable), not a live read per view.
+  const pricesIncludeTax = await getFeatureFlag("prices_include_tax");
 
   // Check membership upsell eligibility
   let showUpsell = false;

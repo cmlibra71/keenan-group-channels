@@ -1,6 +1,15 @@
 @import "tailwindcss";
 @import "./theme-contract.css";
 @import "./cms-safelist.css";
+/* The illustrative-images notice panel colour (card 82HgV23q), now AUTHORED in the product template
+   (cms_pages 69, node product-image-notice) instead of drawn by the sealed ProductImageNotice. The
+   portal compiles it into the builder CSS on publish; this keeps it in the static sheet too, so a
+   draft preview renders the panel in its colour before the page is published. */
+@source inline("bg-[#C85735]");
+/* Authored-node classes the draft previews need before the builder CSS is recompiled on publish:
+   the carton-tier table's placement on the product template (C13) and the brand-range template's
+   range crumb wrapper (C24). */
+@source inline("-mb-8 pt-8 contents");
 
 /* Prevent horizontal overflow when users pinch-zoom on mobile */
 html, body {
@@ -477,4 +486,93 @@ html, body {
     font-weight: 600;
     color: #18181b;
   }
+}
+
+/* Zoey's SALE label (IK card batch, 2026-09-29), AUTHORED in the stored templates: the grey tile
+   flag on the product-card master (cms_components 34, node ikc-sale-flag) and the red label on the
+   product image (cms_pages 69). The portal compiles these into the builder CSS on publish; listing
+   them here keeps a draft preview in the old site's colours and offsets before publish. */
+@source inline("left-[15px] top-[15px] rounded-[3px] bg-[#ABABAB] bg-[#BF1A2D] leading-[12px] leading-[14px]");
+/* Zoey's fixed "Price as configured" bar on a priced bundle (cms_pages 69, node ikp-bundle-bar). */
+@source inline("z-[60] border-[#cccccc] text-[#444444] p-[10px] lg:p-5 text-[20px] lg:text-[18px] lg:text-right");
+/* Room for Zoey's fixed bundle bar: the space under the page (node ikp-bundle-bar-spacer) and the
+   "Talk to a Specialist" button lifted above the bar while it is on screen. */
+@source inline("h-[104px] lg:h-[128px]");
+body:has([data-node-id="ikp-bundle-bar"]) .ik-specialist-float {
+  bottom: calc(var(--ik-bundle-bar-h, 104px) + 1.25rem);
+}
+@media (min-width: 1024px) {
+  body:has([data-node-id="ikp-bundle-bar"]) .ik-specialist-float {
+    bottom: calc(var(--ik-bundle-bar-h-lg, 128px) + 1.25rem);
+  }
+}
+/* The space under the whole page (footer included) while Zoey's fixed bundle bar is on screen —
+   the bar is ≈97px on a phone and ≈114px on desktop. */
+body:has([data-node-id="ikp-bundle-bar"]) {
+  padding-bottom: 104px;
+}
+@media (min-width: 1024px) {
+  body:has([data-node-id="ikp-bundle-bar"]) {
+    padding-bottom: 128px;
+  }
+}
+
+
+/* ── Listing loaders (lib/listing-nav.tsx) ───────────────────────────────────
+   While a filter change loads, every card in a `data-listing-grid` becomes a
+   Industry Kitchens frying-pan loader of EXACTLY its own size: the card stays in the layout with its
+   content hidden, and a layer on top draws a grey card with the animation where
+   the photo goes. Nothing shows for the first 0.3 s, so a fast answer never
+   flashes. Seven copies of the animation, each with its own start point and
+   speed, are dealt out by :nth-child(7n + k) so the grid never moves in step
+   (7 divides none of the 2, 3, 4 or 5 column layouts). Sizes use cqw — 100cqw is
+   the card's own width, which is also the height of its square photo.
+   A Site Builder card sits inside a `display: contents` component wrapper, which
+   has no box to draw on, so the loader goes on the first real box inside it;
+   the timing copy is set on the grid child and inherited. */
+[data-listing-pending] :is([data-listing-grid] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > [style*="contents"] > *) {
+  position: relative;
+  container-type: inline-size;
+}
+[data-listing-pending] :is([data-listing-grid] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > [style*="contents"] > *) > * {
+  animation: kl-hide 0s linear 0.3s both;
+}
+[data-listing-pending] :is([data-listing-grid] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > [style*="contents"] > *)::after,
+[data-listing-pending] :is([data-listing-grid] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > [style*="contents"] > *)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  pointer-events: none;
+  animation: kl-show 0.15s ease-out 0.3s both;
+}
+[data-listing-pending] :is([data-listing-grid] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > [style*="contents"] > *)::after {
+  z-index: 1;
+  box-shadow: none;
+  background:
+    var(--kl-img, url(/loading/pan-flip-1.svg)) center calc(0px + (100cqw - 2 * 0px) * 0.2) / calc((100cqw - 2 * 0px) * 0.6) no-repeat,
+    linear-gradient(#e8e8ea, #e8e8ea) 0px calc(100cqw + 12px) / calc((100cqw - 2 * 0px) * 0.92) 11px no-repeat,
+    linear-gradient(#e8e8ea, #e8e8ea) 0px calc(100cqw + 30px) / calc((100cqw - 2 * 0px) * 0.64) 11px no-repeat,
+    linear-gradient(#e8e8ea, #e8e8ea) 0px calc(100cqw + 52px) / calc((100cqw - 2 * 0px) * 0.34) 11px no-repeat,
+    linear-gradient(#f4f4f5, #f4f4f5) 0px 0px / calc(100cqw - 2 * 0px) calc(100cqw - 2 * 0px) no-repeat,
+    #fff;
+}
+[data-listing-pending] :is([data-listing-grid] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > [style*="contents"] > *)::before {
+  z-index: 2;
+  background: linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.65) 50%, transparent 65%) 0 0 / 250% 100% no-repeat;
+  animation: kl-show 0.15s ease-out 0.3s both, kl-shine 1.6s ease-in-out var(--kl-shine-delay, 0s) infinite;
+}
+[data-listing-pending] [data-listing-grid] > :nth-child(7n + 1) { --kl-img: url(/loading/pan-flip-1.svg); --kl-shine-delay: -0.59s; }
+[data-listing-pending] [data-listing-grid] > :nth-child(7n + 2) { --kl-img: url(/loading/pan-flip-2.svg); --kl-shine-delay: -1.18s; }
+[data-listing-pending] [data-listing-grid] > :nth-child(7n + 3) { --kl-img: url(/loading/pan-flip-3.svg); --kl-shine-delay: -0.18s; }
+[data-listing-pending] [data-listing-grid] > :nth-child(7n + 4) { --kl-img: url(/loading/pan-flip-4.svg); --kl-shine-delay: -0.77s; }
+[data-listing-pending] [data-listing-grid] > :nth-child(7n + 5) { --kl-img: url(/loading/pan-flip-5.svg); --kl-shine-delay: -1.36s; }
+[data-listing-pending] [data-listing-grid] > :nth-child(7n + 6) { --kl-img: url(/loading/pan-flip-6.svg); --kl-shine-delay: -0.35s; }
+[data-listing-pending] [data-listing-grid] > :nth-child(7n + 7) { --kl-img: url(/loading/pan-flip-7.svg); --kl-shine-delay: -0.94s; }
+@keyframes kl-hide { to { visibility: hidden; } }
+@keyframes kl-show { from { opacity: 0; } to { opacity: 1; } }
+@keyframes kl-shine { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  [data-listing-pending] [data-listing-grid] > *:nth-child(n) { --kl-img: url(/loading/pan-flip-still.svg); }
+  [data-listing-pending] :is([data-listing-grid] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > :not([style*="contents"]), [data-listing-grid] > [style*="contents"] > [style*="contents"] > *)::before { display: none; }
 }

@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchProducts } from "@keenan/services/search";
-import { shouldSuppressCatalogSalePrice } from "@/lib/store";
+import { applyGroupPrices, applySpecialPrices, getChannelRulesForProducts, shouldSuppressCatalogSalePrice, withBrandDisplayNames } from "@/lib/store";
+import { numericSpecialHit } from "@/lib/pricing/special-public-price";
+import { getPricingGroupId } from "@/lib/member";
+import { applyChannelRulesToTileRows } from "@keenan/services/channel-rules";
 import { CHANNEL_ID } from "@/lib/channel";
 import { applyCatalogScope } from "@/lib/catalog-scope";
 import { parsePublicSearchParams } from "@/lib/search-params";
+import { getSession } from "@/lib/auth";
 
 /**
  * Fields this PUBLIC endpoint may serialise, as an ALLOWLIST.
@@ -102,12 +106,60 @@ export async function GET(request: NextRequest) {
       result.estimatedTotalHits = Math.max(visible.length, result.estimatedTotalHits - dropped);
     }
 
+    // The viewer's customer-group price list (Industry Kitchens' Zoey model): a suggestion quotes
+    // the price the product's own tile and page quote this viewer — the same record, overlaid
+    // onto a COPY of the shared index hits (this response is no-store, below). Identity on a
+    // channel without `customer_group_pricing` switched on.
+    const pricingGroupId = await getPricingGroupId();
+    if (pricingGroupId && result.hits.length > 0) {
+      result.hits = (await applyGroupPrices(
+        result.hits as unknown as { id: number }[],
+        pricingGroupId
+      )) as unknown as typeof result.hits;
+    }
+
     // Member-only pricing channels never expose the shared catalog sale price
     // (it's another channel's public price) — not even in search results.
     if (await shouldSuppressCatalogSalePrice()) {
       result.hits = result.hits.map((hit) =>
         "salePrice" in hit ? { ...hit, salePrice: null } : hit
       ) as typeof result.hits;
+    }
+
+    // A PARTNER SPECIAL (card tJ4audbu) goes on LAST, exactly as on the tile and the page
+    // (`lib/member.ts` `applyAccountPrices` -> `applySpecialPrices`): the locked price for every
+    // shopper, struck against the regular figure the rows carry by now. AFTER the suppression above,
+    // which would otherwise clear the special's `salePrice`. The overlay writes 2dp strings and the
+    // dropdowns compare numbers, so special hits are turned back into numbers. Identity for a hit
+    // with no special.
+    if (result.hits.length > 0) {
+      result.hits = (
+        (await applySpecialPrices(result.hits as unknown as { id: number }[])) as unknown as typeof result.hits
+      ).map((hit) => numericSpecialHit(hit as never)) as typeof result.hits;
+    }
+
+    // The brand name THIS storefront prints (a Zoey sub-line such as "Waldorf Bold", or staff's
+    // override — services brandDisplaySql.ts) over the shared index's parent brand, for this page of
+    // hits in one query. Identity on a storefront that defines no labels (Chefs Depot).
+    if (result.hits.length > 0) {
+      result.hits = (await withBrandDisplayNames(
+        result.hits as unknown as { id: number; brandName?: string | null }[]
+      )) as unknown as typeof result.hits;
+    }
+
+    // This storefront's Zoey rules (`metafields.zoey_channel_rules[CHANNEL_ID]`, portal PR #1028):
+    // a zero-price product shows no price in the suggestions, exactly as its tile and page show
+    // none. The index carries no rules, so they are read for this page of hits in one query; a
+    // product with none for this channel (every Chefs Depot product) is untouched.
+    if (result.hits.length > 0) {
+      const rulesById = await getChannelRulesForProducts(result.hits.map((h) => h.id));
+      if (rulesById.size > 0) {
+        // The guest rule needs to know who is asking — read only when a hit carries it.
+        const viewer = [...rulesById.values()].some((r) => r.guestQuoteOnly)
+          ? { loggedIn: (await getSession().catch(() => null)) != null }
+          : null;
+        result.hits = applyChannelRulesToTileRows(result.hits, { rulesById, viewer }) as typeof result.hits;
+      }
     }
 
     // Narrow to the public field set LAST, so nothing added above can widen it.

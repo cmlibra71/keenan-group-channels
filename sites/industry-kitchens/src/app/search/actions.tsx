@@ -73,6 +73,12 @@ export async function loadMoreSearchResults(
   return {
     node: (
       <ProductGrid
+        // Zoey's SEARCH tile (old site, 2026-09-28): SKU line, SALE flag, Add to Basket + Add to
+        // Quote — or View Product + an Add to Quote link for a product a tile cannot add — and NO
+        // compare link (the search list carried a wishlist link instead; IK has no wishlist).
+        buyButtons="search"
+        saleFlags
+        showSku
         products={products}
         memberPricingAvailable={memberPricingEnabled}
         memberPriceMap={await getListingMemberPrices(products)}

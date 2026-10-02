@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { addToQuote } from "@/lib/actions/quote";
 import { useCartQuoteCounts, useHeaderPanels } from "@/lib/cart-quote-counts";
 import type { KitChoice } from "@/lib/product-kit";
 import type { AddonSelectionInput } from "@keenan/services/product-addons";
+import { tileRefusalDestination } from "@/lib/product/addon-panel";
 
 export function AddToQuoteButton({
   productId,
@@ -31,6 +33,7 @@ export function AddToQuoteButton({
   const [refusal, setRefusal] = useState<string | null>(null);
   const { setQuoteCount } = useCartQuoteCounts();
   const { open } = useHeaderPanels();
+  const router = useRouter();
 
   function handleClick() {
     setRefusal(null);
@@ -45,6 +48,11 @@ export function AddToQuoteButton({
       // dropping it would leave the shopper a button that does nothing at all.
       if (res && "error" in res && typeof res.error === "string") {
         setRefusal(res.error);
+        // Same as the cart button (card tkvntxsq): a TILE's refusal over an unanswered
+        // required question carries the product page, and the shopper is taken there to
+        // answer it. From the product page itself the action returns no destination.
+        const destination = tileRefusalDestination(res);
+        if (destination) router.push(destination);
         return;
       }
       if (res && "quoteCount" in res && typeof res.quoteCount === "number") {

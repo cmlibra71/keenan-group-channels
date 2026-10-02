@@ -179,7 +179,7 @@ export function WarrantyDirectory() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by brand, equipment type, or keyword\u2026"
+          placeholder="Search by brand, equipment type, or keyword…"
           className="w-full rounded-lg border border-zinc-300 pl-10 pr-4 py-2 text-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
         />
       </div>

@@ -13,6 +13,8 @@ import {
   applyAdvertisedLadderPrices,
   applySpecialPrices,
   getMemberLadderShare,
+  applyGroupPrices,
+  resolveViewerPricingGroupId,
 } from "@/lib/store";
 
 export interface MemberContext {
@@ -74,6 +76,21 @@ export const getAccountId = cache(async (): Promise<number | null> => {
 });
 
 /**
+ * The customer group whose PRICE LIST prices this viewer — Industry Kitchens' Zoey model
+ * (services `groupPricing.ts`): the buying ACCOUNT's group, else the person's own, else the
+ * storefront's not-logged-in tier (a guest is priced from "NOT LOGGED IN", as on Zoey).
+ *
+ * Null on a channel without `customer_group_pricing` switched on — Chefs Depot — after one
+ * cached settings read, so nothing below changes there. Independent of membership: it is NOT the
+ * member-pricing group (`getMemberContext().customerGroupId`, which only an active Chefs Depot
+ * member carries). Memoized per request: every catalogue surface, the cart and checkout ask.
+ */
+export const getPricingGroupId = cache(async (): Promise<number | null> => {
+  const [session, accountId] = await Promise.all([getSession(), getAccountId()]);
+  return resolveViewerPricingGroupId({ accountId, contactId: session?.contactId ?? null }).catch(() => null);
+});
+
+/**
  * Apply this request's PRICE OVERLAYS to catalogue rows that came out of a SHARED source —
  * `unstable_cache`, the `category_listing_cache` table or the Meilisearch index — none of which
  * can hold a per-request price without leaking it to everyone. Both overlays are applied HERE,
@@ -92,13 +109,17 @@ export const getAccountId = cache(async (): Promise<number | null> => {
 export async function applyAccountPrices<T extends { id: number }[]>(products: T): Promise<T> {
   if (products.length === 0) return products;
   const advertised = (await applyAdvertisedLadderPrices(products as never)) as T;
+  // The viewer's customer-group price list (Industry Kitchens) — between the advertised price and
+  // the account's contract prices, which still win. Identity on a channel without it switched on.
+  const grouped = (await applyGroupPrices(advertised as never, await getPricingGroupId())) as T;
   const accountId = await getAccountId();
   const accountPriced = accountId
-    ? ((await applyAccountPricesToProducts(advertised as never, accountId)) as T)
-    : advertised;
-  // A PARTNER SPECIAL goes on LAST, over both layers above (card tJ4audbu): it is a locked price
-  // for every shopper, so it strikes through whatever the row was advertising and beats the
-  // account's own contract price in both directions. Identity for a row with no special.
+    ? ((await applyAccountPricesToProducts(grouped as never, accountId)) as T)
+    : grouped;
+  // A PARTNER SPECIAL goes on LAST, over every layer above (card tJ4audbu): it is a locked price
+  // for every shopper, so it strikes through whatever the row was advertising — the group price and
+  // the account's own contract price included — and beats the contract price in both directions.
+  // Identity for a row with no special.
   return applySpecialPrices(accountPriced as never) as Promise<T>;
 }
 

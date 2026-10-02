@@ -34,6 +34,9 @@ export interface GridProduct {
    * no special.
    */
   special?: { badge: string; label: string | null } | null;
+  /** configurable-from-price — attached upstream by the node branch (`attachFromPrices`). */
+  fromPrice?: string | null;
+  fromSalePrice?: string | null;
   thumbnailImage?: { urlStandard: string; urlThumbnail: string | null } | null;
   /**
    * Card tSrCcnvx: the brand's logo, which the tile shows instead of the grey
@@ -68,7 +71,9 @@ export function ProductGridClient({
   }
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+    // data-listing-grid: while a filter change loads, each card becomes a loader of
+    // the same size (lib/listing-nav.tsx + globals.css).
+    <div data-listing-grid="" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
       <Ga4ViewItemList
         listId={listId}
         listName={listName}
@@ -89,6 +94,8 @@ export function ProductGridClient({
           price={product.price}
           salePrice={product.salePrice}
           special={product.special ?? null}
+          fromPrice={product.fromPrice ?? null}
+          fromSalePrice={product.fromSalePrice ?? null}
           imageUrl={product.thumbnailImage?.urlThumbnail || product.thumbnailImage?.urlStandard}
           brandLogoUrl={product.brand_logo_url ?? null}
           brandLogoAlt={product.brand_name ?? null}

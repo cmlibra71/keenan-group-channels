@@ -1,5 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { specialMarkerOf, withSpecialMarker, specialLineIsStale, isRewardLine } from "./special-line";
 
 // Card tJ4audbu — a cart line re-judges its Partner Special: the special "ends by itself on the
@@ -44,4 +47,26 @@ test("a promotion's reward line is never re-priced here (it moves with its own o
   assert.equal(isRewardLine([{ promotion_reward: 7 }]), true);
   assert.equal(specialLineIsStale([{ promotion_reward: 7 }], live), false);
   assert.equal(isRewardLine([{ partner_special: 168, price_ex_tax: 1300 }]), false);
+});
+
+// ── ONE lock, every charge path (card tJ4audbu, after the merge with #323's cart-side lock) ──────
+const here = fileURLToPath(new URL(".", import.meta.url));
+const source = (rel: string) => readFileSync(path.resolve(here, rel), "utf8");
+
+test("the cart prices a special line once, and never lays the member scale's band over it", () => {
+  const cart = source("../actions/cart.ts");
+  const fn = cart.slice(cart.indexOf("async function resolveItemPricingAndSpecial"), cart.indexOf("function lockToPartnerSpecial"));
+  assert.ok(fn.length > 0, "resolveItemPricingAndSpecial exists");
+  const lockAt = fn.indexOf("lockToPartnerSpecial(layered");
+  const bandAt = fn.indexOf("boundToMemberScale(");
+  assert.ok(lockAt > 0 && bandAt > lockAt, "the special returns before the band is consulted");
+  // No second cart-side lock path survives the merge.
+  assert.equal((cart.match(/getLiveSpecials\(\[productId\]\)/g) ?? []).length, 1);
+});
+
+test("checkout's customer-group re-price leaves a Partner Special line alone", () => {
+  const src = source("../checkout/group-prices.ts");
+  const skip = src.indexOf("if (onSpecial.has(line.product_id)) continue;");
+  const derive = src.indexOf("await groupLinePricing(");
+  assert.ok(skip > 0 && derive > skip, "special lines are skipped before the group price is derived");
 });

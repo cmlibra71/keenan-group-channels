@@ -16,6 +16,8 @@ import {
   getDefaultListingSort,
 } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
+import { loadCatalogAttributeContext } from "@keenan/services";
+import { CHANNEL_ID as ATTR_CHANNEL_ID } from "@/lib/channel";
 import { getListingPricing } from "@/lib/member";
 import { categoryRobots } from "@/lib/seo";
 import { ProductGrid } from "@/components/product/ProductGrid";
@@ -33,6 +35,7 @@ import {
   type CategoryListingPricing,
 } from "@/builder/category-node-branch";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
+import { ListingNavProvider } from "@/lib/listing-nav";
 import { parseListingSort } from "@/lib/listing-sort";
 import { RichContent } from "@/components/content/RichContent";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
@@ -158,7 +161,7 @@ export default async function CategoryPage({
   // these selections go into. An attribute the category does not offer simply
   // matches nothing extra, because the products that would satisfy it are the
   // ones carrying the value.
-  const attributeSelections = parseAttributeSelections(sp as Record<string, string | undefined>);
+  const attributeSelections = parseAttributeSelections(sp as Record<string, string | undefined>, (await loadCatalogAttributeContext(ATTR_CHANNEL_ID)).attributes);
   const attributeParams = Object.keys(attributeSelections).map(attributeParam);
   // Availability is no longer a shopper-facing facet at all: "In stock" was
   // retired first and Clearance followed (clearance products are browsed via the
@@ -434,6 +437,7 @@ export default async function CategoryPage({
 
       {/* ═══ Rail + grid ═══ */}
       <div className="container-page py-8">
+        <ListingNavProvider>
         <div className="flex gap-6">
           <FilterRail facets={facets} />
 
@@ -469,6 +473,7 @@ export default async function CategoryPage({
             )}
           </div>
         </div>
+        </ListingNavProvider>
       </div>
 
       {/* ═══ CMS: below-listing content (empty unless set) ═══ */}

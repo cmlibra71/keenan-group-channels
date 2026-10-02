@@ -2,9 +2,11 @@ import { notFound } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import { draftMode, headers } from "next/headers";
 import Link from "next/link";
-import { getProductBySlug, getProductChannelSeo, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getMemberSavingsPctMap, brandService, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice, getCmsPage, getCmsTemplate } from "@/lib/store";
+import { getProductBySlug, getProductChannelSeo, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getMemberSavingsPctMap, getBrandRowById, CHANNEL_ID, getProductBreadcrumbs, shouldSuppressCatalogSalePrice, getCmsPage, getCmsTemplate } from "@/lib/store";
+import { stripHiddenPrices } from "@keenan/services/price-visibility";
 import type { RenderContext } from "@keenan/services";
 import { getMemberContext, getListingPricing, applyAccountPrices } from "@/lib/member";
+import { offerPriceWithSpecial } from "@/lib/pricing/special-public-price";
 import { assertProductVisible, applyCatalogScope } from "@/lib/catalog-scope";
 import { ChevronRight } from "lucide-react";
 import { ProductOfferTiers } from "@/components/product/ProductOfferTiers";
@@ -74,7 +76,10 @@ export default async function ProductPage({
 
   // Per-account product prices override EVERY other price. The cached product row is SHARED by all
   // shoppers, so the account's price is overlaid onto a copy at read time (never into the cache).
-  const [product] = await applyAccountPrices([cachedProduct]);
+  // An account price must not put a figure back on a product whose price is HIDDEN: the row is
+  // re-hidden AFTER the overlay, so no price is serialised into this page for it (audit S19).
+  const [product] = (await applyAccountPrices([cachedProduct])).map(stripHiddenPrices);
+  const priceHidden = product.hidePrice === true;
 
   // Reviews are PROJECTED BEFORE THEY ARE AWAITED. `getProductReviews` returns the
   // whole `product_reviews` row — `author_email` (stamped on every signed-in
@@ -93,7 +98,7 @@ export default async function ProductPage({
     getProductVideos(product.id),
     getRelatedProducts(product.id, product.categoryIds ?? []),
     product.brandId != null
-      ? (brandService.getById(product.brandId) as Promise<{ name?: string | null; slug?: string | null } | null>)
+      ? (getBrandRowById(product.brandId) as Promise<{ name?: string | null; slug?: string | null } | null>)
       : Promise.resolve(null),
   ]);
 
@@ -130,7 +135,7 @@ export default async function ProductPage({
   membershipTeaser = memberCtx.planPrice
     ? { fromPrice: parseFloat(memberCtx.planPrice).toFixed(2) }
     : null;
-  if ((memberPricingEnabled && memberCtx.customerGroupId) || memberCtx.accountId) {
+  if (!priceHidden && ((memberPricingEnabled && memberCtx.customerGroupId) || memberCtx.accountId)) {
 
     // Member prices for ALL variants so the client can update on variant change. The account is
     // threaded in so its contract price short-circuits the member / cost-plus price.
@@ -188,7 +193,16 @@ export default async function ProductPage({
 
   // Product + Offer + BreadcrumbList structured data. The Offer price is the
   // visitor's state (member or RRP) expressed INC GST for Google Shopping.
-  const offerExPrice = isMember && memberPrice != null ? memberPrice : parseFloat(product.price);
+  //
+  // A live PARTNER SPECIAL (card tJ4audbu) is the price for every visitor — it is locked, so no
+  // member price goes under it — and the page shows it as the "now" figure. `product.price` is the
+  // struck regular figure once `applySpecialPrices` has run, so the Offer states the special, with
+  // its last day as `priceValidUntil`: Google's automatic item updates read this markup and would
+  // otherwise "correct" the feed's sale price back up to the regular price.
+  const { priceEx: offerExPrice, priceValidUntil } = offerPriceWithSpecial(
+    product,
+    isMember && memberPrice != null ? memberPrice : parseFloat(product.price)
+  );
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
@@ -196,6 +210,8 @@ export default async function ProductPage({
         "@type": "Product",
         name: product.name,
         sku: product.sku ?? undefined,
+        // The group-wide Item ID (card w6OZSJTD): a search engine ties the code to this product.
+        productID: (product.itemRef as string | null | undefined) ?? undefined,
         brand: brandRow?.name ? { "@type": "Brand", name: brandRow.name } : undefined,
         image: product.images?.[0]?.urlStandard ?? undefined,
         offers:
@@ -204,6 +220,7 @@ export default async function ProductPage({
                 "@type": "Offer",
                 priceCurrency: "AUD",
                 price: (offerExPrice * 1.1).toFixed(2),
+                ...(priceValidUntil ? { priceValidUntil } : {}),
                 availability:
                   (product.availability ?? "available") === "available"
                     ? "https://schema.org/InStock"

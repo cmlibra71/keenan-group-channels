@@ -95,8 +95,11 @@ export function ProductGridClient({
       </div>
     );
   }
+  // data-listing-grid: while a filter change loads, each card becomes a loader of
+  // the same size (lib/listing-nav.tsx + globals.css).
   return (
     <div
+      data-listing-grid=""
       className={
         wrapperClassName ??
         `grid grid-cols-2 gap-3 sm:gap-4 ${

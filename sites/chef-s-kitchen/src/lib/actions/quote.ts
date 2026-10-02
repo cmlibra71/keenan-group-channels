@@ -30,6 +30,7 @@ import {
 } from "@keenan/services/product-addons";
 import {
   buyableAddons,
+  productPageForRefusal,
   customisationDefinition,
   extrasDefinition,
 } from "@/lib/product/addon-panel";
@@ -117,7 +118,18 @@ export async function addToQuote(
    * `addToQuote` deliberately applies no member or quantity tier either. What they do is
    * travel, so the rep can see the configuration the customer was looking at.
    */
-  addons?: AddonSelectionInput | null
+  addons?: AddonSelectionInput | null,
+  /**
+   * How many to add, in units — a listing tile's quantity box (IK parity, product cards). Absent
+   * (every caller before it) adds one pack, exactly as before. Snapped up to whole packs.
+   */
+  quantity?: number | null,
+  /**
+   * The shared product page passes a gift card's details here. Only Industry Kitchens sells its
+   * gift card with amounts (`channel_gift_cards["1"]`); Chefs Depot has no gift card configuration,
+   * so it is accepted and ignored and this storefront's Add to Quote is unchanged.
+   */
+  _giftCard?: unknown
 ) {
   // getById returns snake_case — read sale_price (reading salePrice was undefined,
   // so quotes silently used RRP instead of the catalog sale price).
@@ -129,6 +141,7 @@ export async function addToQuote(
     sale_price: string | null;
     metafields?: unknown;
     hide_price?: boolean | null;
+    url_path?: string | null;
     restrict_add_to_quote?: boolean | null;
     sell_pack_size?: number | null;
     sell_pack_unit?: string | null;
@@ -230,19 +243,23 @@ export async function addToQuote(
     extrasDefinition(rawAddonDefinition, addonPanelOffered),
     addonsPosted ? addons : {}
   );
+  // A TILE posted nothing, so its refusal also names the page where the question can be answered
+  // (card tkvntxsq — a gas range is never quoted without its gas type) and the tile goes there.
+  const tileDestination = addonsPosted ? null : productPageForRefusal(product.url_path);
   if (unansweredGroups.length > 0) {
-    return {
-      error: addonsPosted
-        ? `Please choose ${unansweredGroups.join(" and ")} before adding this to a quote.`
-        : `Open this product's page to choose ${unansweredGroups.join(" and ")} before adding it to a quote.`,
-    };
+    const error = addonsPosted
+      ? `Please choose ${unansweredGroups.join(" and ")} before adding this to a quote.`
+      : `Open this product's page to choose ${unansweredGroups.join(" and ")} before adding it to a quote.`;
+    return tileDestination ? { error, productPage: tileDestination } : { error };
   }
   const typedRefusal = customisationRefusal(
     customisationDefinition(rawAddonDefinition),
     addonsPosted ? addons : undefined,
     "quote"
   );
-  if (typedRefusal) return { error: typedRefusal };
+  if (typedRefusal) {
+    return tileDestination ? { error: typedRefusal, productPage: tileDestination } : { error: typedRefusal };
+  }
   const addonNote = describeAddonSelection(resolvedAddons);
   if (resolvedAddons.length > 0) {
     lineAttributes = { ...(lineAttributes ?? {}), addon_selection: resolvedAddons };
@@ -310,6 +327,11 @@ export async function addToQuote(
     sellPackUnit: product.sell_pack_unit ?? null,
   });
 
+  // One press adds one pack; a tile's quantity box asks for more (units, snapped up to packs).
+  const wantedUnits =
+    typeof quantity === "number" && Number.isInteger(quantity) && quantity > 1 ? Math.min(quantity, 10000) : null;
+  const addUnits = wantedUnits != null ? Math.max(packSize, snapToPack(wantedUnits, packSize)) : packSize;
+
   const existing = await quoteItemService.findByProductVariant(quote.id, productId, variantId) as {
     id: number;
     quantity: number;
@@ -359,7 +381,7 @@ export async function addToQuote(
       // `incrementsQuantity` is the generalised form of main's `reconfigured` — it covers a
       // bundle rebuild AND a change of paid extras (card 0CDcCYmO).
       quantity: incrementsQuantity
-        ? snapToPack(existing.quantity + packSize, packSize)
+        ? snapToPack(existing.quantity + addUnits, packSize)
         : existing.quantity,
       // MERGED into the existing bag, never over it: `attributes` has other owners
       // (quotes.md `quote-editor`), and a bundle re-configuration used to replace it whole.
@@ -372,7 +394,7 @@ export async function addToQuote(
     await quoteItemService.createForParent(quote.id, {
       productId,
       variantId: variantId || null,
-      quantity: packSize,
+      quantity: addUnits,
       listPrice,
       salePrice,
       // WHO PUT THIS PRICE HERE: the customer did, off the catalogue, through

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  optionalRadioNoneRow,
   extrasPanelGroups,
   customisationGroups,
   customisationOffered,
@@ -9,8 +10,13 @@ import {
   buyableAddons,
   postsConfiguration,
   missingAnswerSentence,
+  questionGroups,
+  productPageForRefusal,
+  tileRefusalDestination,
+  quoteLinePicks,
+  chosenOptionLines,
 } from "./addon-panel";
-import { readProductAddons } from "@keenan/services/product-addons";
+import { gasTypeGroup, readProductAddons, unansweredAddonGroups } from "@keenan/services/product-addons";
 
 const mixed = {
   addons: {
@@ -157,4 +163,138 @@ test("both missing names the priced one first, as the actions refuse", () => {
 test("nothing missing, nothing said", () => {
   assert.equal(missingAnswerSentence(readProductAddons(mixed), [], "quote"), null);
   assert.equal(missingAnswerSentence(null, [""], "quote"), null);
+});
+
+// ── Gas Type: a no-charge QUESTION, not an extra (card tkvntxsq) ──────────────
+
+const gasFryer = readProductAddons({
+  addons: {
+    groups: [
+      gasTypeGroup(),
+      {
+        key: "baskets",
+        label: "Baskets",
+        control: "checkbox",
+        options: [{ key: "twin", label: "Twin baskets", price: "95.00" }],
+      },
+    ],
+  },
+});
+
+test("Gas Type is a question: drawn by the question block, never under 'Optional extras'", () => {
+  assert.deepEqual(questionGroups(gasFryer).map((g) => g.key), ["gas_type"]);
+  assert.deepEqual(extrasPanelGroups(gasFryer).map((g) => g.key), ["baskets"]);
+  assert.deepEqual(questionGroups(readProductAddons(mixed)), []);
+  assert.deepEqual(questionGroups(null), []);
+});
+
+test("a hidden-price or $0 gas product is still refused until the gas type is chosen", () => {
+  const def = extrasDefinition(gasFryer, false);
+  assert.deepEqual((def?.groups ?? []).map((g) => g.key), ["gas_type"]);
+  assert.deepEqual(unansweredAddonGroups(def, {}), ["Gas Type"]);
+  assert.deepEqual(unansweredAddonGroups(def, { gas_type: ["natural_gas"] }), []);
+  // ...and the buy controls post the answer, because the provider offers the question.
+  assert.deepEqual((buyableAddons(gasFryer, false)?.groups ?? []).map((g) => g.key), ["gas_type"]);
+});
+
+test("a priced gas product refuses on the question and the priced extras alike", () => {
+  const def = extrasDefinition(gasFryer, true);
+  assert.deepEqual((def?.groups ?? []).map((g) => g.key), ["gas_type", "baskets"]);
+});
+
+test("the sentence for a missing gas type is a CHOOSE sentence", () => {
+  assert.equal(
+    missingAnswerSentence(gasFryer, ["Gas Type"], "cart"),
+    "Please choose Gas Type before adding this to your cart."
+  );
+});
+
+// ── A refused TILE add goes to the product page (card tkvntxsq) ──────────────
+
+test("the product page is built from a plain url_path, and nothing else", () => {
+  assert.equal(
+    productPageForRefusal("anets-35as-silverline-gas-tube-fryer-16-18-litre-capacity"),
+    "/products/anets-35as-silverline-gas-tube-fryer-16-18-litre-capacity"
+  );
+  assert.equal(productPageForRefusal("/leading-slash"), "/products/leading-slash");
+  // Leading slashes are stripped, so even a protocol-relative value lands INSIDE /products/.
+  assert.equal(productPageForRefusal("//evil.com"), "/products/evil.com");
+  for (const bad of ["", "  ", null, undefined, 42, "\\evil.com", "a\\b", "javascript:alert(1)", "a?b=1", "a#x", "a b"]) {
+    assert.equal(productPageForRefusal(bad), null, String(bad));
+  }
+});
+
+test("a tile only ever navigates to a /products/ path the action built", () => {
+  assert.equal(tileRefusalDestination({ error: "x", productPage: "/products/fryer" }), "/products/fryer");
+  assert.equal(tileRefusalDestination({ error: "x" }), null);
+  assert.equal(tileRefusalDestination({ error: "x", productPage: "https://evil.com/products/x" }), null);
+  assert.equal(tileRefusalDestination({ error: "x", productPage: "/products//evil.com" }), null);
+  assert.equal(tileRefusalDestination({ error: "x", productPage: "/account" }), null);
+  assert.equal(tileRefusalDestination(null), null);
+  assert.equal(tileRefusalDestination("nope"), null);
+});
+
+// ── The choice reaches every email goods list (card tkvntxsq) ────────────────
+
+const lpgPick = [
+  { groupKey: "gas_type", groupLabel: "Gas Type", optionKey: "lpg", optionLabel: "LPG", price: "0.00", url: null },
+];
+
+test("a quote line's picks are read off attributes, object or double-encoded", () => {
+  assert.deepEqual(chosenOptionLines(quoteLinePicks({ addon_selection: lpgPick })), ["Gas Type: LPG"]);
+  assert.deepEqual(
+    chosenOptionLines(quoteLinePicks(JSON.stringify({ addon_selection: lpgPick }))),
+    ["Gas Type: LPG"]
+  );
+  assert.deepEqual(quoteLinePicks(null), []);
+  assert.deepEqual(quoteLinePicks("not json"), []);
+  assert.deepEqual(quoteLinePicks({ kit_kind: "grouped" }), []);
+});
+
+test("the email lines are the order line's own words: one per group, no money", () => {
+  const lines = chosenOptionLines([
+    ...lpgPick,
+    { groupKey: "b", groupLabel: "Baskets", optionKey: "t", optionLabel: "Twin", price: "95.00", url: null },
+    { groupKey: "b", groupLabel: "Baskets", optionKey: "s", optionLabel: "Single", price: "40.00", url: null },
+  ]);
+  assert.deepEqual(lines, ["Gas Type: LPG", "Baskets: Twin, Single"]);
+  assert.ok(lines.every((l) => !l.includes("$")));
+});
+
+// Zoey's "None" answer on an OPTIONAL radio group (judge, batch 1: unit-test the row). The selection
+// each group opens on is the shared provider's own `defaultAddonSelection`, so these are the rows a
+// shopper actually sees on first paint.
+import { defaultAddonSelection } from "@keenan/services/product-addons";
+
+test("optional radio with no default opens on a ticked None (Hatco GRAH 'Optional Controller')", () => {
+  const addons = readProductAddons({
+    addons: { groups: [{ key: "ctl", label: "Optional Controller", control: "radio", required: false, options: [
+      { key: "a", label: "Built-in Control Unit", price: 170 },
+      { key: "b", label: "Remote Control", price: 325 },
+    ] }] },
+  })!;
+  const picks = defaultAddonSelection(addons);
+  assert.deepEqual(optionalRadioNoneRow(addons.groups[0], picks.ctl ?? [], true), { shown: true, checked: true });
+});
+
+test("optional radio WITH a default shows None unticked (Speed Queen LDG3TR 'Venting Option', as Zoey)", () => {
+  const addons = readProductAddons({
+    addons: { groups: [{ key: "vent", label: "Venting Option", control: "radio", required: false, options: [
+      { key: "std", label: "Standard Rear Venting $0", price: 0, no_charge: true, default: true },
+      { key: "left", label: "Left Venting", price: 414 },
+    ] }] },
+  })!;
+  const picks = defaultAddonSelection(addons);
+  assert.deepEqual(picks.vent, ["std"]);
+  assert.deepEqual(optionalRadioNoneRow(addons.groups[0], picks.vent ?? [], true), { shown: true, checked: false });
+  // …and picking None again clears it: the row reads ticked once nothing is chosen.
+  assert.deepEqual(optionalRadioNoneRow(addons.groups[0], [], true), { shown: true, checked: true });
+});
+
+test("no None on a required group, a dropdown, tick-boxes, or a storefront that did not ask", () => {
+  const radio = { control: "radio" as const, required: false };
+  assert.equal(optionalRadioNoneRow({ ...radio, required: true }, [], true).shown, false);
+  assert.equal(optionalRadioNoneRow({ ...radio, control: "dropdown" }, [], true).shown, false);
+  assert.equal(optionalRadioNoneRow({ ...radio, control: "checkbox" }, [], true).shown, false);
+  assert.deepEqual(optionalRadioNoneRow(radio, [], false), { shown: false, checked: false });
 });

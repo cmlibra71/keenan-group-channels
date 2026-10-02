@@ -28,6 +28,7 @@ import {
   getCmsPage,
 } from "@/lib/store";
 import { getSession } from "@/lib/auth";
+import { channelRulesRefuseCartFor } from "@/lib/product/channel-rule-cart";
 import { getAccountId } from "@/lib/member";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductTabs } from "@/components/product/ProductTabs";
@@ -206,7 +207,9 @@ async function ProductBuyboxBlock({ ctx }: BlockProps) {
           // Per-product buying controls (card 7vu2iEEZ). Unset reads as today's behaviour.
           backorderPolicy: product.backorderPolicy ?? null,
           restrictAddToQuote: product.restrictAddToQuote === true,
-          restrictAddToCart: product.restrictAddToCart === true,
+          // This storefront's Zoey rules: zero-price is folded into the row by `getProductBySlug`;
+          // out-of-stock and (for a guest) guest quote-only here — `channelRulesRefuseCartFor`.
+          restrictAddToCart: product.restrictAddToCart === true || (await channelRulesRefuseCartFor(product)),
           hidePrice: product.hidePrice === true,
           availability: product.availability ?? "available",
           descriptionShort: product.descriptionShort,
@@ -395,7 +398,7 @@ async function ProductOverviewBlock({ props, ctx }: BlockProps) {
     // Per-product buying controls (card 7vu2iEEZ). Unset reads as today's behaviour.
     backorderPolicy: product.backorderPolicy ?? null,
     restrictAddToQuote: product.restrictAddToQuote === true,
-    restrictAddToCart: product.restrictAddToCart === true,
+    restrictAddToCart: product.restrictAddToCart === true || (await channelRulesRefuseCartFor(product)),
     hidePrice: product.hidePrice === true,
     availability: product.availability ?? "available",
     descriptionShort: product.descriptionShort,

@@ -7,12 +7,20 @@ import { Package } from "lucide-react";
 import { Price } from "@/components/ui/Price";
 import { ga4SelectItem } from "@/components/analytics/ga4";
 import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
+import { cardPrice } from "@/lib/card-price";
 
 interface ProductCardProps {
   name: string;
   slug: string;
   price: string;
   salePrice?: string | null;
+  /**
+   * configurable-from-price (services #182, `attachFromPrices`): a configurable product's
+   * "Starting From" list / sale. Present, the tile prints "Starting From:" with these figures
+   * instead of the parent's own price (which is often $0 — "Call for Price").
+   */
+  fromPrice?: string | null;
+  fromSalePrice?: string | null;
   imageUrl?: string | null;
   brandName?: string;
   /**
@@ -37,6 +45,30 @@ interface ProductCardProps {
    * was/now, which the sale branch below draws; this puts Tim's badge over the picture.
    */
   special?: { badge: string; label: string | null } | null;
+  /**
+   * IK parity, product cards (old site 2026-09-28). All optional and off by default, so a call
+   * site that passes none of them draws the tile exactly as before.
+   *   saleFlag    — Zoey's grey "SALE" flag on the photo while the tile shows a real sale price
+   *                 (category, brand, search and home tiles; not the product page's rails).
+   *   sku         — the "SKU:" line, drawn only with `showSku` (Zoey's SEARCH tile carries it;
+   *                 its category tile does not).
+   *   priceSuffix — Zoey's price suffix after the price ("Each", "Per Carton of 1,000").
+   *   tierLowPrice— the lowest quantity-break price; "AS LOW AS:" when it undercuts the price shown.
+   */
+  saleFlag?: boolean;
+  /** Zoey prints "Starting From:" only when a configurable's choices differ in price. */
+  fromPriceVaries?: boolean;
+  /** What a $0 tile prints instead of a price: "POA" (Zoey category), "" (Zoey search — nothing).
+   *  Omitted: "Call for Price", as before. */
+  zeroPriceText?: string;
+  /** Zoey's search tile "Brand:" line. */
+  brandLine?: string | null;
+  /** Print no price at all (Zoey's grouped product tile). */
+  hidePrice?: boolean;
+  sku?: string | null;
+  showSku?: boolean;
+  priceSuffix?: string | null;
+  tierLowPrice?: string | number | null;
   /** GA4 select_item context (all optional — card works without analytics). */
   productId?: number;
   listId?: string;
@@ -46,7 +78,7 @@ interface ProductCardProps {
   promotionBadge?: string | null;
 }
 
-export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName, brandLogoUrl, brandLogoAlt, memberPricingAvailable, memberPrice, special, productId, listId, listName, listIndex, promotionBadge }: ProductCardProps) {
+export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSalePrice, imageUrl, brandName, brandLogoUrl, brandLogoAlt, memberPricingAvailable, memberPrice, special, saleFlag, fromPriceVaries, zeroPriceText, brandLine, hidePrice, sku, showSku, priceSuffix, tierLowPrice, productId, listId, listName, listIndex, promotionBadge }: ProductCardProps) {
   // A dead image file is invisible to the server — the row exists and the URL is
   // well formed — so the browser is the only place it can be caught. An errored
   // photo drops to the same fallback an imageless product gets; a logo that is
@@ -56,12 +88,23 @@ export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName,
   const photoUrl = imageUrl && !photoBroken ? imageUrl : null;
   const logoUrl = brandLogoUrl && !logoBroken ? brandLogoUrl : null;
 
-  const displayPrice = parseFloat(price);
-  const displaySalePrice = salePrice ? parseFloat(salePrice) : null;
+  // A sale only when 0 < sale < price, and a configurable prices "Starting From" — see lib/card-price.ts.
+  const { list: displayPrice, sale: displaySalePrice, from: startingFrom } = cardPrice({
+    price,
+    salePrice,
+    fromPrice,
+    fromSalePrice,
+  });
   // Never a member layout on a special: members pay the special too (Tim: "Special Price will
   // be the floor"), and the upstream member map leaves special products out already.
   const showMemberPrice =
     !special && memberPrice != null && displayPrice > 0 && memberPrice < (displaySalePrice ?? displayPrice);
+  const suffix = displayPrice > 0 && priceSuffix ? priceSuffix.trim() : "";
+  // Zoey's "As low as" — only when the lowest tier undercuts what this tile shows.
+  const tierLow = typeof tierLowPrice === "number" ? tierLowPrice : parseFloat(String(tierLowPrice ?? ""));
+  const shownUnit = showMemberPrice ? (memberPrice as number) : (displaySalePrice ?? displayPrice);
+  // Nor an "As low as" on a special: no quantity break comes off it (card tJ4audbu).
+  const showTierLow = !special && displayPrice > 0 && Number.isFinite(tierLow) && tierLow > 0 && tierLow < shownUnit - 1e-9;
 
   // Non-blocking: gtag queues the event; navigation proceeds immediately.
   function handleSelect() {
@@ -119,7 +162,12 @@ export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName,
         {/* Card tJ4audbu — Tim's "Partner Special - No further discounts" image overlay. The
             class is this site's own (globals.css), shared with the badge `@/lib/store` places on
             the authored tile, so the two tiles cannot look different. */}
-        {special && <span className="special-badge">{special.badge}</span>}
+        {special && !hidePrice && <span className="special-badge">{special.badge}</span>}
+        {saleFlag && displaySalePrice != null && (
+          <span className="absolute left-2 top-2 z-[2] rounded-sm bg-zinc-500 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-white">
+            SALE
+          </span>
+        )}
       </div>
       <div className="mt-3">
         {brandName && (
@@ -128,7 +176,17 @@ export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName,
         <h3 className="text-sm font-medium text-zinc-900 group-hover:text-zinc-600 line-clamp-2">
           {name}
         </h3>
-        {showMemberPrice ? (
+        {showSku && sku && (
+          <p className="mt-1 text-xs text-zinc-600">
+            <span className="font-semibold">SKU:</span> {sku}
+          </p>
+        )}
+        {brandLine && (
+          <p className="text-xs text-zinc-600">
+            <span className="font-semibold">Brand:</span> {brandLine}
+          </p>
+        )}
+        {hidePrice ? null : showMemberPrice ? (
           <div className="mt-1">
             <div className="flex items-center gap-2">
               <Price amount={memberPrice} gst className="text-sm font-semibold text-green-700" />
@@ -141,22 +199,36 @@ export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName,
             </span>
           </div>
         ) : (
-          <div className="mt-1 flex items-center gap-2">
+          <div className="mt-1 flex flex-wrap items-center gap-x-2">
+            {startingFrom && (fromPriceVaries ?? true) && displayPrice > 0 && (
+              <span className="text-xs text-zinc-500">Starting From:</span>
+            )}
             {displayPrice === 0 ? (
-              <span className="text-sm font-semibold text-zinc-900">Call for Price</span>
+              zeroPriceText === "" ? null : (
+                <span className="text-sm font-semibold text-zinc-900">{zeroPriceText ?? "Call for Price"}</span>
+              )
             ) : displaySalePrice ? (
+              // Zoey's order: the struck-through was-price, then the sale price.
               <>
-                <Price amount={displaySalePrice} gst className="text-sm font-semibold text-red-600" />
                 <span className="text-sm text-zinc-400 line-through">
                   <Price amount={displayPrice} gst />
                 </span>
+                <Price amount={displaySalePrice} gst className="text-sm font-semibold text-red-600" />
               </>
             ) : (
               <Price amount={displayPrice} gst className="text-sm font-semibold text-zinc-900" />
             )}
+            {suffix && <span className="text-sm font-semibold text-zinc-900">{suffix}</span>}
           </div>
         )}
-        {!showMemberPrice && memberPricingAvailable && displayPrice > 0 && (
+        {!hidePrice && showTierLow && (
+          <p className="mt-1 flex flex-wrap items-baseline gap-1 text-xs">
+            <span className="font-semibold uppercase text-red-600">AS LOW AS:</span>
+            <Price amount={tierLow} gst className="text-zinc-700" />
+            {suffix && <span className="text-zinc-500">{suffix}</span>}
+          </p>
+        )}
+        {!hidePrice && !showMemberPrice && memberPricingAvailable && displayPrice > 0 && (
           <span className="mt-1 inline-block bg-green-50 text-green-700 px-2 py-0.5 rounded text-xs font-medium">
             Members save up to 25%
           </span>

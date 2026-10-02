@@ -6,20 +6,27 @@ import {
   getComponents,
   getDraftComponents,
   getChannelSetting,
+  attachFromPrices,
+  getMemberScaleOn,
+  getEnabledCmsFunctions,
 } from "@/lib/store";
 import { CHANNEL_ID } from "@/lib/channel";
-import { getMemberContext, applyAccountPrices } from "@/lib/member";
+import { getMemberContext, applyAccountPrices, getPricingGroupId } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
 import { promotionBadgeMap } from "@/lib/promotions/badges";
-import { attachBrandLogos } from "@/lib/brand-logo-fallback";
+import { attachBrandLogosAlongside } from "@/lib/brand-logo-fallback";
 import {
   composeBrandPagePayload,
+  brandFacetsAsListingFacets,
+  type FacetSelections,
   loadJsSandbox,
   computeCallResults,
   type NodeTree,
 } from "@keenan/services/builder";
-import { cmsFunctionService } from "@keenan/services/services";
 import { BuilderBrandPage, type BrandGridProduct } from "@/builder/BuilderBrandPage";
+import { applyChannelRulesToTileRows } from "@keenan/services/channel-rules";
+import { BuilderCssLink } from "@/builder/builder-css-link";
+import { usedComponents } from "@/builder/used-components";
 
 // ============================================================================
 // The brand template's Site Builder branch — ENGINE.
@@ -56,7 +63,35 @@ export interface BrandNodeBranchArgs {
   memberPricingEnabled: boolean;
   /** draftMode() OR the `x-kg-json` parity header. */
   draft: boolean;
+  /**
+   * Extra top-level payload facts for a tree that is not the brand page itself — the Brand Range
+   * Template's `range` / `brand_picture` / `pager` (IK hidden-conditionals C24,
+   * `composeBrandRangeSlice`). Merged over the brand payload; absent for the brand page.
+   */
+  payloadExtras?: Record<string, unknown>;
+  /**
+   * The faceted brand listing's filter state, for a brand tree that places a filter rail (IK parity:
+   * the old brand pages' Category / attributes / Price / Brand rail). `facets` is
+   * `listBrandFaceted`'s raw facets; `filters` is this storefront's rail configuration (portal:
+   * Products > Filtering), which the price slider and attribute sections read. Absent → the payload
+   * carries no `listing` and the page renders exactly as before (every Chefs Depot brand page).
+   */
+  listing?: {
+    facets: unknown;
+    /** How many products match the selections (the brand's whole count is `total`). */
+    total?: number;
+    filters?: unknown;
+    selections?: FacetSelections;
+    sort?: string;
+    /** Cumulative Load more (as the category page): the page shown, more to come, the next address. */
+    page?: number;
+    hasMore?: boolean;
+    nextPageHref?: string;
+    listingDisplay?: NonNullable<Parameters<typeof composeBrandPagePayload>[0]["listing"]>["listingDisplay"];
+  };
 }
+
+export { brandTreeHasFilterRail } from "./brand-filter-rail";
 
 /**
  * Does the node path apply to this brand page — a tree authored, and the flag on
@@ -95,6 +130,8 @@ export async function renderBrandNodeBranch({
   pricing,
   memberPricingEnabled,
   draft,
+  payloadExtras,
+  listing,
 }: BrandNodeBranchArgs): Promise<React.ReactElement | null> {
   if (!(await brandNodePathApplies({ brandCms, draft }))) return null;
   const nodeTree = (brandCms as { node_tree?: unknown } | null)!.node_tree as NodeTree;
@@ -103,8 +140,19 @@ export async function renderBrandNodeBranch({
   // to when a product has no photo. Additive — every other field on the row is
   // copied through — and the `product-card` master reads it as
   // `props.card.brand_logo_url` (see `product-card-brand-logo.ts`).
-  const scoped = (await attachBrandLogos(
-    await applyAccountPrices(await applyCatalogScope(products as { id: number }[]))
+  // configurable-from-price (services #182): AFTER the per-viewer price overlays, a configurable
+  // row gets its "Starting From" list/sale, which the `product-card` enrichment reads — without it
+  // a $0-parent configurable tile says "Call for Price".
+  // The logo read runs BESIDE the price overlays — it is keyed by product id alone.
+  const visible = await applyCatalogScope(products as { id: number }[]);
+  const scoped = (await attachBrandLogosAlongside(
+    visible,
+    (async () =>
+      attachFromPrices(await applyAccountPrices(visible), {
+        // The viewer's customer-group price list prices each configurable's children (Industry
+        // Kitchens); null on a channel without it.
+        pricingGroupId: await getPricingGroupId(),
+      }))()
   )) as unknown as BrandGridProduct[];
 
   const memberCtx = await getMemberContext().catch(() => null);
@@ -115,12 +163,15 @@ export async function renderBrandNodeBranch({
   const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
 
   // The Buy X Get Y / free-freight badge each tile carries (card EIXdjw2s), read for exactly the
-  // products on this page and handed to the tile rows beside the member prices.
-  const promoBadgeMap = await promotionBadgeMap(
-    scoped as unknown as { id: number; sku?: string | null }[]
-  );
+  // products on this page and handed to the tile rows beside the member prices; beside it the
+  // channel's member price scale (audit C11) — the price masters word "Standard price"/"RRP" on it.
+  const [promoBadgeMap, memberScaleOn] = await Promise.all([
+    promotionBadgeMap(scoped as unknown as { id: number; sku?: string | null }[]),
+    getMemberScaleOn(),
+  ]);
 
-  const payload = composeBrandPagePayload({
+  const basePayload = composeBrandPagePayload({
+    memberScaleOn,
     channelId: CHANNEL_ID,
     brand,
     products: scoped as unknown as Record<string, unknown>[],
@@ -133,6 +184,30 @@ export async function renderBrandNodeBranch({
     gst: { inclusive: gstInclusive, pricesIncludeTax },
     memberPricingAvailable: memberPricingEnabled,
     draft,
+    ...(listing
+      ? {
+          listing: {
+            facets: listing.facets,
+            total: listing.total,
+            selections: listing.selections,
+            sort: listing.sort,
+            page: listing.page,
+            hasMore: listing.hasMore,
+            nextPageHref: listing.nextPageHref,
+            listingDisplay: listing.listingDisplay,
+          },
+        }
+      : {}),
+  });
+  const payload = (payloadExtras ? { ...basePayload, ...payloadExtras } : basePayload) as typeof basePayload;
+
+  // This storefront's Zoey rules (`channelRules`, portal PR #1028) for the rows the CLIENT wrapper
+  // receives (grid, "load more", GA4 view_item_list): zero-price shows no price (GA4 reports none),
+  // the cart is refused per rule/viewer, and the raw rules object is removed so it never reaches the
+  // browser. The composer above reads `scoped` itself and strips the rules from its own tiles. No rules
+  // (every Chefs Depot row) ⇒ the rows are unchanged.
+  const clientRows = applyChannelRulesToTileRows(scoped, {
+    viewer: { loggedIn: memberCtx?.loggedIn === true || memberCtx?.isMember === true },
   });
 
   const namedStyles = await getNamedStyles().catch(() => ({}));
@@ -144,8 +219,7 @@ export async function renderBrandNodeBranch({
       css?: string;
     } | null)?.css ?? "";
 
-  const jsFunctions = await cmsFunctionService
-    .enabledMapForChannel(CHANNEL_ID)
+  const jsFunctions = await getEnabledCmsFunctions()
     .catch(() => ({}) as Record<string, string>);
   let callResults: Record<string, unknown> = {};
   if (Object.keys(jsFunctions).length > 0) {
@@ -157,18 +231,21 @@ export async function renderBrandNodeBranch({
 
   return (
     <>
-      {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
+      <BuilderCssLink css={builderCss} />
       <BuilderBrandPage
         tree={nodeTree}
         payload={payload}
-        products={scoped}
+        products={clientRows}
         pricing={pricing}
         memberPricingAvailable={memberPricingEnabled}
         namedStyles={namedStyles}
-        components={components}
+        components={usedComponents(nodeTree, components)}
         jsFunctions={jsFunctions}
         callResults={callResults}
         draft={draft}
+        // The price slider and attribute sections read the facets with this storefront's rail
+        // configuration beside them, as they do on a category page.
+        listingFacets={listing ? { ...brandFacetsAsListingFacets(listing.facets), filters: listing.filters } : undefined}
       />
     </>
   );

@@ -1,4 +1,5 @@
 import type { NodeTree, BuilderNode } from "@keenan/services/builder";
+import { templateOwns } from "@keenan/services/builder";
 
 // ============================================================================
 // The "Buy more & save" tag on the AUTHORED listing tile (card FNYihLHk).
@@ -43,6 +44,8 @@ export const PRODUCT_CARD_KEY = "product-card";
 
 /** The node the tag is drawn by. Also the idempotency key. */
 export const PROMO_TAG_NODE_ID = "promo-tag";
+/** The `data-kg-template-owns` name for this placement. */
+export const PROMO_TAG_PLACEMENT = "promo-tag";
 
 /**
  * The tile's own layer names, as the seed wrote them and as the Site Builder
@@ -147,7 +150,9 @@ function spliceInto(
  * on `sf-catalog-browse` rather than papered over with a guess.
  */
 export function withPromoTag(tree: NodeTree, label: string): NodeTree {
-  if (hasNode(tree.root, PROMO_TAG_NODE_ID)) return tree;
+  // A master that authors its own promotional tag (with its own Show-if) — by the node id, or by
+  // declaring `promo-tag` in `data-kg-template-owns` — is left as authored.
+  if (hasNode(tree.root, PROMO_TAG_NODE_ID) || templateOwns(tree, PROMO_TAG_PLACEMENT)) return tree;
 
   const beforeCtas = findParentOfLabel(tree.root, CTAS_LABEL);
   if (beforeCtas) {

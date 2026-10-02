@@ -38,6 +38,11 @@ export interface AccountNavFlags {
    * with no membership programme is never shown Membership.
    */
   statementVisible?: boolean;
+  /**
+   * The wishlist (2026-10-02): the channel setting `wishlist_enabled`. Absent means no, so a store
+   * without the feature never shows the item (Chefs Depot).
+   */
+  wishlistEnabled?: boolean;
 }
 
 /**
@@ -55,6 +60,10 @@ export function buildAccountNavItems(flags: AccountNavFlags): AccountNavItem[] {
     { key: "quotes", label: "My Quotes", href: "/account/quotes" },
     { key: "contact", label: "Contact your rep", href: "/account/contact" },
   ];
+
+  if (flags.wishlistEnabled) {
+    items.push({ key: "wishlist", label: "My Wishlist", href: "/account/wishlist" });
+  }
 
   if (flags.subscriptionsEnabled) {
     items.push({ key: "membership", label: "Membership", href: "/account/membership" });

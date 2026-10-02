@@ -1,4 +1,6 @@
 import { Fragment } from "react";
+import { loadCatalogAttributeContext } from "@keenan/services";
+import { CHANNEL_ID as ATTR_CHANNEL_ID } from "@/lib/channel";
 import { redirect } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import type { Metadata } from "next";
@@ -222,7 +224,7 @@ export default async function BrandPage({
   const rawPrice = priceEnabled ? sp.price : undefined;
   const priceBands = parsePriceBands(rawPrice) as ("lt1000" | "1000to3000" | "gt3000")[];
   const priceRange = priceBands.length === 0 ? parseRangeParam(rawPrice) : undefined;
-  const attributeSelections = parseAttributeSelections(sp as Record<string, string | undefined>);
+  const attributeSelections = parseAttributeSelections(sp as Record<string, string | undefined>, (await loadCatalogAttributeContext(ATTR_CHANNEL_ID)).attributes);
   const selectedCategoryIds = categoryEnabled ? parseIds(sp[CATEGORY_PARAM]) : [];
 
   // "Nothing here" and "nothing MATCHES" are different sentences: a brand with

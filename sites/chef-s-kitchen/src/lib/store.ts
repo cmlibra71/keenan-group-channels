@@ -5,7 +5,7 @@ import { withPromoTagInComponents } from "@/builder/promo-tag-node";
 import { guardTileBuyControlsInComponents, withSpecialPriceInComponents } from "@keenan/services/builder";
 import { withMemberScaleLabels } from "@/builder/member-scale-labels";
 import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
-import { initCommerceDb, createChannelStore, getCommerceClient, blogService } from "@keenan/services";
+import { initCommerceDb, createChannelStore, createRenderConfigCache, getCommerceClient, blogService, setStripeClientOptions } from "@keenan/services";
 import {
   channelService,
   siteService,
@@ -78,6 +78,12 @@ if (dbUrl) {
   initCommerceDb(dbUrl, { maxConnections: 5 });
 }
 
+// STRIPE FROM A STOREFRONT answers in 10 s or not at all (one network retry). Stripe's 80 s default
+// held a shopper on the Pay spinner long past the point they press it again — how duplicate attempts
+// are made. Every PaymentIntent create carries an idempotency key, so the retry is safe. The portal
+// and the worker never call this and keep Stripe's defaults (services StripeProvider).
+setStripeClientOptions({ timeoutMs: 10_000, maxNetworkRetries: 1 });
+
 // ============================================================================
 // Shared channel-store factory — all channel-scoped, cache-wrapped accessors
 // live in @keenan/services. Caching (Next's unstable_cache) is injected here.
@@ -96,6 +102,9 @@ export const {
   sanitizeCatalogProducts,
   getProducts,
   getProductBySlug,
+  // configurable-from-price: a configurable row's "Starting From" list/sale, attached AFTER the
+  // per-viewer price overlays so its tile reads "Starting From" instead of "Call for Price".
+  attachFromPrices,
   // This site's own product search title + meta description (card CfnjZikj).
   getProductChannelSeo,
   getRedirectForPath,
@@ -107,6 +116,11 @@ export const {
   getCategoryBySlug,
   getSubcategories: getSubcategoriesRaw,
   getCategoryStats,
+  // This storefront's Zoey rules for rows from a source that carries none (Meilisearch hits).
+  getChannelRulesForProducts,
+  // This storefront's printed brand names (Zoey sub-line labels) over rows from the shared search
+  // index, which carries the parent brand. Identity on a storefront without labels (Chefs Depot).
+  withBrandDisplayNames,
   getCategoryBreadcrumbs,
   getProductBreadcrumbs,
   // Names of the categories REMOVED from this storefront (channel_settings
@@ -120,6 +134,8 @@ export const {
   getCategoryById,
   getBrandsForChannel,
   getBrandBySlug,
+  // The shared brand row by id, cached (product pages read it on every view).
+  getBrandRowById,
   getBrandListing,
   getProductReviews,
   getProductAttachments,
@@ -130,6 +146,13 @@ export const {
   getMemberPriceMap,
   getMemberSavingsPctMap,
   applyAccountPricesToProducts,
+  // Customer-group price lists (Industry Kitchens' Zoey model, services `groupPricing.ts`). All
+  // switched by `channel_settings.customer_group_pricing`; off = null / identity / empty map —
+  // which is this channel: Chefs Depot never sets it.
+  applyGroupPrices,
+  resolveViewerPricingGroupId,
+  resolveGroupLineRecords,
+  isGroupPricingEnabled,
   // The Chefs Depot member price scale (cards gk23c1VK / Nyp8bkPm). These are
   // no-ops on a channel with the scale switched off in `channel_settings`, which
   // is every channel until one is written.
@@ -247,6 +270,10 @@ const withScaleWording = async (components: ComponentMap): Promise<ComponentMap>
     hideMemberPct: HIDE_MEMBER_SAVING_PCT,
   }) as ComponentMap;
 };
+
+/** The channel's member price scale (ladder) is on — `context.memberScale.on` on listing pages (audit C11). */
+export const getMemberScaleOn = async (): Promise<boolean> =>
+  (await _store.getLadderConfig().catch(() => null))?.enabled === true;
 
 export const getComponents = async (): Promise<ComponentMap> =>
   withScaleWording(withMasterTransforms(await _store.getComponents()));
@@ -368,10 +395,16 @@ export const getMembershipNumber = async (contactId: number): Promise<string | n
 // Channel settings (raw + typed accessors)
 // ============================================================================
 
+// Page-render settings (finance rates, builder CSS, listing settings, nav, footer…)
+// and the CMS function library come from ONE cached read per channel — 60 s, busted
+// by the portal's settings-save and publish purges (services `render-config-cache.ts`).
+// They were 3–5 uncached round trips on every page view (measured 2026-09-30). Any
+// key not on that list still reads live, exactly as before.
+const _renderConfig = createRenderConfigCache(CHANNEL_ID, unstable_cache);
+
 export const getChannelSetting = async (key: string): Promise<unknown> => {
   try {
-    const setting = await channelSettingsService.getByKey(CHANNEL_ID, key);
-    return setting.setting_value;
+    return await _renderConfig.getSettingValue(key);
   } catch {
     return null;
   }
@@ -391,11 +424,28 @@ export const getChannelSettings = async (
   keys: readonly string[]
 ): Promise<Record<string, unknown>> => {
   try {
-    return await channelSettingsService.getValuesByKeys(CHANNEL_ID, keys);
+    return await _renderConfig.getSettingValues(keys);
   } catch {
     return {};
   }
 };
+
+/** The channel's enabled CMS function library (name → source), cached with the settings above. */
+export const getEnabledCmsFunctions = (): Promise<Record<string, string>> =>
+  _renderConfig.getEnabledCmsFunctions();
+
+// The home hero's "N products · M brands" — the same two counts for every visitor, and the brand
+// one is a 200 ms join over every product on the channel (measured 2026-10-02). Held 300 s, the
+// listings' own window, and dropped by every product save's purge.
+export const getCatalogCounts = unstable_cache(
+  async (): Promise<[number, number]> =>
+    Promise.all([
+      productChannelAssignmentService.countForChannel(CHANNEL_ID),
+      productChannelAssignmentService.countBrandsForChannel(CHANNEL_ID),
+    ]),
+  [`catalog-counts-${CHANNEL_ID}`],
+  { revalidate: 300, tags: [`channel-${CHANNEL_ID}`, "products"] }
+);
 
 // CMS-editable footer content (the `footer` channel setting). Empty object →
 // the Footer component falls back to DEFAULT_FOOTER (current content).
@@ -680,6 +730,12 @@ export async function getGuestOrdersForEmail(
  * archive) — which is why it is exported. Two copies of this
  * CASE expression would drift, and a drift here is not cosmetic: a looser copy
  * WIDENS who can read an order, a tighter one 404s an order the list is showing.
+ *
+ * Index: the inbox expression below is served AS WRITTEN by the expression index
+ * `idx_orders_guest_email_inbox` ((<this CASE … || split_part(…)>, channel_id) WHERE
+ * customer_id IS NULL AND contact_id IS NULL), proposed 2026-10-01: ~1,800 heap pages
+ * read per lookup without it, ~5 with it. Postgres only uses an expression index whose
+ * expression the query repeats, so change this text and that index together.
  */
 export function guestOrderForEmailCondition(
   sql: NonNullable<ReturnType<typeof getCommerceClient>>,

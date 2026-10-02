@@ -76,6 +76,7 @@ export type CategoryExtras = {
    *  has to SHOW it when the URL says nothing, or a listing that opens price
    *  high-to-low sits under a dropdown reading "Relevance". */
   defaultSort?: ListingSort;
+  sortOptions?: { value: string; label: string }[];
 };
 
 function categoryOf(ctx?: RenderContext): CategoryRecord | null {
@@ -385,7 +386,7 @@ async function CategoryListingBlock({ props, ctx }: BlockProps) {
               </p>
               <FilterChips facets={facets as never} />
             </div>
-            <SortSelect defaultSort={extras.defaultSort} />
+            <SortSelect options={extras.sortOptions} defaultSort={extras.defaultSort} />
           </div>
 
           <ProductGrid

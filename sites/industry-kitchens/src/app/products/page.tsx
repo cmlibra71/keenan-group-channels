@@ -1,6 +1,8 @@
 import { getProducts, getFeatureFlag, getMegaMenu, getMegaMenuNav, getMegaMenuHidden, productService, CHANNEL_ID, type MegaMenuNode } from "@/lib/store";
+import { getListingDisplay } from "@/lib/listing-display";
 import { flattenTree } from "@/lib/mega-menu";
 import { ikNavItems } from "@/lib/ik-nav";
+import { ikBarHref } from "@/lib/ik-mega-panel";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { getCatalogScope } from "@/lib/catalog-scope";
@@ -42,7 +44,9 @@ export default async function ProductsPage({
     ? (params.filter as FilterKey)
     : "all";
 
-  const fetchOptions: Parameters<typeof getProducts>[0] = { page, limit: 24 };
+  // Page size from Settings → Storefront Listings (C25); 24 with no setting.
+  const pageSize = (await getListingDisplay()).page_sizes.all_products;
+  const fetchOptions: Parameters<typeof getProducts>[0] = { page, limit: pageSize };
   if (activeFilter === "featured") fetchOptions.featured = true;
   if (activeFilter === "sale") fetchOptions.onSale = true;
 
@@ -61,7 +65,7 @@ export default async function ProductsPage({
         ? Promise.resolve({ products: [], total: 0 })
         : productService.listForChannel(CHANNEL_ID, {
             page,
-            limit: 24,
+            limit: pageSize,
             categoryIds: accessibleCategoryIds,
             featured: fetchOptions.featured,
             onSale: fetchOptions.onSale,
@@ -75,7 +79,7 @@ export default async function ProductsPage({
       getMegaMenuNav().catch(() => []),
       getMegaMenuHidden().catch(() => []),
     ]);
-  const totalPages = Math.ceil(total / 24);
+  const totalPages = Math.ceil(total / pageSize);
 
   // The strip IS the department bar's own list. Industry Kitchens now composes
   // its bar through the same shared, unit-tested `resolveNavItems` with the same
@@ -97,7 +101,9 @@ export default async function ProductsPage({
     if (!node) return [];
     // The same wording the bar prints: Industry Kitchens shows the editor's own
     // label in both places (it does not shorten the way Chefs Depot does).
-    return [{ id: node.id, name: item.label || node.name, slug: node.slug, image_url: node.image_url }];
+    // The bar's own address for the department (the editor's url wins, e.g. Brands -> /brands).
+    const href = ikBarHref(item, byId);
+    return [{ id: node.id, name: item.label || node.name, slug: node.slug, image_url: node.image_url, ...(href !== `/categories/${node.slug}` ? { href } : {}) }];
   });
 
   // Departments are a way IN to the tree, so a department the viewer may not
@@ -141,7 +147,7 @@ export default async function ProductsPage({
       {products.length === 0 ? (
         <p className="text-zinc-500 text-center py-16">No products found.</p>
       ) : (
-        <ProductGrid products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={memberPriceMap} listId="all_products" listName="All Products" />
+        <ProductGrid showCompare products={products} memberPricingAvailable={memberPricingEnabled} memberPriceMap={memberPriceMap} listId="all_products" listName="All Products" />
       )}
 
       {/* Pagination */}

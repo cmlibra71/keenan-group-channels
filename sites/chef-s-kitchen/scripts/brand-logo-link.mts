@@ -2,7 +2,7 @@
  * Card uzeXShZu — put the brand-logo link into the STORED Site Builder product
  * templates.
  *
- * Why this exists (same reason as `strip-stock-wording.mts`): the storefront
+ * Why this exists (the same reason the removed stock-wording script had): the storefront
  * renders the AUTHORED tree from the database — `cms_pages.node_tree` for a
  * draft read, `cms_page_versions.node_tree` of the published version for a live
  * one — and `SEED_PRODUCT_TREE` is only the fallback for a site whose template
