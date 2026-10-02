@@ -55,7 +55,7 @@ test("any required question, default or not: no cart, no quote — the column op
 });
 
 test("this storefront's Zoey rules (services channel-rules), per viewer", () => {
-  const rules = (r: Record<string, boolean>) => ({ quoteOnly: false, guestQuoteOnly: false, outOfStock: false, searchOnly: false, cartDisabled: false, guestQuoteHidden: false, backorderSilent: false, ...r });
+  const rules = (r: Record<string, boolean>) => ({ quoteOnly: false, guestQuoteOnly: false, outOfStock: false, searchOnly: false, cartDisabled: false, guestQuoteHidden: false, backorderSilent: false, backorderDeny: false, ...r });
   const member = { loggedIn: true };
   // cart_disabled: no basket for anyone, price stays, quote stays.
   assert.deepEqual(compareBuyButtons({ ...plain, channelRules: rules({ cartDisabled: true }), viewer: member }), { cart: false, quote: true, priceHidden: false, answerRequired: false });
@@ -73,7 +73,7 @@ test("this storefront's Zoey rules (services channel-rules), per viewer", () => 
 
 test("guest_quote_hidden: a guest gets no Add to Quote in the compare column; a signed-in customer keeps it", () => {
   const base = { shownPrice: 24.5, hidePrice: false, kit: null };
-  const rules = { quoteOnly: false, guestQuoteOnly: false, outOfStock: false, searchOnly: false, cartDisabled: true, guestQuoteHidden: true, backorderSilent: false };
+  const rules = { quoteOnly: false, guestQuoteOnly: false, outOfStock: false, searchOnly: false, cartDisabled: true, guestQuoteHidden: true, backorderSilent: false, backorderDeny: false };
   assert.deepEqual(compareBuyButtons({ ...base, channelRules: rules, viewer: { loggedIn: false } }), { cart: false, quote: false, priceHidden: false, answerRequired: false });
   assert.deepEqual(compareBuyButtons({ ...base, channelRules: rules }), { cart: false, quote: false, priceHidden: false, answerRequired: false });
   assert.deepEqual(compareBuyButtons({ ...base, channelRules: rules, viewer: { loggedIn: true } }), { cart: false, quote: true, priceHidden: false, answerRequired: false });
