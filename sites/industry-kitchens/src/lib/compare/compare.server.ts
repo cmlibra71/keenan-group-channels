@@ -13,7 +13,7 @@ import { compareBuyButtons } from "./compare-buy";
 import { tileRequiredQuestions } from "@keenan/services";
 import { isProductId } from "./compare-list";
 import { readProductKit, tileKitChoices, type KitChoice } from "@/lib/product-kit";
-import { readChannelRules } from "@keenan/services/channel-rules";
+import { backorderPolicyForChannel, readChannelRules } from "@keenan/services/channel-rules";
 import { getSession } from "@/lib/auth";
 
 // ============================================================================
@@ -113,7 +113,9 @@ async function readDetails(ids: number[]): Promise<Map<number, DetailRow>> {
       hidePrice: r.hide_price === true,
       inventoryTracking: r.inventory_tracking,
       inventoryLevel: r.inventory_level == null ? null : Number(r.inventory_level),
-      backorderPolicy: r.backorder_policy,
+      // As THIS storefront applies it (the product's own policy, else the channel's Zoey back-order
+      // rule) — the cart's reading, so the column never offers a basket the cart refuses.
+      backorderPolicy: backorderPolicyForChannel(r.backorder_policy, readChannelRules(meta, CHANNEL_ID)),
     });
   }
   return out;

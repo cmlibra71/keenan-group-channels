@@ -93,7 +93,10 @@ test("placeOrder refuses a line whose product is quote-only", () => {
 
 test("the facts read carries both quote-only switches", () => {
   const src = readFileSync(join(LIB, "cart/backorder-facts.ts"), "utf8");
-  assert.match(src, /purchasing_disabled, purchasing_disabled_message, hide_price/);
+  assert.match(src, /purchasing_disabled, metafields ->> 'quote_only_heuristic' AS quote_only_heuristic,/);
+  assert.match(src, /purchasing_disabled_message, hide_price/);
+  // …read as THIS storefront applies it (services effectivePurchasingDisabled).
+  assert.match(src, /effectivePurchasingDisabled\(/);
 });
 
 // ── This storefront's Zoey rules (`metafields.zoey_channel_rules[CHANNEL_ID]`, portal PR #1028) ──

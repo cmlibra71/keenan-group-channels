@@ -78,3 +78,17 @@ test("guest_quote_hidden: a guest gets no Add to Quote in the compare column; a 
   assert.deepEqual(compareBuyButtons({ ...base, channelRules: rules }), { cart: false, quote: false, priceHidden: false, answerRequired: false });
   assert.deepEqual(compareBuyButtons({ ...base, channelRules: rules, viewer: { loggedIn: true } }), { cart: false, quote: true, priceHidden: false, answerRequired: false });
 });
+
+test("the compare column reads the back-order policy as THIS storefront applies it (Zoey 'No Backorders')", async () => {
+  const { backorderPolicyForChannel, readChannelRules } = await import("@keenan/services/channel-rules");
+  const meta = { zoey_channel_rules: { "1": { backorder_deny: true } } };
+  const policy = backorderPolicyForChannel(null, readChannelRules(meta, 1));
+  assert.equal(policy, "deny");
+  // 0 in stock on a tracked product: no basket — the same answer the cart gives.
+  assert.equal(compareBuyButtons({ ...plain, backorderPolicy: policy, inventoryTracking: "product", inventoryLevel: 0 }).cart, false);
+  // Chefs Depot never reads IK's key: unchanged.
+  assert.equal(backorderPolicyForChannel(null, readChannelRules(meta, 2)), null);
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("./compare.server.ts", import.meta.url), "utf8");
+  assert.match(src, /backorderPolicy: backorderPolicyForChannel\(r\.backorder_policy, readChannelRules\(meta, CHANNEL_ID\)\)/);
+});
