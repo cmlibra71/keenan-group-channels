@@ -14,7 +14,8 @@ import { specialAmounts } from "@keenan/services";
 import { getAccountId, getPricingGroupId, getMemberContext } from "@/lib/member";
 import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { CART_RESTRICTED_ERROR } from "@/lib/cart/restricted-message";
-import { chargedUnitPrice, onlineOrderingOff, refuseOnlinePurchase, type OnlinePurchaseViewer } from "@/lib/cart/online-purchase";
+import { chargedUnitPrice, onlineOrderingOff, refuseOnlinePurchase, rewardLineRefused, type OnlinePurchaseViewer } from "@/lib/cart/online-purchase";
+import { withoutRefusedRewards } from "@/lib/promotions/reward-refusal";
 import { catalogLinePrices, usesParentPrice } from "@keenan/services/catalog-price";
 import { catalogPricingVariantId, loadVariantChoiceFacts, unchosenOptionsRefusal } from "@/lib/cart/variant-choice";
 import { purchasingDisabledMessage } from "@keenan/services/purchasing";
@@ -906,8 +907,16 @@ async function syncRewardLinesOnce(cartId: number): Promise<{ changed: number; a
     // Nothing to hold and nothing held: the ordinary basket costs no more than the offer read.
     if (offers.rewardLines.length === 0 && flagged.length === 0) return { changed: 0, added: 0 };
 
+    // ONLY WHAT THE CART WOULD SELL (review round 3). A reward whose product the cart refuses —
+    // quote only, price hidden, Add to Cart off, this storefront's Zoey rules, or short of stock
+    // under "do not back-order" — is not wanted: never added, and taken back out below if it is
+    // already here (a Zoey flag flipped overnight, the shelf ran dry). Left in, it is a locked line
+    // the shopper cannot remove and an order `placeOrder` refuses — the sf-checkout dead end.
+    const viewer = await cartViewer();
+    const sellable = await withoutRefusedRewards(offers.rewardLines, viewer);
+
     const wanted = new Map<string, { promotionId: number; sku: string; quantity: number; held: boolean }>();
-    for (const r of offers.rewardLines) {
+    for (const r of sellable) {
       const key = `${r.promotionId}:${r.sku.toUpperCase()}`;
       const prior = wanted.get(key);
       wanted.set(key, {
@@ -948,16 +957,28 @@ async function syncRewardLinesOnce(cartId: number): Promise<{ changed: number; a
       for (const want of toAdd) {
         const product = products.get(want.sku);
         if (!product) continue;
-        // The reward obeys the same doors any add does: a product this shopper may not see, or
-        // one staff switched off for online ordering, is not put in their cart for them either.
+        // The reward obeys the same doors any Add to Cart does (`addToCart`), because the shopper
+        // cannot take it back out: a product this shopper may not see; a gift card, or one whose
+        // required question has no default answer (the tile refusal, off one product read); a
+        // configurable product's bare parent; then every buying control `placeOrder` re-checks —
+        // staff/Zoey quote only, a hidden price, this storefront's Zoey rules, short stock under
+        // "do not back-order" (`rewardLineRefused`); a quote-only variant; and a $0 price.
         if (!(await isProductVisibleToViewer(product.productId))) continue;
+        const { refusal: addonRefusal } = await readAddonsForAdd(product.productId, product.variantId, undefined);
+        if (addonRefusal) continue;
+        if (unchosenOptionsRefusal(await loadVariantChoiceFacts(product.productId), product.variantId, { posted: false })) {
+          continue;
+        }
         const facts = await backorderFactsForProduct(product.productId);
-        if (facts?.restrictAddToCart) continue;
-        if (facts && !canPurchaseQuantity(facts, want.quantity)) continue;
         const pricing = await resolveItemPricingAndSpecial(product.productId, product.variantId, want.quantity)
           .then((r) => r.pricing)
           .catch(() => null);
         if (!pricing) continue;
+        const variantRow = product.variantId
+          ? await productVariantService.getById(product.variantId).catch(() => null)
+          : null;
+        if (purchasingDisabledMessage(facts, variantRow)) continue;
+        if (rewardLineRefused(facts, want.quantity, { viewer, unitPrice: chargedUnitPrice(pricing) })) continue;
         await cartItemService.createForParent(cartId, {
           productId: product.productId,
           variantId: product.variantId,
@@ -1253,12 +1274,27 @@ async function readCartOnce(allowRewardSync: boolean) {
   // A reward line that no longer matches what the basket earns is brought into line ONCE, then the
   // cart is read again — so the page never shows a free item the offer has stopped giving, nor
   // misses one it now gives. Nothing to do on the ordinary basket (no reward lines, no offer).
-  if (
-    allowRewardSync &&
-    rewardLinesDrifted(visible as unknown as Parameters<typeof rewardLinesDrifted>[0], offers.rewardLines)
-  ) {
-    const changed = await syncRewardLines(cart.id);
-    if (changed > 0) return readCartOnce(false);
+  // A reward line the cart would no longer SELL (review round 3) — a Zoey flag flipped overnight,
+  // staff switched it off, or a "do not back-order" shelf ran dry since it was added — is taken out
+  // here, on read, judged by the facts already in hand: left in, it is a locked line the shopper
+  // cannot remove and an order `placeOrder` refuses. And a reward the offer earns but the cart will
+  // not sell is not "missing": the drift check compares against the sellable list, so such a cart
+  // does not re-sync on every page.
+  if (allowRewardSync) {
+    const heldRefused = visible.some(
+      (i) =>
+        rewardPromotionIdOf(i as { applied_coupons?: unknown }) != null &&
+        rewardLineRefused(stock.get(i.product_id), Number(i.quantity) || 0, { viewer: lineViewer })
+    );
+    const asHeld = visible as unknown as Parameters<typeof rewardLinesDrifted>[0];
+    const drifted =
+      heldRefused ||
+      (rewardLinesDrifted(asHeld, offers.rewardLines) &&
+        rewardLinesDrifted(asHeld, await withoutRefusedRewards(offers.rewardLines, lineViewer ?? (await cartViewer()))));
+    if (drifted) {
+      const changed = await syncRewardLines(cart.id);
+      if (changed > 0) return readCartOnce(false);
+    }
   }
 
   const offerByItem = new Map(offers.lines.map((l) => [l.itemId, l]));

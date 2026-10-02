@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chargedUnitPrice, onlineOrderingOff, refuseOnlinePurchase } from "./online-purchase.ts";
+import { chargedUnitPrice, onlineOrderingOff, refuseOnlinePurchase, rewardLineRefused } from "./online-purchase.ts";
 import { readChannelRules } from "@keenan/services/channel-rules";
 import { CART_RESTRICTED_ERROR } from "./restricted-message.ts";
 
@@ -170,4 +170,55 @@ test("addToCart / updateCartItem / the cart view judge the rules for the shopper
   assert.match(src, /onlineOrderingOff\(facts, viewer\)/);
   assert.match(src, /restrict_add_to_cart: onlineOrderingOff\(facts, lineViewer\)/);
   assert.match(src, /facts\?\.channelRules\?\.guestQuoteOnly \? await cartViewer\(\) : undefined/);
+});
+
+// ── promotion reward lines (card EIXdjw2s, review round 3) ───────────────────
+// An auto-added reward cannot be removed by the shopper, so it may only be a line `placeOrder`
+// would accept: the same buying controls, the same stock rule, and no $0 product.
+
+test("a reward is refused for every buying control placeOrder re-checks", () => {
+  for (const flags of [
+    { restrictAddToCart: true },
+    { purchasingDisabled: true },
+    { hidePrice: true },
+    { variantPurchasingDisabled: true },
+    { channelRules: IK_RULES({ quote_only: true }) },
+    { channelRules: IK_RULES({ out_of_stock: true }) },
+    { channelRules: IK_RULES({ cart_disabled: true }) },
+  ]) {
+    assert.equal(rewardLineRefused(flags, 1, { viewer: SIGNED_IN }), true, JSON.stringify(flags));
+    // Exactly the checkout's own judgement of the line.
+    assert.equal(onlineOrderingOff(flags, SIGNED_IN), true);
+  }
+});
+
+test("guest quote-only refuses a reward for a guest only", () => {
+  const flags = { channelRules: IK_RULES({ guest_quote_only: true }) };
+  assert.equal(rewardLineRefused(flags, 1, { viewer: GUEST }), true);
+  assert.equal(rewardLineRefused(flags, 1, {}), true, "an unknown viewer reads as a guest");
+  assert.equal(rewardLineRefused(flags, 1, { viewer: SIGNED_IN }), false);
+});
+
+test("a do-not-back-order reward short of stock is refused; back-order and untracked are not", () => {
+  const deny = { inventoryTracking: "product", inventoryLevel: 1, backorderPolicy: "deny" };
+  assert.equal(rewardLineRefused(deny, 1), false);
+  assert.equal(rewardLineRefused(deny, 2), true, "two free units, one on the shelf");
+  assert.equal(rewardLineRefused({ ...deny, inventoryLevel: 0 }, 1), true, "ran dry after it was added");
+  assert.equal(rewardLineRefused({ ...deny, backorderPolicy: "allow_notify", inventoryLevel: 0 }, 5), false);
+  assert.equal(rewardLineRefused({ inventoryTracking: "none", inventoryLevel: 0, backorderPolicy: "deny" }, 5), false);
+});
+
+test("a reward priced at $0 sells by quote only and is refused; an ordinary priced one is not", () => {
+  for (const unitPrice of [0, -1, NaN, null]) {
+    assert.equal(rewardLineRefused({}, 1, { unitPrice }), true, String(unitPrice));
+    assert.equal(rewardLineRefused(null, 1, { unitPrice }), true, `${unitPrice} with no facts`);
+  }
+  assert.equal(rewardLineRefused({}, 1, { unitPrice: 12.5 }), false);
+  // Not priced by the caller (the cart read judges held lines on facts alone): price not judged.
+  assert.equal(rewardLineRefused({}, 1), false);
+  assert.equal(rewardLineRefused(null, 1), false, "unknown facts refuse nothing, as for any add");
+});
+
+test("a Chefs Depot product never reads Industry Kitchens' rules for a reward", () => {
+  assert.equal(rewardLineRefused({ channelRules: CD_RULES({ quote_only: true }) }, 1, { viewer: GUEST }), false);
 });
