@@ -2,6 +2,8 @@
 import type { NativeComponents } from "@keenan/services/builder-react";
 import { TileCompare } from "@/components/product/TileCompare";
 import { TILE_COMPARE_KEY } from "./tile-compare-node";
+import { WishlistTileLink } from "@/components/wishlist/WishlistTileLink";
+import { WISHLIST_TILE_NATIVE } from "@/builder/wishlist-node";
 
 // Industry Kitchens seals nothing on the brand page any more — bar the tile's
 // "Add to Compare" control below.
@@ -27,5 +29,8 @@ export function brandNatives(_args: {
     // "Add to Compare" under each brand-page tile (IK parity, compare-feature) — the same
     // control and placement as the category page (`builder/tile-compare-node.ts`).
     [TILE_COMPARE_KEY]: (props: Record<string, unknown>) => <TileCompare productId={props.productId} />,
+    // "Add to Wishlist" under a tile — inside the channel's `wishlist-tile` CMS master, which holds
+    // its words and its Show-if (`builder/wishlist-node.ts`; placed only while `wishlist_enabled`).
+    [WISHLIST_TILE_NATIVE]: (props: Record<string, unknown>) => <WishlistTileLink {...props} />,
   };
 }
