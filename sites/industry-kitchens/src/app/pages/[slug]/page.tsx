@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import { draftMode, headers } from "next/headers";
 import type { Metadata } from "next";
-import { getContentPage, getCmsPage, getCmsTemplate, getFeatureFlag, getNamedStyles, getComponents, getDraftComponents, getChannelSetting, CHANNEL_ID, getEnabledCmsFunctions } from "@/lib/store";
+import { getContentPage, getCmsPage, getCmsTemplate, getFeatureFlag, getNamedStyles, getComponents, getDraftComponents, getChannelSetting, CHANNEL_ID, getEnabledCmsFunctions, getDesignTokens, getDraftDesignTokens } from "@/lib/store";
+import { CONTENT_FONTS_HREF, hasContentFonts } from "@/lib/content-fonts";
 import { getMemberContext } from "@/lib/member";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { composeContentPagePayload } from "@keenan/services/builder";
@@ -142,6 +143,12 @@ export default async function ContentPage({
             publishedGeneratedAt: builderCssBlob?.generated_at ?? null,
           })
         : null;
+      // Content-page fonts (design tokens `contentFonts`, IK legacy info-page
+      // body fonts): the self-hosted files are linked only when the channel
+      // defines such a token — the classes that use them are node-scoped.
+      const contentFonts =
+        hasContentFonts(await getDesignTokens().catch(() => null)) ||
+        (draft && hasContentFonts(await getDraftDesignTokens().catch(() => null)));
       const jsFunctions = await getEnabledCmsFunctions().catch(() => ({}) as Record<string, string>);
       let callResults: Record<string, unknown> = {};
       if (Object.keys(jsFunctions).length > 0) {
@@ -150,6 +157,7 @@ export default async function ContentPage({
       }
       return (
         <>
+          {contentFonts ? <link rel="stylesheet" href={CONTENT_FONTS_HREF} precedence="kg-content-fonts" /> : null}
           {draftCss ? (
             <style href={draftCssId(draftCss)} precedence="kg-builder">
               {draftCss}
