@@ -155,6 +155,7 @@ export default async function ProductPage({
   const jsonLd = productJsonLd({
     name: cachedProduct.name,
     sku: cachedProduct.sku,
+    itemRef: (cachedProduct.itemRef as string | null | undefined) ?? null,
     brandName: brandName ?? null,
     image: productMainImage(cachedProduct.images, seoBase),
     description: productMetaDescription(cachedProduct),

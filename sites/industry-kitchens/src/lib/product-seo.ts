@@ -232,6 +232,12 @@ export function schemaAvailability(availability: string | null | undefined): str
 export interface ProductJsonLdInput extends ProductOfferSource {
   name?: unknown;
   sku?: string | null;
+  /**
+   * The group-wide Item ID (`N41-VN7`), published as schema.org `productID` so a search engine
+   * ties the code to this product. The code is how a customer finds the same product on another
+   * site by searching for it — it carries no group or brand name (card w6OZSJTD).
+   */
+  itemRef?: string | null;
   brandName?: string | null;
   image?: string | null;
   description?: string | null;
@@ -262,6 +268,7 @@ export function productJsonLd(input: ProductJsonLdInput): Record<string, unknown
     url: input.url,
   };
   if (input.sku) ld.sku = input.sku;
+  if (input.itemRef) ld.productID = input.itemRef;
   if (input.brandName) ld.brand = { "@type": "Brand", name: input.brandName };
   if (input.image) ld.image = [input.image];
   if (input.description) ld.description = input.description;

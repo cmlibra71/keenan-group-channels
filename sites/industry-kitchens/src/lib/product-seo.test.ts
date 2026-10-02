@@ -120,6 +120,13 @@ test("the offer carries the price the page shows: sale if any, else price, ex GS
   assert.equal((offer.priceSpecification as Record<string, unknown>).valueAddedTaxIncluded, false);
 });
 
+test("the Item ID is published as productID, and left out when the product has none", () => {
+  const base = { name: "x", url: "https://industrialkitchens.com.au/products/x", price: "100" };
+  assert.equal(productJsonLd({ ...base, itemRef: "N41-VN7" }).productID, "N41-VN7");
+  assert.equal("productID" in productJsonLd({ ...base, itemRef: null }), false);
+  assert.equal("productID" in productJsonLd(base), false);
+});
+
 test("quote-only / POA products get NO offer", () => {
   const base = { name: "x", url: "https://industrialkitchens.com.au/products/x", price: "100" };
   for (const extra of [

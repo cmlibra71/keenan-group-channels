@@ -200,6 +200,8 @@ export default async function ProductPage({
         "@type": "Product",
         name: product.name,
         sku: product.sku ?? undefined,
+        // The group-wide Item ID (card w6OZSJTD): a search engine ties the code to this product.
+        productID: (product.itemRef as string | null | undefined) ?? undefined,
         brand: brandRow?.name ? { "@type": "Brand", name: brandRow.name } : undefined,
         image: product.images?.[0]?.urlStandard ?? undefined,
         offers:
