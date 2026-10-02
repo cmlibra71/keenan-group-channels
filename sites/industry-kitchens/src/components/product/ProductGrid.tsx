@@ -160,7 +160,6 @@ export async function ProductGrid({
             brandLogoAlt={brandLogos.get(product.id)?.brand_name ?? null}
             memberPricingAvailable={memberPricingAvailable}
             memberPrice={memberPriceMap?.[product.id] ?? null}
-            special={product.special ?? null}
             promotionBadge={promoBadges[product.id] ?? null}
             saleFlag={saleFlags}
             fromPriceVaries={buyButtons ? product.fromPriceVaries === true : undefined}

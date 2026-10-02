@@ -18,7 +18,7 @@ import {
 } from "@keenan/services/product-addons";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, forOrderInsert, withPromotionDiscounts, lineGoodsExTax, type BelowCostLine, type LinePromotionDraft } from "@/lib/checkout/order-draft";
 import { chosenOptionLines } from "@/lib/product/addon-panel";
-import { resolveCartOffers, NO_OFFERS, type CartOffers, type OfferCartLine } from "@/lib/promotions/cart-offers";
+import { resolveCartOffers, couponCodesToRedeem, NO_OFFERS, type CartOffers, type OfferCartLine } from "@/lib/promotions/cart-offers";
 import { orderPromotionsRecord } from "@/lib/promotions/order-promotions";
 import { syncCartPromotionRewards } from "@/lib/actions/cart";
 import {
@@ -1528,11 +1528,13 @@ export async function placeOrder(
   const couponCodesOnCart = ((cartWithItems as { coupon_codes?: string[] | null }).coupon_codes ?? [])
     .map((c) => (c ?? "").trim().toUpperCase())
     .filter((c) => c !== "");
-  const couponDiscountByCode = new Map(cartOffers.couponDiscounts.map((c) => [c.code.toUpperCase(), c.discount]));
-  const couponsToRedeem = [...new Set(couponCodesOnCart)]
-    .map((code) => ({ code, discount: couponDiscountByCode.get(code) ?? 0 }))
-    // A code that discounts nothing is not redeemed: it stays usable rather than being burnt.
-    .filter((c) => c.discount > 0);
+  // A code is spent when its rule took money off the goods, gave this order's freight away or put
+  // an item in the cart (card vmO0TRBD); one that did none of those stays usable rather than burnt.
+  const couponsToRedeem = couponCodesToRedeem(
+    couponCodesOnCart,
+    cartOffers,
+    freightOutcome?.promotionId != null ? Number(freightOutcome.promotionId) : null
+  );
   const discountedDrafts = lineItems.filter((l) => l.promotionId != null);
   try {
     if (discountedDrafts.length > 0 && insertedItems.length !== lineItems.length) {

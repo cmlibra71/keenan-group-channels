@@ -236,6 +236,63 @@ export const NO_OFFERS: CartOffers = {
   rewards: [],
 };
 
+/**
+ * WHAT A COUPON CODE EARNS IN THIS BASKET (card vmO0TRBD). Zoey accepts a code whose rule does
+ * something for the cart, and a Discount Rule can do three things: take money off the goods, give
+ * the delivery away (Free Shipping / Apply to Shipping Amount) or put an item in the cart
+ * (Automatically Add Product to Cart). Judging by the goods discount alone refused the last two —
+ * FREESHIPPING, GREEN, DETERGENT and STELLARCHEM were told "That code doesn't apply to what's in
+ * your cart" before their item or their freight could ever count. The engine lists a code in
+ * `appliedCouponCodes` only when its rule moved money, earned the freight or added an item; this
+ * also asks that the code made the basket BETTER than it was without it, and never worse (one
+ * discount code per order, so a code can displace an earlier one). Pure.
+ */
+export function couponCodeEarns(code: string, before: CartOffers, after: CartOffers): boolean {
+  const wanted = (code ?? "").trim().toUpperCase();
+  if (!wanted || !after.appliedCouponCodes.includes(wanted)) return false;
+  if (after.totalDiscount > before.totalDiscount + 1e-9) return true;
+  if (after.totalDiscount < before.totalDiscount - 1e-9) return false;
+  const promotionIds = new Set(
+    after.couponDiscounts.filter((c) => c.code.toUpperCase() === wanted).map((c) => c.promotionId)
+  );
+  if (promotionIds.size === 0) return false;
+  const freightNow = after.freight != null && promotionIds.has(after.freight.promotionId);
+  const freightBefore = before.freight != null && promotionIds.has(before.freight.promotionId);
+  if (freightNow && !freightBefore) return true;
+  return after.rewardLines.some((r) => promotionIds.has(r.promotionId) && r.quantity > 0);
+}
+
+/**
+ * The codes an order REDEEMS (card vmO0TRBD, narrowing p6YVxc4P's "a code that discounts nothing
+ * is not redeemed"): a code is spent when its rule took money off the goods, when its rule's
+ * freight was actually given away on this order (`freightPromotionId`, from `applyFreightReward`),
+ * or when its rule put an item in the cart. A code that did none of those stays usable rather than
+ * being burnt. Each keeps the goods discount it took (0 for freight or an added item), which is
+ * the amount the redemption records. Pure.
+ */
+export function couponCodesToRedeem(
+  codesOnCart: string[],
+  offers: CartOffers,
+  freightPromotionId: number | null
+): { code: string; discount: number }[] {
+  const out: { code: string; discount: number }[] = [];
+  const seen = new Set<string>();
+  for (const raw of codesOnCart) {
+    const code = (raw ?? "").trim().toUpperCase();
+    if (!code || seen.has(code)) continue;
+    seen.add(code);
+    const rows = offers.couponDiscounts.filter((c) => c.code.toUpperCase() === code);
+    const discount = rows.reduce((sum, c) => sum + c.discount, 0);
+    const ids = new Set(rows.map((c) => c.promotionId));
+    const earned =
+      discount > 0 ||
+      (freightPromotionId != null && ids.has(freightPromotionId)) ||
+      offers.rewardLines.some((r) => ids.has(r.promotionId) && r.quantity > 0);
+    if (earned) out.push({ code, discount: Math.round(discount * 100) / 100 });
+  }
+  return out;
+}
+
 /** The SKU actually being sold on this line: the variant's own where it has one. */
 export function lineSku(item: OfferCartLine): string | null {
   return item.variant_sku ?? item.product_sku ?? null;

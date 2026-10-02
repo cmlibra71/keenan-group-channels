@@ -31,6 +31,7 @@ import { specialLineIsStale, withSpecialMarker } from "@/lib/pricing/special-lin
 import {
   resolveCartOffers,
   couponCapRefusal,
+  couponCodeEarns,
   rewardPromotionIdOf,
   rewardSettingsOf,
   rewardQuantityAfterSync,
@@ -1439,7 +1440,9 @@ export async function applyCouponCode(rawCode: string): Promise<{ success?: true
       pricesIncludeTax,
       ...shopper,
     });
-    if (after.totalDiscount <= before.totalDiscount || !after.appliedCouponCodes.includes(code)) {
+    // Zoey takes a code whose rule does something for this cart: money off the goods, the freight
+    // given away, or an item put in the cart (card vmO0TRBD) — `couponCodeEarns`.
+    if (!couponCodeEarns(code, before, after)) {
       // Say the true reason where there is one: a code the shopper has already
       // used is not a code that "doesn't apply to what's in your cart".
       const capped = await couponCapRefusal(code, { contactId: shopper.contactId, email: shopper.email });
@@ -1448,7 +1451,7 @@ export async function applyCouponCode(rawCode: string): Promise<{ success?: true
 
     await cartService.update(cart.id, { couponCodes: [...existing, code] });
     await syncRewardLinesIfRunning(cart.id);
-    return { success: true, discount: after.totalDiscount - before.totalDiscount };
+    return { success: true, discount: Math.max(0, after.totalDiscount - before.totalDiscount) };
   } catch (e) {
     console.error("[applyCouponCode] failed:", e);
     return { error: "We couldn't apply that code. Please try again." };

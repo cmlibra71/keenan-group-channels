@@ -349,6 +349,7 @@
     "lib/promo-tag-wiring.test.ts",
     "lib/promotions/bundles.ts",
     "lib/promotions/cart-offers.ts",
+    "lib/promotions/coupon-earns.test.ts",
     "lib/promotions/round4.test.ts",
     "lib/promotions/shopper.ts",
     "lib/promotions/tax-basis.ts",

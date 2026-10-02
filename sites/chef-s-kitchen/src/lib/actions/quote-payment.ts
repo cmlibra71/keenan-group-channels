@@ -31,6 +31,8 @@ import {
   quoteStampEmail,
   readQuoteLinePromotions,
   quoteOrderPromotionsRecord,
+  orderRecordCoupons,
+  redeemQuoteOrderCoupons,
   readQuoteFreightPromotionNote,
   freightPromotionLine,
   type QuoteRecordItem,
@@ -540,6 +542,22 @@ export async function payQuote(
   }
 
   // ── Side effects: none of these may fail the payment ────────────────────
+  // A coupon code the rep put on the quote is SPENT on the order it becomes (card vmO0TRBD), so its
+  // Uses per Coupon / Uses per Customer count this sale like a web checkout. Never refuses: the
+  // customer is paying a quote whose price was already agreed.
+  const quoteCoupons = orderRecordCoupons(quotePromotions);
+  if (quoteCoupons.length > 0) {
+    await redeemQuoteOrderCoupons({
+      orderId: created.id,
+      coupons: quoteCoupons,
+      contactId: quote.contact_id != null ? Number(quote.contact_id) : (session.contactId ?? null),
+      email: session.email ?? null,
+    })
+      .then((r) => {
+        if (r.refused.length > 0) console.error("[payQuote] quote coupon not redeemed (non-fatal):", r.refused);
+      })
+      .catch((e) => console.error("[payQuote] quote coupon redemption failed (non-fatal):", e));
+  }
   if (plan.freightPending) {
     await alertOrdersTeamNoFreight(created, quote, view.payableInc).catch((e) =>
       console.error("[payQuote] no-freight alert failed (non-fatal):", e)
