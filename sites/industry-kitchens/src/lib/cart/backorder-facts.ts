@@ -73,7 +73,8 @@ export async function backorderFactsForProducts(
       SELECT id, inventory_tracking, inventory_level, backorder_policy, restrict_add_to_cart,
              (metafields -> 'channel_kits' -> ${String(channelId)} ->> 'quote_only') = 'true' AS kit_quote_only,
              purchasing_disabled, metafields ->> 'quote_only_heuristic' AS quote_only_heuristic,
-             jsonb_typeof(metafields -> 'zoey_channel_rules') = 'object' AS zoey_rules_imported, purchasing_disabled_message, hide_price, sell_pack_size, sell_pack_unit, qty_packaging_enabled, qty_increment_groups,
+             jsonb_typeof(metafields -> 'zoey_channel_rules') = 'object' AS zoey_rules_imported,
+             metafields ->> 'quote_only_staff' AS quote_only_staff, purchasing_disabled_message, hide_price, sell_pack_size, sell_pack_unit, qty_packaging_enabled, qty_increment_groups,
              metafields -> 'zoey_channel_rules' AS zoey_channel_rules,
              -- A person's pack for this storefront (channel_pack_override, audit D12) outranks Zoey's.
              COALESCE(metafields -> 'channel_pack_override' -> ${String(channelId)}, metafields -> 'zoey_channel_pack' -> ${String(channelId)}) AS channel_pack,
@@ -92,6 +93,7 @@ export async function backorderFactsForProducts(
         purchasing_disabled: boolean | null;
         quote_only_heuristic?: string | null;
         zoey_rules_imported?: boolean | null;
+        quote_only_staff?: string | null;
         purchasing_disabled_message: string | null;
         hide_price: boolean | null;
         sell_pack_size: number | null;
@@ -118,7 +120,7 @@ export async function backorderFactsForProducts(
         // As THIS storefront applies it: a flag the Zoey worker set from its name / layout heuristic
         // does not apply where Zoey's own rules decide (services `effectivePurchasingDisabled`).
         purchasingDisabled: effectivePurchasingDisabled(
-          { purchasing_disabled: row.purchasing_disabled, quote_only_heuristic: row.quote_only_heuristic, zoey_rules_imported: row.zoey_rules_imported === true },
+          { purchasing_disabled: row.purchasing_disabled, quote_only_heuristic: row.quote_only_heuristic, zoey_rules_imported: row.zoey_rules_imported === true, quote_only_staff: row.quote_only_staff },
           channelId
         ),
         purchasingDisabledMessage: row.purchasing_disabled_message,
