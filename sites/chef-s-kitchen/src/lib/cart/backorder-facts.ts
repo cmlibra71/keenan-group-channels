@@ -20,6 +20,7 @@ import type { StockFacts } from "@keenan/services/backorder";
 import { effectivePackFacts, readChannelPackEntry, type PackFacts } from "@keenan/services/pack";
 import { backorderPolicyForChannel, readChannelRules, type ChannelPurchaseRules } from "@keenan/services/channel-rules";
 import { liftZeroPriceForRequiredOption } from "@keenan/services";
+import { effectivePurchasingDisabled } from "@keenan/services/purchasing";
 
 export type ProductBackorderFacts = StockFacts &
   PackFacts & {
@@ -71,7 +72,8 @@ export async function backorderFactsForProducts(
     const rows = (await sql`
       SELECT id, inventory_tracking, inventory_level, backorder_policy, restrict_add_to_cart,
              (metafields -> 'channel_kits' -> ${String(channelId)} ->> 'quote_only') = 'true' AS kit_quote_only,
-             purchasing_disabled, purchasing_disabled_message, hide_price, sell_pack_size, sell_pack_unit, qty_packaging_enabled, qty_increment_groups,
+             purchasing_disabled, metafields ->> 'quote_only_heuristic' AS quote_only_heuristic,
+             jsonb_typeof(metafields -> 'zoey_channel_rules') = 'object' AS zoey_rules_imported, purchasing_disabled_message, hide_price, sell_pack_size, sell_pack_unit, qty_packaging_enabled, qty_increment_groups,
              metafields -> 'zoey_channel_rules' AS zoey_channel_rules,
              -- A person's pack for this storefront (channel_pack_override, audit D12) outranks Zoey's.
              COALESCE(metafields -> 'channel_pack_override' -> ${String(channelId)}, metafields -> 'zoey_channel_pack' -> ${String(channelId)}) AS channel_pack,
@@ -88,6 +90,8 @@ export async function backorderFactsForProducts(
         restrict_add_to_cart: boolean | null;
         kit_quote_only: boolean | null;
         purchasing_disabled: boolean | null;
+        quote_only_heuristic?: string | null;
+        zoey_rules_imported?: boolean | null;
         purchasing_disabled_message: string | null;
         hide_price: boolean | null;
         sell_pack_size: number | null;
@@ -111,7 +115,12 @@ export async function backorderFactsForProducts(
         // with the same sentence as `restrict_add_to_cart`. No other storefront reads the key.
         restrictAddToCart: row.restrict_add_to_cart === true || row.kit_quote_only === true,
         // The other two quote-only switches ride the same read (see `lib/cart/online-purchase.ts`).
-        purchasingDisabled: row.purchasing_disabled === true,
+        // As THIS storefront applies it: a flag the Zoey worker set from its name / layout heuristic
+        // does not apply where Zoey's own rules decide (services `effectivePurchasingDisabled`).
+        purchasingDisabled: effectivePurchasingDisabled(
+          { purchasing_disabled: row.purchasing_disabled, quote_only_heuristic: row.quote_only_heuristic, zoey_rules_imported: row.zoey_rules_imported === true },
+          channelId
+        ),
         purchasingDisabledMessage: row.purchasing_disabled_message,
         hidePrice: row.hide_price === true,
         // This storefront's Zoey rules, keyed by CHANNEL_ID like `channel_kits` above — the IK key
