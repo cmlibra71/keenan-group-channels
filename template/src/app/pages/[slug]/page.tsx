@@ -12,8 +12,9 @@ import { financeApplyFunderForSlug, withFinanceApplyLogo } from "@/lib/finance/f
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BuilderContentPage } from "@/builder/BuilderContentPage";
 import { BuilderCssLink } from "@/builder/builder-css-link";
+import { draftBuilderCss, draftCssId } from "@/builder/draft-builder-css";
 import { usedComponents } from "@/builder/used-components";
-import { loadJsSandbox, computeCallResults, type NodeTree } from "@keenan/services/builder";
+import { loadJsSandbox, computeCallResults, type BuilderCssBlob, type NodeTree } from "@keenan/services/builder";
 
 export async function generateMetadata({
   params,
@@ -119,8 +120,13 @@ export default async function ContentPage({
       });
       const namedStyles = await getNamedStyles().catch(() => ({}));
       const components = (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<string, NodeTree>;
-      const builderCss =
-        ((await getChannelSetting("builder_published_css").catch(() => null)) as { css?: string } | null)?.css ?? "";
+      const builderCssBlob = (await getChannelSetting("builder_published_css").catch(() => null)) as BuilderCssBlob | null;
+      const builderCss = builderCssBlob?.css ?? "";
+      // A draft may use classes the published sheet has not compiled yet —
+      // compile them here with the publish compiler (builder/draft-builder-css.ts).
+      const draftCss = draft
+        ? await draftBuilderCss({ tree, components, namedStyles, published: builderCssBlob })
+        : "";
       const jsFunctions = await getEnabledCmsFunctions().catch(() => ({}) as Record<string, string>);
       let callResults: Record<string, unknown> = {};
       if (Object.keys(jsFunctions).length > 0) {
@@ -130,6 +136,11 @@ export default async function ContentPage({
       return (
         <>
           <BuilderCssLink css={builderCss} />
+          {draftCss ? (
+            <style id="kg-builder-draft-css" href={draftCssId(draftCss)} precedence="kg-builder">
+              {draftCss}
+            </style>
+          ) : null}
           <BuilderContentPage
             tree={tree}
             payload={payload}
