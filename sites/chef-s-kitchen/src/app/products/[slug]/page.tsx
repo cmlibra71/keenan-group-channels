@@ -6,6 +6,7 @@ import { getProductBySlug, getProductChannelSeo, getProductReviews, getProductAt
 import { stripHiddenPrices } from "@keenan/services/price-visibility";
 import type { RenderContext } from "@keenan/services";
 import { getMemberContext, getListingPricing, applyAccountPrices } from "@/lib/member";
+import { offerPriceWithSpecial } from "@/lib/pricing/special-public-price";
 import { assertProductVisible, applyCatalogScope } from "@/lib/catalog-scope";
 import { ChevronRight } from "lucide-react";
 import { ProductOfferTiers } from "@/components/product/ProductOfferTiers";
@@ -192,7 +193,16 @@ export default async function ProductPage({
 
   // Product + Offer + BreadcrumbList structured data. The Offer price is the
   // visitor's state (member or RRP) expressed INC GST for Google Shopping.
-  const offerExPrice = isMember && memberPrice != null ? memberPrice : parseFloat(product.price);
+  //
+  // A live PARTNER SPECIAL (card tJ4audbu) is the price for every visitor — it is locked, so no
+  // member price goes under it — and the page shows it as the "now" figure. `product.price` is the
+  // struck regular figure once `applySpecialPrices` has run, so the Offer states the special, with
+  // its last day as `priceValidUntil`: Google's automatic item updates read this markup and would
+  // otherwise "correct" the feed's sale price back up to the regular price.
+  const { priceEx: offerExPrice, priceValidUntil } = offerPriceWithSpecial(
+    product,
+    isMember && memberPrice != null ? memberPrice : parseFloat(product.price)
+  );
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
@@ -210,6 +220,7 @@ export default async function ProductPage({
                 "@type": "Offer",
                 priceCurrency: "AUD",
                 price: (offerExPrice * 1.1).toFixed(2),
+                ...(priceValidUntil ? { priceValidUntil } : {}),
                 availability:
                   (product.availability ?? "available") === "available"
                     ? "https://schema.org/InStock"

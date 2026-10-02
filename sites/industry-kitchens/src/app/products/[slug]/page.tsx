@@ -2,13 +2,14 @@ import { notFound } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import { draftMode, headers } from "next/headers";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, getBrandRowById, CHANNEL_ID, getProductBreadcrumbs, getCmsPage, getCmsTemplate, getSiteConfig, getChannelSetting, applyGroupPrices, resolveViewerPricingGroupId } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, getBrandRowById, CHANNEL_ID, getProductBreadcrumbs, getCmsPage, getCmsTemplate, getSiteConfig, getChannelSetting, applyGroupPrices, applySpecialPrices, resolveViewerPricingGroupId } from "@/lib/store";
 import { usesParentPrice } from "@keenan/services/catalog-price";
 import { stripHiddenPrices } from "@keenan/services/price-visibility";
 import type { Metadata } from "next";
 import type { RenderContext } from "@keenan/services";
 import { getSession } from "@/lib/auth";
 import { getAccountId, applyAccountPrices } from "@/lib/member";
+import { offerPriceWithSpecial } from "@/lib/pricing/special-public-price";
 import { assertProductVisible, applyCatalogScope, isProductVisibleToViewer } from "@/lib/catalog-scope";
 import { siteBaseUrl } from "@/lib/seo";
 import { getListingDisplay } from "@/lib/listing-display";
@@ -164,6 +165,8 @@ export default async function ProductPage({
     description: productMetaDescription(cachedProduct),
     price: seoRow.price,
     salePrice: seoRow.salePrice,
+    // The special's last day, when the offer IS a Partner Special (card tJ4audbu).
+    priceValidUntil: offerPriceWithSpecial(seoRow, 0).priceValidUntil,
     // Zoey "use child price: No": every variation is offered at the parent's price, as the page sells it.
     parentPriced: usesParentPrice((cachedProduct as { metafields?: unknown }).metafields, CHANNEL_ID),
     hidePrice: cachedProduct.hidePrice,
@@ -555,10 +558,15 @@ function productReads(product: { id: number; categoryIds?: number[] | null; bran
  * The offer is what a GUEST pays — on this storefront that is the NOT LOGGED IN price list
  * (customer-group pricing, services `groupPricing.ts`), exactly what the page shows a crawler.
  * Priced onto a copy of the shared row; the viewer's own group never reaches the markup.
+ * A live PARTNER SPECIAL (card tJ4audbu) then goes on last, exactly as the page's own funnel lays
+ * it (`lib/member.ts` `applyAccountPrices` -> `applySpecialPrices`): the guest sees the special as
+ * the "now" figure, so the Offer states it — Google's automatic item updates read this markup and
+ * would otherwise "correct" the feed's sale price back up to the group price.
  */
 async function guestPricedRow<T extends { id: number }>(cachedProduct: T): Promise<T> {
   const guestPricingGroupId = await resolveViewerPricingGroupId({ accountId: null, contactId: null }).catch(() => null);
-  const [seoRow] = guestPricingGroupId ? await applyGroupPrices([cachedProduct], guestPricingGroupId) : [cachedProduct];
+  const [grouped] = guestPricingGroupId ? await applyGroupPrices([cachedProduct], guestPricingGroupId) : [cachedProduct];
+  const [seoRow] = (await applySpecialPrices([grouped] as never)) as unknown as T[];
   return seoRow;
 }
 
