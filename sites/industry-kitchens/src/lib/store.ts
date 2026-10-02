@@ -58,6 +58,7 @@ import { CHANNEL_ID } from "./channel";
 import { withBrandLogoFallback, targetsForChannel } from "@/builder/product-card-brand-logo";
 import { withPromoTagInComponents } from "@/builder/promo-tag-node";
 import { withTileCompareInComponents } from "@/builder/tile-compare-node";
+import { withWishlistTileInComponents, WISHLIST_FLAG } from "@/builder/wishlist-node";
 import {
   guardTileBuyControlsInComponents,
   withAnswerRequiredTilesInComponents,
@@ -314,11 +315,23 @@ const withScaleWording = async (components: ComponentMap): Promise<ComponentMap>
 export const getMemberScaleOn = async (): Promise<boolean> =>
   (await _store.getLadderConfig().catch(() => null))?.enabled === true;
 
+/**
+ * "Add to Wishlist" beside every `product-card` tile (2026-10-02) — a reference to the channel's
+ * `wishlist-tile` CMS master (its words and Show-if live there), only while this channel's
+ * `wishlist_enabled` setting is on; off returns the same map. Composed last so it joins the
+ * compare wrapper rather than wrapping the card again. See `builder/wishlist-node.ts`.
+ */
+const withWishlistTile = async (components: ComponentMap): Promise<ComponentMap> =>
+  withWishlistTileInComponents(
+    components as Record<string, NodeTree>,
+    await _store.getFeatureFlag(WISHLIST_FLAG).catch(() => false)
+  ) as ComponentMap;
+
 export const getComponents = async (): Promise<ComponentMap> =>
-  withScaleWording(withMasterTransforms(await _store.getComponents()));
+  withWishlistTile(await withScaleWording(withMasterTransforms(await _store.getComponents())));
 
 export const getDraftComponents = async (): Promise<ComponentMap> =>
-  withScaleWording(withMasterTransforms((await _store.getDraftComponents()) as ComponentMap));
+  withWishlistTile(await withScaleWording(withMasterTransforms((await _store.getDraftComponents()) as ComponentMap)));
 
 // ============================================================================
 // Channel settings (raw accessor)

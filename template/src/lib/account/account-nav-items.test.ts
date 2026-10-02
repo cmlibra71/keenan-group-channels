@@ -137,3 +137,13 @@ test("a sibling route with a shared prefix is not marked current", () => {
   // /account/profile must not light up for a hypothetical /account/profiles
   assert.equal(isAccountNavItemCurrent(item("profile"), "/account/profiles"), false);
 });
+
+test("the wishlist item appears only where the store has the wishlist, under Contact your rep", () => {
+  const off = buildAccountNavItems(ALL_ON).map((i) => i.key);
+  assert.ok(!off.includes("wishlist"), "absent flag = no item");
+  const on = buildAccountNavItems({ ...ALL_ON, wishlistEnabled: true });
+  const keys = on.map((i) => i.key);
+  assert.equal(keys.indexOf("wishlist"), keys.indexOf("contact") + 1);
+  assert.equal(on.find((i) => i.key === "wishlist")?.href, "/account/wishlist");
+  assert.equal(isAccountNavItemCurrent(on.find((i) => i.key === "wishlist")!, "/account/wishlist"), true);
+});

@@ -13,6 +13,7 @@ import {
   Crown,
   Trophy,
   Gift,
+  Heart,
   ShoppingBag,
   LogOut,
   Menu,
@@ -48,6 +49,7 @@ const ICONS: Record<string, LucideIcon> = {
   membership: Crown,
   draws: Trophy,
   partnerOffers: Gift,
+  wishlist: Heart,
   shop: ShoppingBag,
   signout: LogOut,
 };

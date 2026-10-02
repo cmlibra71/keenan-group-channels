@@ -231,6 +231,27 @@ describe("storefront rate-limit rulebook", () => {
     assert.equal(blocked.scope, "ip");
   });
 
+  test("the wishlist budget is per signed-in contact, and a guest counts against the IP only", () => {
+    const t0 = 32_000_000;
+    const ip = "203.0.113.30";
+    const max = RATE_LIMIT_POLICIES.wishlist.buckets[1].max;
+    for (let i = 0; i < max; i++) {
+      assert.equal(consumeRateLimit("wishlist", { ip, identifier: "c501" }, t0 + i).allowed, true);
+    }
+    const blocked = consumeRateLimit("wishlist", { ip, identifier: "c501" }, t0 + max);
+    assert.equal(blocked.allowed, false);
+    assert.equal(blocked.scope, "account");
+    // A colleague on the same office connection is a different contact: not rationed with them.
+    assert.equal(consumeRateLimit("wishlist", { ip, identifier: "c502" }, t0 + max + 1).allowed, true);
+    // A guest (no identifier) is held by the IP envelope alone.
+    const guestIp = "203.0.113.31";
+    const ipMax = RATE_LIMIT_POLICIES.wishlist.buckets[0].max;
+    for (let i = 0; i < ipMax; i++) {
+      assert.equal(consumeRateLimit("wishlist", { ip: guestIp }, t0 + i).allowed, true);
+    }
+    assert.equal(consumeRateLimit("wishlist", { ip: guestIp }, t0 + ipMax).scope, "ip");
+  });
+
   test("every policy is well formed", () => {
     for (const [name, policy] of Object.entries(RATE_LIMIT_POLICIES)) {
       assert.ok(policy.buckets.length > 0, `${name} has no buckets`);

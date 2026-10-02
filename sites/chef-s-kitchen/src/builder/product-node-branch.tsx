@@ -14,6 +14,7 @@ import { getPricingGroupId } from "@/lib/member";
 import {
   loadJsSandbox,
   computeCallResults,
+  templateOwns,
   guardBuyControls,
   guardBuyControlsInComponents,
   buildFaqPageJsonLd,
@@ -25,6 +26,7 @@ import { SEED_PRODUCT_TREE } from "@/builder/seeds/product";
 import { withReviewsBlockInComponents } from "@/builder/product-reviews-node";
 import { withCompareNode } from "@/builder/compare-node";
 import { COMPARE_ENABLED } from "@/lib/compare-site";
+import { withWishlistNode, WISHLIST_FLAG, WISHLIST_PLACEMENT } from "@/builder/wishlist-node";
 import { composeProductPlacements, placementPassRuns } from "@/builder/product-placements";
 import { attachBrandLogos } from "@/lib/brand-logo-fallback";
 import { withMemberScaleLabelsInTree } from "@/builder/member-scale-labels";
@@ -306,8 +308,16 @@ export async function renderProductNodeBranch({
   // the buy row, on the one site whose switch is on (`lib/compare-site.ts`: Industry Kitchens).
   // Placed AFTER the component library is read so an author who put the `product-compare`
   // leaf inside a master this page places (e.g. `actions-row`) keeps their placement.
-  const nodeTree = withCompareNode(composedTree, {
+  const comparedTree = withCompareNode(composedTree, {
     enabled: COMPARE_ENABLED && placementPassRuns(baseTree, "compare"),
+    components,
+  });
+  // The wishlist (Industry Kitchens, 2026-10-02) — a reference to the channel's `wishlist-add` CMS
+  // master directly after the compare control, on a channel whose `wishlist_enabled` setting is on.
+  // Off (Chefs Depot) returns the same tree. The words and Show-if live in the master.
+  const nodeTree = withWishlistNode(comparedTree, {
+    enabled:
+      !templateOwns(baseTree, WISHLIST_PLACEMENT) && (await getFeatureFlag(WISHLIST_FLAG).catch(() => false)),
     components,
   });
   // CSS for AUTHORED classes: the static Tailwind sheet only covers classes in
