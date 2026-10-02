@@ -62,6 +62,8 @@ const parsedKit: ProductKit = {
     { productId: 12, sku: "STAND-1", name: "Oven stand", quantity: 1, group: null, isDefault: false },
   ],
   groups: [],
+  scoped: false,
+  quoteOnly: false,
 };
 
 async function kitNative(data: Record<string, unknown>, product: Record<string, unknown> = { id: 7 }) {

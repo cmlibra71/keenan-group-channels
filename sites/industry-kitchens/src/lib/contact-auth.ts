@@ -86,11 +86,20 @@ export async function createAccountlessContact(
     >`
       INSERT INTO contacts (
         account_id, origin_channel_id, email, password_hash,
-        first_name, last_name, is_active, attributes, metafields
+        first_name, last_name, is_active, attributes, metafields, customer_group_id
       ) VALUES (
         NULL, ${CHANNEL_ID}, ${input.email}, ${passwordHash},
         ${input.firstName ?? null}, ${input.lastName ?? null}, true,
-        ${asJsonText(input.attributes ?? {})}::jsonb, ${asJsonText(input.metafields ?? {})}::jsonb
+        ${asJsonText(input.attributes ?? {})}::jsonb, ${asJsonText(input.metafields ?? {})}::jsonb,
+        -- THE STOREFRONT'S DEFAULT GROUP (channel_settings default_customer_group_id — Industry
+        -- Kitchens: Mates Rates, as Zoey gives every new customer). NULL where unset (Chefs Depot),
+        -- which is what this insert always wrote; a non-numeric or unknown id is NULL too.
+        (
+          SELECT cg.id FROM channel_settings cs
+          JOIN customer_groups cg ON cg.id = CASE WHEN (cs.setting_value #>> '{}') ~ '^[0-9]+$'
+                                                  THEN (cs.setting_value #>> '{}')::int END
+          WHERE cs.channel_id = ${CHANNEL_ID} AND cs.setting_key = 'default_customer_group_id'
+        )
       )
       RETURNING id, email, first_name, last_name`;
     return row;

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import BuilderImage from "./builder-image";
 import type { NodeTree, ProductPagePayload } from "@keenan/services/builder";
+import { componentRendersFor } from "@keenan/services/component-renders";
 import {
   ProductPurchaseProvider,
   useProductPurchase,
@@ -14,7 +15,8 @@ import {
 } from "@keenan/services/product-page";
 import { addToCart } from "@/lib/actions/cart";
 import type { AddonSelectionInput, ProductAddons } from "@keenan/services/product-addons";
-import { missingAnswerSentence } from "@/lib/product/addon-panel";
+import type { GiftCardSelectionInput } from "@keenan/services/gift-card";
+import { missingAnswerSentence, tileRefusalDestination } from "@/lib/product/addon-panel";
 import { COMBINATION_UNAVAILABLE_TEXT } from "@/components/product/ProductCombinationNotice";
 import { addToQuote } from "@/lib/actions/quote";
 import { submitReview } from "@/lib/actions/reviews";
@@ -22,10 +24,15 @@ import { useGst } from "@/lib/gst";
 import { overlayLiveGst } from "./live-gst";
 import { useCartQuoteCounts, useHeaderPanels } from "@/lib/cart-quote-counts";
 import { sanitizeHtml } from "@/lib/sanitize-html";
+import { FINANCE_FROM_REQUIRED_OPTION, KEEP_TEXT_COLOR } from "@/lib/zoey-parity-site";
 import { BuilderTree, type NativeComponents } from "@keenan/services/builder-react";
 import { BuilderActionsProvider } from "@keenan/services/builder-react";
 import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 import { productNatives } from "./product-natives";
+import { productFinanceOffer, productFinanceScope, requiredOptionFinancePrice } from "@/lib/finance/product-finance";
+import { quoteExtrasGroups } from "@keenan/services/product-addons";
+import { useFinanceRates } from "@/lib/finance/finance-rates-context";
+import { barQuantity, KIT_ADD_TO_QUOTE_EVENT, type KitAddToQuoteDetail } from "@/lib/kit-bar-event";
 
 // ============================================================================
 // The product page rendered from a node tree. Thin wrapper over the SHARED
@@ -78,9 +85,14 @@ function ActionsBridge({
         setCartCount(res.cartCount);
         open("cart");
       }
+      // A related-rail TILE posted no configuration; if that product asks a required
+      // question (Gas Type — card tkvntxsq) the refusal carries its page, and the shopper is
+      // taken there to answer it. This page's own buy row posts one, so gets no destination.
+      const destination = tileRefusalDestination(res);
+      if (destination) router.push(destination);
       return res;
     },
-    [setCartCount, open]
+    [setCartCount, open, router]
   );
   const countingAddToQuote = React.useCallback(
     async (
@@ -89,16 +101,23 @@ function ActionsBridge({
       // The shopper's ticked extras (card 0CDcCYmO). A quote line is priced by a rep, so
       // these move no money here — they ride the line as the record of what was asked for,
       // the same way a bundle build does.
-      addons?: AddonSelectionInput
+      addons?: AddonSelectionInput,
+      // IK gift cards (Zoey parity): the amount and recipient / sender details — re-validated by
+      // the action against the product's own configuration.
+      giftCard?: GiftCardSelectionInput,
+      // The Qty box — sent by the bridge with a gift card only (how many cards).
+      quantity?: number
     ) => {
-      const res = await addToQuote(pid, variantId, null, addons);
+      const res = await addToQuote(pid, variantId, null, addons, giftCard ? (quantity ?? null) : null, giftCard ?? null);
       if (res && "quoteCount" in res && typeof res.quoteCount === "number") {
         setQuoteCount(res.quoteCount);
         open("quote");
       }
+      const destination = tileRefusalDestination(res);
+      if (destination) router.push(destination);
       return res;
     },
-    [setQuoteCount, open]
+    [setQuoteCount, open, router]
   );
   // Configurable product with nothing chosen yet: the quote CTA stays live and
   // this prompt names the option still to pick, instead of the click doing
@@ -129,7 +148,35 @@ function ActionsBridge({
     addToQuote: countingAddToQuote,
     onOptionsRequired,
   });
-  const scope = useProductPageScope(payload, { inclusive, pricesIncludeTax });
+  const baseScope = useProductPageScope(payload, { inclusive, pricesIncludeTax });
+  // The weekly-rent offer as `purchase.finance*` (IK hidden-conditionals C8): the SAME call, on the
+  // same inputs, as the sealed SilverChefPanel, so a template that authors the panel quotes the
+  // same rent. Additive — a tree that never reads these renders exactly as before.
+  const financeRates = useFinanceRates();
+  const scope = React.useMemo(() => {
+    // A $0 quote-only product whose required Zoey option carries the price (29797): quote the rent
+    // off that option, whose price the quote-extras box already prints. Per-site switch.
+    const shownPrice = purchase.financeDisplayPrice ?? purchase.displayPrice;
+    const optionPrice =
+      FINANCE_FROM_REQUIRED_OPTION && purchase.quoteExtrasShown && !(shownPrice > 0)
+        ? requiredOptionFinancePrice(quoteExtrasGroups(purchase.product.addons ?? null), purchase.selectedAddons)
+        : 0;
+    const offer = productFinanceOffer({
+      price: optionPrice > 0
+        ? { displayPrice: optionPrice, displaySalePrice: null, memberPrice: null }
+        : {
+            displayPrice: shownPrice,
+            displaySalePrice:
+              purchase.financeDisplaySalePrice !== undefined ? purchase.financeDisplaySalePrice : purchase.displaySalePrice,
+            memberPrice: purchase.financeMemberPrice !== undefined ? purchase.financeMemberPrice : purchase.activeMemberPrice,
+          },
+      sku: purchase.activeVariant?.sku ?? purchase.product.sku,
+      brand: purchase.product.brandName ?? null,
+      pricesIncludeTax,
+      rates: financeRates,
+    });
+    return { ...baseScope, purchase: { ...baseScope.purchase, ...productFinanceScope(offer) } };
+  }, [baseScope, purchase, pricesIncludeTax, financeRates]);
   // Overlay the live GST toggle onto context.gst so any card-rail price-block
   // masters (related products) resolve ex/inc labels from the live state.
   const livePayload = React.useMemo(
@@ -181,10 +228,39 @@ function ActionsBridge({
   // one is set (card XBOxpQmd). Identity-returning when the page carries no
   // form, which is almost every page.
   const confirmed = useFormConfirmations(tree, components);
+  // Does THIS template draw the extras panel for this product? Answered from the rendered tree
+  // itself — the same Show-if chain the renderer walks, on the same payload + scope — so the buy
+  // row's "no dead button" fact (`purchase.requiredQuestionsUnanswerable`) follows whatever the
+  // author did with the panel: moved, re-conditioned or deleted (IK hidden-conditionals batch 3,
+  // judge on batch 2). Deterministic, so server and browser agree on first paint.
+  const pageScope = React.useMemo(() => {
+    const drawn = componentRendersFor(
+      confirmed.tree as NodeTree,
+      confirmed.components as Record<string, NodeTree>,
+      "product-addons",
+      livePayload,
+      scope
+    );
+    const p = scope.purchase as Record<string, unknown>;
+    return {
+      ...scope,
+      purchase: { ...p, requiredQuestionsUnanswerable: p.requiredQuestionsWithoutDefault === true && !drawn },
+    };
+  }, [confirmed, livePayload, scope]);
   const actionHandlers = React.useMemo(
     () => ({
       ...handlers,
       ...formHandlers,
+      // Zoey's fixed "Price as configured" bar on a bundle: its ADD TO QUOTE adds the kit's picks
+      // (the kit native answers the event) at the bar's quantity. Resolves for the bar's toast;
+      // a page with no kit native answers nothing, so the press says so rather than hanging.
+      addBundleToQuote: (args?: Record<string, unknown>) =>
+        new Promise<{ success?: boolean; error?: string }>((resolve) => {
+          const detail: KitAddToQuoteDetail = { productId, quantity: barQuantity(args?.quantity), handled: false, resolve };
+          // dispatchEvent runs listeners synchronously, so `handled` is known on return.
+          window.dispatchEvent(new CustomEvent(KIT_ADD_TO_QUOTE_EVENT, { detail }));
+          if (!detail.handled) resolve({ error: "This product has no configuration to add." });
+        }),
       goBack: (args?: Record<string, unknown>) => {
         if (window.history.length > 1) router.back();
         else router.push(String(args?.fallbackHref ?? "/products"));
@@ -230,7 +306,7 @@ function ActionsBridge({
         nativeComponents={nativeComponents}
         linkComponent={Link as unknown as React.ComponentType<Record<string, unknown>>}
         imageComponent={BuilderImage}
-        scope={scope}
+        scope={pageScope}
       />
       {optionsPrompt ? (
         <div
@@ -266,6 +342,7 @@ export function BuilderProductPage({
   callResults,
   components = {},
   nativeData,
+  plainTextLineBreaks = false,
 }: {
   tree: NodeTree;
   payload: ProductPagePayload;
@@ -275,20 +352,30 @@ export function BuilderProductPage({
   components?: Record<string, NodeTree>;
   /** Route-owned data for this site's sealed product natives. */
   nativeData?: Record<string, unknown>;
+  /** The site's `product_copy_display.plain_text_line_breaks` setting (portal → Storefront Listings):
+   *  plain-text descriptions keep their line breaks as Zoey's nl2br printed them. Absent = off. */
+  plainTextLineBreaks?: boolean;
 }) {
   // The BRAND rides into the purchase scope because the sealed SilverChef panel
   // has to know whether this is a SKOPE machine, and since Steve widened that
   // test (card 6f47rFeT, 2026-08-19) the brand answers it for the 76 SKOPE
   // fridges whose SKU does not. The payload already carries the brand slice, so
   // this costs no query — it only has to reach the provider.
+  //
+  // A kit scoped to THIS storefront may be quote only (`channel_kits[<channel>].quote_only` — a
+  // bundle Zoey sells by quote only, IK parity 2026-09-28). The route parsed the kit once into
+  // `nativeData.kit`; its `quoteOnly` switches Add to Cart off exactly as `restrict_add_to_cart`
+  // does. Read defensively: a site whose kit reader predates it simply has no such flag.
+  const kitQuoteOnly = (nativeData?.kit as { quoteOnly?: unknown } | null | undefined)?.quoteOnly === true;
   const product = React.useMemo(
     () => ({
       ...(payload.product as unknown as PurchaseProduct),
       brandName: payload.brand?.name ?? null,
+      ...(kitQuoteOnly ? { restrictAddToCart: true } : {}),
     }),
-    [payload]
+    [payload, kitQuoteOnly]
   );
-  const enriched = React.useMemo(() => enrichProductPayload(payload, { sanitizeHtml }), [payload]);
+  const enriched = React.useMemo(() => enrichProductPayload(payload, { sanitizeHtml, keepTextColor: KEEP_TEXT_COLOR, plainTextLineBreaks }), [payload, plainTextLineBreaks]);
   return (
     <ProductPurchaseProvider
       product={product}

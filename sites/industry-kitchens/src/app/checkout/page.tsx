@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { goodsTotalOf } from "@/lib/checkout/shown-total";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
 import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getMembershipNumber, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, getLadderConfig, getLiveSpecials, CHANNEL_ID } from "@/lib/store";
@@ -20,7 +21,7 @@ import {
   RENDER_PATH_TIMEOUT_MS,
   type SavedCard,
 } from "@keenan/services";
-import { gstSplit } from "@keenan/services/calc";
+import { gstOnExWholeCents, gstSplit } from "@keenan/services/calc";
 import { resolveStripeGateway } from "@/lib/payments/gateway";
 import { canTakeCardPayment } from "@/lib/payments/stripe-gateways";
 import { resolveNetTermsEntitlement } from "@/lib/checkout/net-terms";
@@ -40,6 +41,7 @@ import {
   filterFinanceMethods,
   financeLinesFromCart,
   financeOfferForCart,
+  financeGoodsTotalIncGst,
   isFinancePaymentMethod,
 } from "@/lib/checkout/finance";
 import { addressTypeFromContactBook } from "@keenan/services/residential";
@@ -150,8 +152,11 @@ export default async function CheckoutPage() {
     const taxSetting = await channelSettingsService.getByKey(CHANNEL_ID, "prices_include_tax");
     pricesIncludeTax = taxSetting.setting_value === true || taxSetting.setting_value === "true";
   } catch {}
-  // GST display amount via gstSplit (single source of tax math — services D4).
-  const gstAmount = Math.round(gstSplit(subtotal, pricesIncludeTax).tax * 100) / 100;
+  // GST display amount — the same whole-cent rule as the cart and the product page on an ex-GST
+  // store (`gstOnExWholeCents`, money judge 2026-09-30); `gstSplit` on a GST-inclusive store.
+  const gstAmount = pricesIncludeTax
+    ? Math.round(gstSplit(subtotal, true).tax * 100) / 100
+    : gstOnExWholeCents(subtotal).tax;
 
   // ── SilverChef / Finance (card VAjaPj0t) ──────────────────────────────────
   // Offered only above this storefront's finance minimum (inc GST, default
@@ -176,7 +181,12 @@ export default async function CheckoutPage() {
   // show-equals-accept just as surely as a different total would.
   const financeOffer = financeOfferForCart({
     lines: financeLinesFromCart(cart.items as never[], pricesIncludeTax),
-    goodsTotalIncGst: gstSplit(subtotal, pricesIncludeTax).incTax,
+    // Freight-kind extras come off the goods, as delivery does (owner decision 8).
+    goodsTotalIncGst: financeGoodsTotalIncGst(
+      gstSplit(subtotal, pricesIncludeTax).incTax,
+      cart.items as never[],
+      pricesIncludeTax
+    ),
     settings: checkoutSettings.financeSettings,
   });
   // …but nothing finance-shaped is DRAWN, and no application form is provisioned,
@@ -588,6 +598,7 @@ export default async function CheckoutPage() {
         items={summaryItems}
         subtotal={subtotal}
         grossSubtotal={grossSubtotal}
+        shownGoodsTotal={goodsTotalOf(cart.items as Parameters<typeof goodsTotalOf>[0])}
         offerDiscount={offerDiscount}
         offerMessages={cartOffers?.messages ?? []}
         gstAmount={gstAmount}

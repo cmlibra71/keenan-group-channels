@@ -8,6 +8,8 @@ import {
   getComponents,
   getDraftComponents,
   getChannelSetting,
+  getMemberScaleOn,
+  getEnabledCmsFunctions,
 } from "@/lib/store";
 import { CHANNEL_ID } from "@/lib/channel";
 import { getMemberContext } from "@/lib/member";
@@ -19,9 +21,10 @@ import {
   computeCallResults,
   type NodeTree,
 } from "@keenan/services/builder";
-import { cmsFunctionService } from "@keenan/services/services";
 import { BuilderHomePage } from "@/builder/BuilderHomePage";
 import { loadHomeNativeData } from "@/builder/home-data";
+import { BuilderCssLink } from "@/builder/builder-css-link";
+import { usedComponents } from "@/builder/used-components";
 
 // ============================================================================
 // The homepage's Site Builder branch — ENGINE.
@@ -100,7 +103,10 @@ export async function renderHomeNodeBranch(
   ]);
   const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
 
+  // The channel's member price scale (audit C11) — the price masters word "Standard price"/"RRP" on it.
+  const memberScaleOn = await getMemberScaleOn();
   const payload = composeHomePagePayload({
+    memberScaleOn,
     channelId: CHANNEL_ID,
     sections,
     customer: {
@@ -121,8 +127,7 @@ export async function renderHomeNodeBranch(
       css?: string;
     } | null)?.css ?? "";
 
-  const jsFunctions = await cmsFunctionService
-    .enabledMapForChannel(CHANNEL_ID)
+  const jsFunctions = await getEnabledCmsFunctions()
     .catch(() => ({}) as Record<string, string>);
   let callResults: Record<string, unknown> = {};
   if (Object.keys(jsFunctions).length > 0) {
@@ -136,15 +141,13 @@ export async function renderHomeNodeBranch(
     draft,
     element: (
       <>
-        {builderCss && (
-          <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />
-        )}
+        <BuilderCssLink css={builderCss} />
         <BuilderHomePage
           tree={nodeTree}
           payload={payload}
           home={homeData}
           namedStyles={namedStyles}
-          components={components}
+          components={usedComponents(nodeTree, components)}
           jsFunctions={jsFunctions}
           callResults={callResults}
           draft={draft}

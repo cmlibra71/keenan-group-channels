@@ -17,6 +17,7 @@ import {
   type ResolvedAddon,
 } from "@keenan/services/product-addons";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, forOrderInsert, withPromotionDiscounts, lineGoodsExTax, type BelowCostLine, type LinePromotionDraft } from "@/lib/checkout/order-draft";
+import { chosenOptionLines } from "@/lib/product/addon-panel";
 import { resolveCartOffers, NO_OFFERS, type CartOffers, type OfferCartLine } from "@/lib/promotions/cart-offers";
 import { reserveOffersForOrder, discardUnchargedOrder, OfferNoLongerAvailableError } from "@keenan/services";
 import { currentShopperForOffers } from "@/lib/promotions/shopper";
@@ -27,6 +28,8 @@ import {
   restrictedCheckoutMessage,
   quantityRefusedCheckoutMessage,
 } from "@/lib/cart/restricted-message";
+import { onlineOrderingOff } from "@/lib/cart/online-purchase";
+import { isGiftCardProduct } from "@keenan/services/gift-card";
 import { normaliseAddressType } from "@keenan/services/residential";
 import { getLineCosts } from "@/lib/store";
 import { sendStaffNotification } from "@/lib/staff-email";
@@ -78,6 +81,16 @@ import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import { applyAccountPricesToCart } from "@/lib/checkout/account-prices";
 import { refreshSpecialPricesInCart } from "@/lib/actions/cart";
 import { SPECIAL_PRICES_MOVED } from "@/lib/pricing/special-line";
+import { repriceGroupLinesForCheckout } from "@/lib/checkout/group-prices";
+import { goodsTotalMoved, PRICES_CHANGED_MESSAGE } from "@/lib/checkout/shown-total";
+import {
+  decideOpenOrderReuse,
+  intentBlocksReuse,
+  EARLIER_PAYMENT_IN_PROGRESS_MESSAGE,
+  OPEN_ORDER_CHECK_FAILED_MESSAGE,
+} from "@/lib/checkout/open-order-reuse";
+import { resolveStampableOrderContactId } from "@keenan/services";
+import { findOpenCardOrderForCart } from "@/lib/checkout/open-order";
 import { saveCheckoutAddressForContact } from "@/lib/contact-addresses";
 import { blockedProductIds } from "@/lib/catalog-scope";
 import { resolveAccountOptions } from "@/lib/checkout/account-options";
@@ -100,6 +113,7 @@ import {
   financeFloorError,
   financeLinesFromCart,
   financeOfferForCart,
+  financeGoodsTotalIncGst,
   filterFinanceMethods,
   fundingTypeError,
   isFinancePaymentMethod,
@@ -120,6 +134,12 @@ import {
 
 type PlaceOrderResult = {
   error?: string;
+  /**
+   * The lines were re-priced after the page rendered (group / account prices, membership expiry):
+   * nothing was placed or charged, the corrected prices are saved, and the form refreshes the page
+   * so the shopper confirms the new total by pressing Pay again (lib/checkout/shown-total.ts).
+   */
+  pricesChanged?: boolean;
   stripe?: {
     clientSecret: string;
     orderNumber: string;
@@ -166,7 +186,7 @@ async function resolveLineAddons(
   if (stored.length === 0) return [];
   try {
     const product = (await productService.getById(productId)) as { metafields?: unknown } | null;
-    return resolveAddonSelection(readProductAddons(product?.metafields), storedAddonsAsSelection(stored));
+    return resolveAddonSelection(readProductAddons(product?.metafields, { channelId: CHANNEL_ID }), storedAddonsAsSelection(stored));
   } catch (e) {
     // Never block a checkout on this lookup: the line keeps the extras it was configured with.
     console.error("[placeOrder] addon re-resolve failed (non-fatal):", e);
@@ -212,7 +232,9 @@ export async function placeOrder(
   // started takes it — persisted to the cart, then the order stops so the shopper sees the new
   // figure before paying it, the same way a lapsed membership does below. The retry succeeds.
   if ((await refreshSpecialPricesInCart()).repriced > 0) {
-    return { error: SPECIAL_PRICES_MOVED };
+    // `pricesChanged` refreshes the checkout page, as every other re-price below does, so the
+    // shopper confirms the new total on screen before a second press can pay it.
+    return { error: SPECIAL_PRICES_MOVED, pricesChanged: true };
   }
 
   const fullCart = await cartService.getWithItems(cartWithItems.id);
@@ -237,6 +259,27 @@ export async function placeOrder(
     };
   }
 
+  // A GIFT CARD is sold by quote only (IK, Zoey parity) — never charged through the cart, whatever a
+  // stale cart line or a lapsed channel rule says. Checked strictly, apart from the buying controls
+  // below (which fail open on a lookup error): a gift card line must never become a paid order at a
+  // catalogue $0 or at its "Starting at" price. The issuing path that would honour one is not on.
+  {
+    const ids = [...new Set((fullCart.items as { product_id: number }[]).map((i) => i.product_id))];
+    for (const id of ids) {
+      let row: { metafields?: unknown; zoey_raw?: unknown; name?: string | null } | null;
+      try {
+        row = (await productService.getById(id)) as typeof row;
+      } catch (e) {
+        // Fail CLOSED: nothing has been written or charged yet, and a press after a blip is cheap.
+        console.error("[placeOrder] gift card check could not read a product — refusing:", e);
+        return { error: "We couldn't check the items in your cart just now. Nothing was charged — please try again." };
+      }
+      if (row && isGiftCardProduct(row, CHANNEL_ID)) {
+        return { error: `${row.name ?? "A gift card"} is sold by quote only. Please remove it from your cart and add it to a quote instead.` };
+      }
+    }
+  }
+
   // Per-product buying controls (card 7vu2iEEZ), re-checked HERE because this is where the money
   // moves: a cart built before staff switched a product off, or before its out-of-stock rule was
   // set to "No", must not become an order. Stock alone never refuses — an empty shelf is a back
@@ -253,7 +296,14 @@ export async function placeOrder(
       quantity: number;
       product_name?: string | null;
     }[];
-    const restricted = lines.find((i) => stock.get(i.product_id)?.restrictAddToCart === true);
+    // Restricted, Zoey "quote only" (`purchasing_disabled`) or price hidden — the same three
+    // switches `addToCart` refuses (lib/cart/online-purchase.ts), so a line added before staff
+    // flipped one still cannot be bought.
+    // …and this storefront's Zoey rules (zero-price, out-of-stock, and guest quote-only for a guest:
+    // `session` is who is placing the order).
+    const restricted = lines.find((i) =>
+      onlineOrderingOff(stock.get(i.product_id), { loggedIn: session != null })
+    );
     if (restricted) {
       return { error: restrictedCheckoutMessage(restricted.product_name) };
     }
@@ -373,6 +423,14 @@ export async function placeOrder(
   // reconciled against the account's price here, at the moment of charging, and persisted to the cart.
   await applyAccountPricesToCart(cartWithItems.id, fullCart.items);
 
+  // ── CUSTOMER-GROUP PRICES (Industry Kitchens): the same reconciliation for the shopper's group
+  // price list, through the cart's own derivation. A line that moved means the page showed a
+  // price we would not charge — so nothing is placed, the corrected prices are saved, and the
+  // shopper reviews the new total first. No-op on a channel without `customer_group_pricing`.
+  if ((await repriceGroupLinesForCheckout(cartWithItems.id, fullCart.items)) > 0) {
+    return { error: PRICES_CHANGED_MESSAGE, pricesChanged: true };
+  }
+
   // Re-validate subscription status — if member pricing is enabled but subscription
   // has expired since items were added, recalculate at non-member prices
   const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
@@ -473,7 +531,10 @@ export async function placeOrder(
             console.error("[placeOrder] failed to persist re-priced cart item (non-fatal):", e);
           }
         }
-        return { error: "Your membership has expired. Prices have been updated to standard pricing. Please review your order and try again." };
+        return {
+          error: "Your membership has expired. Prices have been updated to standard pricing. Please review your order and try again.",
+          pricesChanged: true,
+        };
       }
     }
   }
@@ -488,6 +549,13 @@ export async function placeOrder(
   }
 
   // Calculate line items + subtotal (pure; GST math delegated to gstSplit).
+  // SHOWN == CHARGED for the goods (lib/checkout/shown-total.ts): the page posted the goods total it
+  // rendered. Any re-price above that moved the money — including an account price reconciled
+  // silently — refuses here, with the new prices already saved, and the form refreshes the page.
+  if (goodsTotalMoved(formData.get("shown_goods_total"), fullCart.items)) {
+    return { error: PRICES_CHANGED_MESSAGE, pricesChanged: true };
+  }
+
   const built = buildLineItems(fullCart.items, pricesIncludeTax);
   const totalItems = built.itemsTotal;
 
@@ -916,7 +984,8 @@ export async function placeOrder(
   // with nothing actually offerable.
   const cartFinanceOffer = financeOfferForCart({
     lines: financeLinesFromCart(fullCart.items as never[], pricesIncludeTax),
-    goodsTotalIncGst: subtotalIncTax,
+    // Freight-kind extras come off the goods, exactly as the page measured it (owner decision 8).
+    goodsTotalIncGst: financeGoodsTotalIncGst(subtotalIncTax, fullCart.items as never[], pricesIncludeTax),
     // This storefront's own floor and rates (card 6GBlDtwf) — the SAME settings
     // object the checkout page drew the offer from, because it is the same
     // `getCheckoutSettings()` read. A floor resolved differently here would
@@ -1171,36 +1240,139 @@ export async function placeOrder(
     }));
   }
 
+  // The order's delivery address, as THIS checkout states it — one builder for the fresh order's
+  // row and for the refresh of a reused open order (below), so the two cannot describe it differently.
+  const shippingAddressRow = () => ({
+    first_name: firstName,
+    last_name: lastName,
+    email,
+    phone: phone || null,
+    company: (formData.get("company") as string)?.trim() || null,
+    address1,
+    address2: billingAddress.address2 || null,
+    city,
+    state_or_province: state || null,
+    postal_code: postalCode,
+    country,
+    country_code: country,
+    // Residential vs commercial for THIS delivery (card HMtUxvwZ). Derived by the
+    // details lookup from the shopper's own Places pick and posted as a hidden field;
+    // null when nothing was picked or the pick said nothing, which reads commercial —
+    // exactly how every order behaves today. It refuses NOTHING: it is what lets the
+    // order screen print RESIDENTIAL ADDRESS and raise the commercial-only flag on an
+    // order raised here, which is the highest-volume way an order is created at all.
+    address_type: shippingAddressType,
+    shipping_method: heldForSpecialised
+      ? "Specialised delivery — to be quoted"
+      : deliveryServiceType === "curbside"
+        ? "Curbside delivery"
+        : shippingIncTax > 0
+          ? "Storefront delivery"
+          : "Free delivery",
+    base_cost: String(shippingExTax),
+    cost_ex_tax: String(shippingExTax),
+    cost_inc_tax: String(shippingIncTax),
+    cost_tax: String(shippingTax),
+    items_total: totalItems,
+  });
+
   // Idempotency guard for card payments: if THIS cart already has an open, unpaid
   // Stripe order (the shopper hit "Pay" twice, or retried after a network blip),
-  // reuse it rather than creating a second orphan awaiting_payment order. We match
-  // on the cart uuid stamped in order metafields. createStripePaymentIntent is
+  // reuse it rather than creating a second orphan awaiting_payment order. Found
+  // directly by the cart uuid stamped in order metafields (no recent-orders window). createStripePaymentIntent is
   // itself idempotent on (orderId, amount), so re-confirming returns a usable
   // client secret for the same order.
   if (effectivePaymentMethod === "stripe") {
     try {
-      const open = await orderService.list({
-        page: 1,
-        limit: 20,
-        sort: "id",
-        direction: "desc",
-        filters: {
-          channel_id: { type: "eq", value: CHANNEL_ID },
-          payment_status: { type: "eq", value: "awaiting_payment" },
-          ...(session?.contactId ? { contact_id: { type: "eq", value: session.contactId } } : {}),
-        },
-      });
-      const existing = (open.data as Array<{ id: number; order_number: string; customer_po?: string | null; metafields?: Record<string, unknown> | null }>).find(
-        (o) => (o.metafields ?? {})?.cart_uuid === uuid
-      );
+      // THE CART'S OWN ORDER, looked up directly by the cart uuid stamped on it — never a window of
+      // recent orders (lib/checkout/open-order.ts).
+      const openForCart = (await findOpenCardOrderForCart(uuid, session?.contactId ?? null, session?.email ?? null)) ?? undefined;
+      // REUSE ONLY AN IDENTICAL ORDER (lib/checkout/open-order-reuse.ts). A cart re-priced since the
+      // first attempt — up or down — gets a FRESH order from its current lines; the stale one's intent
+      // is cancelled at Stripe and the order cancelled. If that intent can no longer be cancelled the
+      // money is already moving: start nothing new.
+      let existing = openForCart;
+      if (openForCart && decideOpenOrderReuse(openForCart.total_inc_tax, totalIncTax) === "replace") {
+        existing = undefined;
+        if (openForCart.payment_provider_id) {
+          const voided = await paymentService
+            .voidPayment(openForCart.id, { transaction_id: openForCart.payment_provider_id })
+            .catch((e: unknown) => ({ success: false, error: e instanceof Error ? e.message : String(e) }));
+          if (!voided.success) {
+            console.error("[placeOrder] stale open order's intent could not be cancelled — not replacing", {
+              orderId: openForCart.id,
+              error: (voided as { error?: unknown }).error,
+            });
+            return { error: EARLIER_PAYMENT_IN_PROGRESS_MESSAGE };
+          }
+        }
+        await orderService.update(openForCart.id, {
+          status: "canceled",
+          staffNotes: `Replaced at checkout by a new order: the cart was re-priced after this attempt (total ${String(
+            openForCart.total_inc_tax
+          )} → ${totalIncTax.toFixed(2)} inc GST).`,
+        });
+      }
       if (existing) {
         // The shopper may have added, corrected OR CLEARED their reference on the
         // retry — the box on the form is the truth, so an emptied box clears the
         // order too rather than leaving the first attempt's value on it. Safe to
         // write on its own: OrderService.beforeUpdate only moves status when
         // paymentStatus is part of the same update.
+        // MONEY ALREADY MOVING? (lib/checkout/open-order-reuse.ts `intentBlocksReuse`). Read the open
+        // order's intent live BEFORE touching it: a payment already succeeded / processing in another
+        // tab must not be claimed for someone else or have its addresses rewritten under it.
+        if (existing.payment_provider_id) {
+          const intentStatus = await paymentService
+            .getStripePaymentIntentStatus(existing.id, existing.payment_provider_id)
+            .catch(() => null);
+          if (intentBlocksReuse(intentStatus)) {
+            return { error: EARLIER_PAYMENT_IN_PROGRESS_MESSAGE };
+          }
+        }
         if (customerReference !== (existing.customer_po ?? null)) {
           await orderService.update(existing.id, { customerPo: customerReference });
+        }
+        // THE ADDRESSES AS THIS CHECKOUT STATES THEM. The total matched, but the shopper may have
+        // corrected the billing name, phone or delivery address on the retry — the order must carry
+        // what they submitted THIS time, exactly as a fresh order would (open-order-refresh).
+        // Best-effort in its OWN try: a failure here must not fall through to writing a second order.
+        try {
+          // A GUEST retry (nobody signed in): the order's person follows the billing email exactly as
+          // a fresh guest order's does — the storefront's own passwordless contact for that address
+          // (`OrderService.beforeCreate`), else the guest-checkout contact made for it
+          // (`createGuestContactForCheckout`, as the fresh path does after writing the order). A
+          // guest who corrected their email must not leave the order linked to the contact for the
+          // OLD address — that person's "my orders" would show an order billed to someone else.
+          const guestContactId = session?.contactId
+            ? undefined
+            : ((await resolveStampableOrderContactId({ email, channelId: CHANNEL_ID, accountId: null })) ??
+              (await createGuestContactForCheckout({ email, firstName, lastName, phone }).catch(() => null)));
+          await orderService.update(existing.id, {
+            billingAddress,
+            ...(guestContactId !== undefined ? { contactId: guestContactId } : {}),
+          });
+          const shipRows = (
+            await orderShippingAddressService.listForParent(existing.id, { page: 1, limit: 1, sort: "id", direction: "asc" })
+          ).data as Array<{ id: number }>;
+          if (shipRows[0]) {
+            await orderShippingAddressService.updateForParent(existing.id, shipRows[0].id, shippingAddressRow());
+          } else {
+            await orderShippingAddressService.createForParent(existing.id, shippingAddressRow());
+          }
+        } catch (e) {
+          console.error("[placeOrder] refreshing a reused order's addresses failed (non-fatal):", e);
+        }
+        // GUEST THEN SIGN IN (lib/checkout/open-order.ts): the order was placed as a guest — with no
+        // contact, or linked to the passwordless guest contact for their email — and the shopper has
+        // signed in since. Same cart, same money — claim it for them, so the order is on their account
+        // like the fresh one would have been. (A re-priced one was replaced above.)
+        if (session?.contactId && existing.contact_id !== session.contactId) {
+          await orderService.update(existing.id, {
+            contactId: session.contactId,
+            // …and the group it is now priced at, as the fresh order would be stamped.
+            ...(pricedGroupId != null ? { customerGroupId: pricedGroupId } : {}),
+          });
         }
         const { clientSecret, billingDetails } = await paymentService.createStripePaymentIntent(existing.id, {
           amount: String(totalIncTax),
@@ -1226,7 +1398,13 @@ export async function placeOrder(
         };
       }
     } catch (e) {
-      console.error("[placeOrder] idempotency reuse check failed (non-fatal):", e);
+      // NEVER FALL THROUGH TO A SECOND ORDER (judge hardening). Anything that fails in here — the
+      // lookup, the intent read, a void, a claim, the intent create on the reused order — means we
+      // cannot say whether this cart already has an order (and perhaps a payment) in flight. Writing
+      // a fresh order on top could leave the shopper with two orders and two payments, so the press
+      // is refused instead; nothing new was charged, and the next press starts from the top.
+      console.error("[placeOrder] open-order reuse failed — refusing rather than writing a second order:", e);
+      return { error: OPEN_ORDER_CHECK_FAILED_MESSAGE };
     }
   }
 
@@ -1500,39 +1678,7 @@ export async function placeOrder(
   // Stripe early-return so EVERY payment method records shipping. Best-effort: a
   // failure here must not strand a paid order, so we log and continue.
   try {
-    await orderShippingAddressService.createForParent(order.id, {
-      first_name: firstName,
-      last_name: lastName,
-      email,
-      phone: phone || null,
-      company: (formData.get("company") as string)?.trim() || null,
-      address1,
-      address2: billingAddress.address2 || null,
-      city,
-      state_or_province: state || null,
-      postal_code: postalCode,
-      country,
-      country_code: country,
-      // Residential vs commercial for THIS delivery (card HMtUxvwZ). Derived by the
-      // details lookup from the shopper's own Places pick and posted as a hidden field;
-      // null when nothing was picked or the pick said nothing, which reads commercial —
-      // exactly how every order behaves today. It refuses NOTHING: it is what lets the
-      // order screen print RESIDENTIAL ADDRESS and raise the commercial-only flag on an
-      // order raised here, which is the highest-volume way an order is created at all.
-      address_type: shippingAddressType,
-      shipping_method: heldForSpecialised
-        ? "Specialised delivery — to be quoted"
-        : deliveryServiceType === "curbside"
-          ? "Curbside delivery"
-          : shippingIncTax > 0
-            ? "Storefront delivery"
-            : "Free delivery",
-      base_cost: String(shippingExTax),
-      cost_ex_tax: String(shippingExTax),
-      cost_inc_tax: String(shippingIncTax),
-      cost_tax: String(shippingTax),
-      items_total: totalItems,
-    });
+    await orderShippingAddressService.createForParent(order.id, shippingAddressRow());
   } catch (e) {
     console.error("[placeOrder] shipping address insert failed (non-fatal):", e);
   }
@@ -1700,10 +1846,14 @@ export async function placeOrder(
   // placeholder box where every product thumbnail should be (and dropped the SKU
   // and the product link with it). Best-effort — if the image/site lookup fails
   // the rows degrade to name + quantity rather than blocking the order.
+  // What the shopper chose on each line ("Gas Type: LPG" — card tkvntxsq) rides both emails, in
+  // the words the order line's own `product_options` stores, so the confirmation names WHICH
+  // machine was bought and the staff alert tells the warehouse the same.
   let emailItems: EmailLineItem[] = fullCart.items.map((i) => ({
     name: i.product_name,
     quantity: i.quantity,
     sku: i.product_sku ?? null,
+    options: chosenOptionLines(readStoredAddons(i.modifier_selections)),
   }));
   try {
     // Resolve the site origin through the shared SEO helper so email links use the exact
@@ -1718,6 +1868,7 @@ export async function placeOrder(
       sku: i.product_sku ?? null,
       imageUrl: imageMap.get(i.product_id) ?? null,
       url: i.product_slug ? `${linkBase}/products/${i.product_slug}` : null,
+      options: chosenOptionLines(readStoredAddons(i.modifier_selections)),
     }));
   } catch (e) {
     console.error("[placeOrder] email product rows degraded (non-fatal):", e);

@@ -14,24 +14,77 @@
 // GST toggle are sealed.
 // ============================================================================
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useBuilderLocalState } from "@keenan/services/builder-react";
+import { BUNDLE_CONFIGURED_STATE, bundleAmount } from "@keenan/services/zoey-bundle-price";
+import { useGst } from "@/lib/gst";
 import { ProductKitBlock } from "./ProductKitBlock";
-import { AddToQuoteButton } from "./AddToQuoteButton";
-import { defaultKitSelection, toKitChoices, type ProductKit } from "@/lib/product-kit";
+import { AddToQuoteButton, useQuoteAdd } from "./AddToQuoteButton";
+import {
+  defaultKitSelection,
+  kitConfiguredPrice,
+  kitSelectionReady,
+  KIT_ADD_TO_QUOTE_EVENT,
+  type KitAddToQuoteDetail,
+  toKitChoices,
+  toggleKitSelection,
+  type KitSelection,
+  type ProductKit,
+} from "@/lib/product-kit";
+import { kitQuoteLabel, type KitQuoteLabels } from "@/lib/kit-quote-label";
 
-export function ProductKitNative({ kit, productId }: { kit: ProductKit; productId: number }) {
-  const [selection, setSelection] = useState<Record<string, number>>(() =>
+export function ProductKitNative({ kit, productId, labels }: { kit: ProductKit; productId: number; labels?: KitQuoteLabels | null }) {
+  const [selection, setSelection] = useState<KitSelection>(() =>
     kit.kind === "bundle" ? defaultKitSelection(kit.groups) : {}
   );
   const isBundle = kit.kind === "bundle";
-  const ready = !isBundle || kit.groups.every((g) => selection[g.name] != null);
+  const ready = kitSelectionReady(kit, selection);
+  const { inclusive } = useGst();
+
+  // Zoey's "Price as configured" follows the picks. The page template prints it from
+  // `@state.bundle_configured_display` (falling back to `purchase.bundleConfiguredDisplay`, the
+  // unpicked value), so the words and where they sit stay the template's; this only keeps the
+  // amount current. A bare number like every `*Display` field. Nothing is written without a
+  // captured Zoey range.
+  const local = useBuilderLocalState();
+  const configured = kitConfiguredPrice(kit, selection);
+  const configuredDisplay =
+    configured == null
+      ? ""
+      : bundleAmount(configured, inclusive).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  useEffect(() => {
+    if (configuredDisplay) local?.setValue(BUNDLE_CONFIGURED_STATE, configuredDisplay);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configuredDisplay]);
+
+  // The template's fixed "Price as configured" bar (Zoey's bundle bar) adds THIS build: its
+  // ADD TO QUOTE raises KIT_ADD_TO_QUOTE_EVENT with its quantity, answered here with these picks
+  // through the same add as the button below. Unanswered required groups are refused, as the
+  // button below would be (it is disabled until they are answered).
+  const { add } = useQuoteAdd(productId);
+  useEffect(() => {
+    if (!isBundle) return;
+    const onAdd = (e: Event) => {
+      const d = (e as CustomEvent<KitAddToQuoteDetail>).detail;
+      if (!d || d.productId !== productId) return;
+      d.handled = true;
+      if (!ready) {
+        d.resolve({ error: "Please make your choices above before adding this to your quote." });
+        return;
+      }
+      void add({ kitChoices: toKitChoices(selection), quantity: d.quantity }).then(d.resolve);
+    };
+    window.addEventListener(KIT_ADD_TO_QUOTE_EVENT, onAdd);
+    return () => window.removeEventListener(KIT_ADD_TO_QUOTE_EVENT, onAdd);
+  }, [isBundle, productId, ready, selection, add]);
 
   return (
     <div>
       <ProductKitBlock
         kit={kit}
         selection={selection}
-        onSelect={(group, id) => setSelection((prev) => ({ ...prev, [group]: id }))}
+        onSelect={(group, id) => setSelection((prev) => toggleKitSelection(kit, prev, group, id))}
+        inclusive={inclusive}
       />
       {/* A bundle's own CTA travels with its picks. A grouped kit is bought with the page's
           ordinary buttons — it is one product at one price — so it gets none here. */}
@@ -41,7 +94,9 @@ export function ProductKitNative({ kit, productId }: { kit: ProductKit; productI
             productId={productId}
             disabled={!ready}
             kitChoices={toKitChoices(selection)}
-            label="Add to Quote — request pricing"
+            // Zoey's own button words on a bundle it priced; today's wording elsewhere.
+            // Words editable on the template's product-kit node (props label_priced / label_unpriced, D20).
+            label={kitQuoteLabel(Boolean(kit.zoeyPrice), labels)}
           />
         </div>
       )}

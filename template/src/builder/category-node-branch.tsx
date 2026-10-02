@@ -1,3 +1,4 @@
+import { withListingGridMarks, withListingGridMarksAll } from "@/lib/listing-pending";
 import { cookies } from "next/headers";
 import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
 import {
@@ -7,19 +8,23 @@ import {
   getComponents,
   getDraftComponents,
   getChannelSetting,
+  attachFromPrices,
+  getMemberScaleOn,
+  getEnabledCmsFunctions,
 } from "@/lib/store";
 import { CHANNEL_ID } from "@/lib/channel";
-import { getMemberContext, applyAccountPrices } from "@/lib/member";
+import { getListingDisplay } from "@/lib/listing-display";
+import { getMemberContext, applyAccountPrices, getPricingGroupId } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
-import { attachBrandLogos } from "@/lib/brand-logo-fallback";
+import { attachBrandLogosAlongside } from "@/lib/brand-logo-fallback";
 import type { AttributeSelections } from "@keenan/services/services";
 import {
   composeCategoryPagePayload,
   loadJsSandbox,
   computeCallResults,
+  templateOwnedNames,
   type NodeTree,
 } from "@keenan/services/builder";
-import { cmsFunctionService } from "@keenan/services/services";
 import { treePlacesSeoCopy } from "@/builder/seo-copy-placement";
 import {
   withCategoryFacetComponents,
@@ -37,6 +42,9 @@ import {
   BuilderCategoryPage,
   type CategoryGridProduct,
 } from "@/builder/BuilderCategoryPage";
+import { applyChannelRulesToTileRows } from "@keenan/services/channel-rules";
+import { BuilderCssLink } from "@/builder/builder-css-link";
+import { usedComponents } from "@/builder/used-components";
 
 // ============================================================================
 // The category template's Site Builder branch — ENGINE.
@@ -106,6 +114,22 @@ export interface CategoryNodeBranchArgs {
  * Every read here is the same `cache()`d load the branch itself does, so calling
  * both on one request costs one fetch.
  */
+/**
+ * Does the authored Category Page Template place the WHOLE approved copy block — intro and
+ * questions — itself? It says so by declaring `seo-copy` in its root's `data-kg-template-owns`
+ * (IK hidden-conditionals C23). The route then prints only the questions' JSON-LD (structured data
+ * stays code-owned) and no foot block. Same flag gate and the same cached template read as above.
+ */
+export async function categoryTreeOwnsSeoCopy(draft: boolean): Promise<boolean> {
+  const catTemplate = (await getCmsTemplate("category_layout", draft).catch(() => null)) as {
+    node_tree?: unknown;
+  } | null;
+  const nodeTree = (catTemplate?.node_tree as NodeTree | null) ?? null;
+  if (!nodeTree?.root) return false;
+  if (!draft && !(await getFeatureFlag("node_category_template_enabled"))) return false;
+  return templateOwnedNames(nodeTree).has("seo-copy");
+}
+
 export async function categoryTreePlacesSeoCopy(draft: boolean): Promise<boolean> {
   const catTemplate = (await getCmsTemplate("category_layout", draft).catch(() => null)) as {
     node_tree?: unknown;
@@ -156,7 +180,13 @@ export async function renderCategoryNodeBranch({
   // tree that never had one — Industry Kitchens' is authored clean — so this
   // shared module changes exactly one storefront. See
   // `builder/category-banner-backdrop.ts`.
-  const stripped = stripCategoryBannerBackdrop(storedTree);
+  // A stored template can AUTHOR what these passes do (IK hidden-conditionals C20–C22): naming
+  // `banner-backdrop`, `subcategory-tiles` or `facets` in its root's `data-kg-template-owns` means
+  // the pass does not run on it — the template's own nodes and Show-ifs decide.
+  const owns = templateOwnedNames(storedTree);
+  const stripped = owns.has("banner-backdrop")
+    ? { tree: storedTree, removed: [] as string[] }
+    : stripCategoryBannerBackdrop(storedTree);
 
   // Card MN702iBv (Steve, 2026-08-24): "IK - Increase size of images". The
   // subcategory tile was a 48px thumbnail beside a wide white card; it is now a
@@ -165,9 +195,11 @@ export async function renderCategoryNodeBranch({
   // Chefs Depot keeps the tile it has. See `builder/subcategory-tile-size.ts`.
   // `subcategoryCount` is the cap: above it the children are a directory, not a
   // strip, and the big tile buries the listing (`/categories/brands` has 395).
-  const enlarged = enlargeSubcategoryTiles(stripped.tree, CHANNEL_ID, {
-    subcategoryCount: subcategories?.length,
-  });
+  const enlarged = owns.has("subcategory-tiles")
+    ? { tree: stripped.tree, rewritten: [] as string[], applied: false }
+    : enlargeSubcategoryTiles(stripped.tree, CHANNEL_ID, {
+        subcategoryCount: subcategories?.length,
+      });
   const nodeTree = enlarged.tree;
 
   // The post-condition, and it is not belt-and-braces. The strip matches on node
@@ -179,7 +211,7 @@ export async function renderCategoryNodeBranch({
   // silent regression announces itself in the logs of the site it happened on.
   // It cannot fire on a subcategory tile or the `/categories` index: those bind
   // the same field in flow, without the full-bleed positioning.
-  const survivingBackdrop = findBannerBackdropNodes(nodeTree);
+  const survivingBackdrop = owns.has("banner-backdrop") ? [] : findBannerBackdropNodes(nodeTree);
   if (survivingBackdrop.length > 0) {
     console.warn(
       `[TnQJpunl] category banner backdrop survived the strip: ${survivingBackdrop.join(", ")}` +
@@ -210,8 +242,19 @@ export async function renderCategoryNodeBranch({
   // to when a product has no photo. Additive — every other field on the row is
   // copied through — and the `product-card` master reads it as
   // `props.card.brand_logo_url` (see `product-card-brand-logo.ts`).
-  const scoped = (await attachBrandLogos(
-    await applyAccountPrices(await applyCatalogScope(products as { id: number }[]))
+  // configurable-from-price (services #182): AFTER the per-viewer price overlays, a configurable
+  // row gets its "Starting From" list/sale, which the `product-card` enrichment reads — without it
+  // a $0-parent configurable tile says "Call for Price".
+  // The logo read runs BESIDE the price overlays — it is keyed by product id alone.
+  const visible = await applyCatalogScope(products as { id: number }[]);
+  const scoped = (await attachBrandLogosAlongside(
+    visible,
+    (async () =>
+      attachFromPrices(await applyAccountPrices(visible), {
+        // The viewer's customer-group price list prices each configurable's children (Industry
+        // Kitchens); null on a channel without it.
+        pricingGroupId: await getPricingGroupId(),
+      }))()
   )) as unknown as CategoryGridProduct[];
   const memberCtx = await getMemberContext().catch(() => null);
   // GST facts for the price-block masters: the composer emits both ex/inc
@@ -223,7 +266,10 @@ export async function renderCategoryNodeBranch({
   ]);
   const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
 
+  // The channel's member price scale (audit C11) — the price masters word "Standard price"/"RRP" on it.
+  const memberScaleOn = await getMemberScaleOn();
   const payload = composeCategoryPagePayload({
+    memberScaleOn,
     channelId: CHANNEL_ID,
     category: category as unknown as Record<string, unknown>,
     listing: {
@@ -246,6 +292,18 @@ export async function renderCategoryNodeBranch({
     gst: { inclusive: gstInclusive, pricesIncludeTax },
     memberPricingAvailable: memberPricingEnabled,
     draft,
+    // Price-band wording and the sort list from Settings → Storefront Listings (S18); today's with
+    // no setting.
+    listingDisplay: await getListingDisplay(),
+  });
+
+  // This storefront's Zoey rules (`channelRules`, portal PR #1028) for the rows the CLIENT wrapper
+  // receives (grid, "load more", GA4 view_item_list): zero-price shows no price (GA4 reports none),
+  // the cart is refused per rule/viewer, and the raw rules object is removed so it never reaches the
+  // browser. The composer above reads `scoped` itself and strips the rules from its own tiles. No rules
+  // (every Chefs Depot row) ⇒ the rows are unchanged.
+  const clientRows = applyChannelRulesToTileRows(scoped, {
+    viewer: { loggedIn: memberCtx?.loggedIn === true || memberCtx?.isMember === true },
   });
 
   const namedStyles = await getNamedStyles().catch(() => ({}));
@@ -255,19 +313,21 @@ export async function renderCategoryNodeBranch({
   // carry a section for them; this is the same pure, idempotent, nothing-stored
   // pass the illustrative-image banner uses on the product tree (82HgV23q). A
   // component that does not repeat over the listing's facets is untouched.
-  const components = withCategoryFacetComponents(
+  // …and the element holding the product cards is tagged `data-listing-grid`,
+  // so while a filter change loads each card becomes a loader of the same size
+  // (lib/listing-nav.tsx). Same kind of pure, nothing-stored pass.
+  const components = withListingGridMarksAll(withCategoryFacetComponents(
     (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<
       string,
       NodeTree
     >
-  );
+  ));
   const builderCss =
     ((await getChannelSetting("builder_published_css").catch(() => null)) as {
       css?: string;
     } | null)?.css ?? "";
 
-  const jsFunctions = await cmsFunctionService
-    .enabledMapForChannel(CHANNEL_ID)
+  const jsFunctions = await getEnabledCmsFunctions()
     .catch(() => ({}) as Record<string, string>);
   let callResults: Record<string, unknown> = {};
   if (Object.keys(jsFunctions).length > 0) {
@@ -277,14 +337,15 @@ export async function renderCategoryNodeBranch({
     );
   }
 
+  const pageTree = withListingGridMarks(withCategoryFacetNodes(nodeTree));
   return (
     <>
-      {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
+      <BuilderCssLink css={builderCss} />
       <BuilderCategoryPage
-        tree={withCategoryFacetNodes(nodeTree)}
+        tree={pageTree}
         payload={payload}
         listing={{
-          products: scoped,
+          products: clientRows,
           total,
           shown,
           facets,
@@ -296,7 +357,7 @@ export async function renderCategoryNodeBranch({
           categorySlug: category.slug ?? categorySlugFallback,
         }}
         namedStyles={namedStyles}
-        components={components}
+        components={usedComponents(pageTree, components)}
         jsFunctions={jsFunctions}
         callResults={callResults}
         draft={draft}

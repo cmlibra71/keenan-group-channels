@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { gstSplit } from "@keenan/services/calc";
+import { gstOnExWholeCents, gstSplit } from "@keenan/services/calc";
 import { qualifiesForFreeDelivery } from "@/lib/checkout/shipping";
 import {
   brandFreeShippingMessage,
@@ -33,8 +33,13 @@ export function CartSummary({
   /** The brand free-shipping special this cart earns, if any (card 88Ay7UGA). */
   brandSpecial?: MatchedBrandSpecial | null;
 }) {
-  // GST display amount via gstSplit (single source of tax math — services D4).
-  const gstAmount = Math.round(gstSplit(total, !!pricesIncludeTax).tax * 100) / 100;
+  // GST display amount. On an ex-GST store it is the shared WHOLE-CENT rule (`gstOnExWholeCents`) —
+  // the same one the product page's Estimated Subtotal and pack line use, so a line and the basket
+  // agree to the cent on half-cent ties (money judge 2026-09-30). A GST-inclusive store keeps
+  // `gstSplit` (services D4).
+  const gstAmount = pricesIncludeTax
+    ? Math.round(gstSplit(total, true).tax * 100) / 100
+    : gstOnExWholeCents(total).tax;
 
   const freeDelivery = qualifiesForFreeDelivery({
     enabled: !!freeShippingEnabled,

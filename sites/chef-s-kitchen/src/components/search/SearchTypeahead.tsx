@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Search, X, Loader2 } from "lucide-react";
 import { useGst, adjustForGst } from "@/lib/gst";
 import { MAX_SUGGESTIONS } from "@/lib/search-suggestions";
+import { searchThumbnailSrc } from "@/lib/search-thumbnail";
 import {
   useDropdownMaxHeight,
   useSearchSuggestions,
@@ -292,7 +293,7 @@ export function SearchTypeahead({ defaultValue, inline, variant }: { defaultValu
                     // inside a clipped scroll container.
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={hit.thumbnailUrl}
+                      src={searchThumbnailSrc(hit.thumbnailUrl)}
                       alt=""
                       loading="lazy"
                       decoding="async"

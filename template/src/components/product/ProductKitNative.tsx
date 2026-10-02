@@ -17,21 +17,28 @@
 import { useState } from "react";
 import { ProductKitBlock } from "./ProductKitBlock";
 import { AddToQuoteButton } from "./AddToQuoteButton";
-import { defaultKitSelection, toKitChoices, type ProductKit } from "@/lib/product-kit";
+import {
+  defaultKitSelection,
+  kitSelectionReady,
+  toKitChoices,
+  toggleKitSelection,
+  type KitSelection,
+  type ProductKit,
+} from "@/lib/product-kit";
 
 export function ProductKitNative({ kit, productId }: { kit: ProductKit; productId: number }) {
-  const [selection, setSelection] = useState<Record<string, number>>(() =>
+  const [selection, setSelection] = useState<KitSelection>(() =>
     kit.kind === "bundle" ? defaultKitSelection(kit.groups) : {}
   );
   const isBundle = kit.kind === "bundle";
-  const ready = !isBundle || kit.groups.every((g) => selection[g.name] != null);
+  const ready = kitSelectionReady(kit, selection);
 
   return (
     <div>
       <ProductKitBlock
         kit={kit}
         selection={selection}
-        onSelect={(group, id) => setSelection((prev) => ({ ...prev, [group]: id }))}
+        onSelect={(group, id) => setSelection((prev) => toggleKitSelection(kit, prev, group, id))}
       />
       {/* A bundle's own CTA travels with its picks. A grouped kit is bought with the page's
           ordinary buttons — it is one product at one price — so it gets none here. */}

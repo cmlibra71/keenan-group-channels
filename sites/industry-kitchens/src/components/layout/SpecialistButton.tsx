@@ -13,7 +13,7 @@ export function SpecialistButton({ phone }: { phone?: string }) {
     : undefined;
 
   return (
-    <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-3 print:hidden">
+    <div className="ik-specialist-float fixed bottom-5 right-5 z-40 flex flex-col items-end gap-3 print:hidden">
       {open && (
         <div className="w-64 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl">
           <div className="bg-[#D94B2B] px-4 py-3">

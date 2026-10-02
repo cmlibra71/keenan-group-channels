@@ -3,18 +3,24 @@
 import { cache } from "react";
 import { cartService, cartItemService, productService, productVariantService, contactService, bulkPricingRuleService, getEffectivePrice, applyAdvertisedLadderPrices, getMemberLadderShare, boundPricesToMemberScale, getLadderConfig, getLiveSpecials, CHANNEL_ID } from "@/lib/store";
 import { resolveAccountLinePrices, accountLineKey } from "@keenan/services";
-import { getAccountId } from "@/lib/member";
+import { groupLinePricing } from "@/lib/pricing/group-line";
+import { specialAmounts } from "@keenan/services";
+import { getAccountId, getPricingGroupId, getMemberContext } from "@/lib/member";
 import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { CART_RESTRICTED_ERROR } from "@/lib/cart/restricted-message";
+import { chargedUnitPrice, onlineOrderingOff, refuseOnlinePurchase, type OnlinePurchaseViewer } from "@/lib/cart/online-purchase";
+import { catalogLinePrices, usesParentPrice } from "@keenan/services/catalog-price";
+import { catalogPricingVariantId, loadVariantChoiceFacts, unchosenOptionsRefusal } from "@/lib/cart/variant-choice";
+import { purchasingDisabledMessage } from "@keenan/services/purchasing";
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice, subscriptionPlanService } from "@/lib/store";
 import { getCartUuid, setCartUuid } from "@/lib/cart";
 import { brandIdsForProducts } from "@/lib/checkout/free-shipping-brands";
 import { backorderFactsForProducts, backorderFactsForProduct, type ProductBackorderFacts } from "@/lib/cart/backorder-facts";
 import { availableUnits, canPurchaseQuantity, resolveBackorderPolicy } from "@keenan/services/backorder";
-import { resolvePackSize, resolvePackUnit, snapToPack } from "@keenan/services/pack";
+import { hasGroupIncrements, isPackagingOn, resolvePackSize, resolvePackUnit, snapToPack, type PackFacts } from "@keenan/services/pack";
 import { getSession } from "@/lib/auth";
 import { currentShopperForOffers } from "@/lib/promotions/shopper";
-import { pickBestBulkUnit, layerCartPrice, memberPricingGroupId, specialCartPrice } from "@/lib/pricing/cart-pricing";
+import { pickBestBulkUnit, layerCartPrice, memberPricingGroupId } from "@/lib/pricing/cart-pricing";
 import { specialLineIsStale, withSpecialMarker } from "@/lib/pricing/special-line";
 import { resolveCartOffers, couponCapRefusal, type OfferCartLine } from "@/lib/promotions/cart-offers";
 import { channelPricesIncludeTax } from "@/lib/promotions/tax-basis";
@@ -30,12 +36,22 @@ import {
   type AddonSelectionInput,
   type ResolvedAddon,
 } from "@keenan/services/product-addons";
+import { requiredChoicePrice, soldByRequiredOption } from "@keenan/services";
 import {
   buyableAddons,
   customisationDefinition,
   extrasDefinition,
+  productPageForRefusal,
 } from "@/lib/product/addon-panel";
 import { customisationRefusal } from "@/lib/product-customisation";
+import { isGiftCardProduct } from "@keenan/services/gift-card";
+
+/**
+ * IK gift cards are sold by QUOTE ONLY (Zoey parity: Zoey withholds Add to Basket on its gift card,
+ * and this storefront keeps that `cart_disabled` rule). Refused here as well, whatever the product's
+ * channel rules say, because a cart line would need the issuing path, which is not switched on.
+ */
+const GIFT_CARD_CART_REFUSAL = "Gift cards are added to a quote. Please use Add to Quote.";
 
 async function getOrCreateCart() {
   const uuid = await getCartUuid();
@@ -106,73 +122,71 @@ type LineSpecial = { promotionId: number; priceExTax: number } | null;
  * The prices for a line, plus WHICH Partner Special priced it (null when none did), so every write
  * of a line's price also writes its marker and the cart can tell later whether the special has
  * since started, ended or changed (card tJ4audbu; `refreshSpecialLines`).
+ *
+ * A PARTNER SPECIAL LOCKS THE LINE, exactly as the page draws it: the page's funnel lays the special
+ * LAST — over the group price and the account's contract price — so the regular it strikes through
+ * is whatever the line would otherwise cost (`layered.listPrice`), and the price is the special for
+ * every shopper, with no member price, group discount or quantity break off it (`specialAmounts`,
+ * the same pure function the page's overlay uses). The member scale's band is NOT laid over a
+ * special either: the page shows the special unbounded, and a special below Wholesale x 1.01 can
+ * only have gone live through the approve_promotions gate, so clamping it here would charge a price
+ * the page never showed. One cached read; a line with no live special is priced as before.
  */
 async function resolveItemPricingAndSpecial(
   productId: number,
   variantId: number | null | undefined,
   quantity: number
 ): Promise<{ pricing: { listPrice: string; salePrice: string | null }; special: LineSpecial }> {
-  // A PARTNER SPECIAL is the price, for everyone, before any other layer is consulted — the
-  // account's contract price and the member scale's band included (card tJ4audbu). Same cached
-  // read the product page and the tiles overlay from, so shown == charged.
-  const special = (await getLiveSpecials([productId]).catch(() => new Map())).get(productId);
+  const special = (await getLiveSpecials([productId]).catch(() => new Map())).get(productId) as
+    | { promotionId: number; priceExTax: number }
+    | undefined;
+  const layered = await layerItemPricing(productId, variantId, quantity);
   if (special) {
     return {
-      pricing: specialCartPrice(await regularListPrice(productId, variantId), special.priceExTax),
+      pricing: lockToPartnerSpecial(layered, special.priceExTax),
       special: { promotionId: special.promotionId, priceExTax: special.priceExTax },
     };
   }
-  return { pricing: await resolveUnspecialPricing(productId, variantId, quantity), special: null };
+  return { pricing: await boundToMemberScale(productId, variantId, layered), special: null };
 }
 
-/** Every layer below a special: the account's contract price, the catalogue, member, bulk. */
-async function resolveUnspecialPricing(
+/** The special's was/now on a line, against what the line would otherwise cost. Pure. */
+function lockToPartnerSpecial(
+  layered: { listPrice: string; salePrice: string | null },
+  specialExTax: number
+): { listPrice: string; salePrice: string | null } {
+  const regular = parseFloat(layered.listPrice);
+  const amounts = specialAmounts(Number.isFinite(regular) && regular > 0 ? regular : null, specialExTax);
+  return { listPrice: amounts.price, salePrice: amounts.salePrice };
+}
+
+/**
+ * THE MEMBER PRICE SCALE'S BAND (card gk23c1VK), over a line no special priced. Whatever layer won
+ * — the account's contract price included, which returns before any engine call — a scale-priced
+ * line is held inside [Wholesale x 1.01, standard price]: "no price, promotion or override ever
+ * goes below W x 1.01", "a customer-group or contract price below W does not lower the floor", and
+ * nothing exceeds M. A no-op (one cached settings read) with the scale off.
+ */
+async function boundToMemberScale(
   productId: number,
   variantId: number | null | undefined,
-  quantity: number
+  layered: { listPrice: string; salePrice: string | null }
 ): Promise<{ listPrice: string; salePrice: string | null }> {
-  const layered = await layerItemPricing(productId, variantId, quantity);
-  // THE MEMBER PRICE SCALE'S BAND (card gk23c1VK). Whatever layer won — the
-  // account's contract price included, which returns before any engine call —
-  // a scale-priced line is held inside [Wholesale x 1.01, standard price]:
-  // "no price, promotion or override ever goes below W x 1.01", "a customer-group
-  // or contract price below W does not lower the floor", and nothing exceeds M.
-  // A no-op (one cached settings read) with the scale off, which is every
-  // channel until one is switched on.
   if ((await getLadderConfig().catch(() => null))?.enabled !== true) return layered;
   const bandVariantId = variantId ?? (await defaultVariantId(productId));
   return boundPricesToMemberScale(bandVariantId, layered).catch(() => layered);
 }
 
 /**
- * The list price a line would carry with no special on it — the variant's price, else the
- * product's, run through the advertised-price overlay (M under the member scale) — so a special's
- * struck-through "was" figure in the cart is the same one the product page and the tile strike
- * through. No account price: that is a price for one buyer, not the reference a special is shown
- * against. (Card tJ4audbu.)
+ * WHICH GROUP'S QUANTITY STEP a line uses — the product page's rule (`getProductPageData`: the
+ * member group, else the customer-group pricing group), so the page and the cart step by the same
+ * pack. Only asked for a product that carries per-group increments, so an ordinary line costs no
+ * lookup; null → the base pack.
  */
-async function regularListPrice(
-  productId: number,
-  variantId: number | null | undefined
-): Promise<string | null> {
-  const product = (await productService.getById(productId)) as { price: string | null } | null;
-  if (!product) throw new Error("Product not found");
-  let listPrice: string | null = product.price ?? null;
-  if (variantId) {
-    const variant = (await productVariantService.getById(variantId)) as { price: string | null } | null;
-    if (variant?.price) listPrice = variant.price;
-  }
-  const [row] = await applyAdvertisedLadderPrices([
-    {
-      id: productId,
-      price: listPrice,
-      ...(variantId ? { variants: [{ id: variantId, price: listPrice }] } : {}),
-    },
-  ]);
-  const advertised =
-    (row as { variants?: Array<{ price?: unknown }> }).variants?.[0]?.price ??
-    (row as { price?: unknown }).price;
-  return typeof advertised === "string" && parseFloat(advertised) > 0 ? advertised : listPrice;
+async function packGroupFor(facts: PackFacts | null | undefined): Promise<number | null> {
+  if (!hasGroupIncrements(facts)) return null;
+  const member = await getMemberContext().catch(() => null);
+  return member?.customerGroupId ?? (await getPricingGroupId());
 }
 
 /** The variant a variant-less line prices from: the product's lowest-id variant. */
@@ -188,8 +202,11 @@ async function layerItemPricing(
   variantId: number | null | undefined,
   quantity: number
 ): Promise<{ listPrice: string; salePrice: string | null }> {
-  const product = (await productService.getById(productId)) as { price: string; sale_price: string | null } | null;
+  const product = (await productService.getById(productId)) as { price: string; sale_price: string | null; metafields?: unknown } | null;
   if (!product) throw new Error("Product not found");
+  // Zoey "use child price: No" on this storefront: every choice costs the parent's price and
+  // special, exactly as the product page prices it (services `usesParentPrice`).
+  const parentPriced = usesParentPrice(product.metafields, CHANNEL_ID);
 
   // ── ACCOUNT CONTRACT PRICE: an unconditional override (Zoey: "takes priority over ALL other
   // Product prices"). Resolved BEFORE any layering, and returned directly — the catalogue sale
@@ -197,21 +214,51 @@ async function layerItemPricing(
   const accountId = await getAccountId();
   if (accountId) {
     const key = accountLineKey({ productId, variantId });
+    // A catalog price rule can still undercut the contract: the customer pays the lower (services
+    // `resolveAccountLinePrices` ruleContext; nothing changes while the channel's rule switch is off).
     const record = (
-      await resolveAccountLinePrices(accountId, [{ productId, variantId }])
+      await resolveAccountLinePrices(accountId, [{ productId, variantId }], {
+        channelId: CHANNEL_ID,
+        groupId: await getPricingGroupId(),
+      })
     ).get(key);
     if (record) return { listPrice: record.price, salePrice: record.salePrice };
   }
 
-  let listPrice = product.price;
-  // NOTE: getById returns snake_case — read sale_price (reading salePrice silently
-  // yielded undefined, so IK was charging RRP instead of its public sale price).
-  let catalogSalePrice: string | null = product.sale_price ?? null;
+  // THE CATALOGUE PRICE, exactly as the product page shows it (services #182, `catalogLinePrices`):
+  // variant price ?? parent price, sale = the variant's own sale when it has its own price, else
+  // variant sale ?? parent sale — and a sale only when 0 < sale < price. `getById` returns
+  // snake_case; the helper reads either casing.
+  //
+  // ...and only a variant the page would PRICE is handed to it: the chosen variation of a
+  // configurable. A simple product's lone base variant is not a choice — the page prices the
+  // parent row, sale included — so a request naming it is priced the same way (IK judge wave 1:
+  // Robot Coupe 27382 charged its base variant's $1,050 against the page's $966). A failed facts
+  // read keeps the named variant, which is what this line always did (lib/cart/variant-choice.ts).
+  const choiceFacts = variantId ? await loadVariantChoiceFacts(productId) : null;
+  const pricingVariantId = choiceFacts ? catalogPricingVariantId(choiceFacts, variantId) : (variantId ?? null);
+  const variant = pricingVariantId
+    ? ((await productVariantService.getById(pricingVariantId)) as { price: string | null; sale_price: string | null } | null)
+    : null;
+  const catalog = catalogLinePrices(product, variant, { parentPrice: parentPriced });
+  let listPrice = catalog.listPrice;
+  const catalogSalePrice: string | null = catalog.salePrice;
 
-  if (variantId) {
-    const variant = (await productVariantService.getById(variantId)) as { price: string | null; sale_price: string | null } | null;
-    if (variant?.price) listPrice = variant.price;
-    if (variant?.sale_price) catalogSalePrice = variant.sale_price;
+  // ── THE SHOPPER'S CUSTOMER-GROUP PRICE LIST (Industry Kitchens' Zoey model, services
+  // `groupPricing.ts`). On a channel with `customer_group_pricing` on, the viewer's group — the
+  // ACCOUNT's, else the person's, else "NOT LOGGED IN" for a guest — has a record for this
+  // variant, and that record IS the price the product page showed (`applyAccountPrices` overlays
+  // the same record onto the row): its regular is the list price, its special the sale, and the
+  // product's own catalogue special does not undercut it. A quantity break still wins where it is
+  // lower (Zoey tier prices). Only a line the catalogue PRICES is re-priced — a POA product has no
+  // price to replace. Null group (every other channel) → this block does nothing. The account's
+  // contract price has already returned above, so it still beats the group price.
+  const pricingGroupId = await getPricingGroupId();
+  if (pricingGroupId && parseFloat(listPrice) > 0) {
+    // A simple product's lone base variant is not a choice (`pricingVariantId` is null) — its
+    // record lives on that variant, which is the product's default: the resolver's rule.
+    const grouped = await groupLinePricing(pricingGroupId, productId, pricingVariantId, quantity);
+    if (grouped) return grouped;
   }
 
   // ── THE ADVERTISED PRICE (card gk23c1VK). On a channel whose buying-group
@@ -316,7 +363,7 @@ async function resolveAddonsForProduct(
   if (!selection || Object.keys(selection).length === 0) return [];
   const product = (await productService.getById(productId)) as { metafields?: unknown } | null;
   if (!product) return [];
-  return resolveAddonSelection(readProductAddons(product.metafields), selection);
+  return resolveAddonSelection(readProductAddons(product.metafields, { channelId: CHANNEL_ID }), selection);
 }
 
 /**
@@ -341,11 +388,22 @@ async function readAddonsForAdd(
   productId: number,
   variantId: number | null | undefined,
   selection: AddonSelectionInput | null | undefined
-): Promise<{ resolved: ResolvedAddon[]; refusal: string | null }> {
+): Promise<{ resolved: ResolvedAddon[]; refusal: string | null; productPage?: string | null }> {
   const product = (await productService.getById(productId)) as
-    | { metafields?: unknown; price?: string | null; sale_price?: string | null; hide_price?: boolean | null }
+    | {
+        metafields?: unknown;
+        price?: string | null;
+        sale_price?: string | null;
+        hide_price?: boolean | null;
+        url_path?: string | null;
+        zoey_raw?: unknown;
+      }
     | null;
-  const definition = readProductAddons(product?.metafields);
+  // A gift card is never a cart line (see GIFT_CARD_CART_REFUSAL) — decided off the same one read.
+  if (isGiftCardProduct(product, CHANNEL_ID)) return { resolved: [], refusal: GIFT_CARD_CART_REFUSAL };
+  // THIS storefront's definition: the shared groups plus any scoped to CHANNEL_ID
+  // (`metafields.channel_addons` — the Zoey options imported for Industry Kitchens only).
+  const definition = readProductAddons(product?.metafields, { channelId: CHANNEL_ID });
   if (!definition) return { resolved: [], refusal: null };
 
   // WOULD THE PAGE HAVE OFFERED A PANEL? The same predicate the provider draws it with
@@ -355,11 +413,16 @@ async function readAddonsForAdd(
   // surcharge to charge — refusing over a control the shopper cannot see is the failure
   // `sf-product-page` forbids, and resolving the picks anyway would charge extras the page
   // showed as adding nothing.
+  // A $0 Industry Kitchens product priced THROUGH its required, priced-by-default Zoey option
+  // (owner decision 2026-09-30, services `required-option-price.ts`) draws its panel at $0, so
+  // the picks are resolved and charged here too. Only IK's scoped Zoey groups qualify.
+  const viaRequiredOption = soldByRequiredOption(definition);
   let panelShown = addonPanelShown({
     addons: definition,
     hidePrice: product?.hide_price,
     price: product?.price,
     salePrice: product?.sale_price,
+    soldByRequiredOption: viaRequiredOption,
   });
   // A variant product may carry no price of its own; the page reads the ACTIVE variant's.
   // Only taken in that case, so the ordinary add keeps the one product read it always took.
@@ -381,6 +444,10 @@ async function readAddonsForAdd(
   const buyable = buyableAddons(definition, panelShown);
   if (!buyable) return { resolved: [], refusal: null };
   const posted = selection != null;
+  // A TILE posted nothing, so a refusal also names the page where the question can be answered
+  // (card tkvntxsq) and the tile takes the shopper there. Never from the product page itself:
+  // it posted a configuration, and sending a shopper to the page they are on is a reload.
+  const productPage = posted ? null : productPageForRefusal(product?.url_path);
   // Refused SEPARATELY by kind, because the sentence has to fit the control: you CHOOSE a
   // hopper and you FILL IN an instruction, and both sentences reach a customer. Priced first,
   // so 0CDcCYmO's own wording is unchanged on every product that carries one.
@@ -394,6 +461,7 @@ async function readAddonsForAdd(
       refusal: posted
         ? `Please choose ${missing.join(" and ")} before adding this to your cart.`
         : `Open this product's page to choose ${missing.join(" and ")} before adding it to your cart.`,
+      productPage,
     };
   }
   const typedRefusal = customisationRefusal(
@@ -401,9 +469,13 @@ async function readAddonsForAdd(
     posted ? selection : undefined,
     "cart"
   );
-  if (typedRefusal) return { resolved: [], refusal: typedRefusal };
+  if (typedRefusal) return { resolved: [], refusal: typedRefusal, productPage };
+  // A TILE posted nothing — and still records the answers the author pre-selected (Zoey's
+  // defaults, owner decisions 9/10): a required question with a default is answered by it, so
+  // the line reads "Gas Type: Natural Gas" rather than arriving bare. With no defaults on the
+  // product this resolves to nothing, exactly as before.
   return {
-    resolved: posted ? resolveAddonSelection(buyable, selection) : [],
+    resolved: resolveAddonSelection(buyable, posted ? selection : {}),
     refusal: null,
   };
 }
@@ -418,6 +490,15 @@ async function readAddonsForAdd(
  */
 const CART_QUANTITY_ERROR = "This product is not available in the requested quantity.";
 
+/**
+ * Who is buying, for this storefront's Zoey guest quote-only rule (`lib/cart/online-purchase.ts`):
+ * signed in or not. A failed session read is a guest — it can only refuse a guest-restricted
+ * product, never admit one.
+ */
+async function cartViewer(): Promise<OnlinePurchaseViewer> {
+  return { loggedIn: (await getSession().catch(() => null)) != null };
+}
+
 async function refuseCartQuantity(
   productId: number,
   quantity: number,
@@ -425,9 +506,23 @@ async function refuseCartQuantity(
 ): Promise<string | null> {
   const facts = known !== undefined ? known : await backorderFactsForProduct(productId);
   if (!facts) return null; // unknown product: leave it to the pricing lookup below to fail properly
-  if (facts.restrictAddToCart) return CART_RESTRICTED_ERROR;
+  // Zoey "quote only" (`purchasing_disabled`) says ITS OWN sentence — the staff message, else Zoey's
+  // default (services `purchasingDisabledMessage`, the same words the product page shows).
+  const quoteOnly = purchasingDisabledMessage(facts);
+  if (quoteOnly) return quoteOnly;
+  // Restricted, price hidden, or one of this storefront's Zoey rules (zero-price, out-of-stock, and
+  // guest quote-only for a guest) — see lib/cart/online-purchase.ts. The session is only read for a
+  // product that carries the guest rule, so the ordinary add pays nothing for it.
+  const viewer = facts.channelRules?.guestQuoteOnly ? await cartViewer() : undefined;
+  if (onlineOrderingOff(facts, viewer)) return CART_RESTRICTED_ERROR;
   if (!canPurchaseQuantity(facts, quantity)) return CART_QUANTITY_ERROR;
   return null;
+}
+
+/** The product page a refused tile add opens (`productPageForRefusal` judges the stored path). */
+async function productPageFor(productId: number): Promise<string | null> {
+  const row = (await productService.getById(productId).catch(() => null)) as { url_path?: string | null } | null;
+  return productPageForRefusal(row?.url_path);
 }
 
 export async function addToCart(
@@ -442,16 +537,37 @@ export async function addToCart(
   // even by poking the action directly (the listing/PDP guards are UX; THIS is the enforcement).
   if (!(await isProductVisibleToViewer(productId))) return { error: RESTRICTED_PRODUCT_ERROR };
 
+  // A CONFIGURABLE product is bought as one of its variations, never as the bare parent (IK judge
+  // wave 1: Durafurn Seattle went in at $54.00 with no Castors or Colour chosen). The page greys
+  // its buy buttons until every option is picked; a hand-posted add or a listing tile is refused
+  // here with the page's own sentence — before a cart is created for it.
+  {
+    const posted = addons != null;
+    const facts = await loadVariantChoiceFacts(productId);
+    const refusal = unchosenOptionsRefusal(facts, variantId, { posted });
+    if (refusal) {
+      if (posted) return refusal;
+      // The product page is looked up only for a refused TILE add, never on the ordinary path.
+      return unchosenOptionsRefusal(facts, variantId, { posted, productPage: await productPageFor(productId) }) ?? refusal;
+    }
+  }
+
   const cart = await getOrCreateCart();
 
   // The picks and the required-group refusal come out of ONE product read (Product Brief §3
   // refuses in the action, not only in the page; speed on this path is stakeholder-visible).
-  const { resolved: resolvedAddons, refusal: addonRefusal } = await readAddonsForAdd(
-    productId,
-    variantId,
-    addons
-  );
-  if (addonRefusal) return { error: addonRefusal };
+  const {
+    resolved: resolvedAddons,
+    refusal: addonRefusal,
+    productPage: addonProductPage,
+  } = await readAddonsForAdd(productId, variantId, addons);
+  // `productPage` rides a TILE's refusal only (card tkvntxsq): the tile sends the shopper to the
+  // page to answer the question, rather than leaving a button that did nothing visible.
+  if (addonRefusal) {
+    return addonProductPage
+      ? { error: addonRefusal, productPage: addonProductPage }
+      : { error: addonRefusal };
+  }
   const selectionKey = addonSelectionKey(resolvedAddons);
 
   // Is this product/variant WITH THESE EXTRAS already in the cart?
@@ -504,7 +620,7 @@ export async function addToCart(
   // O108e4jH / zeMPVcA3). The product page already steps in whole packs; this covers the listing
   // tile, a stale form and a direct call — snapping UP, so a shopper is never handed less than
   // they asked for. On everything else `snapToPack` returns the quantity untouched.
-  const packSize = resolvePackSize(facts);
+  const packSize = resolvePackSize(facts, await packGroupFor(facts));
   const finalQty = snapToPack(wantedQty, packSize);
 
   const refusal = await refuseCartQuantity(productId, finalQty, facts);
@@ -513,15 +629,39 @@ export async function addToCart(
   // Price for the FINAL quantity (so crossing a bulk tier re-prices the whole line), then the
   // extras on top — a bulk break is a discount off the PRODUCT and must never discount the
   // accessories with it.
-  let pricing: { listPrice: string; salePrice: string | null };
+  let basePricing: { listPrice: string; salePrice: string | null };
   let lineSpecial: LineSpecial = null;
   try {
     const resolved = await resolveItemPricingAndSpecial(productId, variantId, finalQty);
-    pricing = withAddonSurcharge(resolved.pricing, resolvedAddons);
+    basePricing = resolved.pricing;
     lineSpecial = resolved.special;
   } catch {
     return { error: "Product not found" };
   }
+  // QUOTE ONLY is refused HERE, not only by hiding the button (IK parity root cause, 2026-09-28):
+  // a chosen variant Zoey marked "quote only", or a product this shopper would be charged $0 for
+  // ("Call for Price" on the page). Judged on the price BEFORE extras, so ticked accessories can
+  // never lift a $0 machine into the cart. The product-level flags were refused above.
+  const variantRow = variantId ? await productVariantService.getById(variantId).catch(() => null) : null;
+  // The ONE exception to "judged before extras" (owner decision 2026-09-30): a $0 IK product sold
+  // through its required, priced-by-default Zoey option is judged at base + the chosen answer of
+  // THAT required group only — never an optional extra (money judge). A $0 total is refused as
+  // for any $0 product. Every other product is judged on the base price alone.
+  const requiredDefinition = readProductAddons(facts?.addonBag, { channelId: CHANNEL_ID });
+  const judgedUnitPrice = soldByRequiredOption(requiredDefinition)
+    ? chargedUnitPrice(basePricing) + requiredChoicePrice(requiredDefinition, resolvedAddons)
+    : chargedUnitPrice(basePricing);
+  const quoteOnly = refuseOnlinePurchase(
+    facts,
+    judgedUnitPrice,
+    // Product OR chosen variant (services `isPurchasingDisabled`), with the page's own sentence.
+    purchasingDisabledMessage(facts, variantRow),
+    // This storefront's Zoey guest quote-only rule needs to know who is buying (read only when the
+    // product carries it). `refuseCartQuantity` above already refused it; this keeps the two in step.
+    facts?.channelRules?.guestQuoteOnly ? await cartViewer() : undefined
+  );
+  if (quoteOnly) return { error: quoteOnly };
+  const pricing = withAddonSurcharge(basePricing, resolvedAddons);
 
   if (existing) {
     await cartItemService.updateForParent(cart.id, existing.id, {
@@ -596,7 +736,7 @@ export async function updateCartItem(itemId: number, quantity: number) {
     // removed the line above, so a pack product can still be emptied out of the cart; anything
     // that survives to here is rounded up to a whole pack.
     const packFacts = await backorderFactsForProduct(item.product_id);
-    const nextQuantity = snapToPack(quantity, resolvePackSize(packFacts));
+    const nextQuantity = snapToPack(quantity, resolvePackSize(packFacts, await packGroupFor(packFacts)));
 
     // Same refusal as the add, so a "+" cannot walk past a limit the add refused (card 7vu2iEEZ).
     // Only an INCREASE is judged: a line already in the basket when staff changed the setting must
@@ -867,6 +1007,11 @@ const readCart = cache(async () => {
   // what makes "2 of the items will be backordered" follow a click instead of lagging a round
   // trip behind it. `available_units` is null for an untracked product — no ceiling, not zero.
   const stock = await backorderFactsForProducts(visible.map((i) => i.product_id));
+  // Who is looking, for this storefront's Zoey guest quote-only rule on each line — read once, and
+  // only when some line carries that rule.
+  const lineViewer = [...stock.values()].some((f) => f.channelRules?.guestQuoteOnly)
+    ? await cartViewer()
+    : undefined;
 
   // OFFERS (card p6YVxc4P). The carton bands, the cross-range kicker and the fixed
   // bundles are worked out from the lines that will actually be charged — the same
@@ -882,6 +1027,12 @@ const readCart = cache(async () => {
     ...(await currentShopperForOffers()),
   });
   const offerByItem = new Map(offers.lines.map((l) => [l.itemId, l]));
+  // The group step per product, for the rows' pack display (only products with group rows ask).
+  const packGroups = new Map<number, number | null>();
+  for (const i of visible) {
+    const f = stock.get(i.product_id);
+    if (hasGroupIncrements(f) && !packGroups.has(i.product_id)) packGroups.set(i.product_id, await packGroupFor(f));
+  }
 
   return {
     ...full,
@@ -897,11 +1048,20 @@ const readCart = cache(async () => {
         // ordering SAYS SO on the row and cannot be increased, so the shopper
         // told at checkout to review their cart has something to find. Removing
         // or reducing it stays allowed — see `refuseCartQuantity`.
-        restrict_add_to_cart: facts?.restrictAddToCart === true,
+        // Also true for the other quote-only switches (`purchasing_disabled`, a hidden price):
+        // `refuseCartQuantity` refuses an increase for all three, so the row has to say why.
+        // …and for this storefront's Zoey rules (zero-price, out-of-stock, guest quote-only for a guest).
+        restrict_add_to_cart: onlineOrderingOff(facts, lineViewer),
         // The SELLING UNIT, resolved once here (cards O108e4jH / zeMPVcA3), so the row can step
         // by a whole pack and say what a pack holds without a second lookup or a second opinion.
-        pack_size: resolvePackSize(facts),
-        pack_unit: resolvePackUnit(facts),
+        pack_size: resolvePackSize(facts, packGroups.get(i.product_id) ?? null),
+        pack_unit: resolvePackUnit(facts, packGroups.get(i.product_id) ?? null),
+        // False on Zoey's "multiples of N" (Enable Packaging off): the row then says "Sold in
+        // multiples of N" and names no package or package price.
+        pack_packaging_on: isPackagingOn(facts, packGroups.get(i.product_id) ?? null),
+        // Zoey's own multiples-of-N presentation (this storefront's Zoey entry): the row names
+        // nothing — the ± step and the snap are the whole of it, as on Zoey.
+        pack_note_silent: facts?.silentMultiples === true,
         // What this line took from an offer, so the row can show it without a
         // second evaluation (card p6YVxc4P). Absent on a line that took nothing.
         offer_discount: offerByItem.get(i.id)?.discount ?? null,

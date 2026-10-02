@@ -4,7 +4,9 @@ import {
   filterFinanceMethods,
   financeApplicationValues,
   financeFloorError,
+  financeGoodsTotalIncGst,
   financeLinesFromCart,
+  freightAddonsIncGst,
   financeOfferForCart,
   fundingTypeError,
   newUploadToken,
@@ -281,4 +283,35 @@ test("the application is read from the finance_-prefixed inputs only", () => {
   assert.equal(values.business_name, "Test Kitchen");
   assert.equal("order_number" in values, false);
   assert.equal(Object.values(values).includes("the order's own field"), false);
+});
+
+// ── Owner decision 8: freight-kind extras stay out of the weekly figure and the floor ────────
+
+const freightPick = [
+  { groupKey: "zoey_700", groupLabel: "Freight", optionKey: "syd", optionLabel: "Sydney Metro", price: "650.00", url: null, freight: true },
+  { groupKey: "zoey_800", groupLabel: "Accessories", optionKey: "blade", optionLabel: "Blade", price: "100.00", url: null },
+];
+
+test("a freight-kind extra on the line is not rented; an ordinary extra still is", () => {
+  // The cart added both extras to the line: 1000 + 650 + 100 = 1750 ex GST.
+  const lines = financeLinesFromCart([cartLine({ list_price: "1750", quantity: 2, modifier_selections: freightPick })], false);
+  assert.equal(lines[0].amountIncGst, 2420); // (1750 - 650) x 2 + GST
+});
+
+test("the goods total the floor is measured on loses the freight extras too", () => {
+  const items = [cartLine({ list_price: "1750", quantity: 2, modifier_selections: freightPick })];
+  assert.equal(freightAddonsIncGst(items, false), 1430); // 650 x 2 + GST
+  assert.equal(financeGoodsTotalIncGst(3850, items, false), 2420);
+  assert.equal(freightAddonsIncGst([cartLine()], false), 0);
+  assert.equal(financeGoodsTotalIncGst(1100, [cartLine()], false), 1100);
+});
+
+test("freight extras can push a cart OVER the floor only in price, never in finance", () => {
+  // $600 machine + $650 freight answer: $1,375 inc GST charged, but only $660 of goods.
+  const items = [cartLine({ list_price: "1250", modifier_selections: [freightPick[0]] })];
+  const offer = financeOfferForCart({
+    lines: financeLinesFromCart(items, false),
+    goodsTotalIncGst: financeGoodsTotalIncGst(1375, items, false),
+  });
+  assert.equal(offer.eligible, false);
 });

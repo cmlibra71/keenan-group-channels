@@ -1,7 +1,8 @@
 import { unstable_cache } from "next/cache";
+import { readIkMegaMenuSettings } from "@/lib/ik-mega-panel";
 import { cache } from "react";
 import { normalizeNavItems, type MegaNavItem } from "./mega-menu";
-import { initCommerceDb, createChannelStore, getCommerceClient } from "@keenan/services";
+import { initCommerceDb, createChannelStore, createRenderConfigCache, getCommerceClient, setStripeClientOptions } from "@keenan/services";
 import {
   channelService,
   siteService,
@@ -56,7 +57,13 @@ import { googlePlacesService } from "@keenan/services/integrations";
 import { CHANNEL_ID } from "./channel";
 import { withBrandLogoFallback, targetsForChannel } from "@/builder/product-card-brand-logo";
 import { withPromoTagInComponents } from "@/builder/promo-tag-node";
-import { guardTileBuyControlsInComponents, withSpecialPriceInComponents } from "@keenan/services/builder";
+import { withTileCompareInComponents } from "@/builder/tile-compare-node";
+import {
+  guardTileBuyControlsInComponents,
+  withAnswerRequiredTilesInComponents,
+  withSpecialPriceInComponents,
+} from "@keenan/services/builder";
+import { withAnswerRequiredTilesInDoc } from "@/builder/answer-required-tiles-doc";
 import { withMemberScaleLabels } from "@/builder/member-scale-labels";
 import { PROMO_TAG_LABEL } from "@/lib/promo-tag";
 import type { NodeTree } from "@keenan/services/builder";
@@ -76,6 +83,12 @@ if (dbUrl) {
   initCommerceDb(dbUrl, { maxConnections: 5 });
 }
 
+// STRIPE FROM A STOREFRONT answers in 10 s or not at all (one network retry). Stripe's 80 s default
+// held a shopper on the Pay spinner long past the point they press it again — how duplicate attempts
+// are made. Every PaymentIntent create carries an idempotency key, so the retry is safe. The portal
+// and the worker never call this and keep Stripe's defaults (services StripeProvider).
+setStripeClientOptions({ timeoutMs: 10_000, maxNetworkRetries: 1 });
+
 // ============================================================================
 // Shared channel-store factory — all channel-scoped, cache-wrapped accessors
 // live in @keenan/services. Caching (Next's unstable_cache) is injected here.
@@ -85,6 +98,9 @@ const _store = createChannelStore(CHANNEL_ID, unstable_cache, {
   topCategoriesLimit: 12,
   topCategoriesMaxDepth: 0,
   useCuratedUpsells: true,
+  // IK parity, product cards: this storefront's tiles follow Zoey's rules, so every listing row
+  // carries the Zoey tile facts (services `attachTileFacts`). Chefs Depot leaves it off.
+  zoeyTileFacts: true,
 });
 
 export const {
@@ -94,6 +110,9 @@ export const {
   sanitizeCatalogProducts,
   getProducts,
   getProductBySlug,
+  // configurable-from-price: a configurable row's "Starting From" list/sale, attached AFTER the
+  // per-viewer price overlays so its tile reads "Starting From" instead of "Call for Price".
+  attachFromPrices,
   getRedirectForPath,
   getTopCategories,
   // Wrapped below so a pictureless category borrows a product photograph (InEoeMZh).
@@ -103,6 +122,11 @@ export const {
   getCategoryBySlug,
   getSubcategories: getSubcategoriesRaw,
   getCategoryStats,
+  // This storefront's Zoey rules for rows from a source that carries none (Meilisearch hits).
+  getChannelRulesForProducts,
+  // This storefront's printed brand names (Zoey sub-line labels) over rows from the shared search
+  // index, which carries the parent brand. Identity on a storefront without labels (Chefs Depot).
+  withBrandDisplayNames,
   getCategoryBreadcrumbs,
   getProductBreadcrumbs,
   // Names of the categories REMOVED from this storefront (channel_settings
@@ -116,6 +140,8 @@ export const {
   getCategoryById,
   getBrandsForChannel,
   getBrandBySlug,
+  // The shared brand row by id, cached (product pages read it on every view).
+  getBrandRowById,
   getBrandListing,
   getProductReviews,
   getProductAttachments,
@@ -126,6 +152,12 @@ export const {
   getActiveSubscription,
   getMemberPriceMap,
   applyAccountPricesToProducts,
+  // Customer-group price lists (Industry Kitchens' Zoey model, services `groupPricing.ts`). All
+  // switched by `channel_settings.customer_group_pricing`; off = null / identity / empty map.
+  applyGroupPrices,
+  resolveViewerPricingGroupId,
+  resolveGroupLineRecords,
+  isGroupPricingEnabled,
   // The Chefs Depot member price scale (cards gk23c1VK / Nyp8bkPm). These are
   // no-ops on a channel with the scale switched off in `channel_settings`, which
   // is every channel until one is written.
@@ -150,7 +182,8 @@ export const {
   getContentPage,
   getCmsPage,
   getCmsCategoryPage,
-  getCmsTemplate,
+  // Wrapped below: tiles whose product asks a required question show View Details (Zoey parity).
+  getCmsTemplate: getCmsTemplateRaw,
   getNamedStyles,
   getDesignTokens,
   getDraftDesignTokens,
@@ -210,13 +243,49 @@ const withTileBuyGuard = (components: ComponentMap): ComponentMap =>
     withSpecialPriceInComponents(components as Record<string, NodeTree>)
   ) as ComponentMap;
 
+/**
+ * "Add to Compare" beside every `product-card` tile (IK parity, compare-feature) — this
+ * site only, which is why it is composed HERE and not in shared code. The control itself
+ * is the `tile-compare` native, registered on the category and brand pages; see
+ * `builder/tile-compare-node.ts`. Runs last so it wraps the card every other transform
+ * has already finished.
+ */
+const withTileCompare = (components: ComponentMap): ComponentMap =>
+  withTileCompareInComponents(components as Record<string, NodeTree>) as ComponentMap;
+
 const withMasterTransforms = (components: ComponentMap): ComponentMap =>
-  withTileBuyGuard(
-    withPromoTagInComponents(
-      withBrandLogoFallback(components, BRAND_LOGO_TARGETS) as Record<string, NodeTree>,
-      PROMO_TAG_LABEL
-    ) as ComponentMap
+  withTileCompare(
+    withAnswerRequiredTiles(
+      withTileBuyGuard(
+        withPromoTagInComponents(
+          withBrandLogoFallback(components, BRAND_LOGO_TARGETS) as Record<string, NodeTree>,
+          PROMO_TAG_LABEL
+        ) as ComponentMap
+      )
+    )
   );
+
+// ============================================================================
+// A TILE WHOSE PRODUCT ASKS A REQUIRED QUESTION OFFERS "VIEW DETAILS" (this site only).
+//
+// Zoey's category tile for a product with a required custom option — with or without a
+// pre-selected answer — carries no Add to Basket and no Add to Quote, only "View Details" to the
+// product page, where the question is asked and the default pre-selected (old site, read
+// 2026-09-28; owner: 100% Zoey parity). The Zoey options are imported for THIS storefront
+// (`metafields.channel_addons["1"]`). Services `withAnswerRequiredTiles` hides a tile's buy controls on rows
+// carrying `answer_required` and widens the upsell tile's existing configurable "View Details"
+// link to them. Composed HERE, in this channel's store, so Chefs Depot's tiles are untouched.
+// Render-time only: nothing is written to the stored templates or masters, and a row without the
+// fact keeps its buttons.
+// ============================================================================
+
+const withAnswerRequiredTiles = (components: ComponentMap): ComponentMap =>
+  withAnswerRequiredTilesInComponents(components as Record<string, NodeTree>) as ComponentMap;
+
+export const getCmsTemplate = async (
+  ...args: Parameters<typeof getCmsTemplateRaw>
+): ReturnType<typeof getCmsTemplateRaw> =>
+  withAnswerRequiredTilesInDoc(await getCmsTemplateRaw(...args));
 
 /**
 /**
@@ -241,6 +310,10 @@ const withScaleWording = async (components: ComponentMap): Promise<ComponentMap>
   }) as ComponentMap;
 };
 
+/** The channel's member price scale (ladder) is on — `context.memberScale.on` on listing pages (audit C11). */
+export const getMemberScaleOn = async (): Promise<boolean> =>
+  (await _store.getLadderConfig().catch(() => null))?.enabled === true;
+
 export const getComponents = async (): Promise<ComponentMap> =>
   withScaleWording(withMasterTransforms(await _store.getComponents()));
 
@@ -255,10 +328,16 @@ export const getDraftComponents = async (): Promise<ComponentMap> =>
 // rather than site code — see docs/architecture/seam-audit.md §2c.
 // ============================================================================
 
+// Page-render settings (finance rates, builder CSS, listing settings, nav, footer…)
+// and the CMS function library come from ONE cached read per channel — 60 s, busted
+// by the portal's settings-save and publish purges (services `render-config-cache.ts`).
+// They were 3–5 uncached round trips on every page view (measured 2026-09-30). Any
+// key not on that list still reads live, exactly as before.
+const _renderConfig = createRenderConfigCache(CHANNEL_ID, unstable_cache);
+
 export const getChannelSetting = async (key: string): Promise<unknown> => {
   try {
-    const setting = await channelSettingsService.getByKey(CHANNEL_ID, key);
-    return setting.setting_value;
+    return await _renderConfig.getSettingValue(key);
   } catch {
     return null;
   }
@@ -278,11 +357,15 @@ export const getChannelSettings = async (
   keys: readonly string[]
 ): Promise<Record<string, unknown>> => {
   try {
-    return await channelSettingsService.getValuesByKeys(CHANNEL_ID, keys);
+    return await _renderConfig.getSettingValues(keys);
   } catch {
     return {};
   }
 };
+
+/** The channel's enabled CMS function library (name → source), cached with the settings above. */
+export const getEnabledCmsFunctions = (): Promise<Record<string, string>> =>
+  _renderConfig.getEnabledCmsFunctions();
 
 export type { MegaMenuNode, MegaMenuFeatured, ContentPage } from "@keenan/services";
 
@@ -570,6 +653,30 @@ export const getCategories = async (...args: Parameters<typeof getCategoriesRaw>
 export const getSubcategories = async (...args: Parameters<typeof getSubcategoriesRaw>) =>
   applyBorrowedCategoryImages(await getSubcategoriesRaw(...args));
 
+/**
+ * A category and every visible category under it — the id set a Zoey ANCHOR category lists
+ * products from (brand range pages, `/brands/<brand>/<range>`). Walks the same cached,
+ * hidden-category-aware child read the subcategory tiles use; bounded so a malformed tree
+ * cannot loop.
+ */
+export async function getCategorySubtreeIds(categoryId: number): Promise<number[]> {
+  const seen = new Set<number>([categoryId]);
+  let frontier = [categoryId];
+  for (let depth = 0; depth < 8 && frontier.length > 0 && seen.size < 2000; depth++) {
+    const children = await Promise.all(frontier.map((id) => getSubcategoriesRaw(id)));
+    frontier = [];
+    for (const rows of children) {
+      for (const row of rows as Array<{ id: number }>) {
+        if (!seen.has(row.id)) {
+          seen.add(row.id);
+          frontier.push(row.id);
+        }
+      }
+    }
+  }
+  return [...seen];
+}
+
 /** GA4 Measurement ID (`G-XXXXXXXX`) for this channel — powers the gtag.js tag +
  *  client ecommerce funnel. Empty string when GA4 isn't configured (tag omitted). */
 export const getGa4MeasurementId = unstable_cache(
@@ -617,6 +724,14 @@ export const getMegaMenuHidden = unstable_cache(
     return Array.isArray(value) ? value.filter((v): v is number => typeof v === "number") : [];
   },
   [`mega-menu-hidden-${CHANNEL_ID}`],
+  { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
+);
+
+/** The drop-downs' settings (`mega_menu_settings`: column link limit, All Categories launcher),
+ *  edited in Storefront > Navigation > Mega menu. Read defensively — today's behaviour when unset. */
+export const getMegaMenuSettings = unstable_cache(
+  async () => readIkMegaMenuSettings(await getJsonSetting<unknown>("mega_menu_settings", null)),
+  [`mega-menu-settings-${CHANNEL_ID}`],
   { revalidate: 1800, tags: [`channel-${CHANNEL_ID}`, "channel-settings"] }
 );
 
@@ -750,6 +865,8 @@ export type FooterSetting = {
   /** Finance-partner logos the footer links out to (Industry Kitchens carries
    *  SilverChef and SKOPE Funding). */
   partners?: { name: string; image_url?: string; href?: string }[];
+  /** Publuu flip-book embeds under the partner logos (normalised by the Footer). */
+  embeds?: unknown;
   legal?: string;
 };
 
@@ -904,6 +1021,12 @@ export async function getGuestOrdersForEmail(
  * archive) — which is why it is exported. Two copies of this
  * CASE expression would drift, and a drift here is not cosmetic: a looser copy
  * WIDENS who can read an order, a tighter one 404s an order the list is showing.
+ *
+ * Index: the inbox expression below is served AS WRITTEN by the expression index
+ * `idx_orders_guest_email_inbox` ((<this CASE … || split_part(…)>, channel_id) WHERE
+ * customer_id IS NULL AND contact_id IS NULL), proposed 2026-10-01: ~1,800 heap pages
+ * read per lookup without it, ~5 with it. Postgres only uses an expression index whose
+ * expression the query repeats, so change this text and that index together.
  */
 export function guestOrderForEmailCondition(
   sql: NonNullable<ReturnType<typeof getCommerceClient>>,

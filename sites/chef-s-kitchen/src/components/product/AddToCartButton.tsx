@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { addToCart } from "@/lib/actions/cart";
 import type { AddonSelectionInput } from "@keenan/services/product-addons";
 import { useCartQuoteCounts, useHeaderPanels } from "@/lib/cart-quote-counts";
 import { trackAddedToCart } from "@/components/analytics/klaviyo";
 import { ga4AddToCart } from "@/components/analytics/ga4";
+import { tileRefusalDestination } from "@/lib/product/addon-panel";
 
 export function AddToCartButton({
   productId,
@@ -41,6 +43,7 @@ export function AddToCartButton({
   const [refusal, setRefusal] = useState<string | null>(null);
   const { setCartCount } = useCartQuoteCounts();
   const { open } = useHeaderPanels();
+  const router = useRouter();
 
   function handleClick() {
     setRefusal(null);
@@ -56,6 +59,11 @@ export function AddToCartButton({
       // GA4 and Klaviyo as an `add_to_cart` corrupts every funnel that reads them.
       if (res && "error" in res && typeof res.error === "string") {
         setRefusal(res.error);
+        // A TILE add of a product that asks a required question (Gas Type — card tkvntxsq) is
+        // refused with the page where it can be answered: go there rather than leave the
+        // shopper on a listing with a button that could never succeed. Nothing was added.
+        const destination = tileRefusalDestination(res);
+        if (destination) router.push(destination);
         return;
       }
       if (res && "cartCount" in res && typeof res.cartCount === "number") {

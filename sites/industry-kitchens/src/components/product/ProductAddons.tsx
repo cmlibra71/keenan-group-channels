@@ -34,10 +34,11 @@
 // customer's picks travel with whatever button they press").
 // ============================================================================
 
+import { createContext, useContext } from "react";
 import { useProductPurchase } from "@keenan/services/product-page";
 import type { ProductAddonGroup } from "@keenan/services/product-addons";
 import { Price } from "@/components/ui/Price";
-import { extrasPanelGroups } from "@/lib/product/addon-panel";
+import { extrasPanelGroups, optionalRadioNoneRow, questionGroups, quoteExtrasGroups } from "@/lib/product/addon-panel";
 import { useGst, adjustForGst } from "@/lib/gst";
 
 /** "245.00" ex GST, or "269.50" once the storewide toggle says inclusive.
@@ -82,10 +83,17 @@ function OptionLabel({
   label,
   price,
   url,
+  priced = true,
+  hideZero = false,
 }: {
   label: string;
   price: string;
   url: string | null;
+  /** See `ProductAddons`' `zoeyGroups`: print nothing beside a $0 answer. */
+  hideZero?: boolean;
+  /** False on a no-charge QUESTION (Gas Type, card tkvntxsq): no "+ $0.00" beside an answer
+   *  that never moves the price — Zoey prints nothing there either. */
+  priced?: boolean;
 }) {
   return (
     <span className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
@@ -98,46 +106,104 @@ function OptionLabel({
           </>
         ) : null}
       </span>
-      <span className="shrink-0 text-sm font-semibold text-text-primary">
-        + <Price amount={Number(price)} gst />
-      </span>
+      {/* No "+ $0.00" beside a $0 answer ("Brisbane, Sydney, Melbourne, Adelaide - $0"): Zoey prints
+          nothing there, and the label usually says "$0" already (IK re-audit 39568 / 45223). Only
+          where the site asks (`zoeyGroups`). */}
+      {priced && !(hideZero && !(Number(price) > 0)) ? (
+        <span className="shrink-0 text-sm font-semibold text-text-primary">
+          + <Price amount={Number(price)} gst />
+        </span>
+      ) : null}
     </span>
   );
+}
+
+/**
+ * The words this block prints of its own (round-4 parity: the old Industry Kitchens page printed no
+ * "Optional extras" heading and no "Tick what you need" line). Node props on the `product-addons`
+ * node of the product template; unset = today's words, an EMPTY string = print nothing.
+ */
+export interface ProductAddonsLabels {
+  extrasHeading?: string | null;
+  extrasHelp?: string | null;
+  chooseOne?: string | null;
+  chooseMany?: string | null;
+}
+const DEFAULT_ADDON_LABELS = {
+  extrasHeading: "Optional extras",
+  extrasHelp: "Tick what you need — the price updates as you go.",
+  chooseOne: "Choose one",
+  chooseMany: "Choose at least one",
+} as const;
+const AddonLabelsContext = createContext<Required<{ [K in keyof ProductAddonsLabels]: string }>>({ ...DEFAULT_ADDON_LABELS });
+function resolveAddonLabels(labels: ProductAddonsLabels | undefined) {
+  const pick = (v: string | null | undefined, d: string) => (typeof v === "string" ? v : d);
+  return {
+    extrasHeading: pick(labels?.extrasHeading, DEFAULT_ADDON_LABELS.extrasHeading),
+    extrasHelp: pick(labels?.extrasHelp, DEFAULT_ADDON_LABELS.extrasHelp),
+    chooseOne: pick(labels?.chooseOne, DEFAULT_ADDON_LABELS.chooseOne),
+    chooseMany: pick(labels?.chooseMany, DEFAULT_ADDON_LABELS.chooseMany),
+  };
 }
 
 function AddonGroup({
   group,
   chosen,
   onToggle,
+  priced = true,
+  first = false,
+  optionalRadioNone = false,
+  bareNoCharge = false,
+  hideZero = false,
 }: {
   group: ProductAddonGroup;
   chosen: string[];
   onToggle: (optionKey: string, on?: boolean) => void;
+  /** False for a no-charge question — its answers carry no price to print. */
+  priced?: boolean;
+  /** Print nothing beside a declared no-charge answer in a priced group ("Other - call for freight
+   *  quote POA", as Zoey prints it) — the quote-extras box only, so the priced panel is unchanged. */
+  bareNoCharge?: boolean;
+  /** The first group in a box with no heading above it sits flush with the box's padding. */
+  first?: boolean;
+  /** See `ProductAddons`' prop of the same name. */
+  optionalRadioNone?: boolean;
+  /** See `ProductAddons`' `zoeyGroups`. */
+  hideZero?: boolean;
 }) {
   const single = group.control !== "checkbox";
+  // Zoey's "None" answer on an OPTIONAL radio group — see `optionalRadioNoneRow`.
+  const noneRow = optionalRadioNoneRow(group, chosen, optionalRadioNone);
   const unanswered = single && group.required && chosen.length === 0;
   const money = useAddonMoney();
+  const labels = useContext(AddonLabelsContext);
   // A <select> can hold no anchor, so a dropdown group's link is rendered UNDER the list, for
   // the choice currently held. Without this a group the author set to Dropdown offered no link
   // at all, and the matrix asks for the link and the three controls as one row.
   const chosenOption = single ? group.options.find((o) => o.key === chosen[0]) ?? null : null;
 
   return (
-    <fieldset className="mt-4">
+    <fieldset className={first ? "" : "mt-4"}>
       <legend className="text-sm font-semibold text-text-primary">
         {group.label}
         {/* The button greys while a required group is unanswered (the provider folds
             it into allOptionsSelected), so the reason has to be ON THE SCREEN — a
             disabled control with no wording next to it is exactly what
             sf-product-page forbids. */}
-        {group.required && single ? (
+        {group.required && single && labels.chooseOne ? (
           <span
             className={`ml-2 text-xs font-normal ${
               unanswered ? "text-red-700" : "text-text-muted"
             }`}
           >
-            Choose one
+            {labels.chooseOne}
           </span>
+        ) : null}
+        {/* A required TICK-BOX group (Zoey's required "multiple", e.g. Hallde "Free Discs
+            Inlude"): marked as required; the provider keeps the last tick once one is ticked.
+            A group with no pre-ticked answer is marked but not enforced (known limitation). */}
+        {!single && (group as { atLeastOne?: true }).atLeastOne === true && labels.chooseMany ? (
+          <span className="ml-2 text-xs font-normal text-text-muted">{labels.chooseMany}</span>
         ) : null}
       </legend>
 
@@ -160,7 +226,7 @@ function AddonGroup({
           <option value="">{group.required ? "Please choose…" : "None"}</option>
           {group.options.map((o) => (
             <option key={o.key} value={o.key}>
-              {o.label} (+${money(o.price)})
+              {priced && !(bareNoCharge && o.noCharge) && !(hideZero && !(Number(o.price) > 0)) ? `${o.label} (+$${money(o.price)})` : o.label}
             </option>
           ))}
         </select>
@@ -172,6 +238,24 @@ function AddonGroup({
         </>
       ) : (
         <div className="mt-2 divide-y divide-border rounded-md border border-border">
+          {noneRow.shown ? (
+            <label className="flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-surface-secondary">
+              <input
+                type="radio"
+                name={`addon-${group.key}`}
+                checked={noneRow.checked}
+                onChange={() => {
+                  // `on: false` on the held answer: toggleAddon needs a real option key to find
+                  // the group's row, exactly as the dropdown's own "None" does.
+                  if (chosen[0]) onToggle(chosen[0], false);
+                }}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-brand,#000)]"
+              />
+              <span className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                <span className="min-w-0 text-sm text-text-primary">None</span>
+              </span>
+            </label>
+          ) : null}
           {group.options.map((o) => {
             const isOn = chosen.includes(o.key);
             return (
@@ -191,7 +275,7 @@ function AddonGroup({
                   onClick={single && isOn && !group.required ? () => onToggle(o.key, false) : undefined}
                   className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-brand,#000)]"
                 />
-                <OptionLabel label={o.label} price={o.price} url={o.url} />
+                <OptionLabel label={o.label} price={o.price} url={o.url} priced={priced && !(bareNoCharge && o.noCharge)} hideZero={hideZero} />
               </label>
             );
           })}
@@ -201,12 +285,48 @@ function AddonGroup({
   );
 }
 
-export function ProductAddons() {
+export function ProductAddons({
+  optionalRadioNone = false,
+  zoeyGroups = false,
+  labels,
+}: {
+  /** This block's own words, from the template node (see `ProductAddonsLabels`). */
+  labels?: ProductAddonsLabels;
+  /**
+   * Draw Zoey's "None" answer at the top of every OPTIONAL radio group, ticked while nothing
+   * else is (IK parity: Hatco GRAH "Optional Controller" reads None / Built-in Control Unit /
+   * Remote Control on Zoey). Off by default, so a site that does not ask for it is unchanged.
+   */
+  optionalRadioNone?: boolean;
+  /**
+   * Zoey's way of asking priced groups (IK parity re-audit): a REQUIRED priced group is asked
+   * first, outside the "Optional extras" heading (the heading is drawn only over optional groups),
+   * and a $0 answer prints no "+ $0.00". Off by default, so a site that does not ask is unchanged.
+   */
+  zoeyGroups?: boolean;
+}) {
   const purchase = useProductPurchase();
   const addons = purchase.product.addons ?? null;
+  if (!addons) return null;
 
   /**
-   * IS THIS PANEL ON SCREEN? Read from the provider, never re-derived here.
+   * THE QUESTIONS FIRST, AND WHATEVER THE PRICE (card tkvntxsq).
+   *
+   * A no-charge question — Gas Type, Natural Gas or LPG — decides WHICH machine is being bought,
+   * so it is asked before any extra and it is asked on a quote-only or hidden-price product too:
+   * the provider keeps it in `buyableAddons` whatever the price (it moves no money, so none of the
+   * priced panel's reasons to hide reach it), which means a required one greys the buy controls
+   * until it is answered — and this block is the "Choose one" on screen that explains why. Drawn
+   * only while the provider OFFERS it (`addonGroupsOffered`), the same flag the buy controls post
+   * on, so a renderer that asks cannot disagree with one that posts.
+   *
+   * No "Optional extras" heading and no "+ $0.00": a required question is not optional and moves
+   * no price, and saying either over Gas Type told the shopper two untrue things.
+   */
+  const questions = purchase.addonGroupsOffered ? questionGroups(addons) : [];
+
+  /**
+   * IS THE PRICED PANEL ON SCREEN? Read from the provider, never re-derived here.
    *
    * `extrasPanelShown` IS the predicate (`@keenan/services/product-addons` `addonPanelShown`):
    * the product carries groups, its price is not hidden and it is not zero. Re-testing
@@ -220,39 +340,114 @@ export function ProductAddons() {
    * product (card kyMjCmAw). Reading that one here drew "+ $245.00" tick boxes beside a
    * "Contact For Price" panel on a $0 machine, republishing a total the page may not publish.
    * Two questions, two flags.
+   *
+   * WHICH groups are ours is declared in `lib/product/addon-panel.ts`, not filtered inline, so
+   * whoever adds a control type has to say which panel owns it. A `text` group is kyMjCmAw's
+   * free-text customisation box, and a no-charge question is drawn above.
    */
-  if (!addons || !purchase.extrasPanelShown) return null;
-
-  // WHICH groups are ours — declared in `lib/product/addon-panel.ts`, not filtered inline, so
-  // whoever adds a control type has to say which panel owns it. A `text` group is kyMjCmAw's
-  // free-text customisation box, sharing this bag but not this control.
-  const groups = extrasPanelGroups(addons);
-  if (groups.length === 0) return null;
+  const groups = purchase.extrasPanelShown ? extrasPanelGroups(addons) : [];
+  /**
+   * ZOEY'S OWN OPTIONS ON A PRODUCT WITH NO PRICE (IK parity, XLV-5214). Zoey asks "Freight —
+   * Melbourne Metro +$575.00 …" on a POA canopy, and the answer rides the quote. The provider keeps
+   * them buyable and says so (`quoteExtrasShown`); they are drawn in the questions' box — each
+   * option priced, as Zoey prints it, but no "Optional extras" heading and no running total,
+   * because there is no product price for anything to add up to.
+   */
+  const quoteExtras = purchase.quoteExtrasShown ? quoteExtrasGroups(addons) : [];
+  const requiredGroups = zoeyGroups ? groups.filter((g) => g.required) : [];
+  const optionalGroups = zoeyGroups ? groups.filter((g) => !g.required) : groups;
+  if (questions.length === 0 && groups.length === 0 && quoteExtras.length === 0) return null;
+  const words = resolveAddonLabels(labels);
 
   return (
-    <div className="mt-5 rounded-[12px] border border-border bg-surface-primary px-4 py-3">
-      <p className="text-sm font-semibold text-text-primary">Optional extras</p>
-      <p className="mt-0.5 text-xs text-text-secondary">
-        Tick what you need — the price updates as you go.
-      </p>
-
-      {groups.map((group) => (
-        <AddonGroup
-          key={group.key}
-          group={group}
-          chosen={purchase.selectedAddons[group.key] ?? []}
-          onToggle={(optionKey, on) => purchase.toggleAddon(group.key, optionKey, on)}
-        />
-      ))}
-
-      {purchase.addonTotal > 0 ? (
-        <p className="mt-4 flex items-baseline justify-between border-t border-border pt-3 text-sm">
-          <span className="text-text-secondary">Extras added</span>
-          <span className="font-semibold text-text-primary">
-            + <Price amount={purchase.addonTotal} gst />
-          </span>
-        </p>
+    <AddonLabelsContext.Provider value={words}>
+      {questions.length > 0 ? (
+        <div
+          className="mt-5 rounded-[12px] border border-border bg-surface-primary px-4 py-3"
+          data-product-questions=""
+        >
+          {questions.map((group, i) => (
+            <AddonGroup
+              key={group.key}
+              group={group}
+              priced={false}
+              first={i === 0}
+              optionalRadioNone={optionalRadioNone}
+              hideZero={zoeyGroups}
+              chosen={purchase.selectedAddons[group.key] ?? []}
+              onToggle={(optionKey, on) => purchase.toggleAddon(group.key, optionKey, on)}
+            />
+          ))}
+        </div>
       ) : null}
-    </div>
+
+      {quoteExtras.length > 0 ? (
+        <div
+          className="mt-5 rounded-[12px] border border-border bg-surface-primary px-4 py-3"
+          data-product-quote-extras=""
+        >
+          {quoteExtras.map((group, i) => (
+            <AddonGroup
+              key={group.key}
+              group={group}
+              first={i === 0}
+              optionalRadioNone={optionalRadioNone}
+              hideZero={zoeyGroups}
+              bareNoCharge
+              chosen={purchase.selectedAddons[group.key] ?? []}
+              onToggle={(optionKey, on) => purchase.toggleAddon(group.key, optionKey, on)}
+            />
+          ))}
+        </div>
+      ) : null}
+
+      {groups.length > 0 ? (
+        <div className="mt-5 rounded-[12px] border border-border bg-surface-primary px-4 py-3">
+          {/* A REQUIRED priced group (the SKOPE interstate transfer, a required Colour) is not an
+              optional extra: Zoey asks it with its own required marker and no "Optional extras"
+              heading (IK re-audit 53075 / 36791 / 10299). Asked first; the heading heads only the
+              optional ones, and is not drawn when there are none. */}
+          {requiredGroups.map((group, i) => (
+            <AddonGroup
+              key={group.key}
+              group={group}
+              first={i === 0}
+              optionalRadioNone={optionalRadioNone}
+              hideZero={zoeyGroups}
+              chosen={purchase.selectedAddons[group.key] ?? []}
+              onToggle={(optionKey, on) => purchase.toggleAddon(group.key, optionKey, on)}
+            />
+          ))}
+          {optionalGroups.length > 0 && (words.extrasHeading || words.extrasHelp) ? (
+            <>
+              {words.extrasHeading ? (
+                <p className={`${requiredGroups.length > 0 ? "mt-4 " : ""}text-sm font-semibold text-text-primary`}>{words.extrasHeading}</p>
+              ) : null}
+              {words.extrasHelp ? <p className="mt-0.5 text-xs text-text-secondary">{words.extrasHelp}</p> : null}
+            </>
+          ) : null}
+
+          {optionalGroups.map((group) => (
+            <AddonGroup
+              key={group.key}
+              group={group}
+              optionalRadioNone={optionalRadioNone}
+              hideZero={zoeyGroups}
+              chosen={purchase.selectedAddons[group.key] ?? []}
+              onToggle={(optionKey, on) => purchase.toggleAddon(group.key, optionKey, on)}
+            />
+          ))}
+
+          {purchase.addonTotal > 0 ? (
+            <p className="mt-4 flex items-baseline justify-between border-t border-border pt-3 text-sm">
+              <span className="text-text-secondary">Extras added</span>
+              <span className="font-semibold text-text-primary">
+                + <Price amount={purchase.addonTotal} gst />
+              </span>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </AddonLabelsContext.Provider>
   );
 }

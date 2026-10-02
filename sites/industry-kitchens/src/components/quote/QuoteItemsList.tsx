@@ -7,6 +7,7 @@ import { useCartQuoteCounts } from "@/lib/cart-quote-counts";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { Price } from "@/components/ui/Price";
 import { packNote as packNoteFor, resolvePackSize } from "@keenan/services/pack";
+import { chosenOptionLines, quoteLinePicks } from "@/lib/product/addon-panel";
 
 // QuoteService returns snake_case rows (transformRow convention).
 export type QuoteItemRow = {
@@ -24,6 +25,8 @@ export type QuoteItemRow = {
   product_sku: string | null;
   variant_sku: string | null;
   variant_option_name: string | null;
+  /** The line's recorded picks live in `attributes.addon_selection` (card tkvntxsq — Gas Type). */
+  attributes?: unknown;
   /**
    * The SELLING UNIT of this line's product (cards O108e4jH / zeMPVcA3), selected onto every line
    * by `QuoteService.getWithItems`. The server rounds a typed quantity UP to whole packs, so this
@@ -33,6 +36,11 @@ export type QuoteItemRow = {
    */
   product_sell_pack_size?: number | null;
   product_sell_pack_unit?: string | null;
+  /** Enable Packaging, channel-aware (`QuoteService.getWithItems`): false = "multiples of N". */
+  product_qty_packaging_enabled?: boolean | null;
+  product_qty_unit_label?: string | null;
+  /** Zoey's multiples-of-N from the quote's storefront entry: no pack line (`getWithItems`). */
+  product_pack_silent?: boolean | null;
 };
 
 export function QuoteItemsList({ items, onMutate }: { items: QuoteItemRow[]; onMutate?: () => void }) {
@@ -58,6 +66,9 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
   const packNote = packNoteFor({
     sellPackSize: item.product_sell_pack_size ?? null,
     sellPackUnit: item.product_sell_pack_unit ?? null,
+    qtyPackagingEnabled: item.product_qty_packaging_enabled ?? null,
+    qtyUnitLabel: item.product_qty_unit_label ?? null,
+    silentMultiples: item.product_pack_silent === true,
   });
 
   const unitPrice = item.sale_price
@@ -118,6 +129,13 @@ function QuoteItemRow({ item, onMutate }: { item: QuoteItemRow; onMutate?: () =>
         <p className="text-xs text-zinc-400 mt-0.5">
           SKU: {item.variant_sku || item.product_sku || "N/A"}
         </p>
+        {/* What the customer chose — "+ Gas Type: LPG" (card tkvntxsq), the same line the cart
+            drawer prints, so the quote they are about to send says which machine they asked for. */}
+        {chosenOptionLines(quoteLinePicks(item.attributes)).map((label) => (
+          <p key={label} className="text-xs text-zinc-600 mt-0.5">
+            + {label}
+          </p>
+        ))}
         <p className="text-sm text-zinc-600 mt-1">{isPoa ? (
             <span className="inline-block bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded text-xs font-medium">Requires quote</span>
           ) : <><Price amount={unitPrice} /> each</>}</p>

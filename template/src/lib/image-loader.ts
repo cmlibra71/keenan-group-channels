@@ -16,7 +16,7 @@ export default function imageLoader({
   }
   // `v=2` is a one-off cache-buster, not a parameter the route reads (cards stH1U00j + L1gFfhko):
   // until 2026-09 every response was served `immutable` for a year, so a browser that saw a photo
-  // before it was replaced would never ask again. A new URL reaches it; the route now answers with
-  // a short max-age + ETag, so this should never need bumping again.
+  // before it was replaced would never ask again. A new URL reaches it; the route now answers
+  // `public, no-cache` + ETag (revalidated on every load), so this should never need bumping again.
   return `/api/image?url=${encodeURIComponent(src)}&w=${width}&q=${quality || 80}&v=${IMAGE_URL_EPOCH}`;
 }

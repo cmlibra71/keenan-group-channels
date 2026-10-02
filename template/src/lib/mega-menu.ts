@@ -42,6 +42,9 @@ export type MegaNavItem = {
   children?: MegaNavItem[];
   /** True when the bar added this department itself rather than the editor. */
   auto?: boolean;
+  /** The editor's promotion styling switch (amber + star on Industry Kitchens). Absent = the
+   *  site's own default rule. */
+  highlight?: boolean;
   /**
    * A `brands` item's CHOSEN brands, in the order staff put them. Absent or
    * empty = automatic: the brands with the most products in that department on
@@ -138,6 +141,7 @@ export function normalizeNavItems(value: unknown): MegaNavItem[] {
         pageSlug: typeof i.pageSlug === "string" ? i.pageSlug : undefined,
         newTab: i.newTab === true,
         children: normalizeNavItems(i.children),
+        ...(typeof i.highlight === "boolean" ? { highlight: i.highlight } : {}),
       };
       if (type === "brands" && Array.isArray(i.brandIds)) {
         item.brandIds = i.brandIds.filter(

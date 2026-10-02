@@ -9,20 +9,38 @@
 // BUNDLE: the choice groups the customer picks from. A modular configuration is deliberately NOT
 // priced live (Steve, card 7bmpuqei) — the picks are captured and sent through as a quote request,
 // so this block owns the selection and the parent hands it to Add to Quote.
+//
+// GROUP RULES (Zoey bundles, IK 2026-09-28): an "included" group is listed, not chosen; an
+// optional pick-one offers "None"; a "many" group is tick boxes. A rule-less group is today's
+// required pick-one radio list.
 // ============================================================================
 
 import { Package } from "lucide-react";
-import type { KitGroup, ProductKit } from "@/lib/product-kit";
+import type { KitGroup, KitItem, KitSelection, ProductKit } from "@/lib/product-kit";
+import { bundleAmount, formatBundleAmount } from "@keenan/services/zoey-bundle-price";
+
+/**
+ * Zoey's own price beside an option ("+$731.00", ex or inc GST as the shopper views prices), when
+ * the Zoey import captured one for this storefront's bundle. Nothing otherwise.
+ */
+function OptionPrice({ item, inclusive }: { item: KitItem; inclusive: boolean }) {
+  if (item.selectionPrice == null) return null;
+  return <span className="ml-1 whitespace-nowrap text-zinc-700">+{formatBundleAmount(bundleAmount(item.selectionPrice, inclusive))}</span>;
+}
 
 export function ProductKitBlock({
   kit,
   selection,
   onSelect,
+  inclusive = false,
 }: {
   kit: ProductKit;
-  /** Bundle only: chosen product id per group name. */
-  selection: Record<string, number>;
-  onSelect: (group: string, productId: number) => void;
+  /** Bundle only: chosen product ids per group name. */
+  selection: KitSelection;
+  /** `null` is the None answer of an optional pick-one group. */
+  onSelect: (group: string, productId: number | null) => void;
+  /** The shopper's GST view, for the option prices Zoey printed (ex GST by default). */
+  inclusive?: boolean;
 }) {
   if (kit.kind === "grouped") {
     return (
@@ -46,63 +64,118 @@ export function ProductKitBlock({
     );
   }
 
+  // A bundle Zoey priced (its captured From / To box) reads as Zoey's: the groups and their prices,
+  // no "Build your configuration" heading and no "priced by our team" note — the page's price box
+  // (the template) says what it costs. Every other bundle keeps today's wording.
+  const zoeyPriced = kit.zoeyPrice != null;
   return (
     <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-5">
-      <h3 className="mb-4 text-sm font-semibold text-zinc-900">Build your configuration</h3>
+      {zoeyPriced ? null : <h3 className="mb-4 text-sm font-semibold text-zinc-900">Build your configuration</h3>}
       <div className="space-y-5">
         {kit.groups.map((group) => (
           <KitGroupPicker
             key={group.name}
             group={group}
-            selectedId={selection[group.name] ?? null}
+            selectedIds={selection[group.name] ?? []}
             onSelect={onSelect}
+            inclusive={inclusive}
           />
         ))}
       </div>
-      <p className="mt-4 text-xs text-zinc-500">
-        Configurations like this are priced by our team. Your choices are sent through with the
-        quote request.
-      </p>
+      {zoeyPriced ? null : (
+        <p className="mt-4 text-xs text-zinc-500">
+          Configurations like this are priced by our team. Your choices are sent through with the
+          quote request.
+        </p>
+      )}
     </div>
   );
 }
 
 function KitGroupPicker({
   group,
-  selectedId,
+  selectedIds,
   onSelect,
+  inclusive,
 }: {
   group: KitGroup;
-  selectedId: number | null;
-  onSelect: (group: string, productId: number) => void;
+  selectedIds: number[];
+  onSelect: (group: string, productId: number | null) => void;
+  inclusive: boolean;
 }) {
+  if (group.mode === "included") {
+    return (
+      // min-w-0: a <fieldset> defaults to `min-inline-size: min-content`, so one long product
+      // name widened the box past a 390px phone screen instead of wrapping.
+      <fieldset className="min-w-0">
+        <legend className="mb-2 text-sm font-medium text-zinc-900">{group.name}</legend>
+        <ul className="space-y-1">
+          {group.items.map((item) => (
+            <li key={item.productId} className="flex items-start gap-2 text-sm text-zinc-700">
+              <Package className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
+              <span>
+                <span className="font-medium text-zinc-900">{item.quantity} ×</span> {item.name}
+                {item.sku && <span className="ml-1 text-xs text-zinc-500">({item.sku})</span>}
+                <OptionPrice item={item} inclusive={inclusive} />
+              </span>
+            </li>
+          ))}
+        </ul>
+      </fieldset>
+    );
+  }
+  const many = group.mode === "many";
+  const offerNone = !many && !group.required;
+  const rowClass = (on: boolean) =>
+    `flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-colors ${
+      on ? "border-zinc-900 bg-white" : "border-zinc-200 bg-white hover:border-zinc-400"
+    }`;
   return (
-    <fieldset>
-      <legend className="mb-2 text-sm font-medium text-zinc-900">{group.name}</legend>
+    // min-w-0: a <fieldset> defaults to `min-inline-size: min-content`, so the `truncate` rows
+    // below set the box to the longest name — Hoshizaki KMD-270AB 396px, Rational Duo 533px on a
+    // 390px phone — instead of truncating inside it.
+    <fieldset className="min-w-0">
+      <legend className="mb-2 text-sm font-medium text-zinc-900">
+        {group.name}
+        {group.required && <span className="ml-1 text-xs font-normal text-zinc-500">(required)</span>}
+      </legend>
       <div className="space-y-2">
-        {group.items.map((item) => (
-          <label
-            key={item.productId}
-            className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-colors ${
-              selectedId === item.productId
-                ? "border-zinc-900 bg-white"
-                : "border-zinc-200 bg-white hover:border-zinc-400"
-            }`}
-          >
+        {offerNone && (
+          <label className={rowClass(selectedIds.length === 0)}>
             <input
               type="radio"
               name={`kit-${group.name}`}
-              value={item.productId}
-              checked={selectedId === item.productId}
-              onChange={() => onSelect(group.name, item.productId)}
+              value=""
+              checked={selectedIds.length === 0}
+              onChange={() => onSelect(group.name, null)}
               className="h-4 w-4 border-zinc-300 text-zinc-900 focus:ring-zinc-500"
             />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-zinc-900">{item.name}</span>
-              {item.sku && <span className="block truncate text-xs text-zinc-500">{item.sku}</span>}
-            </span>
+            <span className="min-w-0 flex-1 text-zinc-900">None</span>
           </label>
-        ))}
+        )}
+        {group.items.map((item) => {
+          const on = selectedIds.includes(item.productId);
+          return (
+            <label key={item.productId} className={rowClass(on)}>
+              <input
+                type={many ? "checkbox" : "radio"}
+                name={`kit-${group.name}`}
+                value={item.productId}
+                checked={on}
+                onChange={() => onSelect(group.name, item.productId)}
+                className={`h-4 w-4 border-zinc-300 text-zinc-900 focus:ring-zinc-500${many ? " rounded" : ""}`}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-zinc-900">
+                  {item.quantity > 1 ? `${item.quantity} × ` : ""}
+                  {item.name}
+                </span>
+                {item.sku && <span className="block truncate text-xs text-zinc-500">{item.sku}</span>}
+              </span>
+              <OptionPrice item={item} inclusive={inclusive} />
+            </label>
+          );
+        })}
       </div>
     </fieldset>
   );

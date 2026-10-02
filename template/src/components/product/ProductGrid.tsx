@@ -69,7 +69,7 @@ export async function ProductGrid({
   }
 
   return (
-    <div className={wrapperClassName}>
+    <div data-listing-grid="" className={wrapperClassName}>
       <Ga4ViewItemList
         listId={listId}
         listName={listName}
