@@ -24,6 +24,8 @@ import {
 } from "@keenan/services/builder";
 import { BuilderBrandPage, type BrandGridProduct } from "@/builder/BuilderBrandPage";
 import { applyChannelRulesToTileRows } from "@keenan/services/channel-rules";
+import { BuilderCssLink } from "@/builder/builder-css-link";
+import { usedComponents } from "@/builder/used-components";
 
 // ============================================================================
 // The brand template's Site Builder branch — ENGINE.
@@ -218,7 +220,7 @@ export async function renderBrandNodeBranch({
 
   return (
     <>
-      {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
+      <BuilderCssLink css={builderCss} />
       <BuilderBrandPage
         tree={nodeTree}
         payload={payload}
@@ -226,7 +228,7 @@ export async function renderBrandNodeBranch({
         pricing={pricing}
         memberPricingAvailable={memberPricingEnabled}
         namedStyles={namedStyles}
-        components={components}
+        components={usedComponents(nodeTree, components)}
         jsFunctions={jsFunctions}
         callResults={callResults}
         draft={draft}

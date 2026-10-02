@@ -30,6 +30,8 @@ import { attachBrandLogos } from "@/lib/brand-logo-fallback";
 import { withMemberScaleLabelsInTree } from "@/builder/member-scale-labels";
 import { buildCdMembershipData, resolveCdLadderShare } from "@/lib/pricing/cd-member-pricing.server";
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
+import { BuilderCssLink } from "@/builder/builder-css-link";
+import { usedComponents } from "@/builder/used-components";
 
 // ============================================================================
 // The product template's Site Builder branch — ENGINE.
@@ -351,7 +353,7 @@ export async function renderProductNodeBranch({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd).replace(/</g, "\\u003c") }}
         />
       )}
-      {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
+      <BuilderCssLink css={builderCss} />
       <ViewedProductTracker product={viewedProduct} />
       <BuilderProductPage
         tree={nodeTree}
@@ -361,7 +363,7 @@ export async function renderProductNodeBranch({
             : pagePayload
         }
         namedStyles={namedStyles}
-        components={components}
+        components={usedComponents(nodeTree, components)}
         jsFunctions={jsFunctions}
         callResults={callResults}
         nativeData={{ ...(nativeData ?? {}), cdMembership, offerTiers: { tables: offerTierTables } }}

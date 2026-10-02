@@ -43,6 +43,8 @@ import {
   type CategoryGridProduct,
 } from "@/builder/BuilderCategoryPage";
 import { applyChannelRulesToTileRows } from "@keenan/services/channel-rules";
+import { BuilderCssLink } from "@/builder/builder-css-link";
+import { usedComponents } from "@/builder/used-components";
 
 // ============================================================================
 // The category template's Site Builder branch — ENGINE.
@@ -331,11 +333,12 @@ export async function renderCategoryNodeBranch({
     );
   }
 
+  const pageTree = withListingGridMarks(withCategoryFacetNodes(nodeTree));
   return (
     <>
-      {builderCss && <style id="kg-builder-css" dangerouslySetInnerHTML={{ __html: builderCss }} />}
+      <BuilderCssLink css={builderCss} />
       <BuilderCategoryPage
-        tree={withListingGridMarks(withCategoryFacetNodes(nodeTree))}
+        tree={pageTree}
         payload={payload}
         listing={{
           products: clientRows,
@@ -350,7 +353,7 @@ export async function renderCategoryNodeBranch({
           categorySlug: category.slug ?? categorySlugFallback,
         }}
         namedStyles={namedStyles}
-        components={components}
+        components={usedComponents(pageTree, components)}
         jsFunctions={jsFunctions}
         callResults={callResults}
         draft={draft}
