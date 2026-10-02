@@ -5,6 +5,7 @@ import { tileBuyFacts } from "@/lib/tile-buy";
 import { cardPrice } from "@/lib/card-price";
 import { applyAccountPrices, getPricingGroupId } from "@/lib/member";
 import { attachFromPrices } from "@/lib/store";
+import { promotionBadgeMap } from "@/lib/promotions/badges";
 import { applyCatalogScope } from "@/lib/catalog-scope";
 import { getBrandLogos } from "@/lib/brand-logo-fallback";
 import { Ga4ViewItemList } from "@/components/analytics/Ga4ViewItemList";
@@ -106,6 +107,11 @@ export async function ProductGrid({
   // configurable-from-price: AFTER the overlays, so a configurable tile reads "Starting From".
   // …priced at the viewer's customer-group price list, the same record the tile's headline carries.
   products = await attachFromPrices(products, { pricingGroupId: await getPricingGroupId() });
+  // The Buy X Get Y / free-freight badge each React tile carries (card EIXdjw2s) — the same map the
+  // authored tiles read, for exactly the products still on the page after scope.
+  const promoBadges = await promotionBadgeMap(
+    products as unknown as { id: number; sku?: string | null }[]
+  );
   if (products.length === 0) {
     if (!renderEmpty) return null;
     return (
@@ -166,6 +172,7 @@ export async function ProductGrid({
             // Zoey's search tile prints no price suffix; its category tile does.
             priceSuffix={buyButtons === "search" ? null : (product.priceSuffix ?? null)}
             tierLowPrice={product.tierLowPrice ?? null}
+            promotionBadge={promoBadges[product.id] ?? null}
             listId={listId}
             listName={listName}
             listIndex={indexOffset + index}

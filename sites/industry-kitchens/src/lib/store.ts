@@ -62,6 +62,7 @@ import { withWishlistTileInComponents, WISHLIST_FLAG } from "@/builder/wishlist-
 import {
   guardTileBuyControlsInComponents,
   withAnswerRequiredTilesInComponents,
+  withPromotionBadgeInComponents,
   withSpecialPriceInComponents,
 } from "@keenan/services/builder";
 import { withAnswerRequiredTilesInDoc } from "@/builder/answer-required-tiles-doc";
@@ -254,16 +255,23 @@ const withTileBuyGuard = (components: ComponentMap): ComponentMap =>
 const withTileCompare = (components: ComponentMap): ComponentMap =>
   withTileCompareInComponents(components as Record<string, NodeTree>) as ComponentMap;
 
+/**
+ * Card EIXdjw2s — the Buy X Get Y / free-freight badge on the authored listing tile: a node bound
+ * to the card row's `promo_badge`, present only when the row carries one (the category and brand
+ * branches put it there from `promotionBadgeMap`). Nothing stored.
+ */
 const withMasterTransforms = (components: ComponentMap): ComponentMap =>
   withTileCompare(
-    withAnswerRequiredTiles(
-      withTileBuyGuard(
-        withPromoTagInComponents(
-          withBrandLogoFallback(components, BRAND_LOGO_TARGETS) as Record<string, NodeTree>,
-          PROMO_TAG_LABEL
-        ) as ComponentMap
-      )
-    )
+    withPromotionBadgeInComponents(
+      withAnswerRequiredTiles(
+        withTileBuyGuard(
+          withPromoTagInComponents(
+            withBrandLogoFallback(components, BRAND_LOGO_TARGETS) as Record<string, NodeTree>,
+            PROMO_TAG_LABEL
+          ) as ComponentMap
+        )
+      ) as Record<string, NodeTree>
+    ) as ComponentMap
   );
 
 // ============================================================================
@@ -288,7 +296,6 @@ export const getCmsTemplate = async (
 ): ReturnType<typeof getCmsTemplateRaw> =>
   withAnswerRequiredTilesInDoc(await getCmsTemplateRaw(...args));
 
-/**
 /**
  * Whether this channel cuts member-saving percentages from its stored price
  * masters even with the member price scale off. Chefs Depot only (card

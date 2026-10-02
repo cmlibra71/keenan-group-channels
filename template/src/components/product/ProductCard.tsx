@@ -27,9 +27,11 @@ interface ProductCardProps {
   listId?: string;
   listName?: string;
   listIndex?: number;
+  /** The Buy X Get Y / free-freight badge this product carries (card EIXdjw2s); null = none. */
+  promotionBadge?: string | null;
 }
 
-export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName, memberPricingAvailable, memberPrice, special, productId, listId, listName, listIndex }: ProductCardProps) {
+export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName, memberPricingAvailable, memberPrice, special, productId, listId, listName, listIndex, promotionBadge }: ProductCardProps) {
   const displayPrice = parseFloat(price);
   const displaySalePrice = salePrice ? parseFloat(salePrice) : null;
   // Never a member layout on a special: members pay the special too (Tim: "Special Price will
@@ -134,6 +136,13 @@ export function ProductCard({ name, slug, price, salePrice, imageUrl, brandName,
             Site Builder repeats can never say different things.
 
             `template/` holds null, so nothing renders here today. */}
+        {/* The Buy X Get Y / free-freight badge (card EIXdjw2s): per product, only for a public
+            offer this storefront is running — the same wording the authored tile draws. */}
+        {promotionBadge && !special && (
+          <p className="mt-2">
+            <span className="badge-offer">{promotionBadge}</span>
+          </p>
+        )}
         {/* Not on a Partner Special: "Buy more & save" beside "No further discounts" contradicts
             it (card tJ4audbu). The authored tile follows the same rule. */}
         {PROMO_TAG_LABEL && !special && (

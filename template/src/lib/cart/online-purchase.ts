@@ -38,6 +38,7 @@
 // ============================================================================
 
 import { channelRulesRefuseCart, type ChannelPurchaseRules, type ChannelRuleViewer } from "@keenan/services/channel-rules";
+import { canPurchaseQuantity, type StockFacts } from "@keenan/services/backorder";
 import { CART_RESTRICTED_ERROR } from "./restricted-message";
 
 export interface OnlinePurchaseFlags {
@@ -100,4 +101,35 @@ export function refuseOnlinePurchase(
   if (onlineOrderingOff(flags, viewer)) return CART_RESTRICTED_ERROR;
   if (unitPrice == null || !Number.isFinite(unitPrice) || unitPrice <= 0) return CART_RESTRICTED_ERROR;
   return null;
+}
+
+/**
+ * May a promotion put this product in the cart FOR the shopper (card EIXdjw2s, review round 3)?
+ *
+ * An "Automatically Add Product To Cart" reward is a line the shopper never chose and cannot
+ * remove: it comes and goes with its offer. So it may only ever be a line the cart would SELL —
+ * otherwise the shopper is handed a free item they cannot take out, and `placeOrder` then refuses
+ * the whole order and tells them to remove it (behaviour register sf-cart / sf-checkout). The
+ * reward is therefore judged by exactly what `placeOrder` re-checks on every line:
+ *
+ *   * `onlineOrderingOff` — Add to Cart switched off, Zoey "quote only", a hidden price, a quote-only
+ *     variant, and this storefront's Zoey rules (zero-price, out-of-stock, cart disabled, and guest
+ *     quote-only for a guest);
+ *   * `canPurchaseQuantity` — a "do not back-order" product short of the units the reward gives;
+ *
+ * plus, when the caller has priced it, the Add to Cart rule that a $0 product sells by quote only.
+ * True = refuse (do not add it; take it back out if it is already there). Unknown facts refuse
+ * nothing, as for any add.
+ */
+export function rewardLineRefused(
+  facts: (OnlinePurchaseFlags & StockFacts) | null | undefined,
+  quantity: number,
+  opts: { viewer?: OnlinePurchaseViewer | null; unitPrice?: number | null } = {}
+): boolean {
+  if ("unitPrice" in opts && !(typeof opts.unitPrice === "number" && Number.isFinite(opts.unitPrice) && opts.unitPrice > 0)) {
+    return true;
+  }
+  if (!facts) return false;
+  if (onlineOrderingOff(facts, opts.viewer)) return true;
+  return !canPurchaseQuantity(facts, Math.max(1, Math.floor(quantity) || 1));
 }
