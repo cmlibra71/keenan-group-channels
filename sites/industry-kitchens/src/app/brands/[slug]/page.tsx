@@ -1,4 +1,8 @@
 import { redirect } from "next/navigation";
+import { loadCatalogAttributeContext, readBrandRailSettings, brandRailAttributeDefs } from "@keenan/services";
+import { CHANNEL_ID as ATTR_CHANNEL_ID } from "@/lib/channel";
+import { getListingDisplay } from "@/lib/listing-display";
+import { visibleSortOptions } from "@keenan/services/listing-display-settings";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import type { Metadata } from "next";
 import { draftMode, headers } from "next/headers";
@@ -14,13 +18,17 @@ import {
   getCmsPage,
   getDefaultListingSort,
   getCategoryBySlug,
+  getSubcategories,
+  getChannelSetting,
   // Product photographs a pictureless brand can borrow (InEoeMZh).
   getBorrowedImageCandidates,
   applyBorrowedCategoryImages,
 } from "@/lib/store";
 import { borrowedImageFor, ownersNeedingBorrowedImage } from "@/lib/borrowed-image";
 import { getListingMemberPrices } from "@/lib/member";
-import { brandNodePathApplies, renderBrandNodeBranch } from "@/builder/brand-node-branch";
+import { brandNodePathApplies, brandTreeHasFilterRail, renderBrandNodeBranch } from "@/builder/brand-node-branch";
+import { rangeBelongsToBrand } from "@/lib/brand-range";
+import { brandRailNextPageHref, parseBrandRailSelections } from "@/lib/brand-rail";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BrandIntro } from "@/components/brand/BrandIntro";
@@ -35,8 +43,8 @@ import { BrandIndustryUses } from "@/components/brand/BrandIndustryUses";
 import { BrandFaq } from "@/components/brand/BrandFaq";
 import { BrandCategories } from "@/components/brand/BrandCategories";
 import { FacetRail, FacetChips, SortSelect } from "@/components/category/FilterRail";
-import { enabledFilterIds } from "@/lib/storefront-filters";
-import { parsePriceBands, parseRangeParam } from "@/lib/category-attributes";
+import { applyStorefrontFilters, enabledFilterIds } from "@/lib/storefront-filters";
+import { lastPriceWindow, parsePriceBands } from "@/lib/category-attributes";
 import { parseAttributeSelections } from "@keenan/services/services";
 import {
   CATEGORY_PARAM,
@@ -211,13 +219,165 @@ export default async function BrandPage({
   // for the faceted listing here would hand a designed page 24 rows where it
   // shows 48, with nothing on screen to page or filter them.
   if (await brandNodePathApplies({ brandCms, draft })) {
+    // ── The authored filter rail (IK parity: the old brand pages' Category / attributes / Price /
+    // Brand rail). Only a tree that PLACES one pays for the faceted listing; the rows it lists are
+    // the filtered ones, the hero keeps the brand's whole count. Selections: `sub` (the brand's
+    // categories; an old `cat` link still works), `brand` (the brand's display labels, services
+    // #240), `price` (bands or the slider's window), `f_<code>` attributes. A switched-off facet
+    // (portal: Products > Filtering) stops filtering, not merely displaying (NfYe3P3G).
+    if (brandTreeHasFilterRail((brandCms as { node_tree?: unknown } | null)?.node_tree)) {
+      const listingDisplay = await getListingDisplay();
+      const storefrontFilters = await getStorefrontFilters();
+      const filtersOn = enabledFilterIds(storefrontFilters);
+      const spRec = sp as Record<string, string | undefined>;
+      // This brand page's own rail settings (brand › Filter rail; IK parity with Zoey's per-page
+      // layered navigation): which products it lists, the Price filter's style, its attribute list.
+      const railSettings = readBrandRailSettings(brand.metafields);
+      const attrContext = await loadCatalogAttributeContext(ATTR_CHANNEL_ID);
+      const pageAttributeDefs = railSettings.attributes?.length ? brandRailAttributeDefs(railSettings.attributes, attrContext) : null;
+      const railAttributes = parseAttributeSelections(spRec, pageAttributeDefs ?? attrContext.attributes);
+      const priceStyle = (railSettings.price ?? listingDisplay.brand_price_style) === "zoey_bands" ? ("zoey_bands" as const) : undefined;
+      const rail = parseBrandRailSelections(spRec, filtersOn, Object.keys(railAttributes).length, defaultListingSort);
+      // The Category group lists the brand's RANGES, as Zoey's did: the children of the brand's own
+      // category under Brands ("Waldorf 800 619 · Waldorf Bold 567 · Waldorf Jump 1" on the old
+      // Waldorf page). A brand with no brand category keeps every menu category it reaches, trimmed
+      // to the top 12 below (a ticked one is always kept, so it can be unticked).
+      const brandsRoot = (await getCategoryBySlug("brands").catch(() => null)) as { id?: number } | null;
+      const brandCategory = brandsRoot?.id
+        ? (((await getSubcategories(brandsRoot.id).catch(() => [])) as { id: number; slug?: string | null; name?: string | null }[]).find(
+            (c) => rangeBelongsToBrand(c, brand as { slug?: unknown; name?: unknown; metafields?: unknown }, slug)
+          ) ?? null)
+        : null;
+      // Zoey listed a brand page from its CATEGORY (whole subtree, or only products filed directly in
+      // it); `source` reproduces that where the page says so. Products filter on it, the rail too.
+      const source =
+        brandCategory && (railSettings.source === "category_tree" || railSettings.source === "category_direct")
+          ? { categoryId: brandCategory.id, subtree: railSettings.source === "category_tree" }
+          : undefined;
+      const scope = {
+        ...(brandCategory ? { categoryParentId: brandCategory.id } : {}),
+        ...(source ? { source } : {}),
+        ...(priceStyle ? { priceStyle } : {}),
+        ...(railSettings.attributes?.length ? { attributeList: railSettings.attributes } : {}),
+        // The band labels' wording and Zoey's division limit are the storefront's data (Settings ›
+        // Storefront Listings).
+        ...(priceStyle
+          ? { priceBandLabels: listingDisplay.zoey_band_labels, priceBandDivisionLimit: listingDisplay.zoey_band_division_limit }
+          : {}),
+        // Zoey's admin option order per field (data captured from Zoey's attribute catalogue).
+        ...(railSettings.attributes?.length
+          ? {
+              zoeyOptionOrder:
+                ((await getChannelSetting("zoey_attribute_options").catch(() => null)) as Record<string, string[]> | null) ?? undefined,
+            }
+          : {}),
+      };
+      const pageSize = listingDisplay.page_sizes.brand;
+      const [railListing, railUnfiltered, railMemberPricing] = await Promise.all([
+        // Cumulative for Load more, as the sealed listing: each press re-asks with a bigger limit, and
+        // `total` + facets stay anchored to page 1 inside getBrandListing.
+        getBrandListing(brand.id as number, {
+          page: 1,
+          limit: pageSize * rail.page,
+          ...scope,
+          categoryIds: rail.categoryIds,
+          brandLabels: rail.labels,
+          priceBands: rail.priceBands,
+          priceRange: rail.priceRange,
+          attributes: railAttributes,
+          sort: rail.sort,
+        }),
+        // The hero states how many products the BRAND has, the rail how many match — the same cache
+        // entry an unfiltered first load populates (same limit, scope and sort).
+        rail.filtered
+          ? getBrandListing(brand.id as number, { page: 1, limit: pageSize, ...scope, sort: rail.sort })
+          : Promise.resolve(null),
+        getFeatureFlag("member_pricing_enabled"),
+      ]);
+      const railProducts = railListing.products as unknown as { id: number }[];
+      const railFacets = railListing.facets as Record<string, unknown> & { categories?: { id: number }[]; attributes?: { code: string }[] };
+      const attributeParams = Object.fromEntries(
+        (railFacets.attributes ?? []).map((a) => [`f_${a.code}`, spRec[`f_${a.code}`] ?? ""]).filter(([, v]) => v)
+      ) as Record<string, string>;
+      const shown = railProducts.length;
+      const hasMore = shown < railListing.total && rail.page < MAX_PAGES;
+      const railRendered = await renderBrandNodeBranch({
+        brandCms,
+        brand: {
+          ...(brand as unknown as Record<string, unknown>),
+          metafields: {
+            ...((brand.metafields as Record<string, unknown> | null) ?? {}),
+            product_lines: productLines,
+          },
+        },
+        products: railProducts,
+        total: (railUnfiltered ?? railListing).total,
+        pricing: { memberPriceMap: await getListingMemberPrices(railProducts) },
+        memberPricingEnabled: railMemberPricing,
+        draft,
+        listing: {
+          // A switched-off facet leaves the rail too (applyStorefrontFilters, as the sealed rail); the
+          // brand's labels ride in `brands` so the same switch governs them.
+          facets: (() => {
+            const categories = brandCategory
+              ? railFacets.categories ?? []
+              : (railFacets.categories ?? []).filter((c, i) => i < 12 || rail.categoryIds.includes(c.id));
+            const gated = applyStorefrontFilters(
+              {
+                subcategories: categories as never,
+                brands: (railFacets.brandLabels ?? []) as never,
+                price: (railFacets.price ?? []) as never,
+                availability: [] as never,
+                priceRange: (railFacets.priceRange ?? null) as never,
+              },
+              storefrontFilters
+            ) as unknown as Record<string, unknown>;
+            return {
+              ...railFacets,
+              categories: gated.subcategories,
+              brandLabels: gated.brands,
+              price: gated.price,
+              priceRange: gated.priceRange,
+              // Zoey's bands go with the Price switch too; the slider is not offered beside them.
+              ...(Array.isArray(railFacets.priceBands)
+                ? { priceBands: filtersOn.has("price") ? railFacets.priceBands : [], priceRange: null }
+                : {}),
+              filters: storefrontFilters,
+            };
+          })(),
+          filters: storefrontFilters,
+          // The rail's "Showing … of N": how many match; the hero keeps the brand's whole count.
+          total: railListing.total,
+          selections: {
+            sub: rail.categoryIds.map(String),
+            brand: rail.labels,
+            price: rail.priceChips,
+            attributes: railAttributes,
+          },
+          sort: rail.sort,
+          page: rail.page,
+          hasMore,
+          nextPageHref: hasMore
+            ? brandRailNextPageHref({
+                basePath: `${draft && (await headers()).get("x-kg-json") === "1" ? "/json" : ""}/brands/${slug}`,
+                selections: rail,
+                attributeParams,
+                sortParam: spRec.sort,
+              })
+            : "",
+          listingDisplay,
+        },
+      });
+      if (railRendered) return railRendered;
+    }
     const [{ products: nodeProducts, total: nodeTotal }, nodeMemberPricing] = await Promise.all([
       // The authored tree has no sort control, so the order is the storefront's
       // own default and nothing else (card InEoeMZh). Unset that is still the
       // alphabetical order this read has always returned.
       getProducts({
         brandId: brand.id as number,
-        limit: 48,
+        // Settings → Storefront Listings (C25); 48 with no setting.
+        limit: (await getListingDisplay()).page_sizes.brand,
         sort: defaultListingSort,
       }),
       getFeatureFlag("member_pricing_enabled"),
@@ -248,6 +408,8 @@ export default async function BrandPage({
   // `?sort=` wins, including `?sort=relevance`; with nothing on the URL the
   // listing opens in THIS storefront's own order (card InEoeMZh).
   const sort = parseBrandSort(sp.sort, defaultListingSort);
+  // Sort labels / shown options from Settings → Storefront Listings (same setting as the node-tree listing).
+  const sortOptions = visibleSortOptions(await getListingDisplay());
 
   // This storefront's rail configuration (portal: Products > Filtering). A
   // switched-off facet must stop FILTERING, not merely displaying, so its URL
@@ -260,8 +422,8 @@ export default async function BrandPage({
 
   const rawPrice = priceEnabled ? sp.price : undefined;
   const priceBands = parsePriceBands(rawPrice) as ("lt1000" | "1000to3000" | "gt3000")[];
-  const priceRange = priceBands.length === 0 ? parseRangeParam(rawPrice) : undefined;
-  const attributeSelections = parseAttributeSelections(sp as Record<string, string | undefined>);
+  const priceRange = priceBands.length === 0 ? lastPriceWindow(rawPrice) : undefined;
+  const attributeSelections = parseAttributeSelections(sp as Record<string, string | undefined>, (await loadCatalogAttributeContext(ATTR_CHANNEL_ID)).attributes);
   const selectedCategoryIds = categoryEnabled ? parseIds(sp[CATEGORY_PARAM]) : [];
 
   // "Nothing here" and "nothing MATCHES" are different sentences: a brand with
@@ -411,11 +573,12 @@ export default async function BrandPage({
               </p>
               <FacetChips groups={groups} />
             </div>
-            <SortSelect defaultSort={defaultListingSort} />
+            <SortSelect options={sortOptions} defaultSort={defaultListingSort} />
           </div>
 
           {products.length > 0 ? (
             <ProductGrid
+              showCompare
               products={products}
               memberPricingAvailable={memberPricingEnabled}
               memberPriceMap={await getListingMemberPrices(products)}

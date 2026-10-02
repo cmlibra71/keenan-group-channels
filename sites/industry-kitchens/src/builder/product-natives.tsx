@@ -19,6 +19,12 @@ import { usableBrandLogo } from "@/lib/brand-logo-url";
 import { CdMemberPricingPanel } from "@/components/product/CdMemberPricingPanel";
 import type { CdMembershipData } from "@/lib/pricing/cd-member-pricing";
 import { ProductAddons } from "@/components/product/ProductAddons";
+import { AddToCompare } from "@/components/product/AddToCompare";
+import { COMPARE_NODE_KEY } from "@/builder/compare-node";
+import { TILE_COMPARE_KEY } from "@/builder/tile-compare-node";
+import { TileCompare } from "@/components/product/TileCompare";
+import { OfferTierTables, type OfferTierTable } from "@/components/product/OfferTierTables";
+import { GiftCardPanel } from "@/components/product/GiftCardPanel";
 
 // ============================================================================
 // Industry Kitchens' sealed product-page leaves.
@@ -68,7 +74,9 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
         brandName={brand?.name ?? null}
       />
     ),
-    "warranty-directory": () => <WarrantyDirectory />,
+    // Rows, title and intro from the channel's `warranty_directory` setting (C14) — the route reads
+    // it once into the bag; absent, the component shows the list it always shipped.
+    "warranty-directory": () => <WarrantyDirectory {...((data.warranty ?? {}) as Record<string, never>)} />,
     // Storewide ex/inc-GST switch, now that it has left the header. Sealed for
     // the same reason as the two above: it carries behaviour of its own (writes
     // the GST cookie, flips a site-wide React context). It sits in normal flow
@@ -77,7 +85,7 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // Grouped / bundle contents (card 7bmpuqei). Sealed, not exploded: it holds the customer's
     // picks and sends them through with Add to Quote. Renders nothing for a product that is not a
     // kit, so the node is safe to leave in the template for every product.
-    "product-kit": () => {
+    "product-kit": (props?: Record<string, unknown>) => {
       // `data.kit` is ALREADY parsed: the product route parses metafields exactly
       // once (`nativeData: { kit: readProductKit(product.metafields) }`) — the
       // same way every other native receives its data. Re-parsing a ProductKit as
@@ -85,7 +93,15 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
       // contents never rendered (release-review blocker).
       const kit = (data.kit ?? null) as ProductKit | null;
       if (!kit) return null;
-      return <ProductKitNative kit={kit} productId={Number(product.id)} />;
+      // The button words are node props (audit D20): editable on the template, today's words when unset.
+      const str = (v: unknown) => (typeof v === "string" ? v : null);
+      return (
+        <ProductKitNative
+          kit={kit}
+          productId={Number(product.id)}
+          labels={{ priced: str(props?.label_priced), unpriced: str(props?.label_unpriced) }}
+        />
+      );
     },
     // SilverChef / Skope Funding weekly rental panel (card 6f47rFeT). Sealed
     // because the figure follows the LIVE purchase state — variant choice,
@@ -97,6 +113,11 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // pressed, which an authored tree cannot do. It renders nothing for a product with
     // no text groups, so the node is safe in front of every product page.
     "product-instructions": () => <ProductInstructionsNative />,
+    // IK gift cards (Zoey parity): Amount / Recipient / Sender / Special Message, carried by Add to
+    // Quote. Sealed for the Instructions box's reason — the answers are live purchase state that
+    // must travel with the button. Placed by page 69 with Show-if `product.isGiftCard`, and renders
+    // nothing on a product without a gift card configuration.
+    "product-gift-card": () => <GiftCardPanel />,
     // The product page's Reviews tab (card qxVqy5Dn). Sealed rather than
     // authored because the Write a Review form needs client state (the star
     // picker) and a server action, neither of which a node tree can carry —
@@ -143,7 +164,54 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // purchase state — they move the headline price, the weekly finance figure and what
     // Add to Cart sends — and an authored tree can hold neither state nor money. Renders
     // nothing for a product with no extras, so the node is safe on every product page.
-    "product-addons": () => <ProductAddons />,
+    // Its own words are node props (round-4 parity): `label_extras_heading`, `label_extras_help`,
+    // `label_choose_one`, `label_choose_many` — unset = today's words, "" = print nothing.
+    "product-addons": (props?: Record<string, unknown>) => {
+      const s = (v: unknown) => (typeof v === "string" ? v : null);
+      return (
+        <ProductAddons
+          optionalRadioNone
+          zoeyGroups
+          labels={{
+            extrasHeading: s(props?.label_extras_heading),
+            extrasHelp: s(props?.label_extras_help),
+            chooseOne: s(props?.label_choose_one),
+            chooseMany: s(props?.label_choose_many),
+          }}
+        />
+      );
+    },
+    // "Add to Compare" / "View Compare" + "Compare products here" (IK parity plan decision 12,
+    // root cause `compare-feature`). Sealed because the visitor's compare list is client state
+    // (a cookie) that an authored tree cannot hold. Placed under the buy row by the shared
+    // `withCompareNode` pass, which only runs where `lib/compare-site.ts` is on — this site.
+    // The template lane may place a `product-compare` component node itself; the pass then
+    // leaves that placement alone. Chefs Depot does not register this key.
+    // Which compare block the product's LAYOUT carries (`product.layout.show.compareSidebar`: Zoey's
+    // "Compare Products / You have no items to compare." widget) and every word it prints are data:
+    // the layout row's flag, and node props `label_add`, `label_view`, `label_compare_here`,
+    // `label_sidebar_heading`, `label_sidebar_empty`, `label_sidebar_some` (unset = today's words).
+    [COMPARE_NODE_KEY]: (props?: Record<string, unknown>) => {
+      const s = (v: unknown) => (typeof v === "string" ? v : null);
+      const layout = (product.layout ?? null) as { hasContent?: boolean; show?: Record<string, boolean> } | null;
+      return (
+        <AddToCompare
+          sidebar={layout?.hasContent === true && layout.show?.compareSidebar === true}
+          labels={{
+            add: s(props?.label_add),
+            view: s(props?.label_view),
+            compareHere: s(props?.label_compare_here),
+            sidebarHeading: s(props?.label_sidebar_heading),
+            sidebarEmpty: s(props?.label_sidebar_empty),
+            sidebarSome: s(props?.label_sidebar_some),
+          }}
+        />
+      );
+    },
+    // "Add to Compare" under each RAIL tile (related / upsell) — IK parity, product cards: Zoey's
+    // related rail carries the link on most product layouts. Placed beside every `product-card`
+    // by `builder/tile-compare-node.ts` (via lib/store.ts), `productId` bound to the tile's row.
+    [TILE_COMPARE_KEY]: (props: Record<string, unknown>) => <TileCompare productId={props.productId} />,
     // "Images are for illustrative purposes only" (card 82HgV23q). Sealed rather than
     // authored because the supplied panel colour is not a token on either site, and a
     // colour class invented in a STORED tree has no rule in the deployed stylesheet.
@@ -170,6 +238,15 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // multiplies the price the shopper is being shown by the pack size, which is live purchase
     // state a stored tree cannot carry, and it renders NULL on every product sold individually.
     "product-pack-note": () => <ProductPackNote />,
+    // The carton-tier table (card p6YVxc4P; IK hidden-conditionals C13). The tables are loaded by
+    // the branch with the cart's own rules (only when the template declares `offer-tiers`) and
+    // arrive in the route's bag, so where the table sits — and its Show-if, `offerTiers.shown` —
+    // is the template's. Draws nothing with no banded offer.
+    "product-offer-tiers": () => (
+      <OfferTierTables
+        tables={((data.offerTiers as { tables?: OfferTierTable[] } | undefined)?.tables ?? []) as OfferTierTable[]}
+      />
+    ),
     // The Modular Systems banner (card qGfWAzQx, Steve — CE-40). The SAME sealed
     // panel as the notice above, because it is the same message: one look, one
     // colour, red panel with white writing. What differs is the rule — the slug

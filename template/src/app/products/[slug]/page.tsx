@@ -3,6 +3,7 @@ import { redirectIfMapped } from "@/lib/redirect-seam";
 import { draftMode, headers } from "next/headers";
 import Link from "next/link";
 import { getProductBySlug, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsTemplate } from "@/lib/store";
+import { stripHiddenPrices } from "@keenan/services/price-visibility";
 import type { RenderContext } from "@keenan/services";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { getSession } from "@/lib/auth";
@@ -51,7 +52,10 @@ export default async function ProductPage({
   // Per-account product prices override EVERY other price. The cached product row is shared by all
   // shoppers, so the account's price is overlaid onto a copy at read time (never into the cache).
   const accountId = await getAccountId();
-  const [product] = await applyAccountPrices([cachedProduct]);
+  // An account price must not put a figure back on a product whose price is HIDDEN: the row is
+  // re-hidden AFTER the overlay, so no price is serialised into this page for it (audit S19).
+  const [product] = (await applyAccountPrices([cachedProduct])).map(stripHiddenPrices);
+  const priceHidden = product.hidePrice === true;
 
   // Reviews are PROJECTED BEFORE THEY ARE AWAITED. `getProductReviews` returns the
   // whole `product_reviews` row — `author_email` (stamped on every signed-in
@@ -129,7 +133,7 @@ export default async function ProductPage({
     // Fetch member prices for ALL variants (only for actual members — the
     // customer's group is what unlocks member pricing) so the client can update
     // the displayed price on variant change.
-    if (customerGroupId || accountId) {
+    if (!priceHidden && (customerGroupId || accountId)) {
       const variants = product.variants ?? [];
       const pricingResults = await Promise.all(
         variants.map((v) => getEffectivePrice(v.id, CHANNEL_ID, customerGroupId, 1, accountId))
@@ -274,7 +278,9 @@ export default async function ProductPage({
           // Per-product buying controls (card 7vu2iEEZ). Unset reads as today's behaviour.
           backorderPolicy: product.backorderPolicy ?? null,
           restrictAddToQuote: product.restrictAddToQuote === true,
-          restrictAddToCart: product.restrictAddToCart === true,
+          restrictAddToCart:
+            product.restrictAddToCart === true ||
+            readProductKit(product.metafields, CHANNEL_ID)?.quoteOnly === true,
           hidePrice: product.hidePrice === true,
           availability: product.availability ?? "available",
           descriptionShort: product.descriptionShort,
@@ -296,7 +302,7 @@ export default async function ProductPage({
           // has nothing to draw, its buy controls carry no picks, and the behaviour register's
           // "on EVERY renderer, not just the node one" would be recording something this page
           // does not do. The node path reads the same field out of its own payload.
-          addons: readProductAddons(product.metafields),
+          addons: readProductAddons(product.metafields, { channelId: CHANNEL_ID }),
           // Card VNh9DdYd — the order STAFF authored for this product's variation choices, read
           // from the same portal-owned metafields bag. Null when nobody has authored one, and then
           // `orderOptionValues` derives the order from the product's own combinations.
@@ -304,7 +310,7 @@ export default async function ProductPage({
         }}
         // Grouped / bundle contents (Zoey product types, authored in the portal — they ride
         // products.metafields, which is portal-owned). Null for every other product.
-        kit={readProductKit(product.metafields)}
+        kit={readProductKit(product.metafields, CHANNEL_ID)}
         memberPrice={memberPrice}
         memberPriceMap={memberPriceMap}
         isMember={isMember}

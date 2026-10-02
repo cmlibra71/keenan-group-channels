@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { normalizeFooterEmbeds } from "@keenan/services/footer-embeds";
 import {
   Facebook,
   Instagram,
@@ -9,15 +10,23 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-export type FooterLink = { label: string; href: string };
+export type FooterLink = { label: string; href: string; /** Open in a new tab (the editor's switch). */ newTab?: boolean };
 export type FooterColumn = {
   heading: string;
+  /** The heading's own address, when the editor gave the column one (the old Zoey footer's headings
+   *  were links). Absent = a plain heading. */
+  href?: string;
+  /** Open the heading's address in a new tab. */
+  newTab?: boolean;
   links: FooterLink[];
   /** A second headed group stacked under the column's own links. The portal's
    *  Navigation editor writes it when a footer link holds links of its own
    *  (card aveLhTwr); a storefront that ignored it would silently drop every
    *  link staff put under that heading. */
   extraHeading?: string;
+  /** The sub-heading's own address (the old footer's "Knowledge Hub" -> /essentials). */
+  extraHref?: string;
+  extraNewTab?: boolean;
   extraLinks?: FooterLink[];
 };
 export type FooterContact = { phone?: string; email?: string; address?: string };
@@ -30,6 +39,10 @@ export type FooterConfig = {
   social?: FooterSocial[];
   payment_badges?: FooterBadge[];
   partners?: FooterBadge[];
+  /** Framed Publuu flip-books (the Industry Kitchens catalogue) under the partner logos, as the old
+   *  Zoey footer carried it after the SKOPE Funding logo on every page. Edited on the portal's
+   *  Navigation › Footer menu tab; `normalizeFooterEmbeds` re-checks every URL (publuu.com only). */
+  embeds?: unknown;
   legal?: string;
 };
 
@@ -115,8 +128,8 @@ const PAYMENT_LOGOS: Record<string, React.ReactElement> = {
   ),
 };
 
-function SmartLink({ href, className, children }: { href: string; className?: string; children: React.ReactNode }) {
-  if (/^https?:\/\//.test(href)) {
+function SmartLink({ href, className, newTab, children }: { href: string; className?: string; newTab?: boolean; children: React.ReactNode }) {
+  if (/^https?:\/\//.test(href) || newTab) {
     return (
       <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
         {children}
@@ -135,7 +148,7 @@ function LinkList({ links }: { links: FooterLink[] }) {
     <ul className="mt-3 space-y-2">
       {links.map((l) => (
         <li key={l.href + l.label}>
-          <SmartLink href={l.href} className="text-sm text-zinc-500 hover:text-[#D94B2B]">
+          <SmartLink href={l.href} newTab={l.newTab} className="text-sm text-zinc-500 hover:text-[#D94B2B]">
             {l.label}
           </SmartLink>
         </li>
@@ -155,6 +168,7 @@ export function Footer({
   const partners = config?.partners ?? [];
   const paymentBadges = config?.payment_badges ?? [];
   const social = config?.social ?? [];
+  const embeds = normalizeFooterEmbeds(config?.embeds);
 
   return (
     <footer className="border-t border-zinc-200 bg-zinc-50">
@@ -164,13 +178,25 @@ export function Footer({
           {columns.map((col) => (
             <div key={col.heading}>
               <h4 className="text-sm font-bold uppercase tracking-wide text-zinc-900">
-                {col.heading}
+                {col.href ? (
+                  <SmartLink href={col.href} newTab={col.newTab} className="hover:text-[#D94B2B]">
+                    {col.heading}
+                  </SmartLink>
+                ) : (
+                  col.heading
+                )}
               </h4>
               <LinkList links={col.links ?? []} />
               {col.extraHeading && col.extraLinks && col.extraLinks.length > 0 && (
                 <>
                   <h4 className="mt-6 text-sm font-bold uppercase tracking-wide text-zinc-900">
-                    {col.extraHeading}
+                    {col.extraHref ? (
+                      <SmartLink href={col.extraHref} newTab={col.extraNewTab} className="hover:text-[#D94B2B]">
+                        {col.extraHeading}
+                      </SmartLink>
+                    ) : (
+                      col.extraHeading
+                    )}
                   </h4>
                   <LinkList links={col.extraLinks} />
                 </>
@@ -252,8 +278,31 @@ export function Footer({
           </div>
         )}
 
-        {/* Legal */}
-        <div className="mt-8 border-t border-zinc-200 pt-6 text-center text-xs text-zinc-400">
+        {/* Publuu flip-books — the catalogue the old footer framed after the SKOPE Funding logo. */}
+        {embeds.length > 0 && (
+          <div className="mt-8 space-y-6 border-t border-zinc-200 pt-8" data-footer-embeds="">
+            {embeds.map((e) => (
+              <iframe
+                key={e.src}
+                src={e.src}
+                title={e.title}
+                width="100%"
+                height={e.height}
+                loading="lazy"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allow="clipboard-write; autoplay; fullscreen"
+                allowFullScreen
+                className="block w-full border-0"
+                style={{ height: e.height }}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Legal. Below lg the fixed "Talk to a Specialist" float (bottom-right, ~44px + 20px) sat on
+            top of this line at the end of the page (390px, bundle pages and others); the extra bottom
+            padding lets the line scroll clear of it. Desktop keeps its spacing. */}
+        <div className="mt-8 border-t border-zinc-200 pt-6 pb-[4.5rem] text-center text-xs text-zinc-400 lg:pb-0">
           {config?.legal ?? `© ${new Date().getFullYear()} ${storeName}. All rights reserved.`}
         </div>
       </div>

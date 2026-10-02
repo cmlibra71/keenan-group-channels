@@ -2,6 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   defaultKitSelection,
+  kitSelectionReady,
+  tileKitChoices,
+  toggleKitSelection,
   describeKitChoices,
   describeKitContents,
   readProductKit,
@@ -65,12 +68,12 @@ test("derives the kind from the rows when nobody declared one", () => {
 
 test("starts a bundle on each group's default, else its first product", () => {
   const kit = readProductKit(bundleMeta)!;
-  assert.deepEqual(defaultKitSelection(kit.groups), { "Left bay": 12, "Right bay": 21 });
+  assert.deepEqual(defaultKitSelection(kit.groups), { "Left bay": [12], "Right bay": [21] });
 });
 
 test("resolves a complete selection against the product's OWN kit", () => {
   const kit = readProductKit(bundleMeta)!;
-  const choices = resolveKitChoices(kit, toKitChoices({ "Left bay": 11, "Right bay": 22 }))!;
+  const choices = resolveKitChoices(kit, toKitChoices({ "Left bay": [11], "Right bay": [22] }))!;
   assert.deepEqual(
     choices.map((c) => `${c.group}=${c.sku}`),
     ["Left bay=L-GLASS", "Right bay=R-SOLID"]
@@ -110,4 +113,124 @@ test("refuses a product that isn't offered in the group it was submitted under",
 test("a grouped kit has no configuration to resolve", () => {
   const kit = readProductKit(groupedMeta)!;
   assert.equal(resolveKitChoices(kit, []), null);
+});
+
+// ── Group rules + per-storefront kits (IK Zoey bundles, 2026-09-28) ─────────────────────────
+
+/** HOS-IM-240ANE-28-BUNDLE's shape: an always-included head unit, then two optional groups. */
+const zoeyBundle = {
+  product_kind: "bundle",
+  kit: {
+    items: [
+      { product_id: 1, sku: "IM-240", name: "Ice maker", quantity: 1, group: "Ice Maker" },
+      { product_id: 2, sku: "B-301", name: "Bin 301", quantity: 1, group: "Storage Bin" },
+      { product_id: 3, sku: "B-501", name: "Bin 501", quantity: 1, group: "Storage Bin" },
+      { product_id: 4, sku: "TK-8D", name: "Top kit 8D", quantity: 1, group: "Accessories", is_default: true },
+      { product_id: 5, sku: "HLF20", name: "Filter", quantity: 1, group: "Accessories" },
+    ],
+    groups: [
+      { name: "Ice Maker", mode: "included", required: true },
+      { name: "Storage Bin", mode: "one", required: false },
+      { name: "Accessories", mode: "many", required: false },
+    ],
+  },
+  quote_only: true,
+};
+const scopedMeta = { kit: groupedMeta.kit, product_kind: "grouped", channel_kits: { "1": zoeyBundle } };
+
+test("a storefront's OWN kit wins over the shared one; any other storefront reads the shared kit", () => {
+  const ik = readProductKit(scopedMeta, 1)!;
+  assert.equal(ik.kind, "bundle");
+  assert.equal(ik.scoped, true);
+  assert.equal(ik.quoteOnly, true);
+  const cd = readProductKit(scopedMeta, 2)!;
+  assert.equal(cd.kind, "grouped");
+  assert.equal(cd.scoped, false);
+  assert.equal(cd.quoteOnly, false);
+  assert.equal(readProductKit(scopedMeta)!.kind, "grouped");
+  assert.equal(readProductKit({ channel_kits: { "1": zoeyBundle } }, 2), null);
+  assert.equal(readProductKit({ channel_kits: { "1": zoeyBundle } }), null);
+});
+
+test("quote_only is only honoured on a scoped kit", () => {
+  assert.equal(readProductKit({ ...bundleMeta, quote_only: true })!.quoteOnly, false);
+});
+
+test("group rules read through; a rule-less group stays a required pick-one", () => {
+  const kit = readProductKit(scopedMeta, 1)!;
+  assert.deepEqual(kit.groups.map((g) => `${g.name}:${g.mode}:${g.required}`), [
+    "Ice Maker:included:true",
+    "Storage Bin:one:false",
+    "Accessories:many:false",
+  ]);
+  const legacy = readProductKit(bundleMeta)!;
+  assert.deepEqual(legacy.groups.map((g) => `${g.mode}:${g.required}`), ["one:true", "one:true"]);
+});
+
+test("starts on None for an optional pick-one and on the pre-ticks of a tick-box group", () => {
+  const kit = readProductKit(scopedMeta, 1)!;
+  assert.deepEqual(defaultKitSelection(kit.groups), { Accessories: [4] });
+  assert.equal(kitSelectionReady(kit, {}), true);
+});
+
+test("toggle: pick-one replaces, None clears an optional one, tick boxes toggle, included ignores", () => {
+  const kit = readProductKit(scopedMeta, 1)!;
+  let sel = toggleKitSelection(kit, {}, "Storage Bin", 2);
+  sel = toggleKitSelection(kit, sel, "Storage Bin", 3);
+  assert.deepEqual(sel["Storage Bin"], [3]);
+  sel = toggleKitSelection(kit, sel, "Storage Bin", null);
+  assert.deepEqual(sel["Storage Bin"], []);
+  sel = toggleKitSelection(kit, sel, "Accessories", 4);
+  sel = toggleKitSelection(kit, sel, "Accessories", 5);
+  assert.deepEqual(sel.Accessories, [4, 5]);
+  sel = toggleKitSelection(kit, sel, "Accessories", 4);
+  assert.deepEqual(sel.Accessories, [5]);
+  assert.equal(toggleKitSelection(kit, sel, "Ice Maker", 1), sel);
+  assert.equal(toggleKitSelection(kit, sel, "Storage Bin", 99), sel);
+  // A required pick-one cannot be cleared.
+  const legacy = readProductKit(bundleMeta)!;
+  const start = defaultKitSelection(legacy.groups);
+  assert.equal(toggleKitSelection(legacy, start, "Left bay", null), start);
+});
+
+test("resolve: included rows always, optional groups skippable, tick boxes several, in author order", () => {
+  const kit = readProductKit(scopedMeta, 1)!;
+  const none = resolveKitChoices(kit, [])!;
+  assert.deepEqual(none.map((c) => c.sku), ["IM-240"]);
+  const full = resolveKitChoices(kit, [
+    { group: "Accessories", product_id: 5 },
+    { group: "Accessories", product_id: 4 },
+    { group: "Storage Bin", product_id: 3 },
+    { group: "Ice Maker", product_id: 999 },
+  ])!;
+  assert.deepEqual(full.map((c) => c.sku), ["IM-240", "B-501", "TK-8D", "HLF20"]);
+  assert.equal(
+    describeKitChoices(full),
+    "Ice Maker: Ice maker (IM-240)\nStorage Bin: Bin 501 (B-501)\nAccessories: Top kit 8D (TK-8D)\nAccessories: Filter (HLF20)"
+  );
+  assert.equal(resolveKitChoices(kit, [{ group: "Storage Bin", product_id: 2 }, { group: "Storage Bin", product_id: 3 }]), null);
+  assert.equal(resolveKitChoices(kit, [{ group: "Accessories", product_id: 2 }]), null);
+});
+
+test("a required tick-box group needs at least one tick", () => {
+  const meta = {
+    channel_kits: {
+      "1": {
+        product_kind: "bundle",
+        kit: { items: zoeyBundle.kit.items, groups: [{ name: "Accessories", mode: "many", required: true }] },
+      },
+    },
+  };
+  const kit = readProductKit(meta, 1)!;
+  assert.equal(kitSelectionReady(kit, { "Ice Maker": [1], "Storage Bin": [2] }), false);
+});
+
+test("a tile sends the default build of a scoped kit, and nothing for a shared kit", () => {
+  assert.deepEqual(tileKitChoices(readProductKit(scopedMeta, 1)!), [{ group: "Accessories", product_id: 4 }]);
+  assert.equal(tileKitChoices(readProductKit(bundleMeta)!), null);
+  // A required pick-one with no MARKED default cannot be answered from a tile.
+  const noDefault = {
+    channel_kits: { "1": { product_kind: "bundle", kit: { items: zoeyBundle.kit.items.slice(0, 3) } } },
+  };
+  assert.equal(tileKitChoices(readProductKit(noDefault, 1)!), null);
 });

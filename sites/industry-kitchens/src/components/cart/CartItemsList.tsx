@@ -61,6 +61,10 @@ export type CartItemRow = {
    * quantity in this row is always PIECES, which is what the money is priced in.
    */
   pack_size?: number | null;
+  /** False on Zoey's "multiples of N" (Enable Packaging off) — no package is named. */
+  pack_packaging_on?: boolean | null;
+  /** Zoey's multiples-of-N: no pack line at all (`PackFacts.silentMultiples`). */
+  pack_note_silent?: boolean | null;
   pack_unit?: string | null;
   /**
    * What this line took from a promotion, resolved server-side in `readCart`
@@ -195,6 +199,8 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
   const packNote = packNoteFor({
     sellPackSize: item.pack_size ?? null,
     sellPackUnit: item.pack_unit ?? null,
+    qtyPackagingEnabled: item.pack_packaging_on === false ? false : null,
+    silentMultiples: item.pack_note_silent === true,
   });
   const packUnit = resolvePackUnit({ sellPackUnit: item.pack_unit ?? null });
 
@@ -284,9 +290,14 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
         <p className="text-sm text-zinc-600 mt-1"><Price amount={unitPrice} /> each</p>
         {packNote && (
           <p className="text-xs text-zinc-600 mt-0.5">
-            {packNote} {"\u00b7 "}
-            <Price amount={packPrice(unitPrice, packSize)} />
-            {` per ${packUnit.toLowerCase()}`}
+            {packNote}
+            {item.pack_packaging_on !== false && (
+              <>
+                {" \u00b7 "}
+                <Price amount={packPrice(unitPrice, packSize)} />
+                {` per ${packUnit.toLowerCase()}`}
+              </>
+            )}
           </p>
         )}
         {offerDiscount > 0 && item.offer_name && (

@@ -7,9 +7,9 @@ import {
   storedAddonsAsSelection,
   type ResolvedAddon,
 } from "@keenan/services/product-addons";
-import { cartItemService, productService, getLiveSpecials } from "@/lib/store";
+import { cartItemService, productService, getLiveSpecials, CHANNEL_ID } from "@/lib/store";
 import { accountPriceGovernsLine, decideAccountPriceWrite } from "./account-prices-policy";
-import { getAccountId } from "@/lib/member";
+import { getAccountId, getPricingGroupId } from "@/lib/member";
 
 /** The cart-line shape checkout works with (snake_case, straight off cartService.getWithItems). */
 export interface CartLine {
@@ -32,12 +32,12 @@ export interface CartLine {
  * A lookup failure falls back to the stored picks rather than to nothing: charging the shopper for
  * the configuration they were shown beats silently dropping the accessories off the price.
  */
-async function resolveLineAddons(line: CartLine): Promise<ResolvedAddon[]> {
+export async function resolveLineAddons(line: CartLine): Promise<ResolvedAddon[]> {
   const stored = readStoredAddons(line.modifier_selections);
   if (stored.length === 0) return [];
   try {
     const product = (await productService.getById(line.product_id)) as { metafields?: unknown } | null;
-    return resolveAddonSelection(readProductAddons(product?.metafields), storedAddonsAsSelection(stored));
+    return resolveAddonSelection(readProductAddons(product?.metafields, { channelId: CHANNEL_ID }), storedAddonsAsSelection(stored));
   } catch (e) {
     console.error("[account-prices] addon re-resolve failed (non-fatal):", e);
     return stored;
@@ -60,9 +60,11 @@ export async function applyAccountPricesToCart(cartId: number, lines: CartLine[]
   const accountId = await getAccountId();
   if (!accountId || lines.length === 0) return;
 
+  // Contract vs catalog price rule: the lower (inert while the channel's rule switch is off).
   const prices = await resolveAccountLinePrices(
     accountId,
-    lines.map((l) => ({ productId: l.product_id, variantId: l.variant_id }))
+    lines.map((l) => ({ productId: l.product_id, variantId: l.variant_id })),
+    { channelId: CHANNEL_ID, groupId: await getPricingGroupId() }
   );
   if (prices.size === 0) return;
 

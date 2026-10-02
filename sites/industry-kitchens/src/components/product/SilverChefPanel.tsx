@@ -41,10 +41,15 @@ export function SilverChefPanel() {
   // (2026-08-19): a SKOPE fridge coded `BB380X-2SW` says nothing in its SKU.
   // A variant never has its own brand — the brand belongs to the product.
   const offer = productFinanceOffer({
+    // The FINANCE amounts: the shopper's price less any freight-kind extra they picked (owner
+    // decision 8 — freight stays out of the weekly figure however it is billed, Product Brief
+    // §3). Masked exactly as the display trio is, so a hidden price still hides its rent. A
+    // services build that predates them falls back to the display trio.
     price: {
-      displayPrice: purchase.displayPrice,
-      displaySalePrice: purchase.displaySalePrice,
-      memberPrice: purchase.activeMemberPrice,
+      displayPrice: purchase.financeDisplayPrice ?? purchase.displayPrice,
+      displaySalePrice:
+        purchase.financeDisplaySalePrice !== undefined ? purchase.financeDisplaySalePrice : purchase.displaySalePrice,
+      memberPrice: purchase.financeMemberPrice !== undefined ? purchase.financeMemberPrice : purchase.activeMemberPrice,
     },
     sku,
     brand: purchase.product.brandName ?? null,

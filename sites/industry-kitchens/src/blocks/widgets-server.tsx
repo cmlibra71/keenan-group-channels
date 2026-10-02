@@ -16,6 +16,8 @@ import {
 } from "@/lib/store";
 import { getListingMemberPrices, applyAccountPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
+import { getSession } from "@/lib/auth";
+import { applyChannelRulesToTileRows, channelRulesOfRow } from "@keenan/services/channel-rules";
 import {
   ProductPurchaseProvider,
   type PurchaseProduct,
@@ -121,6 +123,17 @@ export async function CardPartialGrid({
       : getFeatureFlag("member_pricing_enabled").catch(() => false),
   ]);
   if (!cardSource) return null;
+  // This storefront's Zoey rules ride listing rows as `channelRules` (portal PR #1028). Applied HERE,
+  // before either the provider or the card template sees a row: zero-price shows no price, and the
+  // rules that refuse the cart for this shopper set `restrictAddToCart`. The raw rules object is
+  // removed, so it never reaches the template data. The session is read only when a row carries the
+  // guest rule. A row with no rules (every row today) is unchanged.
+  const viewer = {
+    loggedIn: products.some((p) => channelRulesOfRow(p)?.guestQuoteOnly)
+      ? (await getSession().catch(() => null)) != null
+      : false,
+  };
+  products = applyChannelRulesToTileRows(products, { viewer });
 
   return (
     <div className={gridClassName}>
@@ -245,9 +258,9 @@ export function SortSelectWidget({ ctx }: { attrs: Record<string, unknown>; ctx?
   // that the sort box SHOWS the effective order.
   const extras =
     ctx?.record?.kind === "category"
-      ? ((ctx.record.extras ?? {}) as { defaultSort?: ListingSort })
+      ? ((ctx.record.extras ?? {}) as { defaultSort?: ListingSort; sortOptions?: { value: string; label: string }[] })
       : {};
-  return <SortSelect defaultSort={extras.defaultSort} />;
+  return <SortSelect options={extras.sortOptions} defaultSort={extras.defaultSort} />;
 }
 
 export function LoadMoreWidget({ ctx }: { attrs: Record<string, unknown>; ctx?: RenderContext }) {

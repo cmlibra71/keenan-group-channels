@@ -23,6 +23,9 @@ export type CategoryTile = {
   name: string;
   slug: string;
   image_url?: string | null;
+  /** Where the tile goes when it is not the category page (a menu department's own bar address,
+   *  e.g. Brands -> /brands). Absent = /categories/<slug>. */
+  href?: string;
 };
 
 export function CategoryTiles({
@@ -53,7 +56,7 @@ export function CategoryTiles({
         {categories.map((category) => (
           <Link
             key={category.id}
-            href={`/categories/${category.slug}`}
+            href={category.href ?? `/categories/${category.slug}`}
             className="group overflow-hidden rounded-lg border border-zinc-200 bg-white transition-all hover:border-zinc-400 hover:shadow-sm"
           >
             {/* 3:1 is the category BANNER ratio (card RyMa2mkX): artwork with its heading baked

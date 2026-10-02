@@ -59,7 +59,7 @@ test("the product route hands the purchase provider its paid extras", () => {
   // fills `ctx.buybox.product` — either way the key is `addons`.
   assert.match(
     source,
-    /addons:\s*readProductAddons\(\s*product\.metafields\s*\)/,
+    /addons:\s*readProductAddons\(\s*product\.metafields\s*(?:,\s*\{\s*channelId:\s*CHANNEL_ID\s*\}\s*)?\)/,
     `${ROUTE} must pass 'addons: readProductAddons(product.metafields)' into the buy-box ` +
       `product payload, or the LEGACY renderer draws no extras panel and its buy controls ` +
       `post no picks while the node renderer's do.`
@@ -70,7 +70,7 @@ test("the product route hands the purchase provider its paid extras", () => {
   // extras read almost certainly should too — fail loudly rather than drift apart.
   assert.match(
     source,
-    /readProductKit\(\s*product\.metafields\s*\)/,
+    /readProductKit\(\s*product\.metafields\s*(?:,\s*CHANNEL_ID\s*)?\)/,
     `${ROUTE} no longer reads the kit off product.metafields — the extras read sits ` +
       `beside it by design; re-check both together.`
   );

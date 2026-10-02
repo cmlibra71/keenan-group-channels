@@ -23,6 +23,7 @@ import {
 } from "@/lib/store";
 import { getContactPermissions, getAccountContactIds } from "@/lib/role-permissions";
 import { Price } from "@/components/ui/Price";
+import { chosenOptionLines, quoteLinePicks } from "@/lib/product/addon-panel";
 import { QuoteActions } from "./quote-actions";
 import { QuoteMessages } from "./quote-messages";
 import { RepContactPanel } from "@/components/account/RepContactPanel";
@@ -129,6 +130,8 @@ interface QuoteDetailItem {
   product_sku: string | null;
   variant_sku: string | null;
   variant_option_name: string | null;
+  /** The line's bag — `addon_selection` holds the customer's picks ("Gas Type: LPG", card tkvntxsq). */
+  attributes?: Record<string, unknown> | string | null;
 }
 
 const statusStyles: Record<string, string> = {
@@ -537,6 +540,13 @@ export default async function QuoteDetailPage({
                 <p className="text-xs text-zinc-400 mt-0.5">
                   SKU: {item.variant_sku || item.product_sku || "N/A"}
                 </p>
+                {/* What the customer chose on the line — "Gas Type: LPG" (card tkvntxsq) — same
+                    words the quote drawer, the /q link and the order line print. Never money. */}
+                {chosenOptionLines(quoteLinePicks(item.attributes)).map((label) => (
+                  <p key={label} className="text-xs text-zinc-600 mt-0.5">
+                    + {label}
+                  </p>
+                ))}
                 <p className="text-sm text-zinc-600 mt-1">
                   Qty {item.quantity}
                   {!hidePrices && hasPrice && (

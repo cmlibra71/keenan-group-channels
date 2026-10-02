@@ -2,11 +2,25 @@ import { notFound } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import { draftMode, headers } from "next/headers";
 import Link from "next/link";
-import { getProductBySlug, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, brandService, CHANNEL_ID, getProductBreadcrumbs, getCmsPage, getCmsTemplate } from "@/lib/store";
+import { getProductBySlug, getProductReviews, getProductAttachments, getProductVideos, getRelatedProducts, getFeatureFlag, getEffectivePrice, getActiveSubscriptionForContact, getSubscriptionPlans, contactService, getBrandRowById, CHANNEL_ID, getProductBreadcrumbs, getCmsPage, getCmsTemplate, getSiteConfig, getChannelSetting, applyGroupPrices, resolveViewerPricingGroupId } from "@/lib/store";
+import { usesParentPrice } from "@keenan/services/catalog-price";
+import { stripHiddenPrices } from "@keenan/services/price-visibility";
+import type { Metadata } from "next";
 import type { RenderContext } from "@keenan/services";
 import { getSession } from "@/lib/auth";
 import { getAccountId, applyAccountPrices } from "@/lib/member";
-import { assertProductVisible, applyCatalogScope } from "@/lib/catalog-scope";
+import { assertProductVisible, applyCatalogScope, isProductVisibleToViewer } from "@/lib/catalog-scope";
+import { siteBaseUrl } from "@/lib/seo";
+import { getListingDisplay } from "@/lib/listing-display";
+import {
+  jsonLdScript,
+  productCanonicalUrl,
+  productJsonLd,
+  productMainImage,
+  productMetaDescription,
+  productMetaKeywords,
+  productPageTitle,
+} from "@/lib/product-seo";
 import { ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
 import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
@@ -14,7 +28,10 @@ import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductOfferTiers } from "@/components/product/ProductOfferTiers";
 import { ProductPromotionBadge } from "@/components/product/ProductPromotionBadge";
 import { readProductKit } from "@/lib/product-kit";
+import { readWarrantyDirectory, WARRANTY_DIRECTORY_SETTING_KEY } from "@keenan/services/warranty-directory";
 import { readProductAddons } from "@keenan/services/product-addons";
+import { channelRulesOfRow } from "@keenan/services/channel-rules";
+import { channelRulesRefuseCartFor } from "@/lib/product/channel-rule-cart";
 import { readOptionValueOrder } from "@keenan/services/product-option-order";
 import { ProductTabs } from "@/components/product/ProductTabs";
 import { ProductGrid } from "@/components/product/ProductGrid";
@@ -29,6 +46,68 @@ type ProductBrandMetafields = {
   extended_warranty?: { name: string; body: string; link?: string };
   installation_notes?: string[];
 };
+
+/**
+ * The product's own <head> (IK parity root cause `product-seo-head`): title, description,
+ * canonical, Open Graph and Twitter. The rules live in `lib/product-seo.ts` (unit-tested).
+ *
+ * `robots` is deliberately NOT named here. Next resolves metadata field by field, and a page
+ * that names `robots` at all REPLACES the layout's `siteRobots()` — which is what keeps this
+ * site `noindex` until SITE_INDEXABLE is switched on (see lib/seo.ts, card InEoeMZh).
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const product = await getProductBySlug(slug);
+  if (!product) return { title: "Product not found" };
+  // A product this viewer may not see 404s in the page; its <head> must not name it either.
+  if (!(await isProductVisibleToViewer(product.id))) return { title: "Product not found" };
+  const { site } = await getSiteConfig();
+  const base = siteBaseUrl(site?.url);
+  // The channel's title expression (Settings › Storefront Listings); empty = the built-in pattern.
+  const title = productPageTitle(product, (await getListingDisplay()).product_title_expression);
+  const description = productMetaDescription(product);
+  const url = productCanonicalUrl(product.urlPath || slug, base);
+  const image = productMainImage(product.images, base);
+  const images = image ? [{ url: image, alt: product.name }] : undefined;
+  const keywords = productMetaKeywords(product as { metaKeywords?: unknown; zoeyRaw?: unknown });
+  return {
+    title,
+    description,
+    ...(keywords ? { keywords } : {}),
+    alternates: { canonical: url },
+    // og:type is NOT set here — see OG_TYPE_PRODUCT. Next's typed `openGraph.type` has no
+    // "product", and without a `type` Next emits no og:type at all.
+    openGraph: {
+      title,
+      description,
+      url,
+      siteName: "Industry Kitchens",
+      locale: "en_AU",
+      images,
+    },
+    twitter: {
+      card: image ? "summary_large_image" : "summary",
+      title,
+      description,
+      images: image ? [image] : undefined,
+    },
+  };
+}
+
+/**
+ * `og:type` = "product" (Open Graph's product object). The old site prints Zoey's
+ * `product.item` (the Facebook catalogue type); "product" is the Open Graph spec's own type and
+ * what Facebook's crawler maps a product page to, so we use it rather than copy Zoey's.
+ * Next's Metadata API cannot express it (its `openGraph.type` union stops at the video/music/
+ * article types, and `other` writes `name=`, not `property=`), so the tag is rendered here and
+ * React 19 hoists a `<meta>` into <head> wherever it appears. Rendered with the JSON-LD on
+ * every path the route returns.
+ */
+const OG_TYPE_PRODUCT = <meta property="og:type" content="product" />;
 
 export default async function ProductPage({
   params,
@@ -53,42 +132,59 @@ export default async function ProductPage({
   // Per-account product prices override EVERY other price. The cached product row is shared by all
   // shoppers, so the account's price is overlaid onto a copy at read time (never into the cache).
   const accountId = await getAccountId();
-  const [product] = await applyAccountPrices([cachedProduct]);
+  // The reads below do not depend on one another, so they go together rather than one after the
+  // other (measured 2026-10-02: 8–9 database round trips back to back before the page could render).
+  const [[product], [reviews, attachmentsRaw, videos, relatedRaw, brandRow], seoRow, breadcrumbs, seoSiteConfig] =
+    await Promise.all([
+      // An account price must not put a figure back on a product whose price is HIDDEN: the row is
+      // re-hidden AFTER the overlay, so no price is serialised into this page for it (audit S19).
+      applyAccountPrices([cachedProduct]).then((rows) => rows.map(stripHiddenPrices)),
+      productReads(cachedProduct),
+      guestPricedRow(cachedProduct),
+      // Breadcrumb trail scoped to this channel's own category tree. A product's
+      // category assignments can span other channels' trees, so resolving through
+      // the channel guarantees every crumb links to a category page that exists here.
+      getProductBreadcrumbs(cachedProduct.id) as Promise<{ id: number; name: string; slug: string }[]>,
+      getSiteConfig(),
+    ]);
+  const priceHidden = product.hidePrice === true;
 
-  // Reviews are PROJECTED BEFORE THEY ARE AWAITED. `getProductReviews` returns the
-  // whole `product_reviews` row — `author_email` (stamped on every signed-in
-  // reviewer since card qxVqy5Dn), `contact_id`, `customer_id`, the moderation
-  // status — and a dev build serialises every AWAITED value into the page, so a
-  // cast or a `.map()` after the await strips nothing: the raw row is already in
-  // the flight payload by then (measured on this page 2026-09-16, review id 89's
-  // whole row with `author_email` and `contact_id` in it). Projecting on the
-  // PROMISE means nothing unprojected is ever awaited here, and the rows handed to
-  // `ProductTabs` ("use client") and to `RenderContext.extras` carry only the six
-  // fields this page renders. (PRODUCT-BRIEF §3: on a customer-facing surface,
-  // load only what you render; register rule owned by card BIig1Zo1.)
-  const [reviews, attachmentsRaw, videos, relatedRaw, brandRow] = await Promise.all([
-    getProductReviews(product.id).then(publicReviews),
-    getProductAttachments(product.id),
-    getProductVideos(product.id),
-    getRelatedProducts(product.id, product.categoryIds ?? []),
-    product.brandId != null
-      ? (brandService.getById(product.brandId) as Promise<{ name: string | null; metafields: ProductBrandMetafields | null } | null>)
-      : Promise.resolve(null),
-  ]);
-  // Related/upsell rail: hidden products are dropped at the SOURCE, so they cannot reach the grid,
-  // the builder payload or any serialized props.
-  const relatedProducts = await applyAccountPrices(await applyCatalogScope(relatedRaw));
   const brandMeta = (brandRow?.metafields ?? {}) as ProductBrandMetafields;
   const brandName = brandRow?.name ?? undefined;
 
-  // Breadcrumb trail scoped to this channel's own category tree. A product's
-  // category assignments can span other channels' trees, so resolving through
-  // the channel guarantees every crumb links to a category page that exists here.
-  const breadcrumbs = (await getProductBreadcrumbs(product.id)) as {
-    id: number;
-    name: string;
-    slug: string;
-  }[];
+  // Product structured data (root cause `product-seo-head`), priced by `guestPricedRow` above.
+  const seoBase = siteBaseUrl(seoSiteConfig.site?.url);
+  const productUrl = productCanonicalUrl(cachedProduct.urlPath || slug, seoBase);
+  const jsonLd = productJsonLd({
+    name: cachedProduct.name,
+    sku: cachedProduct.sku,
+    itemRef: (cachedProduct.itemRef as string | null | undefined) ?? null,
+    brandName: brandName ?? null,
+    image: productMainImage(cachedProduct.images, seoBase),
+    description: productMetaDescription(cachedProduct),
+    price: seoRow.price,
+    salePrice: seoRow.salePrice,
+    // Zoey "use child price: No": every variation is offered at the parent's price, as the page sells it.
+    parentPriced: usesParentPrice((cachedProduct as { metafields?: unknown }).metafields, CHANNEL_ID),
+    hidePrice: cachedProduct.hidePrice,
+    purchasingDisabled: cachedProduct.purchasingDisabled,
+    restrictAddToCart: cachedProduct.restrictAddToCart,
+    availability: cachedProduct.availability,
+    // Zoey out-of-stock keeps the Offer and marks it OutOfStock (the page keeps its price).
+    zoeyOutOfStock: channelRulesOfRow(cachedProduct, CHANNEL_ID)?.outOfStock === true,
+    condition: cachedProduct.condition,
+    // A configurable publishes its "Starting From" range, exactly as the page prices it.
+    variants: seoRow.variants ?? [],
+    options: cachedProduct.options ?? [],
+    variantOptionMappings: cachedProduct.variantOptionMappings ?? [],
+    url: productUrl,
+  });
+  const jsonLdTag = (
+    <>
+      {OG_TYPE_PRODUCT}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }} />
+    </>
+  );
 
   // Fetch member pricing if feature is enabled
   let memberPrice: number | null = null;
@@ -96,7 +192,7 @@ export default async function ProductPage({
   let membershipTeaser: { fromPrice: string | null } | null = null;
   const memberPricingEnabled = await getFeatureFlag("member_pricing_enabled");
 
-  let memberPriceMap: Record<number, number> = {};
+  const memberPriceMap: Record<number, number> = {};
   if (memberPricingEnabled) {
     const session = await getSession();
     let customerGroupId: number | null = null;
@@ -121,7 +217,7 @@ export default async function ProductPage({
     // Fetch member prices for ALL variants (only for actual members — the
     // customer's group is what unlocks member pricing) so the client can update
     // the displayed price on variant change.
-    if (customerGroupId || accountId) {
+    if (!priceHidden && (customerGroupId || accountId)) {
       const variants = product.variants ?? [];
       const pricingResults = await Promise.all(
         variants.map((v) => getEffectivePrice(v.id, CHANNEL_ID, customerGroupId, 1, accountId))
@@ -163,12 +259,12 @@ export default async function ProductPage({
 
   // Site Builder node path — additive. Returns null (and we fall through to the
   // block/legacy paths below) until node_product_template_enabled is on here.
-  // No jsonLd is passed: this route emits no JSON-LD, and the node branch must
-  // not invent structured data the native page does not claim.
+  // The route owns SEO and hands its Product JSON-LD in; every path below emits the same block.
   {
     const memberCtx = await getMemberContext().catch(() => null);
     const nodeRendered = await renderProductNodeBranch({
       slug,
+      jsonLd,
       member: {
         customerGroupId: memberCtx?.customerGroupId ?? null,
         isMember: memberCtx?.isMember ?? false,
@@ -196,27 +292,34 @@ export default async function ProductPage({
         brand: brandRow?.name ?? null,
       },
       draft,
-      // Everything IK's sealed product natives need. The node branch fetches
-      // the bindable payload itself; these are the route's own reads, which it
-      // already does for the block path's RenderContext extras.
+      // What IK's sealed product natives READ — and nothing more, because this bag is handed to the
+      // client `BuilderProductPage` and serialised into the page. `product-natives.tsx` reads
+      // `data.kit` (and `data.cdMembership`, which the node branch adds); the bindable payload
+      // carries everything else. It used to also carry the whole product row and its `metafields`
+      // bag, none of it read, which put portal-owned internals (e.g. `zoey_channel_rules`) in the
+      // browser (judge follow-up on channels #312).
       nativeData: {
-        purchaseProduct: product,
-        memberPrice,
-        memberPriceMap,
-        isMember,
-        membershipTeaser,
-        reviews,
-        attachments,
-        description: product.description ?? null,
-        warranty: brandMeta.warranty_text ?? null,
-        customFields: (product.metafields as Record<string, unknown> | null) ?? null,
         // Grouped / bundle contents, for the sealed `product-kit` leaf.
-        kit: readProductKit(product.metafields),
-        productId: product.id,
+        kit: readProductKit(product.metafields, CHANNEL_ID),
+        // The Warranty & Service Directory (C14): this channel's `warranty_directory` setting, with
+        // the shipped list as the fallback (`readWarrantyDirectory`).
+        warranty: readWarrantyDirectory(await getChannelSetting(WARRANTY_DIRECTORY_SETTING_KEY).catch(() => null)),
       },
     });
-    if (nodeRendered) return nodeRendered;
+    // The node branch renders the JSON-LD it was handed; og:type rides beside it.
+    if (nodeRendered) return (
+      <>
+        {OG_TYPE_PRODUCT}
+        {nodeRendered}
+      </>
+    );
   }
+
+  // Related/upsell rail: hidden products are dropped at the SOURCE, so they cannot reach the grid,
+  // the builder payload or any serialized props. Only the CMS-template and legacy paths below draw
+  // this rail — the node path prices its own inside `getProductPageData` — so it is priced HERE,
+  // after the node branch, rather than on every view (3 round trips the node path never used).
+  const relatedProducts = await applyAccountPrices(await applyCatalogScope(relatedRaw));
 
   // ═══ CMS product TEMPLATE path (kill switch: flag off → legacy) ═══
   // The whole page as a block document; this route stays the data owner — the
@@ -246,6 +349,7 @@ export default async function ProductPage({
       };
       return (
         <div>
+          {jsonLdTag}
           <ViewedProductTracker
             product={{
               id: product.id,
@@ -283,6 +387,7 @@ export default async function ProductPage({
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+      {jsonLdTag}
       <ViewedProductTracker
         product={{
           id: product.id,
@@ -333,7 +438,16 @@ export default async function ProductPage({
           // Per-product buying controls (card 7vu2iEEZ). Unset reads as today's behaviour.
           backorderPolicy: product.backorderPolicy ?? null,
           restrictAddToQuote: product.restrictAddToQuote === true,
-          restrictAddToCart: product.restrictAddToCart === true,
+          // A bundle Zoey sells by quote only stays quote only here (IK parity, the scoped kit's
+          // `quote_only`): no Add to Cart at the head unit's partial price.
+          //
+          // This storefront's Zoey rules (portal PR #1028): `getProductBySlug` already folded
+          // zero-price into `restrictAddToCart` / `hidePrice`; out-of-stock and (for a guest) guest
+          // quote-only are added here (`channelRulesRefuseCartFor`).
+          restrictAddToCart:
+            product.restrictAddToCart === true ||
+            readProductKit(product.metafields, CHANNEL_ID)?.quoteOnly === true ||
+            (await channelRulesRefuseCartFor(product)),
           hidePrice: product.hidePrice === true,
           availability: product.availability ?? "available",
           descriptionShort: product.descriptionShort,
@@ -355,7 +469,9 @@ export default async function ProductPage({
           // has nothing to draw, its buy controls carry no picks, and the behaviour register's
           // "on EVERY renderer, not just the node one" would be recording something this page
           // does not do. The node path reads the same field out of its own payload.
-          addons: readProductAddons(product.metafields),
+          // Groups scoped to THIS storefront (`metafields.channel_addons[CHANNEL_ID]`) are added —
+          // the Zoey options imported for Industry Kitchens. Chefs Depot never reads them.
+          addons: readProductAddons(product.metafields, { channelId: CHANNEL_ID }),
           // Card VNh9DdYd — the order STAFF authored for this product's variation choices, read
           // from the same portal-owned metafields bag. Null when nobody has authored one, and then
           // `orderOptionValues` derives the order from the product's own combinations.
@@ -363,7 +479,7 @@ export default async function ProductPage({
         }}
         // Grouped / bundle contents (Zoey product types, authored in the portal — they ride
         // products.metafields, which is portal-owned). Null for every other product.
-        kit={readProductKit(product.metafields)}
+        kit={readProductKit(product.metafields, CHANNEL_ID)}
         memberPrice={memberPrice}
         memberPriceMap={memberPriceMap}
         isMember={isMember}
@@ -403,6 +519,47 @@ export default async function ProductPage({
       {belowDetail.length > 0 && <BlockRenderer blocks={belowDetail} draft={draft} />}
     </div>
   );
+}
+
+/**
+ * The product's own cached reads, together.
+ *
+ * Reviews are PROJECTED BEFORE THEY ARE AWAITED. `getProductReviews` returns the
+ * whole `product_reviews` row — `author_email` (stamped on every signed-in
+ * reviewer since card qxVqy5Dn), `contact_id`, `customer_id`, the moderation
+ * status — and a dev build serialises every AWAITED value into the page, so a
+ * cast or a `.map()` after the await strips nothing: the raw row is already in
+ * the flight payload by then (measured on this page 2026-09-16, review id 89's
+ * whole row with `author_email` and `contact_id` in it). Projecting on the
+ * PROMISE means nothing unprojected is ever awaited here, and the rows handed to
+ * `ProductTabs` ("use client") and to `RenderContext.extras` carry only the six
+ * fields this page renders. (PRODUCT-BRIEF §3: on a customer-facing surface,
+ * load only what you render; register rule owned by card BIig1Zo1.)
+ */
+function productReads(product: { id: number; categoryIds?: number[] | null; brandId?: number | null }) {
+  return Promise.all([
+    getProductReviews(product.id).then(publicReviews),
+    getProductAttachments(product.id),
+    getProductVideos(product.id),
+    getRelatedProducts(product.id, product.categoryIds ?? []),
+    product.brandId != null
+      ? (getBrandRowById(product.brandId) as Promise<{ name: string | null; metafields: ProductBrandMetafields | null } | null>)
+      : Promise.resolve(null),
+  ]);
+}
+
+/**
+ * The SHARED product row priced for the JSON-LD offer (root cause `product-seo-head`). Not the
+ * account-priced copy: the offer is the price a visitor with no account sees, and a
+ * quote-only / Call for Price product gets no offer at all (lib/product-seo.ts).
+ * The offer is what a GUEST pays — on this storefront that is the NOT LOGGED IN price list
+ * (customer-group pricing, services `groupPricing.ts`), exactly what the page shows a crawler.
+ * Priced onto a copy of the shared row; the viewer's own group never reaches the markup.
+ */
+async function guestPricedRow<T extends { id: number }>(cachedProduct: T): Promise<T> {
+  const guestPricingGroupId = await resolveViewerPricingGroupId({ accountId: null, contactId: null }).catch(() => null);
+  const [seoRow] = guestPricingGroupId ? await applyGroupPrices([cachedProduct], guestPricingGroupId) : [cachedProduct];
+  return seoRow;
 }
 
 /** A review row as the SHOPPER may see it — the six fields this page renders. */

@@ -1,22 +1,8 @@
 import Link from "next/link";
-import Image from "next/image";
 import { Menu, ChevronDown, Star } from "lucide-react";
-import type { MegaMenuFeatured } from "@/lib/store";
-import {
-  ALL_BRANDS_HREF,
-  flattenTree,
-  itemHref,
-  panelBrandColumn,
-  panelColumns,
-  panelExtras,
-  resolveNavItems,
-  shortNavLabel,
-  splitNavItems,
-  subcategoryColumnCount,
-  type MegaBrandLike,
-  type MegaMenuNodeLike,
-  type MegaNavItem,
-} from "@/lib/mega-menu";
+import { itemHref, panelBrandColumn, panelExtras, shortNavLabel, type MegaMenuNodeLike, type MegaNavItem } from "@/lib/mega-menu";
+import { navItemKey, navModel, type NavData } from "@/lib/nav-model";
+import { LazyDeptPanel, LazyLinkDropdown } from "./MegaMenuPanels";
 import { MegaMenuShell } from "./MegaMenuShell";
 
 /**
@@ -31,33 +17,20 @@ import { MegaMenuShell } from "./MegaMenuShell";
  * `@/lib/mega-menu` (shared with template/ and unit-tested); this file is
  * presentation only.
  *
- * Pure server component — panels open on hover and :focus-within, so it is
- * keyboard operable without JS. Hidden below lg (the MobileNavDrawer takes
- * over, from the same resolved items).
+ * Server component for the BAR — every bar link is in the page's HTML. The
+ * drop-downs' CONTENTS are drawn in the browser from the menu data
+ * (MegaMenuPanels.tsx, lib/nav-model.ts) instead of being rendered into every
+ * page. Panels still open on pure-CSS hover and :focus-within. Hidden below lg
+ * (the MobileNavDrawer takes over, from the same resolved items).
  */
-export function MegaMenu({
-  departments,
-  featured,
-  items,
-  hiddenCategoryIds,
-  brandColumns = {},
-}: {
-  departments: MegaMenuNodeLike[];
-  featured: Record<string, MegaMenuFeatured>;
-  items?: MegaNavItem[];
-  hiddenCategoryIds?: number[];
-  /** Each Brands column's brands, keyed by department id (`getMegaMenuBrandColumns`). */
-  brandColumns?: Record<number, MegaBrandLike[]>;
-}) {
-  const navItems = resolveNavItems({ departments, items, hiddenCategoryIds });
-  const byId = flattenTree(departments);
-  const { left, right } = splitNavItems(navItems);
+export function MegaMenu({ data }: { data: NavData }) {
+  const { left, right, byId } = navModel(data);
 
   return (
     <MegaMenuShell className="hidden lg:block bg-brand-deep relative">
       <div className="container-page">
         <ul data-nav-bar className="flex flex-nowrap items-stretch gap-0.5 overflow-hidden">
-          {left.map((item, i) => renderItem(item, i, byId, featured, brandColumns))}
+          {left.map((item, i) => renderItem(item, i, byId))}
 
           {/* Overflow — shown by MegaMenuShell only when the bar runs out of row */}
           <li
@@ -114,9 +87,7 @@ export function MegaMenu({
 function renderItem(
   item: MegaNavItem,
   i: number,
-  byId: Map<number, MegaMenuNodeLike>,
-  featured: Record<string, MegaMenuFeatured>,
-  brandColumns: Record<number, MegaBrandLike[]>
+  byId: Map<number, MegaMenuNodeLike>
 ) {
   if (item.type === "categories") {
     return (
@@ -150,16 +121,8 @@ function renderItem(
           )}
         </Link>
 
-        {hasPanel && (
-          <MegaPanel
-            dept={dept}
-            feat={featured[String(dept.id)]}
-            extras={extras}
-            byId={byId}
-            brandHeading={brandColumn ? brandColumn.label || "Brands" : null}
-            brands={brandColumn ? brandColumns[dept.id] ?? [] : []}
-          />
-        )}
+        {/* The panel's contents are drawn in the browser (MegaMenuPanels.tsx). */}
+        {hasPanel && <LazyDeptPanel index={i} navKey={navItemKey(item)} />}
       </li>
     );
   }
@@ -178,176 +141,7 @@ function renderItem(
           <ChevronDown className="h-[11px] w-[11px] opacity-70" strokeWidth={2} />
         )}
       </Link>
-      {children.length > 0 && (
-        <div className="mega-panel invisible absolute h-0 overflow-hidden left-0 top-full z-50 min-w-[220px] rounded-b-card border border-black/5 bg-white py-2 opacity-0 shadow-hover transition-all delay-0 duration-150 group-hover/nav:visible group-hover/nav:h-auto group-hover/nav:overflow-visible group-hover/nav:opacity-100 group-hover/nav:delay-[300ms] group-focus-within/nav:visible group-focus-within/nav:h-auto group-focus-within/nav:overflow-visible group-focus-within/nav:opacity-100">
-          {children.map((child, j) => (
-            <Link
-              key={j}
-              href={itemHref(child, byId)}
-              target={child.newTab ? "_blank" : undefined}
-              className="block px-4 py-2 text-[13.5px] text-text-primary transition-colors hover:bg-brand-tint hover:text-brand-deep"
-            >
-              {child.label}
-            </Link>
-          ))}
-        </div>
-      )}
+      {children.length > 0 && <LazyLinkDropdown index={i} navKey={navItemKey(item)} />}
     </li>
-  );
-}
-
-function MegaPanel({
-  dept,
-  feat,
-  extras,
-  byId,
-  brandHeading,
-  brands,
-}: {
-  dept: MegaMenuNodeLike;
-  feat?: MegaMenuFeatured;
-  extras: MegaNavItem[];
-  byId: Map<number, MegaMenuNodeLike>;
-  /** The Brands column's heading, or null when this department has none. */
-  brandHeading: string | null;
-  brands: MegaBrandLike[];
-}) {
-  // 3 link columns: depth-1 children become column groups, balanced across
-  // columns; their children are the links (the group itself when childless).
-  // A Brands column (card HaWBvySC) takes the last of the three.
-  const columns = panelColumns(dept.children, subcategoryColumnCount(brandHeading !== null));
-
-  // The panel is full-bleed and drops straight over the page below the bar (the
-  // breadcrumb sits ~50px under it), so two guards keep it from stealing clicks
-  // meant for the page: a hover-intent delay, so merely sweeping the pointer
-  // down across a department never opens it (it stays `invisible`, and hidden
-  // means un-hoverable, so the delayed transition is abandoned); and
-  // pointer-events only on the white card, so the transparent gutters beside it
-  // are click-through. Keyboard (:focus-within) opens with no delay.
-  //
-  // A CLOSED panel is ZERO HEIGHT (`h-0 overflow-hidden`), not merely invisible.
-  // `html, body { overflow-x: hidden }` (globals.css) makes BODY its own scroll
-  // container, so an absolutely positioned box hanging below the page still adds
-  // that much scrollable overflow inside it — and the Industry Kitchens Brands
-  // panel is 5,700px tall. On any page shorter than the panel (every /pages/*)
-  // the reader could wheel straight past the footer into empty space with the
-  // menu shut, which is what card Qt0yPLCl reported. The white card is capped at
-  // the viewport and scrolls inside itself, so an OPEN panel cannot hang below
-  // the fold and put the overflow back either.
-  return (
-    <div
-      className="mega-panel pointer-events-none invisible absolute left-0 right-0 top-full z-[110] h-0 translate-y-2 overflow-hidden opacity-0 transition-all delay-0 duration-200
-                 group-hover/nav:visible group-hover/nav:h-auto group-hover/nav:translate-y-0 group-hover/nav:overflow-visible group-hover/nav:opacity-100 group-hover/nav:delay-[300ms]
-                 group-focus-within/nav:visible group-focus-within/nav:h-auto group-focus-within/nav:translate-y-0 group-focus-within/nav:overflow-visible group-focus-within/nav:opacity-100"
-    >
-      <div className="container-page">
-        <div className="pointer-events-none grid max-w-[1100px] grid-cols-[1fr_1fr_1fr_240px] gap-6 max-h-[calc(100vh-14rem)] overflow-y-auto rounded-b-card border border-border border-t-[3px] border-t-member bg-white p-6 shadow-lg group-hover/nav:pointer-events-auto group-focus-within/nav:pointer-events-auto">
-          {columns.map((col, i) => (
-            <div key={i} className="space-y-5">
-              {col.map((group) => (
-                <div key={group.id}>
-                  <Link
-                    href={`/categories/${group.slug}`}
-                    className="mb-2 block border-b border-border pb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-accent-dark hover:text-accent"
-                  >
-                    {group.name}
-                  </Link>
-                  {group.children.slice(0, 7).map((leaf) => (
-                    <Link
-                      key={leaf.id}
-                      href={`/categories/${leaf.slug}`}
-                      className="block py-[5px] text-[13px] text-ink-700 transition-colors duration-200 hover:text-accent"
-                    >
-                      {leaf.name}
-                    </Link>
-                  ))}
-                  {group.children.length > 7 && (
-                    <Link
-                      href={`/categories/${group.slug}`}
-                      className="block py-[5px] text-[13px] font-semibold text-accent hover:text-accent-hover"
-                    >
-                      View all →
-                    </Link>
-                  )}
-                </div>
-              ))}
-            </div>
-          ))}
-
-          {/* Brands column — words only, no logos (Steve: no pictures in a
-              drop-down). Staff's chosen brands, else this department's busiest
-              brands on this storefront (card HaWBvySC). */}
-          {brandHeading !== null && (
-            <div className="space-y-5">
-              <div>
-                <Link
-                  href={ALL_BRANDS_HREF}
-                  className="mb-2 block border-b border-border pb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-accent-dark hover:text-accent"
-                >
-                  {brandHeading}
-                </Link>
-                {brands.map((brand) => (
-                  <Link
-                    key={brand.id}
-                    href={`/brands/${brand.slug}`}
-                    className="block py-[5px] text-[13px] text-ink-700 transition-colors duration-200 hover:text-accent"
-                  >
-                    {brand.name}
-                  </Link>
-                ))}
-                <Link
-                  href={ALL_BRANDS_HREF}
-                  className="block py-[5px] text-[13px] font-semibold text-accent hover:text-accent-hover"
-                >
-                  View all brands →
-                </Link>
-              </div>
-            </div>
-          )}
-
-          <div className="flex flex-col gap-4 self-start">
-            {/* Featured panel — self-start so it stays a compact card (image + copy)
-                instead of stretching to the full mega-menu row height. */}
-            <div className="flex flex-col overflow-hidden rounded-card bg-brand-tint">
-              <div className="relative grid h-[120px] place-items-center bg-gradient-to-br from-brand-mid to-brand-deep">
-                {(feat?.image_url ?? dept.image_url) && (
-                  <Image src={(feat?.image_url ?? dept.image_url)!} alt="" fill sizes="240px" className="object-cover" />
-                )}
-              </div>
-              <div className="p-3.5">
-                <b className="mb-0.5 block text-sm text-text-primary">
-                  {feat?.heading ?? `Shop ${dept.name}`}
-                </b>
-                <p className="mb-2.5 text-xs text-steel-500">
-                  {feat?.body ?? "Member pricing across the full range."}
-                </p>
-                <Link
-                  href={feat?.cta_href ?? `/categories/${dept.slug}`}
-                  className="btn-primary btn-sm"
-                >
-                  {feat?.cta_text ?? "Shop now"}
-                </Link>
-              </div>
-            </div>
-
-            {/* Information pages tucked inside this department by the editor */}
-            {extras.length > 0 && (
-              <div className="border-t border-border pt-3">
-                {extras.map((extra, j) => (
-                  <Link
-                    key={j}
-                    href={itemHref(extra, byId)}
-                    target={extra.newTab ? "_blank" : undefined}
-                    className="block py-[5px] text-[13px] font-medium text-ink-700 transition-colors duration-200 hover:text-accent"
-                  >
-                    {extra.label}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }

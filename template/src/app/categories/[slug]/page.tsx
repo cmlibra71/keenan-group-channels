@@ -18,6 +18,8 @@ import {
   getDefaultListingSort,
 } from "@/lib/store";
 import type { RenderContext } from "@keenan/services";
+import { loadCatalogAttributeContext } from "@keenan/services";
+import { CHANNEL_ID as ATTR_CHANNEL_ID } from "@/lib/channel";
 import { getListingMemberPrices } from "@/lib/member";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { assertCategoryVisible } from "@/lib/catalog-scope";
@@ -29,6 +31,7 @@ import {
 } from "@keenan/services/services";
 import { parsePriceBands, parseRangeParam } from "@/lib/category-attributes";
 import { FilterRail, FilterChips, SortSelect } from "@/components/category/FilterRail";
+import { ListingNavProvider } from "@/lib/listing-nav";
 import { parseListingSort } from "@/lib/listing-sort";
 import { RichContent } from "@/components/content/RichContent";
 import { CategorySeo } from "@/components/category/CategorySeo";
@@ -148,7 +151,7 @@ export default async function CategoryPage({
   // these selections go into. An attribute the category does not offer simply
   // matches nothing extra, because the products that would satisfy it are the
   // ones carrying the value.
-  const attributeSelections = parseAttributeSelections(sp as Record<string, string | undefined>);
+  const attributeSelections = parseAttributeSelections(sp as Record<string, string | undefined>, (await loadCatalogAttributeContext(ATTR_CHANNEL_ID)).attributes);
   const attributeParams = Object.keys(attributeSelections).map(attributeParam);
   // Availability is no longer a shopper-facing facet at all: "In stock" was
   // retired first and Clearance followed (clearance products are browsed via the
@@ -376,6 +379,7 @@ export default async function CategoryPage({
       )}
 
       {/* ═══ Rail + grid ═══ */}
+      <ListingNavProvider>
       <div className="flex gap-6">
         <FilterRail facets={facets} />
 
@@ -413,6 +417,7 @@ export default async function CategoryPage({
           )}
         </div>
       </div>
+      </ListingNavProvider>
 
       </div>
 

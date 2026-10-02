@@ -17,6 +17,14 @@ const nextConfig: NextConfig = {
     imageSizes: [100, 200, 400, 600, 800],
     deviceSizes: [1024, 1280, 1600],
   },
+  // The old Zoey site's compare list lived at /catalog/product_compare/index/ (IK parity,
+  // root cause compare-feature). Bookmarks and old links land on the new compare page.
+  async redirects() {
+    return [
+      { source: "/catalog/product_compare", destination: "/compare", permanent: true },
+      { source: "/catalog/product_compare/:path*", destination: "/compare", permanent: true },
+    ];
+  },
   // Baseline security headers applied to every response.
   // TODO: add a Content-Security-Policy once the inline GTM/dataLayer bootstrap
   // (see src/app/layout.tsx) is moved to a nonce or hash so a strict policy

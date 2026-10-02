@@ -3,13 +3,150 @@ import DOMPurify from "isomorphic-dompurify";
 /**
  * Sanitize untrusted HTML (catalog / CMS / blog content) before it is handed to
  * `dangerouslySetInnerHTML`. Strips <script>/<iframe>/event-handlers/javascript:
- * URIs while keeping the formatting tags our editorial content relies on.
+ * URIs while keeping the formatting tags our editorial content relies on. The one
+ * iframe that survives is a YouTube / Vimeo video embed (see `finishVideoEmbeds`).
  *
  * isomorphic-dompurify runs in both server and client components (it uses jsdom
  * on the server, the browser DOM on the client).
  */
 export function sanitizeHtml(html: string): string {
-  return DOMPurify.sanitize(html, {
+  // Only content that carries an <iframe> takes the DOM route below; everything
+  // else is sanitized to a string exactly as it always was.
+  if (!/<iframe/i.test(html)) return DOMPurify.sanitize(html, SANITIZE_CONFIG);
+  const body = DOMPurify.sanitize(html, {
+    ...SANITIZE_CONFIG,
+    ADD_TAGS: ["iframe"],
+    FORBID_TAGS: SANITIZE_CONFIG.FORBID_TAGS.filter((t) => t !== "iframe"),
+    RETURN_DOM: true,
+  }) as unknown as HTMLElement;
+  finishVideoEmbeds(body);
+  return body.innerHTML;
+}
+
+// ============================================================================
+// Video embeds in product descriptions (root cause description-iframes-stripped).
+//
+// The old Industry Kitchens site shows YouTube videos INSIDE product descriptions
+// (products 4644 and eight others). This sanitizer used to delete every <iframe>,
+// so those videos vanished. An iframe now survives ONLY when its src is an https
+// embed on one of the hosts below — compared after real URL parsing, never by
+// substring, so `youtube.com.evil.example` is refused. Everything the author wrote
+// on the frame except its size and title is thrown away and replaced with our own
+// safe `sandbox` / `allow` / `referrerpolicy`, and the frame is wrapped in a 16:9
+// box so it scales on a phone instead of overflowing at its authored 560px.
+//
+// Done on the sanitized DOM, not with a DOMPurify hook: hooks are global to the
+// shared DOMPurify instance and would leak into every other caller.
+// ============================================================================
+
+/** The only hosts an iframe in authored content may point at, and the path each must embed. */
+const VIDEO_EMBED_HOSTS: Record<string, RegExp> = {
+  "youtube.com": /^\/embed\//,
+  "www.youtube.com": /^\/embed\//,
+  "youtube-nocookie.com": /^\/embed\//,
+  "www.youtube-nocookie.com": /^\/embed\//,
+  "player.vimeo.com": /^\/video\//,
+};
+
+const EMBED_WRAPPER_CLASS = "kg-video-embed";
+// A <span> styled as a block, not a <div>: Zoey descriptions put the iframe inside a
+// <p>, and a <div> there would be split out of the paragraph when the browser
+// re-parses the markup (an iframe and a span are both phrasing content; a div is not).
+const EMBED_WRAPPER_STYLE =
+  "display:block;position:relative;width:100%;max-width:100%;padding-bottom:56.25%;height:0;overflow:hidden;margin:1rem 0";
+const EMBED_FRAME_STYLE = "position:absolute;top:0;left:0;width:100%;height:100%;border:0";
+
+/**
+ * The SilverChef finance calculator — the ONE non-video embed authored content may carry (IK parity:
+ * Zoey's Förje layout puts it at the top of LEASE OPTIONS, 49 products). Same discipline as the video
+ * hosts: real URL parsing, exact host, fixed path prefix, and every author attribute thrown away.
+ */
+const CALCULATOR_EMBED_HOST = "www.silverchef.finance";
+const CALCULATOR_EMBED_PATH = /^\/en_AU\/embed\/calculator\//;
+const CALCULATOR_FRAME_STYLE = "display:block;width:100%;height:900px;border:1px solid #000;margin:1rem 0";
+
+/** The https URL an authored calculator iframe src may keep, or null. Exported for the tests. */
+export function allowedCalculatorEmbedSrc(raw: string | null | undefined): string | null {
+  const src = String(raw ?? "").trim();
+  // No encoded path separators: the prefix test must mean what it says.
+  if (!src || /%2f|%5c/i.test(src)) return null;
+  let url: URL;
+  try {
+    url = new URL(src.startsWith("//") ? `https:${src}` : src);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" || url.username || url.password || url.port) return null;
+  if (url.hostname.toLowerCase() !== CALCULATOR_EMBED_HOST || !CALCULATOR_EMBED_PATH.test(url.pathname)) return null;
+  return url.toString();
+}
+
+/** The https URL an authored iframe src may keep, or null. Exported for the tests. */
+export function allowedVideoEmbedSrc(raw: string | null | undefined): string | null {
+  const src = String(raw ?? "").trim();
+  if (!src) return null;
+  let url: URL;
+  try {
+    // Protocol-relative (`//www.youtube.com/embed/x`) is how Zoey stored most of them.
+    url = new URL(src.startsWith("//") ? `https:${src}` : src);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  if (url.username || url.password || url.port) return null;
+  const path = VIDEO_EMBED_HOSTS[url.hostname.toLowerCase()];
+  if (!path || !path.test(url.pathname)) return null;
+  url.protocol = "https:";
+  return url.toString();
+}
+
+function finishVideoEmbeds(root: HTMLElement): void {
+  const doc = root.ownerDocument;
+  for (const frame of Array.from(root.querySelectorAll("iframe"))) {
+    const calculator = allowedCalculatorEmbedSrc(frame.getAttribute("src"));
+    if (calculator) {
+      for (const attr of Array.from(frame.attributes)) frame.removeAttribute(attr.name);
+      frame.setAttribute("src", calculator);
+      frame.setAttribute("title", "SilverChef finance calculator");
+      frame.setAttribute("loading", "lazy");
+      frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+      frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox");
+      frame.setAttribute("style", CALCULATOR_FRAME_STYLE);
+      frame.textContent = "";
+      continue;
+    }
+    const src = allowedVideoEmbedSrc(frame.getAttribute("src"));
+    if (!src) {
+      frame.remove();
+      continue;
+    }
+    const title = frame.getAttribute("title");
+    for (const attr of Array.from(frame.attributes)) frame.removeAttribute(attr.name);
+    frame.setAttribute("src", src);
+    frame.setAttribute("title", title || "Video");
+    frame.setAttribute("loading", "lazy");
+    frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+    frame.setAttribute("allow", "accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen");
+    frame.setAttribute("allowfullscreen", "");
+    frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-presentation allow-popups");
+    frame.setAttribute("style", EMBED_FRAME_STYLE);
+    // An iframe has no children worth keeping.
+    frame.textContent = "";
+    // Idempotent: content sanitized twice keeps one wrapper.
+    const parent = frame.parentElement;
+    if (parent && parent.classList.contains(EMBED_WRAPPER_CLASS) && parent.children.length === 1) {
+      parent.setAttribute("style", EMBED_WRAPPER_STYLE);
+      continue;
+    }
+    const wrapper = doc.createElement("span");
+    wrapper.setAttribute("class", EMBED_WRAPPER_CLASS);
+    wrapper.setAttribute("style", EMBED_WRAPPER_STYLE);
+    frame.replaceWith(wrapper);
+    wrapper.appendChild(frame);
+  }
+}
+
+const SANITIZE_CONFIG = {
     // Allow normal formatting + tables + media; everything else is dropped.
     ALLOWED_TAGS: [
       "p", "br", "hr", "div", "span",
@@ -72,6 +209,8 @@ export function sanitizeHtml(html: string): string {
       "points", "rx", "ry", "xmlns",
     ],
     // Defence in depth — these are dropped even if the lists above ever change.
+    // `iframe` stays here: `sanitizeHtml` lifts it for ONE pass and then keeps only
+    // allow-listed video embeds (see `finishVideoEmbeds`).
     FORBID_TAGS: ["script", "iframe", "object", "embed", "form", "input", "style", "link", "base"],
     // Still off here. A page that needs to style rows by state
     // (`tr[data-no-residential]`) carries its own markup AND its own scoped
@@ -81,8 +220,7 @@ export function sanitizeHtml(html: string): string {
     // would only be a hook for styling that has nowhere to come from — and
     // `data-node-id` is a handle the builder canvas measures boxes with.
     ALLOW_DATA_ATTR: false,
-  });
-}
+};
 
 /**
  * Sanitize KTL template output (CMS v2). Identical policy to sanitizeHtml plus

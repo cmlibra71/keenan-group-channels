@@ -4,15 +4,17 @@ import { Phone, Mail } from "lucide-react";
 import { getCart } from "@/lib/actions/cart";
 import { getQuote } from "@/lib/actions/quote";
 import { getSession } from "@/lib/auth";
-import { getActiveSubscriptionForContact, getFeatureFlag, getMegaMenu, getMegaMenuNav, getMegaMenuHidden, drawEntryService, CHANNEL_ID } from "@/lib/store";
+import { getActiveSubscriptionForContact, getFeatureFlag, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import type { HeaderConfig } from "@/lib/store";
 import { HeaderClient } from "./HeaderClient";
 import { HeaderPanels } from "./HeaderPanels";
 import { HeaderSearch } from "./HeaderSearch";
 import { MobileNav } from "./MobileNav";
 import { MegaMenu } from "./MegaMenu";
-import { getMegaMenuBrandColumns } from "@/lib/mega-menu-brands";
 import { MobileNavDrawer } from "./MobileNavDrawer";
+import { loadNavData, NAV_DATA_PATH } from "@/lib/nav-data";
+import { drawerRowHeads, navModel } from "@/lib/nav-model";
+import { NavDataProvider } from "@/lib/nav-data-client";
 
 export async function Header({
   storeName,
@@ -30,19 +32,12 @@ export async function Header({
   // wrong loading the site"), and it re-runs on every refresh()
   // from a cart/quote mutation. Degrade gracefully (empty badge / nav) on a
   // transient DB failure instead of taking down the whole storefront.
-  const [cart, quote, megaMenu, megaNav, hiddenDepartments] = await Promise.all([
+  // loadNavData degrades its own reads the same way (an empty menu, never a throw).
+  const [cart, quote, nav] = await Promise.all([
     getCart().catch(() => null),
     getQuote().catch(() => null),
-    getMegaMenu().catch(() => ({ departments: [], featured: {} })),
-    getMegaMenuNav().catch(() => []),
-    getMegaMenuHidden().catch(() => []),
+    loadNavData(),
   ]);
-  // The drop-downs' Brands columns (card HaWBvySC). Free unless somebody has
-  // added one in Storefront > Navigation; a failure drops the brands, never the
-  // header.
-  const brandColumns = await getMegaMenuBrandColumns(megaNav, megaMenu.departments).catch(
-    () => ({})
-  );
   const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   // QuoteService.getWithItems types its items loosely (Record<string,unknown>) unlike
   // CartService — precise typing there is a separate cleanup. quantity is runtime-correct.
@@ -61,8 +56,13 @@ export async function Header({
     getFeatureFlag("subscriptions_enabled"),
     getFeatureFlag("draws_enabled"),
   ]);
+  // SIGNED IN at all — independent of membership. Industry Kitchens sells no membership
+  // (`subscriptions_enabled` is off), so keying the account label off `isMember` alone left a
+  // signed-in trade customer looking at "Sign In/Register" on every page (IK trade check RC10;
+  // Zoey's signed-in header says My Account). Read once, here, for both labels.
+  const session = await getSession().catch(() => null);
+  const signedIn = session != null;
   if (subscriptionsEnabled) {
-    const session = await getSession().catch(() => null);
     if (session) {
       const activeSub = await getActiveSubscriptionForContact(session.contactId).catch(() => null);
       isMember = !!activeSub;
@@ -87,6 +87,9 @@ export async function Header({
 
   return (
     <>
+      {/* Loads the drop-downs' and drawer's contents in the browser, once per menu
+          version (lib/nav-model.ts). Renders no element of its own. */}
+      <NavDataProvider src={`${NAV_DATA_PATH}?v=${nav.version}`}>
       <header className="bg-white sticky top-0 z-50 shadow-[0_1px_0_rgba(0,0,0,0.06)]">
         {/* Utility row — logo, search (xl), account cluster (xl), compact icons (sub-xl) */}
         <div className="border-b border-zinc-200">
@@ -150,6 +153,7 @@ export async function Header({
                   cartCount={cartCount}
                   quoteCount={quoteCount}
                   isMember={isMember}
+                  signedIn={signedIn}
                   entryCount={entryCount}
                   drawsEnabled={drawsEnabled}
                 />
@@ -166,19 +170,15 @@ export async function Header({
                   cartCount={cartCount}
                   quoteCount={quoteCount}
                   isMember={isMember}
+                  signedIn={signedIn}
                   entryCount={entryCount}
                   drawsEnabled={drawsEnabled}
                   variant="compact"
                 />
                 <span className="p-2 text-zinc-700 xl:hidden">
-                  <MobileNavDrawer
-                    departments={megaMenu.departments}
-                    items={megaNav}
-                    hiddenCategoryIds={hiddenDepartments}
-                    brandColumns={brandColumns}
-                  />
+                  <MobileNavDrawer rows={drawerRowHeads(navModel(nav.data))} />
                 </span>
-                <MobileNav />
+                <MobileNav signedIn={signedIn} />
               </div>
             </div>
           </div>
@@ -202,6 +202,7 @@ export async function Header({
                 cartCount={cartCount}
                 quoteCount={quoteCount}
                 isMember={isMember}
+                signedIn={signedIn}
                 entryCount={entryCount}
                 drawsEnabled={drawsEnabled}
                 variant="account"
@@ -247,14 +248,9 @@ export async function Header({
             Every department by default, in the editor's order,
             minus the ones switched off in Storefront > Navigation (cards
             9wau4Tx9, mOTgYEvX). */}
-        <MegaMenu
-          departments={megaMenu.departments}
-          featured={megaMenu.featured}
-          items={megaNav}
-          hiddenCategoryIds={hiddenDepartments}
-          brandColumns={brandColumns}
-        />
+        <MegaMenu data={nav.data} />
       </header>
+      </NavDataProvider>
 
       {/* The header's slide-out panels — rendered ONCE here, NOT inside
           HeaderClient (which renders three times for three breakpoints) and NOT

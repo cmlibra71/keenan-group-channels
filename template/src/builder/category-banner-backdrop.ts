@@ -26,7 +26,7 @@ import type { NodeTree, BuilderNode } from "@keenan/services/builder";
 // sees. The backdrop is AUTHORED DATA, and this is the pure pass that removes it
 // on the way to the renderer.
 //
-// Same shape and the same reason as `strip-stock-nodes.ts`, with one deliberate
+// Same shape and the same reason as the old stock-wording pass, with one deliberate
 // difference: that card's cleanup was a one-off script that rewrote the stored
 // trees, this one runs at RENDER time (the `product-image-notice.ts` pattern).
 // Nothing is written to the stored trees, so there is nothing to undo on a
@@ -77,7 +77,7 @@ export interface BannerBackdropResult {
   removed: string[];
 }
 
-// The walk is structural, not variant-aware, for the reason `strip-stock-nodes`
+// The walk is structural, not variant-aware, for the reason the old stock-wording pass
 // spells out: `BuilderNode` is a union whose members differ in which child
 // arrays they carry, so the transform reads them off a plain-record view and
 // only the two node-list keys the builder uses are ever rewritten. Everything

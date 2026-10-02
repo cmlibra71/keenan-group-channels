@@ -20,7 +20,7 @@ import {
   getUpcomingDraws,
   getBrandsForChannel,
   prizeService,
-  productChannelAssignmentService,
+  getCatalogCounts,
   CHANNEL_ID,
   getJsonSetting,
 } from "@/lib/store";
@@ -154,10 +154,7 @@ function renderHomeSub(env: HomeV2Env, sb: SubBlockInstance): React.ReactNode {
  *  stats banner — data machinery, placeable but not code-editable. */
 export async function HeroSidePanelWidget() {
   const { planBenefits, featuredPrize, featuredDraw } = await getMembershipContext();
-  const [productCount, brandCount] = await Promise.all([
-    productChannelAssignmentService.countForChannel(CHANNEL_ID),
-    productChannelAssignmentService.countBrandsForChannel(CHANNEL_ID),
-  ]);
+  const [productCount, brandCount] = await getCatalogCounts();
   return (
     <div className="flex flex-col gap-[18px] self-center">
       {featuredPrize ? (
@@ -225,10 +222,7 @@ async function HomeHero(props: Record<string, unknown> = {}, ctx?: RenderContext
   const { channel } = await getSiteConfig();
   const { subscriptionsEnabled, plan, planPrice, planBenefits, featuredPrize, featuredDraw } =
     await getMembershipContext();
-  const [productCount, brandCount] = await Promise.all([
-    productChannelAssignmentService.countForChannel(CHANNEL_ID),
-    productChannelAssignmentService.countBrandsForChannel(CHANNEL_ID),
-  ]);
+  const [productCount, brandCount] = await getCatalogCounts();
 
   if (subscriptionsEnabled && plan) {
     const eyebrow = copy("home_hero", "eyebrow", props);

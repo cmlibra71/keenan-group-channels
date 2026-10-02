@@ -12,12 +12,13 @@ import { getQuoteUuid, setQuoteUuid, clearQuoteUuid } from "@/lib/quote";
 import { readAcquisitionUtm } from "@/lib/acquisition";
 import { getSession } from "@/lib/auth";
 import { layerCartPrice, specialCartPrice } from "@/lib/pricing/cart-pricing";
-import { resolvePackSize, snapToPack } from "@keenan/services/pack";
+import { effectivePackFacts, readChannelPack, resolvePackSize, snapToPack } from "@keenan/services/pack";
 import {
   describeKitChoices,
   describeKitContents,
   readProductKit,
   resolveKitChoices,
+  tileKitChoices,
   type KitChoice,
 } from "@/lib/product-kit";
 import {
@@ -30,6 +31,7 @@ import {
 } from "@keenan/services/product-addons";
 import {
   buyableAddons,
+  productPageForRefusal,
   customisationDefinition,
   extrasDefinition,
 } from "@/lib/product/addon-panel";
@@ -37,6 +39,17 @@ import { customisationRefusal } from "@/lib/product-customisation";
 import { slidingWindowAllow } from "@/lib/rate-limit";
 import { resolveCustomerRequestState } from "@keenan/services";
 import { decideQuoteLineWrite } from "@/lib/quotes/addon-line-write";
+import {
+  giftCardRefusal,
+  giftCardUnitPrice,
+  readQuoteLineGiftCard,
+  isGiftCardProduct,
+  readGiftCardConfig,
+  validateGiftCardSelection,
+  type GiftCardSelectionInput,
+} from "@keenan/services/gift-card";
+import { giftCardPressQuantity, planGiftCardQuoteWrite, giftCardQuoteNote } from "@/lib/quotes/gift-card-quote-line";
+import { channelPricesIncludeTax } from "@/lib/promotions/tax-basis";
 import {
   quoteHidesPrices,
   resolveQuoteAcceptState,
@@ -51,6 +64,8 @@ import { isStaffOnlyDraft, withoutStaffOnlyDrafts } from "@/lib/quotes/draft-vis
 import { acceptanceAcknowledgementUrl } from "@/lib/quotes/acknowledgement-url";
 import { repriceQuoteForCustomer } from "@/lib/quotes/reprice-deltas";
 import { QUOTE_REPRICED_ON_ACCEPT_MESSAGE } from "@keenan/services/member-ladder";
+import { getPricingGroupId } from "@/lib/member";
+import { groupLinePricing } from "@/lib/pricing/group-line";
 import { accountAcceptanceHoldsConversion } from "@/lib/quotes/pro-forma-pay-call";
 import { getContactPermissions } from "@/lib/role-permissions";
 import { mayFileAddressInBook } from "@/lib/account/address-authority";
@@ -104,6 +119,73 @@ async function countQuoteItems(quoteId: number): Promise<number> {
   return (full?.items ?? []).reduce((sum, i) => sum + (i.quantity ?? 0), 0);
 }
 
+/**
+ * Pre-link the quote to the signed-in contact. Best-effort convenience only — it must never block
+ * adding the item (a stale session would otherwise throw an FK error and 500 the add).
+ */
+async function linkQuoteToSession(quote: { id: number; contact_id?: number | null }): Promise<void> {
+  const session = await getSession();
+  if (session && !quote.contact_id) {
+    try {
+      await quoteService.update(quote.id, { contactId: session.contactId, email: session.email });
+    } catch (e) {
+      console.error("[addToQuote] customer link failed (non-fatal):", e);
+    }
+  }
+}
+
+/** The gift card half of {@link addToQuote} (IK, Zoey parity). */
+async function addGiftCardToQuote(
+  productId: number,
+  variantId: number | null,
+  product: { metafields?: unknown; zoey_raw?: unknown; url_path?: string | null },
+  giftCard: GiftCardSelectionInput | null,
+  /** The Qty box, in cards (Zoey honours it on the gift card). */
+  quantity: number | null | undefined
+) {
+  const config = readGiftCardConfig({ metafields: product.metafields, zoeyRaw: product.zoey_raw }, CHANNEL_ID);
+  if (!config) {
+    return { error: "This gift card can't be added to a quote right now. Please contact us about it." };
+  }
+  // A listing tile or the related rail posts no card: the amount and the people are asked on the
+  // product page, so that is where the shopper is sent.
+  if (giftCard == null) {
+    const productPage = productPageForRefusal(product.url_path);
+    const error = "Open the gift card's page to choose the amount and who it's for before adding it to a quote.";
+    return productPage ? { error, productPage } : { error };
+  }
+  const verdict = validateGiftCardSelection(config, giftCard);
+  if (!verdict.ok) return { error: giftCardRefusal(verdict) };
+  const unitPrice = giftCardUnitPrice(verdict.line.amount_inc_tax, await channelPricesIncludeTax());
+
+  const quote = await getOrCreateQuote();
+  await linkQuoteToSession(quote);
+  // THIS product's lines already on the quote — one per card (see gift-card-quote-line.ts).
+  const full = (await quoteService.getWithItems(quote.id)) as { items?: Array<Record<string, unknown>> } | null;
+  const lines = (full?.items ?? [])
+    .filter((i) => Number(i.product_id) === productId)
+    .map((i) => ({ id: Number(i.id), product_id: Number(i.product_id), quantity: Number(i.quantity) || 0, attributes: i.attributes }));
+  const write = planGiftCardQuoteWrite({ lines, line: verdict.line, unitPrice, addUnits: giftCardPressQuantity(quantity) });
+  if (write.kind === "refuse") return { error: write.error };
+  if (write.kind === "create") {
+    await quoteItemService.createForParent(quote.id, {
+      productId,
+      variantId: variantId || null,
+      quantity: write.quantity,
+      listPrice: write.listPrice,
+      salePrice: null,
+      // The customer's chosen FACE VALUE, not a catalogue price: `manual` is what keeps every
+      // engine reprice path from re-deriving it off the product's $0 (see gift-card-quote-line.ts).
+      priceSource: "manual",
+      attributes: write.attributes,
+      customerNotes: write.customerNotes,
+    });
+  } else {
+    await quoteItemService.updateForParent(quote.id, write.itemId, { quantity: write.quantity });
+  }
+  return { success: true, quoteCount: await countQuoteItems(quote.id) };
+}
+
 export async function addToQuote(
   productId: number,
   variantId?: number | null,
@@ -117,7 +199,18 @@ export async function addToQuote(
    * `addToQuote` deliberately applies no member or quantity tier either. What they do is
    * travel, so the rep can see the configuration the customer was looking at.
    */
-  addons?: AddonSelectionInput | null
+  addons?: AddonSelectionInput | null,
+  /**
+   * How many to add, in units — a listing tile's quantity box (IK parity, product cards). Absent
+   * (every caller before it) adds one pack, exactly as before. Snapped up to whole packs.
+   */
+  quantity?: number | null,
+  /**
+   * IK gift cards (Zoey parity): the amount and recipient / sender details the product page's gift
+   * card panel collected. A CLAIM — re-validated below against the product's own configuration, and
+   * only read for a product this storefront sells as a gift card.
+   */
+  giftCard?: GiftCardSelectionInput | null
 ) {
   // getById returns snake_case — read sale_price (reading salePrice was undefined,
   // so quotes silently used RRP instead of the catalog sale price).
@@ -129,9 +222,11 @@ export async function addToQuote(
     sale_price: string | null;
     metafields?: unknown;
     hide_price?: boolean | null;
+    url_path?: string | null;
     restrict_add_to_quote?: boolean | null;
     sell_pack_size?: number | null;
     sell_pack_unit?: string | null;
+    zoey_raw?: unknown;
   } | null;
   if (!product) return { error: "Product not found" };
 
@@ -142,19 +237,38 @@ export async function addToQuote(
     return { error: "This product can't be added to a quote. Please contact us about it." };
   }
 
+  // ── IK GIFT CARDS (Zoey parity) — quote only, carrying the card the customer chose ─────────
+  // Handled on its own path because nothing else about this action applies to it: it has no kit,
+  // no extras, no pack, and its price is the CHOSEN face value — never the catalogue's $0 and never
+  // a group price. See `lib/quotes/gift-card-quote-line.ts` for the money and the one-line rule.
+  if (isGiftCardProduct(product, CHANNEL_ID)) {
+    return addGiftCardToQuote(productId, variantId ?? null, product, giftCard ?? null, quantity);
+  }
+
   // ── Kit products (Zoey grouped / bundle, authored in the portal) ──────────────────────────
   // A BUNDLE is a modular configuration: it is not priced live, its picks come through as a
   // quote request (Steve, card 7bmpuqei). The choices arrive as group names + product ids and are
   // re-resolved against the product's OWN kit here, so nothing a browser sends can invent a line.
   // A GROUPED kit has no choices — its contents ride along so the rep can see what the one price
   // covers without opening the product.
-  const kit = readProductKit(product.metafields);
+  //
+  // THIS storefront's kit wins (`metafields.channel_kits[CHANNEL_ID]` — the Zoey bundles imported
+  // for Industry Kitchens, with their optional groups). A listing TILE posts no picks: on such a
+  // scoped kit it sends the default build (the always-included rows + each group's marked
+  // default) instead of being refused, unless a required choice has no default to send. A shared
+  // kit is refused from a tile exactly as before.
+  const kit = readProductKit(product.metafields, CHANNEL_ID);
+  const kitFromTile = kit?.kind === "bundle" && kitChoices == null && kit.scoped;
   let lineAttributes: Record<string, unknown> | null = null;
   let lineNotes: string | null = null;
   if (kit?.kind === "bundle") {
-    const resolved = resolveKitChoices(kit, kitChoices);
+    const resolved = resolveKitChoices(kit, kitFromTile ? tileKitChoices(kit) : kitChoices);
     if (!resolved) {
-      return { error: "Choose an option in every group before adding this to a quote." };
+      const productPage = kitFromTile ? productPageForRefusal(product.url_path) : null;
+      const error = kitFromTile
+        ? "Open this product's page to choose your configuration before adding it to a quote."
+        : "Choose an option in every group before adding this to a quote.";
+      return productPage ? { error, productPage } : { error };
     }
     lineAttributes = { kit_kind: "bundle", kit_selection: resolved };
     lineNotes = describeKitChoices(resolved);
@@ -188,7 +302,8 @@ export async function addToQuote(
   // anywhere to say "keep my blades". This is the same `undefined`-vs-empty distinction the
   // portal's own `product-type-actions.ts` draws.
   const addonsPosted = addons != null;
-  const rawAddonDefinition = readProductAddons(product.metafields);
+  // THIS storefront's definition — shared groups plus those scoped to CHANNEL_ID.
+  const rawAddonDefinition = readProductAddons(product.metafields, { channelId: CHANNEL_ID });
   // WOULD THE PAGE HAVE OFFERED A PANEL? The same predicate the provider draws it with
   // (`addonPanelShown`), re-made here against the product record. A product whose price is
   // hidden or zero sells by quote and shows no panel, so it has no required group to answer:
@@ -217,6 +332,11 @@ export async function addToQuote(
   // with both panels, both buttons and `addToCart`, so no two of them can disagree.
   const addonDefinition = buyableAddons(rawAddonDefinition, addonPanelOffered);
   const resolvedAddons = addonsPosted ? resolveAddonSelection(addonDefinition, addons) : [];
+  // A TILE posted nothing. On a NEW line it still records the answers the author pre-selected
+  // (Zoey's defaults, owner decisions 9/10 — "Gas Type: Natural Gas"); on a line already in the
+  // quote it changes nothing, because "nothing posted" means "leave my configuration alone"
+  // (`lib/quotes/addon-line-write.ts`). Empty on a product with no defaults, as before.
+  const tileDefaultAddons = addonsPosted ? [] : resolveAddonSelection(addonDefinition, {});
   // A required single-choice group is a question about the MACHINE, not about the cart, so it
   // is asked on this button too — and asked HERE rather than only in the page, because a stale
   // tab or a hand-posted action would otherwise quote a configuration nobody answered. From a
@@ -230,19 +350,23 @@ export async function addToQuote(
     extrasDefinition(rawAddonDefinition, addonPanelOffered),
     addonsPosted ? addons : {}
   );
+  // A TILE posted nothing, so its refusal also names the page where the question can be answered
+  // (card tkvntxsq — a gas range is never quoted without its gas type) and the tile goes there.
+  const tileDestination = addonsPosted ? null : productPageForRefusal(product.url_path);
   if (unansweredGroups.length > 0) {
-    return {
-      error: addonsPosted
-        ? `Please choose ${unansweredGroups.join(" and ")} before adding this to a quote.`
-        : `Open this product's page to choose ${unansweredGroups.join(" and ")} before adding it to a quote.`,
-    };
+    const error = addonsPosted
+      ? `Please choose ${unansweredGroups.join(" and ")} before adding this to a quote.`
+      : `Open this product's page to choose ${unansweredGroups.join(" and ")} before adding it to a quote.`;
+    return tileDestination ? { error, productPage: tileDestination } : { error };
   }
   const typedRefusal = customisationRefusal(
     customisationDefinition(rawAddonDefinition),
     addonsPosted ? addons : undefined,
     "quote"
   );
-  if (typedRefusal) return { error: typedRefusal };
+  if (typedRefusal) {
+    return tileDestination ? { error: typedRefusal, productPage: tileDestination } : { error: typedRefusal };
+  }
   const addonNote = describeAddonSelection(resolvedAddons);
   if (resolvedAddons.length > 0) {
     lineAttributes = { ...(lineAttributes ?? {}), addon_selection: resolvedAddons };
@@ -256,6 +380,19 @@ export async function addToQuote(
     const variant = await productVariantService.getById(variantId) as { price: string | null; sale_price: string | null } | null;
     if (variant?.price) listPrice = variant.price;
     if (variant?.sale_price) catalogSalePrice = variant.sale_price;
+  }
+
+  // THE SHOPPER'S CUSTOMER-GROUP PRICE LIST (Industry Kitchens' Zoey model): on a channel with
+  // `customer_group_pricing` on, the catalogue price THIS viewer was shown is their group's record
+  // (the account's group, else the person's, else NOT LOGGED IN) — the same record the product
+  // page and the cart read. The record alone: no quantity break, per the ADR below. Only a line
+  // the catalogue prices; null group (every other channel) → unchanged.
+  if (parseFloat(String(listPrice ?? "0")) > 0) {
+    const grouped = await groupLinePricing(await getPricingGroupId(), productId, variantId || null, 1, { tiers: false });
+    if (grouped) {
+      listPrice = grouped.listPrice;
+      catalogSalePrice = grouped.salePrice;
+    }
   }
 
   // A quote applies ONLY base price + catalog-sale suppression at add time; member
@@ -305,10 +442,22 @@ export async function addToQuote(
   // rule the cart applies — a quote the customer built must not ask for two pieces of something
   // that only ships in twelves. `resolvePackSize` returns 1 for everything else, so an ordinary
   // product still goes on one at a time.
-  const packSize = resolvePackSize({
-    sellPackSize: product.sell_pack_size ?? null,
-    sellPackUnit: product.sell_pack_unit ?? null,
-  });
+  // THIS storefront's own Zoey pack (`metafields.zoey_channel_pack[CHANNEL_ID]`) fills a product
+  // with no shared pack, exactly as the cart's facts and the product page read it.
+  const packSize = resolvePackSize(
+    effectivePackFacts(
+      {
+        sellPackSize: product.sell_pack_size ?? null,
+        sellPackUnit: product.sell_pack_unit ?? null,
+      },
+      readChannelPack(product.metafields, CHANNEL_ID)
+    )
+  );
+
+  // One press adds one pack; a tile's quantity box asks for more (units, snapped up to packs).
+  const wantedUnits =
+    typeof quantity === "number" && Number.isInteger(quantity) && quantity > 1 ? Math.min(quantity, 10000) : null;
+  const addUnits = wantedUnits != null ? Math.max(packSize, snapToPack(wantedUnits, packSize)) : packSize;
 
   const existing = await quoteItemService.findByProductVariant(quote.id, productId, variantId) as {
     id: number;
@@ -336,12 +485,15 @@ export async function addToQuote(
     // `lib/quotes/addon-line-write.ts`, which carries the reasoning: a listing TILE posts no
     // selection and must not be read as a clear-down, and a comment a rep typed is never
     // overwritten (quotes.md, card 7bmpuqei).
+    // A tile's DEFAULT bundle build is not a re-configuration of a line the customer already
+    // built on the page: it counts up and leaves that build (and its comment) alone.
+    const tileBuildOnly = kitFromTile;
     const { incrementsQuantity, clearsAddons, writesNote } = decideQuoteLineWrite({
       addonsPosted,
       hadAddons,
       resolvedAddonCount: resolvedAddons.length,
-      isBundleBuild: kit?.kind === "bundle",
-      lineNotes,
+      isBundleBuild: kit?.kind === "bundle" && !tileBuildOnly,
+      lineNotes: tileBuildOnly ? null : lineNotes,
       existingNote: existing.customer_notes ?? null,
       ownedNote:
         typeof existingAttributes.storefront_note === "string"
@@ -349,7 +501,7 @@ export async function addToQuote(
           : null,
     });
 
-    const attributeChanges: Record<string, unknown> = { ...(lineAttributes ?? {}) };
+    const attributeChanges: Record<string, unknown> = tileBuildOnly ? {} : { ...(lineAttributes ?? {}) };
     if (clearsAddons) attributeChanges.addon_selection = null;
     if (writesNote) attributeChanges.storefront_note = lineNotes;
 
@@ -359,7 +511,7 @@ export async function addToQuote(
       // `incrementsQuantity` is the generalised form of main's `reconfigured` — it covers a
       // bundle rebuild AND a change of paid extras (card 0CDcCYmO).
       quantity: incrementsQuantity
-        ? snapToPack(existing.quantity + packSize, packSize)
+        ? snapToPack(existing.quantity + addUnits, packSize)
         : existing.quantity,
       // MERGED into the existing bag, never over it: `attributes` has other owners
       // (quotes.md `quote-editor`), and a bundle re-configuration used to replace it whole.
@@ -369,10 +521,14 @@ export async function addToQuote(
       ...(writesNote ? { customerNotes: lineNotes } : {}),
     });
   } else {
+    if (tileDefaultAddons.length > 0) {
+      lineAttributes = { ...(lineAttributes ?? {}), addon_selection: tileDefaultAddons };
+      lineNotes = [lineNotes, describeAddonSelection(tileDefaultAddons)].filter(Boolean).join("\n") || null;
+    }
     await quoteItemService.createForParent(quote.id, {
       productId,
       variantId: variantId || null,
-      quantity: packSize,
+      quantity: addUnits,
       listPrice,
       salePrice,
       // WHO PUT THIS PRICE HERE: the customer did, off the catalogue, through
@@ -457,6 +613,9 @@ export async function updateQuoteItem(itemId: number, quantity: number) {
     return { success: true, quoteCount };
   } catch (e) {
     console.error("[updateQuoteItem] failed (non-fatal):", e);
+    // The gift card cap (services QuoteItemService) says its own sentence.
+    const capped = giftCardCapMessage(e);
+    if (capped) return { error: capped };
     return { error: "Could not update quote" };
   }
 }
@@ -1019,6 +1178,8 @@ export async function updateAccountQuoteItem(
     await quoteService.markChangeRequested(quoteId, { changeSummary: "Quantity changed" });
   } catch (e) {
     console.error("[updateAccountQuoteItem] failed:", e);
+    const capped = giftCardCapMessage(e);
+    if (capped) return { error: capped };
     return { error: "Could not update this quote." };
   }
 
@@ -1100,11 +1261,28 @@ export async function duplicateQuote(quoteId: number) {
         // The copy keeps the original line's provenance, and a line with none
         // recorded is the customer's own (card laFQveZT).
         priceSource: (it.price_source as string) || "customer",
+        // A GIFT CARD line (IK) carries who the card is for: the copy keeps the card and its note,
+        // or it would be a priced card for nobody.
+        ...copiedGiftCard(it),
       });
     } catch { /* skip a failing line */ }
   }
   revalidatePath("/account/quotes");
   return { success: true, quoteId: copy.id };
+}
+
+/** The gift card cap's own sentence, when that is why a quantity change was refused. */
+function giftCardCapMessage(e: unknown): string | null {
+  const m = e instanceof Error ? e.message : "";
+  return /gift card line can hold at most/i.test(m) ? m : null;
+}
+
+/** The gift card (and the storefront's note for it) a duplicated line keeps; nothing for any other line. */
+function copiedGiftCard(it: Record<string, unknown>): Record<string, unknown> {
+  const card = readQuoteLineGiftCard(it.attributes);
+  if (!card) return {};
+  const note = giftCardQuoteNote(card);
+  return { attributes: { gift_card: card, storefront_note: note }, customerNotes: note };
 }
 
 // ── Customer requests on a quote: more time, a change, a message ─────────────

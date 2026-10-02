@@ -6,12 +6,12 @@ import {
   getFeatureFlag,
   getBrandsForChannel,
   getJsonSetting,
-  productChannelAssignmentService,
-  CHANNEL_ID,
+  getCatalogCounts,
+  attachFromPrices,
 } from "@/lib/store";
 import { getListingPricing, applyAccountPrices } from "@/lib/member";
 import { applyCatalogScope } from "@/lib/catalog-scope";
-import { attachBrandLogos } from "@/lib/brand-logo-fallback";
+import { attachBrandLogosAlongside } from "@/lib/brand-logo-fallback";
 import { getMembershipContext, copy } from "@/blocks/home-blocks";
 import type { HomeNativeData } from "./BuilderHomePage";
 import type { GridProduct } from "@/components/product/ProductGridClient";
@@ -65,10 +65,7 @@ export async function loadHomeNativeData(
       needMembership ? getMembershipContext() : null,
       needHero ? getSiteConfig() : null,
       needStats
-        ? Promise.all([
-            productChannelAssignmentService.countForChannel(CHANNEL_ID),
-            productChannelAssignmentService.countBrandsForChannel(CHANNEL_ID),
-          ])
+        ? getCatalogCounts()
         : null,
       needCats ? getTopCategories() : [],
       needCats ? getMegaMenu() : null,
@@ -86,13 +83,21 @@ export async function loadHomeNativeData(
   // every other field on the row is copied through — and a no-op on a channel
   // that has not opted in. Both rails below draw their tiles with `ProductCard`,
   // which reads `brand_logo_url` / `brand_name` off the row.
-  const scopePrice = async (rows: Record<string, unknown>[]) =>
-    (await attachBrandLogos(
-      await applyAccountPrices(await applyCatalogScope(rows as never))
+  // The brand-logo read runs beside the price overlays (keyed by product id alone).
+  const scopePrice = async (rows: Record<string, unknown>[]) => {
+    const visible = await applyCatalogScope(rows as never);
+    // configurable-from-price: "Starting From" on configurable rail tiles, after the overlays.
+    return (await attachBrandLogosAlongside(
+      visible,
+      (async () => attachFromPrices(await applyAccountPrices(visible)))()
     )) as unknown as GridProduct[];
+  };
 
-  const clearanceProducts = clearanceRes ? await scopePrice(clearanceRes.products as never) : [];
-  const featuredProducts = featuredRes ? await scopePrice(featuredRes.products as never) : [];
+  // The two rails are scoped and priced together, not one after the other (2–3 round trips each).
+  const [clearanceProducts, featuredProducts] = await Promise.all([
+    clearanceRes ? scopePrice(clearanceRes.products as never) : [],
+    featuredRes ? scopePrice(featuredRes.products as never) : [],
+  ]);
   const [clearancePricing, featuredPricing] = await Promise.all([
     clearanceProducts.length ? getListingPricing(clearanceProducts as never) : null,
     featuredProducts.length ? getListingPricing(featuredProducts as never) : null,

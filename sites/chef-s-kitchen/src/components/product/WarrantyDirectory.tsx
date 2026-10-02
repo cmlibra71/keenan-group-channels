@@ -270,7 +270,7 @@ export function WarrantyDirectory() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by brand, equipment type, or keyword\u2026"
+          placeholder="Search by brand, equipment type, or keyword…"
           className="w-full input pl-10"
         />
       </div>

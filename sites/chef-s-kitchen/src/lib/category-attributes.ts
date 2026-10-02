@@ -31,6 +31,8 @@ export interface AttributeFacet {
   min?: number;
   max?: number;
   options?: AttributeFacetOption[];
+  /** Options only — draw the tick boxes without counts (a brand page's own list, services brandRail). */
+  hideCounts?: true;
 }
 
 export interface RangeWindow {
@@ -66,6 +68,29 @@ export function parseRangeParam(raw: string | undefined | null): RangeWindow | u
     return undefined;
   if (min !== undefined && max !== undefined && min > max) return undefined;
   return { min, max };
+}
+
+/** Most windows a price trail keeps (Magento kept every prior interval; a URL needs a bound). */
+export const MAX_PRICE_TRAIL = 10;
+
+/**
+ * Zoey's (Magento 1.9) price trail: `price=5000-6000,5000-5500` is the band a shopper chose, then
+ * the finer band chosen inside it. The LAST window filters; the earlier ones are the way back up.
+ * Only valid windows count (a legacy band token or junk is dropped). Pure.
+ */
+export function priceWindowTrail(raw: string | undefined | null): string[] {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((w) => w.trim())
+    .filter((w) => w.includes("-") && parseRangeParam(w) !== undefined)
+    .slice(-MAX_PRICE_TRAIL);
+}
+
+/** The window a price param filters by: its trail's last window (a plain `a-b` is a trail of one). */
+export function lastPriceWindow(raw: string | undefined | null): RangeWindow | undefined {
+  const trail = priceWindowTrail(raw);
+  return trail.length ? parseRangeParam(trail[trail.length - 1]) : undefined;
 }
 
 export function formatRangeParam(range: RangeWindow): string {

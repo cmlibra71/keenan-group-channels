@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { goodsTotalOf } from "@/lib/checkout/shown-total";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
 import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getMembershipNumber, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, getLadderConfig, getLiveSpecials, CHANNEL_ID } from "@/lib/store";
@@ -40,6 +41,7 @@ import {
   filterFinanceMethods,
   financeLinesFromCart,
   financeOfferForCart,
+  financeGoodsTotalIncGst,
   isFinancePaymentMethod,
 } from "@/lib/checkout/finance";
 import { addressTypeFromContactBook } from "@keenan/services/residential";
@@ -178,7 +180,12 @@ export default async function CheckoutPage() {
   // show-equals-accept just as surely as a different total would.
   const financeOffer = financeOfferForCart({
     lines: financeLinesFromCart(cart.items as never[], pricesIncludeTax),
-    goodsTotalIncGst: gstSplit(subtotal, pricesIncludeTax).incTax,
+    // Freight-kind extras come off the goods, as delivery does (owner decision 8).
+    goodsTotalIncGst: financeGoodsTotalIncGst(
+      gstSplit(subtotal, pricesIncludeTax).incTax,
+      cart.items as never[],
+      pricesIncludeTax
+    ),
     settings: checkoutSettings.financeSettings,
   });
   // …but nothing finance-shaped is DRAWN, and no application form is provisioned,
@@ -590,6 +597,7 @@ export default async function CheckoutPage() {
         items={summaryItems}
         subtotal={subtotal}
         grossSubtotal={grossSubtotal}
+        shownGoodsTotal={goodsTotalOf(cart.items as Parameters<typeof goodsTotalOf>[0])}
         offerDiscount={offerDiscount}
         offerMessages={cartOffers?.messages ?? []}
         gstAmount={gstAmount}
