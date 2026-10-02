@@ -1,19 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Menu, X, ChevronDown, Star } from "lucide-react";
-import {
-  ALL_BRANDS_HREF,
-  flattenTree,
-  itemHref,
-  panelBrandColumn,
-  panelExtras,
-  resolveNavItems,
-  type MegaBrandLike,
-  type MegaMenuNodeLike,
-  type MegaNavItem,
-} from "@/lib/mega-menu";
+import { drawerRows, type DrawerRowHead } from "@/lib/nav-model";
+import { useNavData } from "@/lib/nav-data-client";
 
 /**
  * Below lg the nav becomes a hamburger → full-height drawer.
@@ -24,29 +15,27 @@ import {
  * A department expands into its sub-categories plus any information pages
  * tucked inside it; a custom link with children expands into those.
  */
-export function MobileNavDrawer({
-  departments,
-  items,
-  hiddenCategoryIds,
-  brandColumns = {},
-}: {
-  departments: MegaMenuNodeLike[];
-  items?: MegaNavItem[];
-  hiddenCategoryIds?: number[];
-  /** Each department's Brands column, as the desktop bar shows it (card HaWBvySC). */
-  brandColumns?: Record<number, MegaBrandLike[]>;
-}) {
+export function MobileNavDrawer({ rows }: { rows: DrawerRowHead[] }) {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const navItems = resolveNavItems({ departments, items, hiddenCategoryIds });
-  const byId = flattenTree(departments);
+  // The rows themselves come with the page (labels and links only); what each
+  // expands into is drawn from the menu data, loaded on first open at the latest
+  // (lib/nav-model.ts — it used to ship the whole category tree as props).
+  const { model, load } = useNavData();
+  const childrenByKey = useMemo(
+    () => new Map(model ? drawerRows(model).map((r) => [r.key, r.children]) : []),
+    [model]
+  );
   const close = () => setOpen(false);
 
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          load();
+          setOpen(true);
+        }}
         className="lg:hidden text-white/90 hover:text-white transition-colors duration-200"
         aria-label="Open menu"
       >
@@ -67,67 +56,28 @@ export function MobileNavDrawer({
             </div>
 
             <div className="flex-1 overflow-y-auto">
-              {navItems.map((item, i) => {
-                const key = `${item.type}-${item.categoryId ?? item.pageSlug ?? item.url ?? i}`;
-                const dept = item.type === "category" && item.categoryId ? byId.get(item.categoryId) : undefined;
-                if (item.type === "category" && !dept) return null;
-
-                const extras = panelExtras(item);
-                const groups = dept?.children ?? [];
-                // The same Brands column the desktop drop-down carries: a heading,
-                // the brands, then View all brands (card HaWBvySC).
-                const brandColumn = dept ? panelBrandColumn(item) : null;
-                const brandLinks: { key: string; href: string; label: string; heading?: boolean }[] =
-                  brandColumn && dept
-                    ? [
-                        { key: "bh", href: ALL_BRANDS_HREF, label: brandColumn.label || "Brands", heading: true },
-                        ...(brandColumns[dept.id] ?? []).map((b) => ({
-                          key: `b${b.id}`,
-                          href: `/brands/${b.slug}`,
-                          label: b.name,
-                        })),
-                        { key: "ba", href: ALL_BRANDS_HREF, label: "View all brands" },
-                      ]
-                    : [];
-                const childLinks: { key: string; href: string; label: string; newTab?: boolean; heading?: boolean }[] = [
-                  ...groups.map((g) => ({ key: `g${g.id}`, href: `/categories/${g.slug}`, label: g.name })),
-                  ...brandLinks,
-                  ...extras.map((e, j) => ({
-                    key: `e${j}`,
-                    href: itemHref(e, byId),
-                    label: e.label,
-                    newTab: e.newTab,
-                  })),
-                  ...(dept
-                    ? []
-                    : (item.children ?? []).map((c, j) => ({
-                        key: `c${j}`,
-                        href: itemHref(c, byId),
-                        label: c.label,
-                        newTab: c.newTab,
-                      }))),
-                ];
-                const href = dept ? `/categories/${dept.slug}` : itemHref(item, byId);
-                const isClearance = href === "/clearance";
+              {rows.map((row) => {
+                const { key, href, label, newTab, isClearance, hasChildren } = row;
+                const childLinks = childrenByKey.get(key) ?? [];
 
                 return (
                   <div key={key} className="border-b border-border">
                     <div className="flex items-center">
                       <Link
                         href={href}
-                        target={item.newTab ? "_blank" : undefined}
+                        target={newTab ? "_blank" : undefined}
                         onClick={close}
                         className={`flex flex-1 items-center gap-2 px-4 py-3.5 text-sm font-semibold ${
                           isClearance ? "text-member-text" : "text-text-primary"
                         }`}
                       >
                         {isClearance && <Star className="h-4 w-4 fill-current" />}
-                        {item.label}
+                        {label}
                       </Link>
-                      {childLinks.length > 0 && (
+                      {hasChildren && (
                         <button
                           onClick={() => setExpanded(expanded === key ? null : key)}
-                          aria-label={`Expand ${item.label}`}
+                          aria-label={`Expand ${label}`}
                           aria-expanded={expanded === key}
                           className="px-4 py-3.5 text-text-secondary"
                         >
