@@ -125,6 +125,8 @@ export default async function CheckoutPage() {
     (cart as { offers?: { totalDiscount: number; messages: { kind: string; text: string }[] } } | null)
       ?.offers ?? null;
   const offerDiscount = Math.max(0, Math.round((cartOffers?.totalDiscount ?? 0) * 100) / 100);
+  const freeShippingBlocked =
+    (cart as { offers?: { freeShippingBlocked?: boolean } } | null)?.offers?.freeShippingBlocked === true;
   const subtotal = Math.max(0, Math.round((grossSubtotal - offerDiscount) * 100) / 100);
 
   // Brand free-shipping special (card 88Ay7UGA): any line from a promoted brand
@@ -603,9 +605,11 @@ export default async function CheckoutPage() {
         paymentAvailability={paymentAvailability}
         savedAddresses={savedAddresses}
         googlePlacesEnabled={checkoutSettings.googlePlacesEnabled}
-        freeShippingEnabled={checkoutSettings.freeShippingEnabled}
+        // A Discount Rule set to "Do not allow free shipping method" takes free delivery away from
+        // this cart (card vmO0TRBD) — the same flag placeOrder reads, so show equals charge.
+        freeShippingEnabled={checkoutSettings.freeShippingEnabled && !freeShippingBlocked}
         freeShippingThreshold={checkoutSettings.freeShippingThreshold}
-        brandSpecial={brandSpecial}
+        brandSpecial={freeShippingBlocked ? null : brandSpecial}
         shippingEnabled={shippingEnabled}
         bulkyProductNames={bulkyProductNames}
         commercialProductNames={commercialProductNames}

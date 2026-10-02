@@ -13,7 +13,7 @@ import { getAccountId } from "@/lib/member";
 import { isProductVisibleToViewer, blockedProductIds, RESTRICTED_PRODUCT_ERROR } from "@/lib/catalog-scope";
 import { CART_RESTRICTED_ERROR } from "@/lib/cart/restricted-message";
 import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice, subscriptionPlanService } from "@/lib/store";
-import { getCartUuid, setCartUuid } from "@/lib/cart";
+import { getCartUuid, setCartUuid, getDeclinedRewards, addDeclinedReward } from "@/lib/cart";
 import { brandIdsForProducts } from "@/lib/checkout/free-shipping-brands";
 import { backorderFactsForProducts, backorderFactsForProduct, type ProductBackorderFacts } from "@/lib/cart/backorder-facts";
 import { availableUnits, canPurchaseQuantity, resolveBackorderPolicy } from "@keenan/services/backorder";
@@ -26,6 +26,10 @@ import {
   resolveCartOffers,
   couponCapRefusal,
   rewardPromotionIdOf,
+  rewardSettingsOf,
+  rewardQuantityAfterSync,
+  rewardQuantityRefusal,
+  declinedRewardKey,
   rewardMarker,
   lineSku,
   type OfferCartLine,
@@ -568,7 +572,8 @@ export async function addToCart(
     });
   }
 
-  await syncRewardLinesIfRunning(cart.id);
+  // "Yes - But Only from Cart" resets an offer item's quantity whenever a product is Added to Cart.
+  await syncRewardLinesIfRunning(cart.id, { fromAdd: true });
   return { success: true, cartCount: await countCartItems(cart.id) };
 }
 
@@ -597,8 +602,20 @@ export async function updateCartItem(itemId: number, quantity: number) {
       if (rewardsRunning) {
         const row = (await cartItemService.getByIdForParent(cart.id, itemId).catch(() => null)) as {
           applied_coupons?: unknown;
+          product_sku?: string | null;
+          variant_sku?: string | null;
+          product_id?: number;
+          quantity?: number;
         } | null;
-        if (row && rewardPromotionIdOf(row) != null) return { error: REWARD_LINE_LOCKED };
+        const rewardOf = row ? rewardPromotionIdOf(row) : null;
+        if (row && rewardOf != null) {
+          // Zoey's Allow Removal From Cart (card vmO0TRBD): No = the item leaves only with the items
+          // that earned it; Yes = the shopper may take it out, and it stays out of THIS cart.
+          const refusal = rewardQuantityRefusal(rewardSettingsOf(row), Number(row.quantity ?? 0), 0);
+          if (refusal) return { error: refusal };
+          const sku = await rewardLineSku(row);
+          if (sku) await addDeclinedReward(uuid, declinedRewardKey(rewardOf, sku));
+        }
       }
       // Idempotent: removing an already-deleted line (e.g. rapid minus clicks on
       // the last unit, or a raced concurrent remove) is a no-op success.
@@ -628,7 +645,13 @@ export async function updateCartItem(itemId: number, quantity: number) {
       return { success: true, cartCount: await countCartItems(cart.id) };
     }
     // The reward line's lock (see above), read off the row this change already loaded — no extra read.
-    if (rewardPromotionIdOf(item) != null) return { error: REWARD_LINE_LOCKED };
+    // Zoey's Allow Quantity Updates (card vmO0TRBD) says whether, and how far, the shopper may move it.
+    const isRewardLine = rewardPromotionIdOf(item) != null;
+    if (isRewardLine) {
+      const refusal = rewardQuantityRefusal(rewardSettingsOf(item), item.quantity, quantity);
+      if (refusal) return { error: refusal };
+    }
+    const surchargeUnit = isRewardLine ? rewardSettingsOf(item).surchargeUnit : null;
 
     // Whole packs here too (cards O108e4jH / zeMPVcA3). A quantity of zero or less has already
     // removed the line above, so a pack product can still be emptied out of the cart; anything
@@ -677,7 +700,11 @@ export async function updateCartItem(itemId: number, quantity: number) {
     await cartItemService.updateForParent(
       cart.id,
       itemId,
-      pricing
+      surchargeUnit != null
+        ? // A surcharge item keeps the price its offer gave it (a percentage of the product that
+          // added it); a catalogue reprice must not overwrite it.
+          { quantity: nextQuantity }
+        : pricing
         ? {
             quantity: nextQuantity,
             listPrice: pricing.listPrice,
@@ -706,8 +733,14 @@ export async function removeCartItem(itemId: number) {
   return updateCartItem(itemId, 0);
 }
 
-const REWARD_LINE_LOCKED =
-  "This item comes with your offer. It is added and removed automatically with the items that earn it.";
+/** The SKU a reward line sells (its variant's own where it has one), for the declined-reward key. */
+async function rewardLineSku(row: { product_sku?: string | null; variant_sku?: string | null; product_id?: number }): Promise<string | null> {
+  const direct = (row.variant_sku ?? row.product_sku ?? "").trim();
+  if (direct) return direct.toUpperCase();
+  if (row.product_id == null) return null;
+  const p = (await productService.getById(row.product_id).catch(() => null)) as { sku?: string | null } | null;
+  return p?.sku ? String(p.sku).toUpperCase() : null;
+}
 
 /**
  * Keep the cart's promotion REWARD lines in step with what the basket has earned (card EIXdjw2s,
@@ -723,14 +756,14 @@ const REWARD_LINE_LOCKED =
  * Never throws and never blocks the mutation it follows: a sync that fails leaves the cart as the
  * shopper left it, and `placeOrder` syncs again before it bills.
  */
-async function syncRewardLines(cartId: number): Promise<number> {
+async function syncRewardLines(cartId: number, opts: { fromAdd?: boolean } = {}): Promise<number> {
   // A second pass only when the first one ADDED something: the engine judges an auto-added item
   // against its floor from the catalogue price before adding it, and again from the line's real
   // price once it is in the cart (a trade price can sit lower). If that second look withholds it,
   // it comes straight back out here — never left in the cart to be billed at full price.
   let total = 0;
   for (let pass = 0; pass < 2; pass++) {
-    const { changed, added } = await syncRewardLinesOnce(cartId);
+    const { changed, added } = await syncRewardLinesOnce(cartId, opts);
     total += changed;
     if (added === 0) break;
   }
@@ -743,12 +776,12 @@ async function syncRewardLines(cartId: number): Promise<number> {
  * the speed-sensitive ones (behaviour register sf-cart); a flagged line left behind by an offer
  * that has since stopped is taken out by the next cart READ, which always checks.
  */
-async function syncRewardLinesIfRunning(cartId: number): Promise<number> {
+async function syncRewardLinesIfRunning(cartId: number, opts: { fromAdd?: boolean } = {}): Promise<number> {
   if (!(await channelRunsRewardOffers(CHANNEL_ID))) return 0;
-  return syncRewardLines(cartId);
+  return syncRewardLines(cartId, opts);
 }
 
-async function syncRewardLinesOnce(cartId: number): Promise<{ changed: number; added: number }> {
+async function syncRewardLinesOnce(cartId: number, opts: { fromAdd?: boolean } = {}): Promise<{ changed: number; added: number }> {
   try {
     const full = await cartService.getWithItems(cartId);
     const items = (full?.items ?? []) as unknown as (OfferCartLine & { quantity: number })[];
@@ -766,15 +799,34 @@ async function syncRewardLinesOnce(cartId: number): Promise<{ changed: number; a
     // Nothing to hold and nothing held: the ordinary basket costs no more than the offer read.
     if (offers.rewardLines.length === 0 && flagged.length === 0) return { changed: 0, added: 0 };
 
-    const wanted = new Map<string, { promotionId: number; sku: string; quantity: number; held: boolean }>();
+    // Offer items the shopper took out of this cart stay out (Allow Removal From Cart, card vmO0TRBD).
+    const declined = await getDeclinedRewards((full as { uuid?: string | null } | null)?.uuid ?? (await getCartUuid()) ?? null);
+    const wanted = new Map<
+      string,
+      {
+        promotionId: number;
+        sku: string;
+        quantity: number;
+        held: boolean;
+        settings: Parameters<typeof rewardMarker>[1];
+      }
+    >();
     for (const r of offers.rewardLines) {
       const key = `${r.promotionId}:${r.sku.toUpperCase()}`;
+      if (declined.has(declinedRewardKey(r.promotionId, r.sku))) continue;
       const prior = wanted.get(key);
       wanted.set(key, {
         promotionId: r.promotionId,
         sku: r.sku.toUpperCase(),
         quantity: (prior?.quantity ?? 0) + r.quantity,
         held: false,
+        // Zoey's settings for the added item ride its marker (card vmO0TRBD).
+        settings: {
+          allowQty: r.allowQtyUpdates ?? "no",
+          allowRemoval: r.allowRemoval === true,
+          customization: r.customization ?? null,
+          surchargeUnit: r.unitPrice ?? null,
+        },
       });
     }
 
@@ -790,13 +842,25 @@ async function syncRewardLinesOnce(cartId: number): Promise<{ changed: number; a
         continue;
       }
       want.held = true;
-      if (line.quantity !== want.quantity) {
-        const pricing = await resolveItemPricingAndSpecial(line.product_id, line.variant_id, want.quantity)
-          .then((r) => r.pricing)
-          .catch(() => null);
+      const settings = { ...rewardSettingsOf(line), ...(want.settings ?? {}) };
+      const nextQty = rewardQuantityAfterSync(settings.allowQty, line.quantity, want.quantity, opts.fromAdd === true);
+      const surcharge = settings.surchargeUnit;
+      const markerNow = JSON.stringify(rewardMarker(want.promotionId, { ...settings, addedQty: want.quantity }));
+      const markerMoved = JSON.stringify(line.applied_coupons ?? null) !== markerNow;
+      const priceMoved = surcharge != null && Math.abs(parseFloat(String(line.list_price ?? "NaN")) - surcharge) > 0.00005;
+      if (line.quantity !== nextQty || markerMoved || priceMoved) {
+        const pricing =
+          surcharge != null
+            ? { listPrice: surcharge.toFixed(4), salePrice: null }
+            : line.quantity !== nextQty
+              ? await resolveItemPricingAndSpecial(line.product_id, line.variant_id, nextQty)
+                  .then((r) => r.pricing)
+                  .catch(() => null)
+              : null;
         await cartItemService.updateForParent(cartId, line.id, {
-          quantity: want.quantity,
+          quantity: nextQty,
           ...(pricing ? { listPrice: pricing.listPrice, salePrice: pricing.salePrice } : {}),
+          appliedCoupons: rewardMarker(want.promotionId, { ...settings, addedQty: want.quantity }),
         });
         changed++;
       }
@@ -814,9 +878,15 @@ async function syncRewardLinesOnce(cartId: number): Promise<{ changed: number; a
         const facts = await backorderFactsForProduct(product.productId);
         if (facts?.restrictAddToCart) continue;
         if (facts && !canPurchaseQuantity(facts, want.quantity)) continue;
-        const pricing = await resolveItemPricingAndSpecial(product.productId, product.variantId, want.quantity)
-          .then((r) => r.pricing)
-          .catch(() => null);
+        // A SURCHARGE item (Zoey's "Calculate Amount as Surcharge Percentage", card vmO0TRBD) is
+        // charged the percentage of the products that added it; any other at its catalogue price.
+        const surcharge = want.settings?.surchargeUnit ?? null;
+        const pricing =
+          surcharge != null
+            ? { listPrice: surcharge.toFixed(4), salePrice: null as string | null }
+            : await resolveItemPricingAndSpecial(product.productId, product.variantId, want.quantity)
+                .then((r) => r.pricing)
+                .catch(() => null);
         if (!pricing) continue;
         await cartItemService.createForParent(cartId, {
           productId: product.productId,
@@ -825,7 +895,7 @@ async function syncRewardLinesOnce(cartId: number): Promise<{ changed: number; a
           listPrice: pricing.listPrice,
           salePrice: pricing.salePrice,
           modifierSelections: [],
-          appliedCoupons: rewardMarker(want.promotionId),
+          appliedCoupons: rewardMarker(want.promotionId, { ...(want.settings ?? {}), addedQty: want.quantity }),
         });
         changed++;
         added++;
@@ -896,6 +966,8 @@ export async function repriceCartForSession(): Promise<{ repriced: number }> {
 
     let repriced = 0;
     for (const item of items) {
+      // A surcharge offer item keeps the price its offer gave it (card vmO0TRBD); the sync re-prices it.
+      if (rewardSettingsOf(item).surchargeUnit != null && rewardPromotionIdOf(item) != null) continue;
       try {
         // Signing in re-prices the whole line, extras included (card 0CDcCYmO): the surcharge
         // is part of what this line is charged, so a re-price that dropped it would show the
@@ -974,6 +1046,8 @@ async function refreshSpecialLines(
   let moved = 0;
   for (const item of items) {
     if (item.product_id == null) continue;
+    // A surcharge offer item is priced by its offer, never by a special (card vmO0TRBD).
+    if (rewardPromotionIdOf(item) != null && rewardSettingsOf(item).surchargeUnit != null) continue;
     const special = live.get(item.product_id);
     const now = special ? { promotionId: special.promotionId, priceExTax: special.priceExTax } : null;
     if (!specialLineIsStale(item.applied_coupons, now)) continue;
@@ -1143,8 +1217,14 @@ async function readCartOnce(allowRewardSync: boolean) {
         offer_name: offerByItem.get(i.id)?.promotionName ?? null,
         offer_percent: offerByItem.get(i.id)?.percent ?? null,
         // Set when a promotion PUT this line in the cart (card EIXdjw2s): the row shows it as the
-        // offer's item and offers no quantity buttons — it comes and goes with its offer.
+        // offer's item; its quantity buttons and remove follow the offer's own settings (card
+        // vmO0TRBD — Zoey's Allow Quantity Updates / Allow Removal From Cart), and a Matching QTY
+        // offer's Customization Title / Message shows under it.
         promotion_reward: rewardPromotionIdOf(i as { applied_coupons?: unknown }),
+        reward_settings:
+          rewardPromotionIdOf(i as { applied_coupons?: unknown }) != null
+            ? rewardSettingsOf(i as { applied_coupons?: unknown })
+            : null,
       };
     }),
   };

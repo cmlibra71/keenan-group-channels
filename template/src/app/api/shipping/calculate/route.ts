@@ -8,6 +8,7 @@ import {
   type FreightGrant,
 } from "@keenan/services";
 import { gstSplit } from "@keenan/services/calc";
+import { discountRuleAddressFrom } from "@keenan/services";
 import { calculateShipping, CHANNEL_ID } from "@/lib/store";
 import { cartLineGoodsExTax } from "@/lib/checkout/order-draft";
 import { resolveCartOffers, type OfferCartLine } from "@/lib/promotions/cart-offers";
@@ -88,6 +89,9 @@ export async function POST(request: NextRequest) {
           // The same shopper the cart and checkout judge offers for, so the freight is quoted
           // on the goods value they will actually be charged (card p6YVxc4P, round 4).
           ...(await currentShopperForOffers()),
+          // The postcode being quoted: a Discount Rule's Shipping Postcode condition reads it, as
+          // placeOrder's does (card vmO0TRBD).
+          address: discountRuleAddressFrom({ postcode }),
         });
         freightGrant = offers.freight;
         const offerByItemId = new Map(offers.lines.map((l) => [l.itemId, l.discount]));

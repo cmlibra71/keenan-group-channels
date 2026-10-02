@@ -24,6 +24,7 @@ import {
   couponService,
   evaluateBasketPromotions,
   loadCouponCustomerUses,
+  type DiscountRuleAddress,
   type FreightGrant,
   resolveOrderPricingGroupId,
   type PromotionEvaluation,
@@ -66,9 +67,121 @@ export function rewardPromotionIdOf(item: { applied_coupons?: unknown }): number
   return null;
 }
 
+/**
+ * Zoey's per-rule settings for the item a Discount Rule added (card vmO0TRBD): Allow Quantity
+ * Updates, Allow Removal From Cart, the Matching QTY Customization Title / Message and — in
+ * surcharge mode — the price it is charged. Stored on the line's own marker, so the cart row, the
+ * quantity buttons and the sync all read the same settings without another query.
+ */
+export interface RewardLineSettings {
+  allowQty: "yes" | "cart_only" | "no_increase" | "no" | "force";
+  allowRemoval: boolean;
+  customization: { title: string; message: string } | null;
+  /** Surcharge mode: the per-unit price, in the cart's basis. */
+  surchargeUnit: number | null;
+  /** How many the offer put there — "Yes - But Prohibit Qty Increases" never goes above it. */
+  addedQty: number | null;
+}
+
 /** The `applied_coupons` value that marks a line as this promotion's reward. */
-export function rewardMarker(promotionId: number): { promotion_reward: number }[] {
-  return [{ promotion_reward: promotionId }];
+export function rewardMarker(
+  promotionId: number,
+  settings?: Partial<RewardLineSettings> | null
+): Array<{ promotion_reward: number } & Record<string, unknown>> {
+  const s = settings ?? {};
+  return [
+    {
+      promotion_reward: promotionId,
+      ...(s.allowQty && s.allowQty !== "no" ? { allow_qty: s.allowQty } : {}),
+      ...(s.allowRemoval ? { allow_removal: true } : {}),
+      ...(s.customization ? { customization: s.customization } : {}),
+      ...(s.surchargeUnit != null ? { surcharge_unit: s.surchargeUnit } : {}),
+      ...(s.addedQty != null ? { added_qty: s.addedQty } : {}),
+    },
+  ];
+}
+
+/** The settings a reward line's marker carries (defaults = Zoey's "No" everywhere). PURE. */
+export function rewardSettingsOf(item: { applied_coupons?: unknown }): RewardLineSettings {
+  const out: RewardLineSettings = { allowQty: "no", allowRemoval: false, customization: null, surchargeUnit: null, addedQty: null };
+  const raw = item.applied_coupons;
+  if (!Array.isArray(raw)) return out;
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    if (!(Number(e.promotion_reward) > 0)) continue;
+    if (["yes", "cart_only", "no_increase", "force"].includes(String(e.allow_qty))) out.allowQty = e.allow_qty as RewardLineSettings["allowQty"];
+    out.allowRemoval = e.allow_removal === true;
+    const c = e.customization as { title?: unknown; message?: unknown } | null;
+    if (c && typeof c === "object") out.customization = { title: String(c.title ?? ""), message: String(c.message ?? "") };
+    const su = Number(e.surcharge_unit);
+    out.surchargeUnit = Number.isFinite(su) && su >= 0 && e.surcharge_unit != null ? su : null;
+    const aq = Number(e.added_qty);
+    out.addedQty = Number.isInteger(aq) && aq > 0 ? aq : null;
+  }
+  return out;
+}
+
+/**
+ * The quantity a held reward line should have after a sync, by Zoey's Allow Quantity Updates
+ * (card vmO0TRBD): "No" and "No - Always force…" hold the offer's quantity; "Yes" keeps whatever the
+ * shopper set; "Yes - But Only from Cart" keeps it except when a product is being Added to Cart,
+ * which resets it; "Yes - But Prohibit Qty Increases" keeps it but never above the offer's. PURE.
+ */
+export function rewardQuantityAfterSync(
+  allowQty: RewardLineSettings["allowQty"],
+  current: number,
+  wanted: number,
+  fromAdd: boolean
+): number {
+  switch (allowQty) {
+    case "yes":
+      return current;
+    case "cart_only":
+      return fromAdd ? wanted : current;
+    case "no_increase":
+      return Math.min(current, wanted);
+    default:
+      return wanted;
+  }
+}
+
+/** May the shopper change a reward line's quantity to `next`? Null = yes, else the reason. PURE. */
+export function rewardQuantityRefusal(settings: RewardLineSettings, current: number, next: number): string | null {
+  if (next <= 0) return settings.allowRemoval ? null : REWARD_LINE_LOCKED_TEXT;
+  if (settings.allowQty === "no" || settings.allowQty === "force") return REWARD_LINE_LOCKED_TEXT;
+  if (settings.allowQty === "no_increase" && next > Math.max(current, settings.addedQty ?? current)) {
+    return "This item comes with your offer — you can lower its quantity, but not raise it.";
+  }
+  return null;
+}
+
+export const REWARD_LINE_LOCKED_TEXT =
+  "This item comes with your offer. It is added and removed automatically with the items that earn it.";
+
+/**
+ * A reward the shopper took out of the cart (Allow Removal From Cart = Yes) must not come straight
+ * back on the next read — Zoey remembers it for the cart. The cart rows have nowhere to keep that,
+ * so it rides a cookie beside the cart's own (`cart_uuid`): `<cart uuid>|<promotion id>:<SKU>,…`.
+ * A different cart (a new uuid) starts with nothing declined. PURE helpers; the cookie I/O is in
+ * `cart.ts`.
+ */
+export const DECLINED_REWARDS_COOKIE = "declined_rewards";
+export function declinedRewardKey(promotionId: number, sku: string): string {
+  return `${promotionId}:${sku.toUpperCase()}`;
+}
+export function parseDeclinedRewards(value: string | null | undefined, cartUuid: string | null | undefined): Set<string> {
+  if (!value || !cartUuid) return new Set();
+  const [uuid, list] = value.split("|");
+  if (uuid !== cartUuid || !list) return new Set();
+  return new Set(list.split(",").map((k) => k.trim()).filter((k) => /^\d+:[A-Z0-9][A-Z0-9._\-/ ]*$/.test(k)));
+}
+export function serializeDeclinedRewards(cartUuid: string, keys: Iterable<string>): string {
+  return `${cartUuid}|${[...new Set(keys)].slice(0, 50).join(",")}`;
+}
+/** Coupon codes as the engine reads them (kept as a seam; codes are passed through unchanged). */
+export function visibleCouponCodes(codes: readonly string[] | null | undefined): string[] {
+  return [...(codes ?? [])];
 }
 
 /** What one line took, as the cart, the checkout and the order all read it. */
@@ -104,6 +217,11 @@ export type CartOffers = {
   freight: FreightGrant | null;
   /** Which lines earned and took each Buy X Get Y reward, for the order's record. */
   rewards: RewardRecord[];
+  /**
+   * A Discount Rule set to Free Shipping = "Do not allow free shipping method" applied (card
+   * vmO0TRBD): the checkout offers no free delivery for this cart.
+   */
+  freeShippingBlocked?: boolean;
 };
 
 export const NO_OFFERS: CartOffers = {
@@ -168,6 +286,7 @@ function toOffers(evaluation: PromotionEvaluation): CartOffers {
     rewardLines: evaluation.rewardLines ?? [],
     freight: evaluation.freight ?? null,
     rewards: evaluation.rewards ?? [],
+    ...(evaluation.freeShippingBlocked ? { freeShippingBlocked: true } : {}),
   };
 }
 
@@ -207,6 +326,14 @@ export async function resolveCartOffers(
      * limited to customer groups reaches the customers it names and nobody else.
      */
     customerGroupId?: number | null;
+    /**
+     * The delivery and payment the checkout knows (card vmO0TRBD): a Discount Rule's Shipping
+     * Postcode / State / Country, Delivery Method and Payment Method conditions read it. The cart
+     * page has none yet, so those conditions read empty there — as on a Zoey cart before checkout.
+     */
+    address?: DiscountRuleAddress | null;
+    /** Which of IK's store views the shopper is on (the GST toggle) — picks the rule's label. */
+    labelView?: "ex_gst" | "inc_gst" | null;
   }
 ): Promise<CartOffers> {
   if (!items || items.length === 0) return NO_OFFERS;
@@ -231,7 +358,7 @@ export async function resolveCartOffers(
       })),
       {
         channelId: options.channelId,
-        couponCodes: options.couponCodes ?? [],
+        couponCodes: visibleCouponCodes(options.couponCodes),
         taxInclusive: options.pricesIncludeTax === true,
         contactId: options.contactId ?? null,
         email: options.email ?? null,
@@ -239,6 +366,8 @@ export async function resolveCartOffers(
         accountId: options.accountId ?? null,
         pricing: { trade: options.accountId != null },
         context: "storefront",
+        address: options.address ?? null,
+        labelView: options.labelView ?? null,
       }
     );
     return toOffers(evaluation);

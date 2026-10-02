@@ -28,7 +28,7 @@ import {
 } from "@keenan/services";
 import { reserveOffersForOrder, discardUnchargedOrder, OfferNoLongerAvailableError } from "@keenan/services";
 import { currentShopperForOffers } from "@/lib/promotions/shopper";
-import { resolveOrderPricingGroupId } from "@keenan/services";
+import { resolveOrderPricingGroupId, discountRuleAddressFrom } from "@keenan/services";
 import { backorderFactsForProducts } from "@/lib/cart/backorder-facts";
 import { canPurchaseQuantity } from "@keenan/services/backorder";
 import {
@@ -527,6 +527,10 @@ export async function placeOrder(
     contactId: shopper.contactId ?? session?.contactId ?? null,
   }).catch(() => null);
   const cartCouponCodes = ((cartWithItems as { coupon_codes?: string[] | null }).coupon_codes ?? []) as string[];
+  // The delivery address and payment this order is placed with — a Discount Rule's Shipping
+  // Postcode / State / Country and Payment Method conditions read them (card vmO0TRBD), exactly as
+  // the quote and the portal's order read theirs (`discountRuleAddressFrom`).
+  const offerAddress = discountRuleAddressFrom({ postcode: postalCode, state, country }, { paymentMethod: paymentMethod || null });
   try {
     cartOffers = await resolveCartOffers(fullCart.items as unknown as OfferCartLine[], {
       channelId: CHANNEL_ID,
@@ -536,6 +540,7 @@ export async function placeOrder(
       accountId: shopper.accountId,
       email: buyerEmail,
       customerGroupId: pricedGroupId,
+      address: offerAddress,
     });
     // A GUEST PAST A COUPON'S PER-CUSTOMER CAP. The cart could not know their email, so it SHOWED
     // the code's discount; priced for them, the code gives nothing. Never charge a total the
@@ -550,6 +555,7 @@ export async function placeOrder(
         accountId: shopper.accountId,
         email: null,
         customerGroupId: pricedGroupId,
+        address: offerAddress,
       });
       const dropped = shown.appliedCouponCodes.filter((c) => !cartOffers.appliedCouponCodes.includes(c));
       if (dropped.length > 0 && shown.totalDiscount > cartOffers.totalDiscount + 0.005) {
@@ -771,7 +777,10 @@ export async function placeOrder(
         ).values(),
       ]
     : [];
-  const brandFreeShipping = !!matchBrandSpecial(brandSpecials, cartBrandIds);
+  // "Do not allow free shipping method" (a Discount Rule, card vmO0TRBD) takes BOTH free deliveries
+  // away: the brand special and the member threshold. The checkout page reads the same flag.
+  const freeShippingBlocked = cartOffers.freeShippingBlocked === true;
+  const brandFreeShipping = !freeShippingBlocked && !!matchBrandSpecial(brandSpecials, cartBrandIds);
 
   // Shipping is quoted to the customer on the EX-tax subtotal (checkout page +
   // CheckoutForm pass cart.cartAmount), so the order must use the same basis or
@@ -782,7 +791,7 @@ export async function placeOrder(
     shippingRateExTax = 0;
   } else if (
     qualifiesForFreeDelivery({
-      enabled: checkoutSettings.freeShippingEnabled,
+      enabled: checkoutSettings.freeShippingEnabled && !freeShippingBlocked,
       isMember,
       amount: subtotalExTax,
       threshold: checkoutSettings.freeShippingThreshold,
