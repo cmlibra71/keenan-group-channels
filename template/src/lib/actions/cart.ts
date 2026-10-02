@@ -138,65 +138,60 @@ type LineSpecial = { promotionId: number; priceExTax: number } | null;
 /**
  * The prices for a line, plus WHICH Partner Special priced it (null when none did), so every write
  * of a line's price also writes its marker and the cart can tell later whether the special has
- * since started, ended or changed (card tJ4audbu; `refreshSpecialLines`). The PRICE is
- * `resolveItemPricing`'s alone — the one Partner Special lock (`lockToPartnerSpecial`, laid over
- * every other layer and then held inside the member scale's band) — so there is exactly one place
- * a special prices a cart line. This only names the special, from the same cached read.
+ * since started, ended or changed (card tJ4audbu; `refreshSpecialLines`).
+ *
+ * A PARTNER SPECIAL LOCKS THE LINE, exactly as the page draws it: the page's funnel lays the special
+ * LAST — over the group price and the account's contract price — so the regular it strikes through
+ * is whatever the line would otherwise cost (`layered.listPrice`), and the price is the special for
+ * every shopper, with no member price, group discount or quantity break off it (`specialAmounts`,
+ * the same pure function the page's overlay uses). The member scale's band is NOT laid over a
+ * special either: the page shows the special unbounded, and a special below Wholesale x 1.01 can
+ * only have gone live through the approve_promotions gate, so clamping it here would charge a price
+ * the page never showed. One cached read; a line with no live special is priced as before.
  */
 async function resolveItemPricingAndSpecial(
   productId: number,
   variantId: number | null | undefined,
   quantity: number
 ): Promise<{ pricing: { listPrice: string; salePrice: string | null }; special: LineSpecial }> {
-  const [pricing, specials] = await Promise.all([
-    resolveItemPricing(productId, variantId, quantity),
-    getLiveSpecials([productId]).catch(() => new Map()),
-  ]);
-  const special = specials.get(productId) as { promotionId: number; priceExTax: number } | undefined;
-  return {
-    pricing,
-    special: special ? { promotionId: special.promotionId, priceExTax: special.priceExTax } : null,
-  };
+  const special = (await getLiveSpecials([productId]).catch(() => new Map())).get(productId) as
+    | { promotionId: number; priceExTax: number }
+    | undefined;
+  const layered = await layerItemPricing(productId, variantId, quantity);
+  if (special) {
+    return {
+      pricing: lockToPartnerSpecial(layered, special.priceExTax),
+      special: { promotionId: special.promotionId, priceExTax: special.priceExTax },
+    };
+  }
+  return { pricing: await boundToMemberScale(productId, variantId, layered), special: null };
 }
 
-async function resolveItemPricing(
-  productId: number,
-  variantId: number | null | undefined,
-  quantity: number
-): Promise<{ listPrice: string; salePrice: string | null }> {
-  const layered = await lockToPartnerSpecial(productId, await layerItemPricing(productId, variantId, quantity));
-  // THE MEMBER PRICE SCALE'S BAND (card gk23c1VK). Whatever layer won — the
-  // account's contract price included, which returns before any engine call —
-  // a scale-priced line is held inside [Wholesale x 1.01, standard price]:
-  // "no price, promotion or override ever goes below W x 1.01", "a customer-group
-  // or contract price below W does not lower the floor", and nothing exceeds M.
-  // A no-op (one cached settings read) with the scale off, which is every
-  // channel until one is switched on.
-  if ((await getLadderConfig().catch(() => null))?.enabled !== true) return layered;
-  const bandVariantId = variantId ?? (await defaultVariantId(productId));
-  return boundPricesToMemberScale(bandVariantId, layered).catch(() => layered);
+/** The special's was/now on a line, against what the line would otherwise cost. Pure. */
+function lockToPartnerSpecial(
+  layered: { listPrice: string; salePrice: string | null },
+  specialExTax: number
+): { listPrice: string; salePrice: string | null } {
+  const regular = parseFloat(layered.listPrice);
+  const amounts = specialAmounts(Number.isFinite(regular) && regular > 0 ? regular : null, specialExTax);
+  return { listPrice: amounts.price, salePrice: amounts.salePrice };
 }
 
 /**
- * A PARTNER SPECIAL LOCKS THE LINE (card tJ4audbu), exactly as the page draws it: the page's funnel
- * lays the special LAST — over the group price and the account's contract price — so the regular it
- * strikes through is whatever the line would otherwise cost (`layered.listPrice`), and the price is
- * the special for every shopper, with no quantity break off it (`specialAmounts`, the same pure
- * function the page's overlay uses). Until this, the cart applied no special on any path: the
- * first live special would have shown one price and charged another. One cached read; a storefront
- * with no live special (both, today) gets the line back untouched.
+ * THE MEMBER PRICE SCALE'S BAND (card gk23c1VK), over a line no special priced. Whatever layer won
+ * — the account's contract price included, which returns before any engine call — a scale-priced
+ * line is held inside [Wholesale x 1.01, standard price]: "no price, promotion or override ever
+ * goes below W x 1.01", "a customer-group or contract price below W does not lower the floor", and
+ * nothing exceeds M. A no-op (one cached settings read) with the scale off.
  */
-async function lockToPartnerSpecial(
+async function boundToMemberScale(
   productId: number,
+  variantId: number | null | undefined,
   layered: { listPrice: string; salePrice: string | null }
 ): Promise<{ listPrice: string; salePrice: string | null }> {
-  const special = (await getLiveSpecials([productId]).catch(() => new Map())).get(productId) as
-    | { priceExTax: number }
-    | undefined;
-  if (!special) return layered;
-  const regular = parseFloat(layered.listPrice);
-  const amounts = specialAmounts(Number.isFinite(regular) && regular > 0 ? regular : null, special.priceExTax);
-  return { listPrice: amounts.price, salePrice: amounts.salePrice };
+  if ((await getLadderConfig().catch(() => null))?.enabled !== true) return layered;
+  const bandVariantId = variantId ?? (await defaultVariantId(productId));
+  return boundPricesToMemberScale(bandVariantId, layered).catch(() => layered);
 }
 
 /**

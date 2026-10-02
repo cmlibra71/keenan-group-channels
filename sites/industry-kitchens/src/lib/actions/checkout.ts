@@ -240,7 +240,9 @@ export async function placeOrder(
   // started takes it — persisted to the cart, then the order stops so the shopper sees the new
   // figure before paying it, the same way a lapsed membership does below. The retry succeeds.
   if ((await refreshSpecialPricesInCart()).repriced > 0) {
-    return { error: SPECIAL_PRICES_MOVED };
+    // `pricesChanged` refreshes the checkout page, as every other re-price below does, so the
+    // shopper confirms the new total on screen before a second press can pay it.
+    return { error: SPECIAL_PRICES_MOVED, pricesChanged: true };
   }
   // Buy X Get Y reward lines follow the basket (card EIXdjw2s). Brought up to date BEFORE the lines
   // are read — and AFTER the Partner Special re-judge above, so a spend condition is judged on the

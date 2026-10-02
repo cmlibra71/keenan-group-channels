@@ -117,9 +117,9 @@ export async function applyAccountPrices<T extends { id: number }[]>(products: T
     ? ((await applyAccountPricesToProducts(grouped as never, accountId)) as T)
     : grouped;
   // A PARTNER SPECIAL goes on LAST, over every layer above (card tJ4audbu): it is a locked price
-  // for every shopper, so it strikes through whatever the row was advertising and beats the
-  // customer-group price and the account's own contract price in both directions. Identity for a
-  // row with no special.
+  // for every shopper, so it strikes through whatever the row was advertising — the group price and
+  // the account's own contract price included — and beats the contract price in both directions.
+  // Identity for a row with no special.
   return applySpecialPrices(accountPriced as never) as Promise<T>;
 }
 

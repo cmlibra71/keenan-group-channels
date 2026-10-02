@@ -103,7 +103,8 @@ export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSaleP
   // Zoey's "As low as" — only when the lowest tier undercuts what this tile shows.
   const tierLow = typeof tierLowPrice === "number" ? tierLowPrice : parseFloat(String(tierLowPrice ?? ""));
   const shownUnit = showMemberPrice ? (memberPrice as number) : (displaySalePrice ?? displayPrice);
-  const showTierLow = displayPrice > 0 && Number.isFinite(tierLow) && tierLow > 0 && tierLow < shownUnit - 1e-9;
+  // Nor an "As low as" on a special: no quantity break comes off it (card tJ4audbu).
+  const showTierLow = !special && displayPrice > 0 && Number.isFinite(tierLow) && tierLow > 0 && tierLow < shownUnit - 1e-9;
 
   // Non-blocking: gtag queues the event; navigation proceeds immediately.
   function handleSelect() {
@@ -162,7 +163,7 @@ export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSaleP
             class is this site's own (globals.css), shared with the badge `@/lib/store` places on
             the authored tile, so the two tiles cannot look different. */}
         {special && <span className="special-badge">{special.badge}</span>}
-        {saleFlag && !special && displaySalePrice != null && (
+        {saleFlag && displaySalePrice != null && (
           <span className="absolute left-2 top-2 z-[2] rounded-sm bg-zinc-500 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-white">
             SALE
           </span>

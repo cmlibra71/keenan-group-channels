@@ -152,6 +152,7 @@ export async function ProductGrid({
             slug={product.urlPath || String(product.id)}
             price={product.price}
             salePrice={product.salePrice}
+            special={product.special ?? null}
             fromPrice={product.fromPrice ?? null}
             fromSalePrice={product.fromSalePrice ?? null}
             imageUrl={product.thumbnailImage?.urlThumbnail || product.thumbnailImage?.urlStandard}
