@@ -167,11 +167,12 @@ export async function updateWishlist(updates: WishlistLineUpdate[]): Promise<Upd
   const tooMany = await limited(session.contactId, "wishlist.update");
   if (tooMany) return { ok: false, error: tooMany };
   if (!Array.isArray(updates)) return { ok: false, error: INVALID };
-  // Only the three fields an update may carry cross into the service.
+  // Every element must be a plain object; only the three fields an update may carry cross into the service.
+  if (!updates.every((u) => u !== null && typeof u === "object" && !Array.isArray(u))) return { ok: false, error: INVALID };
   const clean = updates.map((u) => ({
-    itemId: (u as WishlistLineUpdate | null)?.itemId,
-    ...(u && "quantity" in u ? { quantity: u.quantity } : {}),
-    ...(u && "comment" in u ? { comment: u.comment } : {}),
+    itemId: u.itemId,
+    ...(Object.prototype.hasOwnProperty.call(u, "quantity") ? { quantity: u.quantity } : {}),
+    ...(Object.prototype.hasOwnProperty.call(u, "comment") ? { comment: u.comment } : {}),
   }));
   const result = await updateWishlistLines({ contactId: session.contactId, channelId: CHANNEL_ID }, clean);
   if (!result.ok) return { ok: false, error: result.reason === "not_found" ? NOT_FOUND : INVALID };

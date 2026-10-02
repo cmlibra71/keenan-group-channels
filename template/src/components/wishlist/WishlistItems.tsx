@@ -131,6 +131,11 @@ export function WishlistItems(props: WishlistItemsProps) {
     run(async () => {
       const res = await removeFromWishlist(line.id);
       if (!res.ok) return setNotice({ tone: "error", text: res.error });
+      if (!res.removed) {
+        // Not removed (already gone, or not this list's): reload to the server's truth.
+        window.location.reload();
+        return;
+      }
       applyLines([], [line.id]);
     });
 
