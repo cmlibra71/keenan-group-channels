@@ -119,7 +119,7 @@ export function ClearanceRail({
             sku={product.sku}
             price={product.price}
             salePrice={product.salePrice}
-                special={product.special ?? null}
+            special={product.special ?? null}
             imageUrl={product.thumbnailImage?.urlThumbnail || product.thumbnailImage?.urlStandard}
             brandName={product.brandName}
             brandLogoUrl={product.brand_logo_url ?? null}

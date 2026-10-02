@@ -339,6 +339,8 @@
     "lib/pricing/group-line.ts",
     "lib/pricing/special-line.test.ts",
     "lib/pricing/special-line.ts",
+    "lib/pricing/special-public-price.test.ts",
+    "lib/pricing/special-public-price.ts",
     "lib/pricing/special-saving.test.ts",
     "lib/pricing/special-saving.ts",
     "lib/product-customisation.test.ts",

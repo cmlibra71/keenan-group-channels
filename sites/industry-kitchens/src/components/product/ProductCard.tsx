@@ -160,7 +160,7 @@ export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSaleP
         {/* Card tJ4audbu — Tim's "Partner Special - No further discounts" image overlay. The
             class is this site's own (globals.css), shared with the badge `@/lib/store` places on
             the authored tile, so the two tiles cannot look different. */}
-        {special && <span className="special-badge">{special.badge}</span>}
+        {special && !hidePrice && <span className="special-badge">{special.badge}</span>}
         {saleFlag && displaySalePrice != null && (
           <span className="absolute left-2 top-2 z-[2] rounded-sm bg-zinc-500 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-white">
             SALE
