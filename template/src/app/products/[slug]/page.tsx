@@ -13,6 +13,7 @@ import { ChevronRight } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
 import { ProductPageClient } from "@/components/product/ProductPageClient";
 import { ProductOfferTiers } from "@/components/product/ProductOfferTiers";
+import { ProductPromotionBadge } from "@/components/product/ProductPromotionBadge";
 import { readProductKit } from "@/lib/product-kit";
 import { readProductAddons } from "@keenan/services/product-addons";
 import { readOptionValueOrder } from "@keenan/services/product-option-order";
@@ -219,6 +220,7 @@ export default async function ProductPage({
               CMS-template path as well as the fallback below — the live product
               page takes THIS branch, so an insert on only one of them shows the
               table on a page nobody sees. */}
+          <ProductPromotionBadge sku={product.sku} productId={product.id} />
           <ProductOfferTiers sku={product.sku} productId={product.id} unitPrice={memberPrice} />
         </div>
       );
@@ -317,6 +319,7 @@ export default async function ProductPage({
 
       {/* Carton tiers this product is in (card p6YVxc4P). Draws nothing when it is
           in no banded offer, and reads the same live promotions the cart applies. */}
+      <ProductPromotionBadge sku={product.sku} productId={product.id} />
       <ProductOfferTiers sku={product.sku} productId={product.id} unitPrice={memberPrice} />
 
       {/* Brand-specific warranty / installation notes (conditional) */}

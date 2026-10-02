@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchProducts } from "@keenan/services/search";
-import { applyGroupPrices, getChannelRulesForProducts, shouldSuppressCatalogSalePrice, withBrandDisplayNames } from "@/lib/store";
+import { applyGroupPrices, applySpecialPrices, getChannelRulesForProducts, shouldSuppressCatalogSalePrice, withBrandDisplayNames } from "@/lib/store";
+import { numericSpecialHit } from "@/lib/pricing/special-public-price";
 import { getPricingGroupId } from "@/lib/member";
 import { applyChannelRulesToTileRows } from "@keenan/services/channel-rules";
 import { CHANNEL_ID } from "@/lib/channel";
@@ -123,6 +124,18 @@ export async function GET(request: NextRequest) {
       result.hits = result.hits.map((hit) =>
         "salePrice" in hit ? { ...hit, salePrice: null } : hit
       ) as typeof result.hits;
+    }
+
+    // A PARTNER SPECIAL (card tJ4audbu) goes on LAST, exactly as on the tile and the page
+    // (`lib/member.ts` `applyAccountPrices` -> `applySpecialPrices`): the locked price for every
+    // shopper, struck against the regular figure the rows carry by now. AFTER the suppression above,
+    // which would otherwise clear the special's `salePrice`. The overlay writes 2dp strings and the
+    // dropdowns compare numbers, so special hits are turned back into numbers. Identity for a hit
+    // with no special.
+    if (result.hits.length > 0) {
+      result.hits = (
+        (await applySpecialPrices(result.hits as unknown as { id: number }[])) as unknown as typeof result.hits
+      ).map((hit) => numericSpecialHit(hit as never)) as typeof result.hits;
     }
 
     // The brand name THIS storefront prints (a Zoey sub-line such as "Waldorf Bold", or staff's

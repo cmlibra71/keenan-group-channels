@@ -75,6 +75,22 @@ export type CartItemRow = {
    */
   offer_discount?: number | null;
   offer_name?: string | null;
+  /**
+   * Set when a promotion PUT this line in the cart (card EIXdjw2s — Zoey's "Automatically Add
+   * Product To Cart"). It comes and goes with the items that earn it, so the row offers no
+   * quantity buttons and no remove: the server would refuse both.
+   */
+  promotion_reward?: number | null;
+  /**
+   * Zoey's settings for that added item (card vmO0TRBD): Allow Quantity Updates, Allow Removal From
+   * Cart, and a Matching QTY offer's Customization Title / Message. Absent = Zoey's "No".
+   */
+  reward_settings?: {
+    allowQty: "yes" | "cart_only" | "no_increase" | "no" | "force";
+    allowRemoval: boolean;
+    customization: { title: string; message: string } | null;
+    addedQty: number | null;
+  } | null;
   offer_percent?: number | null;
 };
 
@@ -130,6 +146,16 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
   /** Staff switched this product off for online ordering: the standing reason,
    *  shown whether or not the shopper has just pressed anything. */
   const restricted = item.restrict_add_to_cart === true;
+  const isReward = item.promotion_reward != null;
+  // Whether the shopper may move / take out an offer's item is the offer's own setting (Zoey's Allow
+  // Quantity Updates / Allow Removal From Cart, card vmO0TRBD); the server enforces the same rule.
+  const rewardQtyEditable =
+    isReward && ["yes", "cart_only", "no_increase"].includes(item.reward_settings?.allowQty ?? "no");
+  const rewardNoIncrease =
+    isReward &&
+    item.reward_settings?.allowQty === "no_increase" &&
+    item.quantity >= (item.reward_settings?.addedQty ?? item.quantity);
+  const rewardRemovable = isReward && item.reward_settings?.allowRemoval === true;
   const notice = cartLineNotice(refusal, restricted);
 
   const unitPrice = item.sale_price
@@ -279,7 +305,22 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
         {offerDiscount > 0 && item.offer_name && (
           <p className="mt-1 text-xs font-medium text-green-700">
             {item.offer_name}
-            {item.offer_percent ? ` — ${item.offer_percent}% off` : ""}
+            {/* A reward's percent is per REWARDED unit, which on a shared line is not the
+                line's; the saving beside the total says what it is worth. */}
+            {!isReward && item.offer_percent ? ` — ${item.offer_percent}% off` : ""}
+          </p>
+        )}
+        {isReward && (
+          <p className="mt-1 text-xs text-zinc-500">
+            {rewardRemovable || rewardQtyEditable
+              ? "Comes with your offer."
+              : "Comes with your offer — added and removed automatically."}
+          </p>
+        )}
+        {isReward && item.reward_settings?.customization && (item.reward_settings.customization.title || item.reward_settings.customization.message) && (
+          <p className="mt-1 text-xs text-zinc-600" data-testid="reward-customization">
+            {item.reward_settings.customization.title ? <span className="font-medium">{item.reward_settings.customization.title}: </span> : null}
+            {item.reward_settings.customization.message}
           </p>
         )}
         {backorderNote && (
@@ -301,7 +342,10 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
         )}
       </div>
 
-      {/* Quantity controls */}
+      {/* Quantity controls — none on a promotion's reward line (see `promotion_reward`). */}
+      {isReward && !rewardQtyEditable ? (
+        <span className="min-w-8 px-1 text-center text-sm font-medium">Qty {item.quantity}</span>
+      ) : (
       <div className="flex items-center gap-2">
         <button
           onClick={() => handleQuantity(item.quantity - packSize)}
@@ -316,13 +360,14 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
           // A restricted line may be reduced and removed, never increased — the
           // server refuses it anyway (`refuseCartQuantity`), and a button that
           // only ever refuses is the control this card exists to remove.
-          disabled={isPending || restricted}
-          title={restricted ? CART_RESTRICTED_ERROR : undefined}
+          disabled={isPending || restricted || rewardNoIncrease}
+          title={restricted ? CART_RESTRICTED_ERROR : rewardNoIncrease ? "This item comes with your offer — you can lower its quantity, but not raise it." : undefined}
           className="h-8 w-8 flex items-center justify-center rounded border border-zinc-300 text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
         >
           <Plus className="h-3 w-3" />
         </button>
       </div>
+      )}
 
       {/* Line total. An offer is shown as a REDUCTION under the line rather than
           folded into the unit price, because that is exactly how it lands on the
@@ -337,14 +382,18 @@ function CartItemRow({ item, onMutate }: { item: CartItemRow; onMutate?: () => v
         )}
       </div>
 
-      {/* Remove */}
-      <button
-        onClick={handleRemove}
-        disabled={isPending}
-        className="text-zinc-400 hover:text-red-600 disabled:opacity-50"
-      >
-        <Trash2 className="h-4 w-4" />
-      </button>
+      {/* Remove — not on a reward line, which leaves with the item that earned it. */}
+      {isReward && !rewardRemovable ? (
+        <span className="w-4" aria-hidden="true" />
+      ) : (
+        <button
+          onClick={handleRemove}
+          disabled={isPending}
+          className="text-zinc-400 hover:text-red-600 disabled:opacity-50"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      )}
     </div>
   );
 }

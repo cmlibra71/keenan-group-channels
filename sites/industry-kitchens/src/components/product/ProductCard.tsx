@@ -41,6 +41,11 @@ interface ProductCardProps {
   /** Active member's price for this product — renders the member layout. */
   memberPrice?: number | null;
   /**
+   * Card tJ4audbu — the PARTNER SPECIAL on this product. `price` / `salePrice` already carry its
+   * was/now, which the sale branch below draws; this puts Tim's badge over the picture.
+   */
+  special?: { badge: string; label: string | null } | null;
+  /**
    * IK parity, product cards (old site 2026-09-28). All optional and off by default, so a call
    * site that passes none of them draws the tile exactly as before.
    *   saleFlag    — Zoey's grey "SALE" flag on the photo while the tile shows a real sale price
@@ -69,9 +74,11 @@ interface ProductCardProps {
   listId?: string;
   listName?: string;
   listIndex?: number;
+  /** The Buy X Get Y / free-freight badge this product carries (card EIXdjw2s); null = none. */
+  promotionBadge?: string | null;
 }
 
-export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSalePrice, imageUrl, brandName, brandLogoUrl, brandLogoAlt, memberPricingAvailable, memberPrice, saleFlag, fromPriceVaries, zeroPriceText, brandLine, hidePrice, sku, showSku, priceSuffix, tierLowPrice, productId, listId, listName, listIndex }: ProductCardProps) {
+export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSalePrice, imageUrl, brandName, brandLogoUrl, brandLogoAlt, memberPricingAvailable, memberPrice, special, saleFlag, fromPriceVaries, zeroPriceText, brandLine, hidePrice, sku, showSku, priceSuffix, tierLowPrice, productId, listId, listName, listIndex, promotionBadge }: ProductCardProps) {
   // A dead image file is invisible to the server — the row exists and the URL is
   // well formed — so the browser is the only place it can be caught. An errored
   // photo drops to the same fallback an imageless product gets; a logo that is
@@ -88,13 +95,16 @@ export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSaleP
     fromPrice,
     fromSalePrice,
   });
+  // Never a member layout on a special: members pay the special too (Tim: "Special Price will
+  // be the floor"), and the upstream member map leaves special products out already.
   const showMemberPrice =
-    memberPrice != null && displayPrice > 0 && memberPrice < (displaySalePrice ?? displayPrice);
+    !special && memberPrice != null && displayPrice > 0 && memberPrice < (displaySalePrice ?? displayPrice);
   const suffix = displayPrice > 0 && priceSuffix ? priceSuffix.trim() : "";
   // Zoey's "As low as" — only when the lowest tier undercuts what this tile shows.
   const tierLow = typeof tierLowPrice === "number" ? tierLowPrice : parseFloat(String(tierLowPrice ?? ""));
   const shownUnit = showMemberPrice ? (memberPrice as number) : (displaySalePrice ?? displayPrice);
-  const showTierLow = displayPrice > 0 && Number.isFinite(tierLow) && tierLow > 0 && tierLow < shownUnit - 1e-9;
+  // Nor an "As low as" on a special: no quantity break comes off it (card tJ4audbu).
+  const showTierLow = !special && displayPrice > 0 && Number.isFinite(tierLow) && tierLow > 0 && tierLow < shownUnit - 1e-9;
 
   // Non-blocking: gtag queues the event; navigation proceeds immediately.
   function handleSelect() {
@@ -149,6 +159,10 @@ export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSaleP
             <Package className="h-12 w-12" />
           </div>
         )}
+        {/* Card tJ4audbu — Tim's "Partner Special - No further discounts" image overlay. The
+            class is this site's own (globals.css), shared with the badge `@/lib/store` places on
+            the authored tile, so the two tiles cannot look different. */}
+        {special && !hidePrice && <span className="special-badge">{special.badge}</span>}
         {saleFlag && displaySalePrice != null && (
           <span className="absolute left-2 top-2 z-[2] rounded-sm bg-zinc-500 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-white">
             SALE
@@ -231,7 +245,16 @@ export function ProductCard({ name, slug, price, salePrice, fromPrice, fromSaleP
             The block is present so that naming a tag in that one file is the whole opt-in — the
             same wording is placed on the authored `product-card` master by `@/lib/store`, so
             this tile and the tile the Site Builder repeats can never say different things. */}
-        {PROMO_TAG_LABEL && (
+        {/* The Buy X Get Y / free-freight badge (card EIXdjw2s): per product, only for a public
+            offer this storefront is running — the same wording the authored tile draws. */}
+        {promotionBadge && !special && (
+          <p className="mt-2">
+            <span className="badge-offer">{promotionBadge}</span>
+          </p>
+        )}
+        {/* Not on a Partner Special: "Buy more & save" beside "No further discounts" contradicts
+            it (card tJ4audbu). The authored tile follows the same rule. */}
+        {PROMO_TAG_LABEL && !special && (
           <p className="mt-3">
             <span className="badge-promo">{PROMO_TAG_LABEL}</span>
           </p>

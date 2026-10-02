@@ -1,5 +1,6 @@
 import { ProductCard } from "./ProductCard";
 import { applyAccountPrices } from "@/lib/member";
+import { promotionBadgeMap } from "@/lib/promotions/badges";
 import { applyCatalogScope } from "@/lib/catalog-scope";
 import { Ga4ViewItemList } from "@/components/analytics/Ga4ViewItemList";
 
@@ -9,6 +10,13 @@ interface ProductWithImage {
   urlPath: string | null;
   price: string;
   salePrice: string | null;
+  /**
+   * Card tJ4audbu — the PARTNER SPECIAL pricing this product, put on the row by the storefront's
+   * price funnel (`lib/member.ts` `applyAccountPrices` → `applySpecialPrices`). Its `price` /
+   * `salePrice` already carry the was/now; this is what puts Tim's badge on the tile. Absent =
+   * no special.
+   */
+  special?: { badge: string; label: string | null } | null;
   thumbnailImage?: { urlStandard: string; urlThumbnail: string | null } | null;
 }
 
@@ -52,6 +60,11 @@ export async function ProductGrid({
 }) {
   products = await applyCatalogScope(products);
   products = await applyAccountPrices(products);
+  // The Buy X Get Y / free-freight badge each React tile carries (card EIXdjw2s) — the same map the
+  // authored tiles read, for exactly the products still on the page after scope.
+  const promoBadges = await promotionBadgeMap(
+    products as unknown as { id: number; sku?: string | null }[]
+  );
   if (products.length === 0) {
     if (!renderEmpty) return null;
     return (
@@ -82,9 +95,11 @@ export async function ProductGrid({
           slug={product.urlPath || String(product.id)}
           price={product.price}
           salePrice={product.salePrice}
+          special={product.special ?? null}
           imageUrl={product.thumbnailImage?.urlThumbnail || product.thumbnailImage?.urlStandard}
           memberPricingAvailable={memberPricingAvailable}
           memberPrice={memberPriceMap?.[product.id] ?? null}
+          promotionBadge={promoBadges[product.id] ?? null}
           listId={listId}
           listName={listName}
           listIndex={indexOffset + index}

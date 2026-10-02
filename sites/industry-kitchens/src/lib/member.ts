@@ -8,6 +8,7 @@ import {
   accountService,
   applyAccountPricesToProducts,
   applyAdvertisedLadderPrices,
+  applySpecialPrices,
   getMemberLadderShare,
   applyGroupPrices,
   resolveViewerPricingGroupId,
@@ -127,8 +128,14 @@ export async function applyAccountPrices<T extends { id: number }[]>(products: T
   // the account's contract prices, which still win. Identity on a channel without it switched on.
   const grouped = (await applyGroupPrices(advertised as never, await getPricingGroupId())) as T;
   const accountId = await getAccountId();
-  if (!accountId) return grouped;
-  return applyAccountPricesToProducts(grouped as never, accountId) as Promise<T>;
+  const accountPriced = accountId
+    ? ((await applyAccountPricesToProducts(grouped as never, accountId)) as T)
+    : grouped;
+  // A PARTNER SPECIAL goes on LAST, over every layer above (card tJ4audbu): it is a locked price
+  // for every shopper, so it strikes through whatever the row was advertising — the group price and
+  // the account's own contract price included — and beats the contract price in both directions.
+  // Identity for a row with no special.
+  return applySpecialPrices(accountPriced as never) as Promise<T>;
 }
 
 /**

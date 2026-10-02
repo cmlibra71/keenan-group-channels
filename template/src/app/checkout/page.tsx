@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { goodsTotalOf } from "@/lib/checkout/shown-total";
 import { getCart } from "@/lib/actions/cart";
 import { getSession } from "@/lib/auth";
-import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getMembershipNumber, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, getLadderConfig, CHANNEL_ID } from "@/lib/store";
+import { getFeatureFlag, getSubscriptionPlans, getActiveSubscriptionForContact, getMembershipNumber, getCheckoutSettings, customerAddressService, contactService, channelSettingsService, shippingRateCardService, getLadderConfig, getLiveSpecials, CHANNEL_ID } from "@/lib/store";
+import { partnerSpecialSaving } from "@/lib/pricing/special-saving";
 import { resolveFreeTrialOffer } from "@/lib/membership/free-trial";
 import {
   checkoutOfferCopy,
@@ -126,6 +127,8 @@ export default async function CheckoutPage() {
     (cart as { offers?: { totalDiscount: number; messages: { kind: string; text: string }[] } } | null)
       ?.offers ?? null;
   const offerDiscount = Math.max(0, Math.round((cartOffers?.totalDiscount ?? 0) * 100) / 100);
+  const freeShippingBlocked =
+    (cart as { offers?: { freeShippingBlocked?: boolean } } | null)?.offers?.freeShippingBlocked === true;
   const subtotal = Math.max(0, Math.round((grossSubtotal - offerDiscount) * 100) / 100);
 
   // Brand free-shipping special (card 88Ay7UGA): any line from a promoted brand
@@ -469,7 +472,15 @@ export default async function CheckoutPage() {
       // $74.40 by being a member was told "$130.40 with your membership" because a $56.00 carton
       // offer had been folded in. The order record computes its own member saving offer-free
       // (order-draft.ts), so the two disagreed about one sale. Card p6YVxc4P.
-      memberSavings = Math.max(0, Math.round((listValue - grossSubtotal) * 100) / 100);
+      // A PARTNER SPECIAL line's gap to list is the special's, not the membership's (card
+      // tJ4audbu: every shopper pays it, "No further discounts") — never "saved with your
+      // membership". Same cached read that priced the line.
+      const specialLines = cart.items as { product_id: number | null; list_price: string | null; sale_price: string | null; quantity: number }[];
+      const onSpecial = await getLiveSpecials(
+        specialLines.map((i) => i.product_id).filter((id): id is number => id != null)
+      ).catch(() => new Map());
+      const specialSaving = partnerSpecialSaving(specialLines, new Set(onSpecial.keys()));
+      memberSavings = Math.max(0, Math.round((listValue - grossSubtotal - specialSaving) * 100) / 100);
       memberNumber = await getMembershipNumber(session.contactId).catch(() => null);
     } else if (!isMember) {
       const plans = await getSubscriptionPlans();
@@ -602,9 +613,11 @@ export default async function CheckoutPage() {
         paymentAvailability={paymentAvailability}
         savedAddresses={savedAddresses}
         googlePlacesEnabled={checkoutSettings.googlePlacesEnabled}
-        freeShippingEnabled={checkoutSettings.freeShippingEnabled}
+        // A Discount Rule set to "Do not allow free shipping method" takes free delivery away from
+        // this cart (card vmO0TRBD) — the same flag placeOrder reads, so show equals charge.
+        freeShippingEnabled={checkoutSettings.freeShippingEnabled && !freeShippingBlocked}
         freeShippingThreshold={checkoutSettings.freeShippingThreshold}
-        brandSpecial={brandSpecial}
+        brandSpecial={freeShippingBlocked ? null : brandSpecial}
         shippingEnabled={shippingEnabled}
         bulkyProductNames={bulkyProductNames}
         commercialProductNames={commercialProductNames}

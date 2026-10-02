@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pickBestBulkUnit, layerCartPrice, memberPricingGroupId, type BulkRule } from "./cart-pricing.ts";
+import { pickBestBulkUnit, layerCartPrice, memberPricingGroupId, specialCartPrice, type BulkRule } from "./cart-pricing.ts";
 
 // ---- pickBestBulkUnit ------------------------------------------------------
 
@@ -128,4 +128,16 @@ test("no group anywhere means no member price — the line falls back to RRP", (
 test("zero and undefined are not groups", () => {
   assert.equal(memberPricingGroupId(0, 0), null);
   assert.equal(memberPricingGroupId(undefined, 1505), 1505);
+});
+
+// ---- specialCartPrice (card tJ4audbu) --------------------------------------
+
+test("a Partner Special is stored as the line's sale price under the regular list price", () => {
+  assert.deepEqual(specialCartPrice("6059.09", 4363.64), { listPrice: "6059.09", salePrice: "4363.64" });
+});
+
+test("a special at or above the regular price has nothing to strike through", () => {
+  assert.deepEqual(specialCartPrice("100", 100), { listPrice: "100.00", salePrice: null });
+  assert.deepEqual(specialCartPrice("100", 120), { listPrice: "120.00", salePrice: null });
+  assert.deepEqual(specialCartPrice(null, 55.5), { listPrice: "55.50", salePrice: null });
 });

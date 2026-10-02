@@ -14,7 +14,9 @@ export type PriceAudience =
   /** Signed-in B2B account holder, not a member: a negotiated contract price. */
   | "account"
   /** Everyone else: RRP, plus an invitation to join. */
-  | "public";
+  | "public"
+  /** A PARTNER SPECIAL (card tJ4audbu): one locked price for every shopper, members included. */
+  | "special";
 
 export interface PriceDisplayInput {
   /** The catalogue price (products.price). Always the reference point. */
@@ -28,6 +30,13 @@ export interface PriceDisplayInput {
   /** What membership would save on this product, as a whole percentage.
    *  Non-members only; never accompanied by a price. */
   memberSavingsPct?: number;
+  /**
+   * The PARTNER SPECIAL this product is locked to, ex GST (card tJ4audbu). It beats everything
+   * below: the headline is the special, `rrp` is struck through as the "was" figure when the
+   * special undercuts it, and no member badge, member saving, account label or join pitch appears
+   * — members pay the special too ("Special Price will be the floor", Tim 21 Sep).
+   */
+  specialPrice?: number | null;
 }
 
 export interface PriceDisplay {
@@ -52,6 +61,8 @@ export interface PriceDisplay {
   showJoin: boolean;
   /** Percentage to advertise in the teaser. 0 = no number, copy stays generic. */
   teaserPct: number;
+  /** Strike the regular price through as a "Was" figure — a Partner Special that undercuts it. */
+  showWas: boolean;
 }
 
 export function derivePriceDisplay(input: PriceDisplayInput): PriceDisplay {
@@ -70,7 +81,23 @@ export function derivePriceDisplay(input: PriceDisplayInput): PriceDisplay {
     showAccountLabel: false,
     showJoin: false,
     teaserPct: 0,
+    showWas: false,
   };
+
+  // A PARTNER SPECIAL wins before anything else, including the POA test: a special is a price
+  // staff set on purpose, so a $0 catalogue row carrying one sells at the special.
+  const special = input.specialPrice;
+  if (special != null && Number.isFinite(special) && special > 0) {
+    return {
+      ...blank,
+      hidden: false,
+      audience: "special",
+      headline: special,
+      // Only when there is something to strike: "was $X now $X" must never render, and no
+      // "Save N%" beside Tim's "No further discounts" badge.
+      showWas: Number.isFinite(rrp) && rrp > special,
+    };
+  }
 
   // POA / quote-only: the caller renders its own "Call for Price".
   if (!Number.isFinite(rrp) || rrp <= 0) return blank;

@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { cartService, cartItemService, orderService, orderItemService, orderShippingAddressService, CHANNEL_ID, getEffectivePrice, productVariantService, productService, channelSettingsService, getCheckoutSettings, paymentService } from "@/lib/store";
-import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice, getSiteConfig } from "@/lib/store";
+import { getFeatureFlag, getActiveSubscriptionForContact, shouldSuppressCatalogSalePrice, getSiteConfig, getLiveSpecials } from "@/lib/store";
 import { getCartUuid, clearCartUuid } from "@/lib/cart";
 import { getSession } from "@/lib/auth";
 import { hasTestCheckoutSession } from "@/lib/checkout/test-session";
@@ -18,10 +18,18 @@ import {
 } from "@keenan/services/product-addons";
 import { buildLineItems, withShipping, determinePaymentStatus, findBelowCostLines, withLineCosts, withBackorderedQuantities, memberSavings, forOrderInsert, withPromotionDiscounts, lineGoodsExTax, type BelowCostLine, type LinePromotionDraft } from "@/lib/checkout/order-draft";
 import { chosenOptionLines } from "@/lib/product/addon-panel";
-import { resolveCartOffers, NO_OFFERS, type CartOffers, type OfferCartLine } from "@/lib/promotions/cart-offers";
+import { resolveCartOffers, couponCodesToRedeem, NO_OFFERS, type CartOffers, type OfferCartLine } from "@/lib/promotions/cart-offers";
+import { orderPromotionsRecord } from "@/lib/promotions/order-promotions";
+import { syncCartPromotionRewards } from "@/lib/actions/cart";
+import {
+  applyFreightReward,
+  readOrderFreightPromotionNote,
+  freightPromotionLine,
+  type FreightOutcome,
+} from "@keenan/services";
 import { reserveOffersForOrder, discardUnchargedOrder, OfferNoLongerAvailableError } from "@keenan/services";
 import { currentShopperForOffers } from "@/lib/promotions/shopper";
-import { resolveOrderPricingGroupId } from "@keenan/services";
+import { resolveOrderPricingGroupId, discountRuleAddressFrom } from "@keenan/services";
 import { backorderFactsForProducts } from "@/lib/cart/backorder-facts";
 import { canPurchaseQuantity } from "@keenan/services/backorder";
 import {
@@ -79,6 +87,8 @@ import {
 } from "@/lib/role-permissions";
 import { mayFileAddressInBook } from "@/lib/account/address-authority";
 import { applyAccountPricesToCart } from "@/lib/checkout/account-prices";
+import { refreshSpecialPricesInCart } from "@/lib/actions/cart";
+import { SPECIAL_PRICES_MOVED } from "@/lib/pricing/special-line";
 import { repriceGroupLinesForCheckout } from "@/lib/checkout/group-prices";
 import { goodsTotalMoved, PRICES_CHANGED_MESSAGE } from "@/lib/checkout/shown-total";
 import {
@@ -224,6 +234,21 @@ export async function placeOrder(
 
   const cartWithItems = await cartService.getByUuid(uuid);
   if (!cartWithItems) return { error: "Cart not found." };
+
+  // ── PARTNER SPECIALS are re-judged at the moment of charging (card tJ4audbu). A line priced by a
+  // special that has since ended goes back to its normal price, and a line added before one
+  // started takes it — persisted to the cart, then the order stops so the shopper sees the new
+  // figure before paying it, the same way a lapsed membership does below. The retry succeeds.
+  if ((await refreshSpecialPricesInCart()).repriced > 0) {
+    // `pricesChanged` refreshes the checkout page, as every other re-price below does, so the
+    // shopper confirms the new total on screen before a second press can pay it.
+    return { error: SPECIAL_PRICES_MOVED, pricesChanged: true };
+  }
+  // Buy X Get Y reward lines follow the basket (card EIXdjw2s). Brought up to date BEFORE the lines
+  // are read — and AFTER the Partner Special re-judge above, so a spend condition is judged on the
+  // prices the order will charge — so an order is never billed a reward the basket stopped earning
+  // (at full price), nor missing one it earned. Never throws.
+  await syncCartPromotionRewards();
 
   const fullCart = await cartService.getWithItems(cartWithItems.id);
   if (!fullCart || fullCart.items.length === 0) return { error: "Cart is empty." };
@@ -441,7 +466,15 @@ export async function placeOrder(
       const addonsBeforeReprice = new Map<number, unknown>(
         fullCart.items.map((i) => [i.id, i.modifier_selections])
       );
+      // A line on a PARTNER SPECIAL is not a member price and is not repriced here: the special
+      // is every shopper's price, members and non-members alike (card tJ4audbu), so a lapsed
+      // membership changes nothing about it — resetting it to RRP would charge more than the page
+      // this shopper was just shown.
+      const onSpecial = await getLiveSpecials(
+        fullCart.items.map((i) => i.product_id).filter((id): id is number => id != null)
+      ).catch(() => new Map());
       for (const item of fullCart.items) {
+        if (item.product_id != null && onSpecial.has(item.product_id)) continue;
         if (item.sale_price && item.list_price) {
           const oldPrice = item.sale_price;
           if (suppressCatalogSale) {
@@ -562,6 +595,10 @@ export async function placeOrder(
     contactId: shopper.contactId ?? session?.contactId ?? null,
   }).catch(() => null);
   const cartCouponCodes = ((cartWithItems as { coupon_codes?: string[] | null }).coupon_codes ?? []) as string[];
+  // The delivery address and payment this order is placed with — a Discount Rule's Shipping
+  // Postcode / State / Country and Payment Method conditions read them (card vmO0TRBD), exactly as
+  // the quote and the portal's order read theirs (`discountRuleAddressFrom`).
+  const offerAddress = discountRuleAddressFrom({ postcode: postalCode, state, country }, { paymentMethod: paymentMethod || null });
   try {
     cartOffers = await resolveCartOffers(fullCart.items as unknown as OfferCartLine[], {
       channelId: CHANNEL_ID,
@@ -571,6 +608,7 @@ export async function placeOrder(
       accountId: shopper.accountId,
       email: buyerEmail,
       customerGroupId: pricedGroupId,
+      address: offerAddress,
     });
     // A GUEST PAST A COUPON'S PER-CUSTOMER CAP. The cart could not know their email, so it SHOWED
     // the code's discount; priced for them, the code gives nothing. Never charge a total the
@@ -585,6 +623,7 @@ export async function placeOrder(
         accountId: shopper.accountId,
         email: null,
         customerGroupId: pricedGroupId,
+        address: offerAddress,
       });
       const dropped = shown.appliedCouponCodes.filter((c) => !cartOffers.appliedCouponCodes.includes(c));
       if (dropped.length > 0 && shown.totalDiscount > cartOffers.totalDiscount + 0.005) {
@@ -782,6 +821,11 @@ export async function placeOrder(
   // Shipping calculation. The rate card states EX-GST figures and GST is added on top of
   // them — a $30 flat rate is $33 inc (Tim, card twwZMnMY). Never back GST out of the rate.
   let shippingRateExTax = 0;
+  /**
+   * A Buy X Get Y FREIGHT reward (card EIXdjw2s): the quoted freight, what is charged and what was
+   * given away. Null when no freight promotion reduced this order's freight.
+   */
+  let freightOutcome: FreightOutcome | null = null;
   /** Staff-only breakdown of what the delivery figure is made of (card Xw9VQmAJ). */
   let freightAttributeBreakdown: unknown[] = [];
   const checkoutSettings = await getCheckoutSettings();
@@ -801,7 +845,10 @@ export async function placeOrder(
         ).values(),
       ]
     : [];
-  const brandFreeShipping = !!matchBrandSpecial(brandSpecials, cartBrandIds);
+  // "Do not allow free shipping method" (a Discount Rule, card vmO0TRBD) takes BOTH free deliveries
+  // away: the brand special and the member threshold. The checkout page reads the same flag.
+  const freeShippingBlocked = cartOffers.freeShippingBlocked === true;
+  const brandFreeShipping = !freeShippingBlocked && !!matchBrandSpecial(brandSpecials, cartBrandIds);
 
   // Shipping is quoted to the customer on the EX-tax subtotal (checkout page +
   // CheckoutForm pass cart.cartAmount), so the order must use the same basis or
@@ -812,7 +859,7 @@ export async function placeOrder(
     shippingRateExTax = 0;
   } else if (
     qualifiesForFreeDelivery({
-      enabled: checkoutSettings.freeShippingEnabled,
+      enabled: checkoutSettings.freeShippingEnabled && !freeShippingBlocked,
       isMember,
       amount: subtotalExTax,
       threshold: checkoutSettings.freeShippingThreshold,
@@ -844,7 +891,19 @@ export async function placeOrder(
         weightIncomplete: cartFreight ? cartFreight.has_unweighed_lines : true,
       });
       if (shippingResult.success) {
-        shippingRateExTax = shippingResult.cost;
+        // A free / reduced freight PROMOTION comes off the quoted rate here and nowhere else — the
+        // same `applyFreightReward` the checkout summary's estimate route runs, from the same
+        // offers, so the Shipping row shown is the one charged. The QUOTED figure is kept on the
+        // order (metafields.promotions.freight); the carrier's own cost is booked on the delivery
+        // exactly as before, because giving freight away changes what the customer pays, never
+        // what the carrier bills us. Never on a bulky order or outside the offer's zones.
+        const outcome = applyFreightReward(shippingResult.cost, cartOffers.freight, {
+          zoneId: shippingResult.zone_id ?? null,
+          hasBulky: bulkyProducts.length > 0,
+          specialised: heldForSpecialised,
+        });
+        shippingRateExTax = outcome.chargedExTax;
+        if (outcome.givenAwayExTax > 0) freightOutcome = outcome;
         // The staff-only working behind the number (card Xw9VQmAJ). The CUSTOMER sees one
         // Delivery total here, on the confirmation, in the email, on the invoice and on their
         // own order page — nothing they read names or itemises a surcharge. This bag is read
@@ -1147,7 +1206,12 @@ export async function placeOrder(
   // below-cost sentry: a reporting figure must never cost a customer their order.
   if (memberSubscription) {
     try {
-      const savings = memberSavings(fullCart.items, pricesIncludeTax);
+      // A Partner Special line is not a membership saving (card tJ4audbu): the special is
+      // every shopper's price, so its gap to list is left out of what the order records.
+      const specialIds = await getLiveSpecials(
+        fullCart.items.map((i) => i.product_id).filter((id): id is number => id != null)
+      ).catch(() => new Map());
+      const savings = memberSavings(fullCart.items, pricesIncludeTax, new Set(specialIds.keys()));
       if (savings.savedExTax > 0) {
         orderMetafields.member_savings = {
           subscription_id: memberSubscription.id,
@@ -1184,26 +1248,16 @@ export async function placeOrder(
   // are inserted; this is recorded as well because `metafields` exists in every
   // environment, so the reporting requirement holds even before migration 0100 is
   // applied — and it is the only place a bundle's own name survives.
-  if (cartOffers.appliedPromotionIds.length > 0) {
-    orderMetafields.promotions = {
-      total_discount: promotionDiscount.toFixed(2),
-      applied: cartOffers.appliedPromotionIds,
-      coupons: cartOffers.couponDiscounts.map((c) => ({
-        code: c.code,
-        promotion_id: c.promotionId,
-        discount: c.discount.toFixed(2),
-      })),
-      lines: cartOffers.lines.map((l) => ({
-        cart_item_id: l.itemId,
-        promotion_id: l.promotionId,
-        promotion_name: l.promotionName,
-        percent: l.percent,
-        discount: l.discount.toFixed(2),
-        floor_clamped: l.floorClamped,
-        ...(l.bundleSlug ? { bundle: l.bundleSlug } : {}),
-      })),
-    };
-  }
+  // Card EIXdjw2s adds what the promotion report and a refund need: the freight given away (quoted
+  // vs charged), which products earned and took each Buy X Get Y reward, and any line a
+  // Manager-approved promotion took under its margin floor. See `lib/promotions/order-promotions.ts`.
+  const promotionsRecord = orderPromotionsRecord(
+    cartOffers,
+    freightOutcome,
+    fullCart.items as unknown as Parameters<typeof orderPromotionsRecord>[2],
+    promotionDiscount
+  );
+  if (promotionsRecord) orderMetafields.promotions = promotionsRecord;
   if (belowCostLines.length > 0) {
     orderMetafields.below_cost_lines = belowCostLines.map((l) => ({
       product_id: l.productId,
@@ -1474,11 +1528,13 @@ export async function placeOrder(
   const couponCodesOnCart = ((cartWithItems as { coupon_codes?: string[] | null }).coupon_codes ?? [])
     .map((c) => (c ?? "").trim().toUpperCase())
     .filter((c) => c !== "");
-  const couponDiscountByCode = new Map(cartOffers.couponDiscounts.map((c) => [c.code.toUpperCase(), c.discount]));
-  const couponsToRedeem = [...new Set(couponCodesOnCart)]
-    .map((code) => ({ code, discount: couponDiscountByCode.get(code) ?? 0 }))
-    // A code that discounts nothing is not redeemed: it stays usable rather than being burnt.
-    .filter((c) => c.discount > 0);
+  // A code is spent when its rule took money off the goods, gave this order's freight away or put
+  // an item in the cart (card vmO0TRBD); one that did none of those stays usable rather than burnt.
+  const couponsToRedeem = couponCodesToRedeem(
+    couponCodesOnCart,
+    cartOffers,
+    freightOutcome?.promotionId != null ? Number(freightOutcome.promotionId) : null
+  );
   const discountedDrafts = lineItems.filter((l) => l.promotionId != null);
   try {
     if (discountedDrafts.length > 0 && insertedItems.length !== lineItems.length) {
@@ -1875,6 +1931,14 @@ export async function placeOrder(
       // customer's only email would read "Order Confirmed" over a total that excludes the
       // delivery we haven't quoted, and say nothing about the card not being charged.
       notice: heldForSpecialised ? SPECIALISED_HOLD_NOTICE : null,
+      // The freight promotion's own line (card EIXdjw2s, scope 8) — from the record this order
+      // was just written with, GST-inclusive like every figure in the email.
+      freightPromotionLine: (() => {
+        const note = readOrderFreightPromotionNote(orderMetafields);
+        if (!note) return null;
+        const aud = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" });
+        return freightPromotionLine(note, (n) => aud.format(n));
+      })(),
       bankDetails: method?.bankDetails ?? null,
       // Use the customer's actual account terms for a net-terms invoice email.
       netTermsDays:

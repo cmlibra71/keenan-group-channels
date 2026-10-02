@@ -5,6 +5,7 @@ import { tileBuyFacts } from "@/lib/tile-buy";
 import { cardPrice } from "@/lib/card-price";
 import { applyAccountPrices, getPricingGroupId } from "@/lib/member";
 import { attachFromPrices } from "@/lib/store";
+import { promotionBadgeMap } from "@/lib/promotions/badges";
 import { applyCatalogScope } from "@/lib/catalog-scope";
 import { getBrandLogos } from "@/lib/brand-logo-fallback";
 import { Ga4ViewItemList } from "@/components/analytics/Ga4ViewItemList";
@@ -15,6 +16,13 @@ interface ProductWithImage {
   urlPath: string | null;
   price: string;
   salePrice: string | null;
+  /**
+   * Card tJ4audbu — the PARTNER SPECIAL pricing this product, put on the row by the storefront's
+   * price funnel (`lib/member.ts` `applyAccountPrices` → `applySpecialPrices`). Its `price` /
+   * `salePrice` already carry the was/now; this is what puts Tim's badge on the tile. Absent =
+   * no special.
+   */
+  special?: { badge: string; label: string | null } | null;
   fromPrice?: string | null;
   fromSalePrice?: string | null;
   thumbnailImage?: { urlStandard: string; urlThumbnail: string | null } | null;
@@ -99,6 +107,11 @@ export async function ProductGrid({
   // configurable-from-price: AFTER the overlays, so a configurable tile reads "Starting From".
   // …priced at the viewer's customer-group price list, the same record the tile's headline carries.
   products = await attachFromPrices(products, { pricingGroupId: await getPricingGroupId() });
+  // The Buy X Get Y / free-freight badge each React tile carries (card EIXdjw2s) — the same map the
+  // authored tiles read, for exactly the products still on the page after scope.
+  const promoBadges = await promotionBadgeMap(
+    products as unknown as { id: number; sku?: string | null }[]
+  );
   if (products.length === 0) {
     if (!renderEmpty) return null;
     return (
@@ -139,6 +152,7 @@ export async function ProductGrid({
             slug={product.urlPath || String(product.id)}
             price={product.price}
             salePrice={product.salePrice}
+            special={product.special ?? null}
             fromPrice={product.fromPrice ?? null}
             fromSalePrice={product.fromSalePrice ?? null}
             imageUrl={product.thumbnailImage?.urlThumbnail || product.thumbnailImage?.urlStandard}
@@ -146,6 +160,7 @@ export async function ProductGrid({
             brandLogoAlt={brandLogos.get(product.id)?.brand_name ?? null}
             memberPricingAvailable={memberPricingAvailable}
             memberPrice={memberPriceMap?.[product.id] ?? null}
+            promotionBadge={promoBadges[product.id] ?? null}
             saleFlag={saleFlags}
             fromPriceVaries={buyButtons ? product.fromPriceVaries === true : undefined}
             // Zoey: a $0 tile says "POA" on a category-style list and nothing on search; a grouped
