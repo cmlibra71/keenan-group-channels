@@ -7,9 +7,10 @@ import type { FormPolicy } from "@keenan/services/builder-react";
 //
 // formPolicy.keepEmptyOptionValue — a "Choose…" placeholder <option value="">
 //   keeps its empty value, so a required dropdown rejects the placeholder
-//   instead of accepting (and submitting) its text. (WP2-b, IK info pages)
+//   instead of accepting (and submitting) its text. (WP2-b, IK info pages;
+//   Chefs Depot switched on 2026-10-03 — "CD select fix", coordinator-approved)
 // ============================================================================
 
 export const siteRenderPolicy: { formPolicy: FormPolicy } = {
-  formPolicy: {},
+  formPolicy: { keepEmptyOptionValue: true },
 };
