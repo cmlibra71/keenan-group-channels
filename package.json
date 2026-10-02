@@ -16,6 +16,7 @@
     "@keenan/services": "file:keenan-services-1.0.0.tgz",
     "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.7",
+    "tailwind-builder-node": "npm:@tailwindcss/node@4.2.2",
     "zod": "^4.1.13"
   },
   "devDependencies": {
