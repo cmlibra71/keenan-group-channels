@@ -6,37 +6,43 @@ import {
   builderCompilerInput,
   builderCompilerKey,
   collectPageBuilderClasses,
-  type BuilderCssBlob,
+  draftCompileClasses,
+  type BuilderCssInputs,
   type NodeTree,
 } from "@keenan/services/builder";
 
 // ============================================================================
-// Draft preview CSS — compile a DRAFT page's authored classes on the fly.
+// Draft preview CSS — the builder stylesheet a DRAFT page would get once
+// published.
 //
 // The published builder stylesheet (`builder_published_css`) is compiled by
-// the portal from the channel's saved vocabulary. A draft can use a class it
-// has not compiled yet — a draft written by a script (applyDraftOps), or one
-// saved before the portal's background recompile finished — and the draft
-// preview then drew that element unstyled. Pages are reviewed and pixel-diffed
-// as drafts before they are published, so the preview has to be exact.
+// the portal from the channel's saved class inventory. A draft can use a class
+// that inventory does not have yet — a draft written by a script
+// (applyDraftOps), or saved before the portal's background recompile finished
+// — and the draft preview then drew that element unstyled. Pages are reviewed
+// and pixel-diffed as drafts before they are published, so the preview has to
+// be exact.
 //
-// So on a draft render we compile the page's classes (its tree, the masters it
-// can reach, the named styles, the safelists) with the SAME compiler input and
-// post-processing the portal's publish uses (@keenan/services builder-css),
-// seeded with the theme the portal stored next to the published sheet, and
-// emit the result AFTER the published sheet. Tailwind orders rules per class,
-// so this sheet re-emits the page's rules in exactly the order a publish would
-// put them; rules the published sheet already has are simply repeated.
+// The portal stores the inputs of its last compile (`builder_css_inputs`: the
+// class list + the compiler theme). On a draft render:
+//   - every class the page can use (its tree, the masters it reaches, named
+//     styles, safelists) already in the inventory → nothing to do; the
+//     published sheet is exactly what a publish would serve;
+//   - otherwise compile `inventory ∪ page classes` with the stored theme, the
+//     same compiler input and post-processing as the portal's publish
+//     (@keenan/services builder-css), and serve that ONE sheet in place of the
+//     published one — byte-for-byte the sheet the next publish produces.
+//   - no stored inputs (before the portal first wrote them) → published sheet.
 //
 // The compiler is the portal's Tailwind version, installed here under the
 // alias `tailwind-builder-node` (root package.json) so the site's own
 // Tailwind can move independently. It is loaded through a runtime require so
 // nothing is bundled and a published page never touches it; if it cannot be
-// loaded the draft falls back to the published sheet alone — exactly the
-// behaviour before this existed. That is the case in the standalone production
-// image today (the runtime require is not traced into it), so on the live site
-// a draft preview still shows only published classes; local builds (`next
-// build && next start` with full node_modules, the parity harness) compile.
+// loaded the draft falls back to the published sheet — exactly the behaviour
+// before this existed. That is the case in the standalone production image
+// today (the runtime require is not traced into it), so on the live site a
+// draft preview still shows only published classes; local builds (`next build
+// && next start` with full node_modules, the parity harness) compile.
 //
 // Draft-only. Never called for a published render.
 // ============================================================================
@@ -45,7 +51,8 @@ type Compiler = { build: (candidates: string[]) => string };
 type CompileFn = (css: string, opts: { base: string; onDependency: (p: string) => void }) => Promise<Compiler>;
 
 const ALIAS = "tailwind-builder-node";
-const MAX_SHEETS = 64;
+const MAX_SHEETS = 32;
+const MAX_COMPILERS = 4;
 
 let loader: Promise<{ compile: CompileFn; base: string } | null> | null = null;
 const compilers = new Map<string, Promise<Compiler>>();
@@ -79,27 +86,35 @@ function loadCompiler(): Promise<{ compile: CompileFn; base: string } | null> {
 }
 
 /**
- * The stylesheet a draft page needs on top of the published one, or "" when it
- * cannot be compiled. Memoised per (theme, class set).
+ * The full builder stylesheet for a draft render, or null when the published
+ * sheet already is that stylesheet (or the draft cannot be compiled). Memoised
+ * per (theme, class set), least-recently-used.
  */
 export async function draftBuilderCss(input: {
   tree: NodeTree | null | undefined;
   components?: Record<string, NodeTree | null | undefined>;
   namedStyles?: Record<string, string[] | null | undefined>;
-  published?: BuilderCssBlob | null;
-}): Promise<string> {
+  inputs?: BuilderCssInputs | null;
+}): Promise<string | null> {
   try {
-    const classes = collectPageBuilderClasses(input.tree, input.components ?? {}, input.namedStyles ?? {});
-    const themeVars = input.published?.theme_vars ?? {};
+    const pageClasses = collectPageBuilderClasses(input.tree, input.components ?? {}, input.namedStyles ?? {});
+    const classes = draftCompileClasses(pageClasses, input.inputs);
+    if (!classes) return null;
+    const themeVars = input.inputs?.theme_vars ?? {};
     const themeKey = builderCompilerKey(themeVars);
-    const sheetKey = themeKey + "|" + createHash("sha256").update(classes.join(" ")).digest("hex");
+    const sheetKey = createHash("sha256").update(themeKey).update("\0").update(classes.join(" ")).digest("hex");
     const hit = sheets.get(sheetKey);
-    if (hit !== undefined) return hit;
+    if (hit !== undefined) {
+      sheets.delete(sheetKey);
+      sheets.set(sheetKey, hit);
+      return hit;
+    }
 
     const loaded = await loadCompiler();
-    if (!loaded) return "";
+    if (!loaded) return null;
     let compiler = compilers.get(themeKey);
     if (!compiler) {
+      if (compilers.size >= MAX_COMPILERS) compilers.delete(compilers.keys().next().value as string);
       compiler = loaded.compile(builderCompilerInput(themeVars), { base: loaded.base, onDependency: () => {} });
       compilers.set(themeKey, compiler);
       compiler.catch(() => compilers.delete(themeKey));
@@ -110,14 +125,14 @@ export async function draftBuilderCss(input: {
     return css;
   } catch (e) {
     console.error("[draft-builder-css] compile failed:", e instanceof Error ? e.message : e);
-    return "";
+    return null;
   }
 }
 
 /** Short content hash — the `href` React dedupes/hoists the <style> by. React
- *  hoists it into <head> right after the published sheet's <link> and renders it
- *  as `<style data-precedence="kg-builder" data-href="kg-draft-…">` — the marker
- *  an audit can look for to prove a draft render compiled its own classes. */
+ *  hoists it into <head> where the published sheet's <link> would have gone and
+ *  renders it as `<style data-precedence="kg-builder" data-href="kg-draft-…">` —
+ *  the marker an audit can look for to prove a draft compiled its own sheet. */
 export function draftCssId(css: string): string {
   return "kg-draft-" + createHash("sha256").update(css).digest("hex").slice(0, 16);
 }
