@@ -5,6 +5,7 @@ import BuilderImage from "./builder-image";
 import { useRouter } from "next/navigation";
 import type { NodeTree } from "@keenan/services/builder";
 import { BuilderTree, BuilderActionsProvider, type NativeComponents } from "@keenan/services/builder-react";
+import { siteRenderPolicy } from "./site-render-policy";
 import { Ga4ViewItemList } from "@/components/analytics/Ga4ViewItemList";
 import {
   enquireHandler,
@@ -229,6 +230,7 @@ function BrandPageTree({
         }))}
       />
       <BuilderTree
+        formPolicy={siteRenderPolicy.formPolicy}
         tree={confirmed.tree}
         payload={livePayload}
         namedStyles={namedStyles}

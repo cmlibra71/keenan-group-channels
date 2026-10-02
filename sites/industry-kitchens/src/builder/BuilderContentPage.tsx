@@ -5,6 +5,7 @@ import BuilderImage from "./builder-image";
 import { useRouter } from "next/navigation";
 import type { NodeTree } from "@keenan/services/builder";
 import { BuilderTree, BuilderActionsProvider, type NativeComponents } from "@keenan/services/builder-react";
+import { siteRenderPolicy } from "./site-render-policy";
 import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 import { contentNatives } from "./content-natives";
 
@@ -52,6 +53,7 @@ export function BuilderContentPage({
   return (
     <BuilderActionsProvider handlers={formHandlers} navigate={(to) => router.push(to)}>
       <BuilderTree
+        formPolicy={siteRenderPolicy.formPolicy}
         tree={confirmed.tree}
         payload={payload}
         namedStyles={namedStyles}

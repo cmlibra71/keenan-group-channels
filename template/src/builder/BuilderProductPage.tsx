@@ -26,6 +26,7 @@ import { useCartQuoteCounts, useHeaderPanels } from "@/lib/cart-quote-counts";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { FINANCE_FROM_REQUIRED_OPTION, KEEP_TEXT_COLOR } from "@/lib/zoey-parity-site";
 import { BuilderTree, type NativeComponents } from "@keenan/services/builder-react";
+import { siteRenderPolicy } from "./site-render-policy";
 import { BuilderActionsProvider } from "@keenan/services/builder-react";
 import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 import { productNatives } from "./product-natives";
@@ -297,6 +298,7 @@ function ActionsBridge({
   return (
     <BuilderActionsProvider handlers={actionHandlers} navigate={(to) => router.push(to)}>
       <BuilderTree
+        formPolicy={siteRenderPolicy.formPolicy}
         tree={confirmed.tree}
         payload={livePayload}
         namedStyles={namedStyles}

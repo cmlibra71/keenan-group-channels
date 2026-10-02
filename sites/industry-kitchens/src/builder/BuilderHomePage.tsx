@@ -5,6 +5,7 @@ import BuilderImage from "./builder-image";
 import { useRouter } from "next/navigation";
 import type { NodeTree } from "@keenan/services/builder";
 import { BuilderTree, BuilderActionsProvider, type NativeComponents } from "@keenan/services/builder-react";
+import { siteRenderPolicy } from "./site-render-policy";
 import { homeSectionNatives, type HomeNativeData } from "./home-natives";
 import {
   enquireHandler,
@@ -100,6 +101,7 @@ export function BuilderHomePage({
       navigate={(to) => router.push(to)}
     >
       <BuilderTree
+        formPolicy={siteRenderPolicy.formPolicy}
         tree={confirmed.tree}
         payload={livePayload}
         namedStyles={namedStyles}
