@@ -15,9 +15,11 @@ import { BuilderContentPage } from "@/builder/BuilderContentPage";
 import { BuilderCssLink } from "@/builder/builder-css-link";
 import { draftBuilderCss, draftCssId } from "@/builder/draft-builder-css";
 import { usedComponents } from "@/builder/used-components";
+import { siteRenderPolicy } from "@/builder/site-render-policy";
 import {
   loadJsSandbox,
   computeCallResults,
+  usedCmsFunctions,
   BUILDER_CSS_INPUTS_SETTING_KEY,
   type BuilderCssInputs,
   type NodeTree,
@@ -149,7 +151,11 @@ export default async function ContentPage({
       const contentFonts =
         hasContentFonts(await getDesignTokens().catch(() => null)) ||
         (draft && hasContentFonts(await getDraftDesignTokens().catch(() => null)));
-      const jsFunctions = await getEnabledCmsFunctions().catch(() => ({}) as Record<string, string>);
+      const allFunctions = await getEnabledCmsFunctions().catch(() => ({}) as Record<string, string>);
+      // Only what this page can call (site policy) — none → no QuickJS sandbox.
+      const jsFunctions = siteRenderPolicy.onlyUsedFunctions
+        ? usedCmsFunctions(tree, components, allFunctions)
+        : allFunctions;
       let callResults: Record<string, unknown> = {};
       if (Object.keys(jsFunctions).length > 0) {
         await loadJsSandbox(jsFunctions).catch(() => null);

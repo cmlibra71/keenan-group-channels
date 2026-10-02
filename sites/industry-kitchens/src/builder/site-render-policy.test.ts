@@ -7,3 +7,7 @@ import { siteRenderPolicy } from "./site-render-policy";
 test("this site's form policy", () => {
   assert.deepEqual(siteRenderPolicy.formPolicy, { keepEmptyOptionValue: true });
 });
+
+test("this site's function loading", () => {
+  assert.equal(siteRenderPolicy.onlyUsedFunctions ?? false, true);
+});

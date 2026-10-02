@@ -13,6 +13,7 @@ import {
 import { getPricingGroupId } from "@/lib/member";
 import {
   loadJsSandbox,
+  usedCmsFunctions,
   computeCallResults,
   templateOwns,
   guardBuyControls,
@@ -35,6 +36,7 @@ import { buildCdMembershipData, resolveCdLadderShare } from "@/lib/pricing/cd-me
 import { ViewedProductTracker } from "@/components/analytics/ViewedProductTracker";
 import { BuilderCssLink } from "@/builder/builder-css-link";
 import { usedComponents } from "@/builder/used-components";
+import { siteRenderPolicy } from "@/builder/site-render-policy";
 
 // ============================================================================
 // The product template's Site Builder branch — ENGINE.
@@ -340,8 +342,12 @@ export async function renderProductNodeBranch({
   // JavaScript function library: SSR evaluates call-conditions live (the
   // sandbox is awaited here), and callResults keeps the client's first paint
   // identical until its wasm loads.
-  const jsFunctions = await getEnabledCmsFunctions()
+  const allFunctions = await getEnabledCmsFunctions()
     .catch(() => ({}) as Record<string, string>);
+  // Only what this page can call (site policy) — none → no QuickJS sandbox.
+  const jsFunctions = siteRenderPolicy.onlyUsedFunctions
+    ? usedCmsFunctions(nodeTree, components as Parameters<typeof usedCmsFunctions>[1], allFunctions)
+    : allFunctions;
   let callResults: Record<string, unknown> = {};
   if (Object.keys(jsFunctions).length > 0) {
     await loadJsSandbox(jsFunctions).catch(() => null);

@@ -20,6 +20,7 @@ import {
   brandFacetsAsListingFacets,
   type FacetSelections,
   loadJsSandbox,
+  usedCmsFunctions,
   computeCallResults,
   type NodeTree,
 } from "@keenan/services/builder";
@@ -27,6 +28,7 @@ import { BuilderBrandPage, type BrandGridProduct } from "@/builder/BuilderBrandP
 import { applyChannelRulesToTileRows } from "@keenan/services/channel-rules";
 import { BuilderCssLink } from "@/builder/builder-css-link";
 import { usedComponents } from "@/builder/used-components";
+import { siteRenderPolicy } from "@/builder/site-render-policy";
 
 // ============================================================================
 // The brand template's Site Builder branch — ENGINE.
@@ -219,8 +221,12 @@ export async function renderBrandNodeBranch({
       css?: string;
     } | null)?.css ?? "";
 
-  const jsFunctions = await getEnabledCmsFunctions()
+  const allFunctions = await getEnabledCmsFunctions()
     .catch(() => ({}) as Record<string, string>);
+  // Only what this page can call (site policy) — none → no QuickJS sandbox.
+  const jsFunctions = siteRenderPolicy.onlyUsedFunctions
+    ? usedCmsFunctions(nodeTree, components as Record<string, NodeTree>, allFunctions)
+    : allFunctions;
   let callResults: Record<string, unknown> = {};
   if (Object.keys(jsFunctions).length > 0) {
     await loadJsSandbox(jsFunctions).catch(() => null);
