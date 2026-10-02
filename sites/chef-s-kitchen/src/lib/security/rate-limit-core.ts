@@ -145,6 +145,22 @@ const POLICIES = {
       { scope: "account", windowMs: 60 * MINUTE, max: 2 },
     ],
   },
+  /**
+   * The wishlist (Industry Kitchens): add, update, remove, and the after-sign-in claim.
+   *
+   * Not credential traffic, so nothing here can lock a customer out of their account — only out of
+   * editing their list for a few minutes. Sized far above a shopper building a list by hand (a busy
+   * session is a few dozen clicks) and far below a script papering a list or probing item ids.
+   * The `account` bucket is the signed-in CONTACT (`c<id>`), so one office sharing an egress
+   * address is not rationed as a single shopper; a guest's adds count only against the IP.
+   */
+  wishlist: {
+    message: "Too many wishlist changes.",
+    buckets: [
+      { scope: "ip", windowMs: 10 * MINUTE, max: 300 },
+      { scope: "account", windowMs: 10 * MINUTE, max: 120 },
+    ],
+  },
   /** The checkout "do you already have an account?" probe (bulk enumeration). */
   email_lookup: {
     message: "Too many attempts.",

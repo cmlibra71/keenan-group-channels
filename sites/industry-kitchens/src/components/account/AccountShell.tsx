@@ -26,12 +26,13 @@ import { AccountNav } from "./AccountNav";
  * dedupes those three channel_settings lookups across the shell and the page.
  */
 export const readAccountNavFlags = cache(async () => {
-  const [subscriptionsEnabled, drawsEnabled, partnerOffersEnabled] = await Promise.all([
+  const [subscriptionsEnabled, drawsEnabled, partnerOffersEnabled, wishlistEnabled] = await Promise.all([
     getFeatureFlag("subscriptions_enabled"),
     getFeatureFlag("draws_enabled"),
     getFeatureFlag("partner_offers_enabled"),
+    getFeatureFlag("wishlist_enabled"),
   ]);
-  return { subscriptionsEnabled, drawsEnabled, partnerOffersEnabled };
+  return { subscriptionsEnabled, drawsEnabled, partnerOffersEnabled, wishlistEnabled };
 });
 
 export async function AccountShell({ children }: { children: React.ReactNode }) {

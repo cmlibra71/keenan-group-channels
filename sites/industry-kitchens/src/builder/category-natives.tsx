@@ -5,6 +5,8 @@ import type { CategoryFacets } from "@/components/category/FilterRail";
 import type { CategoryListingCtx } from "./BuilderCategoryPage";
 import { TileCompare } from "@/components/product/TileCompare";
 import { TILE_COMPARE_KEY } from "./tile-compare-node";
+import { WishlistTileLink } from "@/components/wishlist/WishlistTileLink";
+import { WISHLIST_TILE_NATIVE } from "@/builder/wishlist-node";
 
 // Industry Kitchens seals nothing on the category page any more.
 //
@@ -38,5 +40,8 @@ export function categoryNatives({ listing }: { listing: CategoryListingCtx }): N
     // `product-card` by `builder/tile-compare-node.ts` (via lib/store.ts); `productId` arrives
     // bound to the tile's row. Not a master key, so nothing is shadowed.
     [TILE_COMPARE_KEY]: (props: Record<string, unknown>) => <TileCompare productId={props.productId} />,
+    // "Add to Wishlist" under a tile — inside the channel's `wishlist-tile` CMS master, which holds
+    // its words and its Show-if (`builder/wishlist-node.ts`; placed only while `wishlist_enabled`).
+    [WISHLIST_TILE_NATIVE]: (props: Record<string, unknown>) => <WishlistTileLink {...props} />,
   };
 }
