@@ -126,8 +126,11 @@ export default async function ContentPage({
       });
       const namedStyles = await getNamedStyles().catch(() => ({}));
       const components = (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<string, NodeTree>;
-      const builderCss =
-        ((await getChannelSetting("builder_published_css").catch(() => null)) as { css?: string } | null)?.css ?? "";
+      const builderCssBlob = (await getChannelSetting("builder_published_css").catch(() => null)) as {
+        css?: string;
+        generated_at?: string;
+      } | null;
+      const builderCss = builderCssBlob?.css ?? "";
       // A draft may use classes the published sheet has not compiled yet: then
       // it gets the sheet its publish would produce (builder/draft-builder-css.ts).
       const draftCss = draft
@@ -136,6 +139,7 @@ export default async function ContentPage({
             components,
             namedStyles,
             inputs: (await getChannelSetting(BUILDER_CSS_INPUTS_SETTING_KEY).catch(() => null)) as BuilderCssInputs | null,
+            publishedGeneratedAt: builderCssBlob?.generated_at ?? null,
           })
         : null;
       const jsFunctions = await getEnabledCmsFunctions().catch(() => ({}) as Record<string, string>);

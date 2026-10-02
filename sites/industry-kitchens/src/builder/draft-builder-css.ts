@@ -95,8 +95,14 @@ export async function draftBuilderCss(input: {
   components?: Record<string, NodeTree | null | undefined>;
   namedStyles?: Record<string, string[] | null | undefined>;
   inputs?: BuilderCssInputs | null;
+  /** `generated_at` of the published blob. The portal writes the sheet and the
+   *  inputs as two writes; if they disagree the inputs may describe an older
+   *  compile, so the draft keeps the published sheet rather than risk serving
+   *  a sheet built from a stale inventory. */
+  publishedGeneratedAt?: string | null;
 }): Promise<string | null> {
   try {
+    if (input.inputs?.generated_at !== input.publishedGeneratedAt) return null;
     const pageClasses = collectPageBuilderClasses(input.tree, input.components ?? {}, input.namedStyles ?? {});
     const classes = draftCompileClasses(pageClasses, input.inputs);
     if (!classes) return null;
