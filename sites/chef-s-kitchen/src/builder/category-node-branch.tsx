@@ -268,12 +268,13 @@ export async function renderCategoryNodeBranch({
   const gstInclusive = parseGstInclusive(cookieStore.get(GST_COOKIE)?.value);
 
   // The Buy X Get Y / free-freight badge each tile carries (card EIXdjw2s), read for exactly the
-  // products on this page and handed to the tile rows beside the member prices; beside it the
-  // channel's member price scale (audit C11) — the price masters word "Standard price"/"RRP" on it.
+  // products on this page and handed to the tile rows beside the member prices; and the channel's
+  // member price scale (audit C11) — the price masters word "Standard price"/"RRP" on it.
   const [promoBadgeMap, memberScaleOn] = await Promise.all([
     promotionBadgeMap(scoped as unknown as { id: number; sku?: string | null }[]),
     getMemberScaleOn(),
   ]);
+
   const payload = composeCategoryPagePayload({
     memberScaleOn,
     channelId: CHANNEL_ID,
