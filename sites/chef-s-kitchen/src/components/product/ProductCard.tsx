@@ -66,6 +66,12 @@ export interface ProductCardProps {
   inventoryLevel?: number | null;
   /** Accepted and deliberately unused — see `inventoryLevel`. */
   inventoryTracking?: string | null;
+  /**
+   * Card tJ4audbu — the PARTNER SPECIAL on this product. `salePrice` carries the special (the
+   * storefront's price funnel put it there), and this puts Tim's badge over the picture and draws
+   * the price as a was/now instead of an RRP.
+   */
+  special?: { badge: string; label: string | null } | null;
   /** GA4 select_item context (all optional — card works without analytics). */
   listId?: string;
   listName?: string;
@@ -93,6 +99,7 @@ export function ProductCard({
   availability,
   restrictAddToCart,
   restrictAddToQuote,
+  special,
   listId,
   listName,
   listIndex,
@@ -109,7 +116,11 @@ export function ProductCard({
   const rrp = parseFloat(price);
   const sale = salePrice ? parseFloat(salePrice) : null;
   const hasPrice = Number.isFinite(rrp) && rrp > 0;
-  const savePct = sale && rrp > 0 ? Math.round(((rrp - sale) / rrp) * 100) : 0;
+  // No "Save N%" chip on a Partner Special: Tim's badge says "No further discounts", and a
+  // percentage beside it reads as one more discount on offer (card tJ4audbu).
+  const savePct = sale && rrp > 0 && !special ? Math.round(((rrp - sale) / rrp) * 100) : 0;
+  const specialPrice = special ? (sale ?? rrp) : null;
+  const priced = hasPrice || (specialPrice != null && specialPrice > 0);
 
   // No stock-level badge: per card CXnP1lrL the storefront never states stock
   // status on a tile (the old "Low Stock" tag is gone).
@@ -136,7 +147,7 @@ export function ProductCard({
   // tile, which is the "CTA that does nothing" 7bmpuqei forbids here.
   const buttons = tileButtons(
     tileControlsOf({ restrictAddToCart, restrictAddToQuote }),
-    hasPrice,
+    priced,
     outOfStock
   );
 
@@ -202,6 +213,11 @@ export function ProductCard({
           {clearance && <span className="badge-clearance">Clearance</span>}
         </div>
 
+        {/* Card tJ4audbu — Tim's "Partner Special - No further discounts" image overlay. Styled
+            by the site's own `.special-badge` (globals.css), the same class `@/lib/store` places
+            on the authored `product-card` master, so the two tiles cannot look different. */}
+        {special && <span className="special-badge">{special.badge}</span>}
+
         {/* Brand mark — top-right */}
         {brandName && (
           <span className="absolute right-2.5 top-2.5 z-[2] rounded-sm bg-steel-50 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.06em] text-steel-500">
@@ -229,9 +245,10 @@ export function ProductCard({
 
         {/* Pricing — shared trade model */}
         <div className="mt-auto pt-2.5">
-          {hasPrice && (
+          {priced && (
             <PriceBlock
               rrp={rrp}
+              specialPrice={specialPrice}
               memberPrice={memberPrice}
               accountPricing={accountPricing}
               memberSavingsPct={memberSavingsPct}
@@ -260,7 +277,9 @@ export function ProductCard({
             `builder/promo-tag-node.ts` reaches at render time off this same wording, applied once
             in `@/lib/store` so no branch can load the master without it. One constant, so no two
             of our own screens can say different things about the same product. */}
-        {PROMO_TAG_LABEL && (
+        {/* Not on a Partner Special: "Buy more & save" beside "No further discounts" contradicts
+            it (card tJ4audbu). The authored tile follows the same rule. */}
+        {PROMO_TAG_LABEL && !special && (
           <p className="mt-3">
             <span className="badge-promo">{PROMO_TAG_LABEL}</span>
           </p>

@@ -261,6 +261,11 @@ export interface ProductJsonLdInput extends ProductOfferSource {
   description?: string | null;
   condition?: string | null;
   url: string;
+  /**
+   * The last day (YYYY-MM-DD) the offered price holds — set when the offer is a Partner Special
+   * (card tJ4audbu), whose end date the Google feed also sends as `sale_price_effective_date`.
+   */
+  priceValidUntil?: string | null;
 }
 
 export function schemaCondition(condition: string | null | undefined): string {
@@ -300,6 +305,7 @@ export function productJsonLd(input: ProductJsonLdInput): Record<string, unknown
       lowPrice: low,
       highPrice: high,
       offerCount: price.count,
+      ...(input.priceValidUntil ? { priceValidUntil: input.priceValidUntil } : {}),
       priceSpecification: {
         "@type": "UnitPriceSpecification",
         minPrice: low,
@@ -317,6 +323,7 @@ export function productJsonLd(input: ProductJsonLdInput): Record<string, unknown
       url: input.url,
       priceCurrency: "AUD",
       price: amount,
+      ...(input.priceValidUntil ? { priceValidUntil: input.priceValidUntil } : {}),
       priceSpecification: {
         "@type": "UnitPriceSpecification",
         price: amount,
