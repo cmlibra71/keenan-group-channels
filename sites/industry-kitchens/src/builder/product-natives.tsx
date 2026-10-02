@@ -23,6 +23,9 @@ import { AddToCompare } from "@/components/product/AddToCompare";
 import { COMPARE_NODE_KEY } from "@/builder/compare-node";
 import { TILE_COMPARE_KEY } from "@/builder/tile-compare-node";
 import { TileCompare } from "@/components/product/TileCompare";
+import { WishlistButton } from "@/components/wishlist/WishlistButton";
+import { WishlistTileLink } from "@/components/wishlist/WishlistTileLink";
+import { WISHLIST_BUTTON_NATIVE, WISHLIST_TILE_NATIVE } from "@/builder/wishlist-node";
 import { OfferTierTables, type OfferTierTable } from "@/components/product/OfferTierTables";
 import { GiftCardPanel } from "@/components/product/GiftCardPanel";
 
@@ -212,6 +215,11 @@ export function productNatives({ payload, variantImageUrl, data }: ProductNative
     // related rail carries the link on most product layouts. Placed beside every `product-card`
     // by `builder/tile-compare-node.ts` (via lib/store.ts), `productId` bound to the tile's row.
     [TILE_COMPARE_KEY]: (props: Record<string, unknown>) => <TileCompare productId={props.productId} />,
+    // "Add to Wishlist" (2026-10-02) — inside the channel's `wishlist-add` CMS master, placed under the
+    // compare control by `builder/wishlist-node.ts` while `wishlist_enabled` is on. Every word is a
+    // prop on that master; the native reads the page's picked variation and quantity.
+    [WISHLIST_BUTTON_NATIVE]: (props: Record<string, unknown>) => <WishlistButton {...props} />,
+    [WISHLIST_TILE_NATIVE]: (props: Record<string, unknown>) => <WishlistTileLink {...props} />,
     // "Images are for illustrative purposes only" (card 82HgV23q). Sealed rather than
     // authored because the supplied panel colour is not a token on either site, and a
     // colour class invented in a STORED tree has no rule in the deployed stylesheet.
