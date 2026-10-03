@@ -10,6 +10,7 @@ import {
   type BuilderCssInputs,
   type NodeTree,
 } from "@keenan/services/builder";
+import { siteRenderPolicy } from "./site-render-policy";
 
 // ============================================================================
 // Draft preview CSS — the builder stylesheet a DRAFT page would get once
@@ -125,7 +126,7 @@ export async function draftBuilderCss(input: {
       compilers.set(themeKey, compiler);
       compiler.catch(() => compilers.delete(themeKey));
     }
-    const css = buildLiveBuilderCss(await compiler, classes);
+    const css = buildLiveBuilderCss(await compiler, classes, siteRenderPolicy.builderCss ?? {});
     if (sheets.size >= MAX_SHEETS) sheets.delete(sheets.keys().next().value as string);
     sheets.set(sheetKey, css);
     return css;

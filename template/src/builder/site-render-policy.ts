@@ -1,4 +1,5 @@
 import type { FormPolicy } from "@keenan/services/builder-react";
+import type { BuilderCssOptions } from "@keenan/services/builder";
 
 // ============================================================================
 // This site's rendering choices for Site Builder trees — the PER-SITE half of a
@@ -12,13 +13,19 @@ import type { FormPolicy } from "@keenan/services/builder-react";
 //   the masters it draws can call (WP2-h); a page calling none loads no
 //   QuickJS sandbox, server or browser. Without it every enabled function rides
 //   along on every page.
+// builderCss.commaSafeSelectors — the draft-preview compile splits selector
+//   lists on top-level commas only, as the portal's publish does for this
+//   channel (WP2-j; mirrors the portal's lib/cms/site-render-policy.ts).
 // ============================================================================
 
 export const siteRenderPolicy: {
   formPolicy: FormPolicy;
   /** Ship only the library functions a page can call (none → no QuickJS sandbox). */
   onlyUsedFunctions?: boolean;
+  /** Builder stylesheet compile choices — must match the portal's for this channel. */
+  builderCss?: BuilderCssOptions;
 } = {
   formPolicy: { keepEmptyOptionValue: true },
   onlyUsedFunctions: true,
+  builderCss: { commaSafeSelectors: true },
 };
