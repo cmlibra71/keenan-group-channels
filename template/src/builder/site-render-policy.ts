@@ -1,4 +1,5 @@
 import type { FormPolicy } from "@keenan/services/builder-react";
+import type { EmbedPolicy } from "@keenan/services/cms";
 import type { BuilderCssOptions } from "@keenan/services/builder";
 
 // ============================================================================
@@ -16,6 +17,11 @@ import type { BuilderCssOptions } from "@keenan/services/builder";
 // builderCss.commaSafeSelectors — the draft-preview compile splits selector
 //   lists on top-level commas only, as the portal's publish does for this
 //   channel (WP2-j; mirrors the portal's lib/cms/site-render-policy.ts).
+// embedPolicy.calculator — node-tree iframes may frame the two exact SilverChef
+//   pages (WP2-m; mirrors the portal's lib/cms/site-render-policy.ts).
+// contentNow — content pages carry context.now (WP2-s).
+// responsiveDetails — FAQ <details data-open-base="open|"> take their phone
+//   open state below 1024px without overriding a visitor's click (WP2-n).
 // ============================================================================
 
 export const siteRenderPolicy: {
@@ -24,8 +30,17 @@ export const siteRenderPolicy: {
   onlyUsedFunctions?: boolean;
   /** Builder stylesheet compile choices — must match the portal's for this channel. */
   builderCss?: BuilderCssOptions;
+  /** Optional embeds node trees may frame (SilverChef calculator / certified-used page). */
+  embedPolicy?: EmbedPolicy;
+  /** Content pages carry context.now (today's date, storefront timezone). */
+  contentNow?: boolean;
+  /** Accordion <details> carrying data-open-base apply it below 1024px. */
+  responsiveDetails?: boolean;
 } = {
   formPolicy: { keepEmptyOptionValue: true },
   onlyUsedFunctions: true,
   builderCss: { commaSafeSelectors: true },
+  embedPolicy: { calculator: true },
+  contentNow: true,
+  responsiveDetails: true,
 };

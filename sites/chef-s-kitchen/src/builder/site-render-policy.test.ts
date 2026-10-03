@@ -15,3 +15,9 @@ test("this site's function loading", () => {
 test("this site's builder stylesheet compile choices", () => {
   assert.deepEqual(siteRenderPolicy.builderCss ?? {}, {});
 });
+
+test("this site's embeds, content date and responsive accordions", () => {
+  assert.deepEqual(siteRenderPolicy.embedPolicy ?? {}, {});
+  assert.equal(siteRenderPolicy.contentNow ?? false, false);
+  assert.equal(siteRenderPolicy.responsiveDetails ?? false, false);
+});

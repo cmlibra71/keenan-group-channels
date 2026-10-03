@@ -108,6 +108,7 @@ export const {
   // This site's own product search title + meta description (card CfnjZikj).
   getProductChannelSeo,
   getRedirectForPath,
+  getGonePaths,
   getTopCategories,
   // Wrapped below so a pictureless category borrows a product photograph (InEoeMZh).
   getCategories: getCategoriesRaw,
