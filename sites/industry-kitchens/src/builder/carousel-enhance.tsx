@@ -11,7 +11,7 @@ import { autoplayMs, nearestIndex, stepIndex } from "./carousel-state";
 //                                 the slides (CSS scroll-snap gives swipe)
 //   [data-kg-carousel-prev|next]  buttons (their text is a CMS prop)
 //   [data-kg-carousel-dot]        one button per slide, in order; the current
-//                                 one carries aria-current="true"
+//                                 one carries aria-current="true" + data-current
 // Arrow keys move while focus is inside. Autoplay pauses on hover/focus and in
 // a hidden tab, and never runs under prefers-reduced-motion or when frozen for
 // screenshot diffing (?kg-freeze, <html data-kg-freeze>, or localStorage
@@ -56,8 +56,14 @@ function wire(root: HTMLElement, reduced: boolean, freeze: boolean): () => void 
   const mark = () => {
     const i = current();
     dots.forEach((d, k) => {
-      if (k === i) d.setAttribute("aria-current", "true");
-      else d.removeAttribute("aria-current");
+      // aria-current for assistive tech; data-current for styling (class tokens cannot carry "=")
+      if (k === i) {
+        d.setAttribute("aria-current", "true");
+        d.setAttribute("data-current", "");
+      } else {
+        d.removeAttribute("aria-current");
+        d.removeAttribute("data-current");
+      }
     });
   };
 
