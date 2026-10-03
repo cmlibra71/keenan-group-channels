@@ -39,6 +39,8 @@ export const siteRenderPolicy: {
   responsiveDetails?: boolean;
   /** Authored carousels (data-kg-carousel) get arrows, dots, keyboard, autoplay (WP3 K1). */
   carousels?: boolean;
+  /** Content pages load their declared product / blog lists (info-product-grid, info-blog-list — WP2-a/o). */
+  pageLists?: boolean;
 } = {
   formPolicy: { keepEmptyOptionValue: true },
   // Chefs Depot since 2026-10-03 (coordinator-approved perf flip): no CD tree

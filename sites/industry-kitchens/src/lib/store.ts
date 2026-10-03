@@ -111,6 +111,8 @@ export const {
   sanitizeCatalogProduct,
   sanitizeCatalogProducts,
   getProducts,
+  // A page's declared product list (WP2-a): channel visibility, declared order.
+  getProductsByPaths,
   getProductBySlug,
   // configurable-from-price: a configurable row's "Starting From" list/sale, attached AFTER the
   // per-viewer price overlays so its tile reads "Starting From" instead of "Call for Price".

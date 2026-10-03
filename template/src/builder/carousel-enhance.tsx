@@ -12,6 +12,11 @@ import { autoplayMs, currentDot, nearestIndex, stepIndex } from "./carousel-stat
 //   [data-kg-carousel-prev|next]  buttons (their text is a CMS prop)
 //   [data-kg-carousel-dot]        one button per slide, in order; the current
 //                                 one carries aria-current="true" + data-current
+//   [data-kg-carousel-pause]      a visible pause/play toggle (WCAG 2.2.2,
+//                                 coordinator 2026-10-04): the root gets
+//                                 data-paused while the visitor has paused it;
+//                                 its accessible name swaps between the
+//                                 button's data-label-pause / data-label-play
 // Navigation counts in SLIDES (Zoey's slick, infinite mode): with several
 // slides in view the track stops at its end but the index keeps going, so
 // every dot is reachable. A track that cannot scroll at all hides its arrows
@@ -42,6 +47,7 @@ function wire(root: HTMLElement, reduced: boolean, freeze: boolean): () => void 
   const dots = own<HTMLElement>("[data-kg-carousel-dot]");
   const prev = own<HTMLElement>("[data-kg-carousel-prev]");
   const next = own<HTMLElement>("[data-kg-carousel-next]");
+  const pauses = own<HTMLElement>("[data-kg-carousel-pause]");
   const loop = root.getAttribute("data-loop") !== "false";
   const maxScroll = () => Math.max(0, track.scrollWidth - track.clientWidth);
   const offsets = () => {
@@ -83,6 +89,8 @@ function wire(root: HTMLElement, reduced: boolean, freeze: boolean): () => void 
   const layout = () => {
     isStatic = maxScroll() <= 1 || slides().length <= 1;
     for (const el of [...prev, ...next, ...dots]) el.style.display = isStatic ? "none" : "";
+    // Nothing moves on its own (no autoplay, reduced motion, frozen, static): nothing to pause.
+    for (const el of pauses) el.style.display = isStatic || ms === 0 ? "none" : "";
     if (isStatic) want = 0;
     // Widened so the track is no longer at its end: the index follows what is shown.
     else if (targetLeft === null && track.scrollLeft < maxScroll() - 1) want = nearestIndex(offsets(), track.scrollLeft);
@@ -131,8 +139,27 @@ function wire(root: HTMLElement, reduced: boolean, freeze: boolean): () => void 
   let timer: ReturnType<typeof setInterval> | null = null;
   let hover = false;
   let focus = false;
+  let userPaused = false;
+  const showPaused = () => {
+    root.toggleAttribute("data-paused", userPaused);
+    // The accessible NAME says what the button will do ("Pause" / "Play"); no aria-pressed on top
+    // of a swapping label (it would announce "Play, pressed").
+    for (const b of pauses) {
+      // the button's own data-paused drives its icon (no group variant needed)
+      b.toggleAttribute("data-paused", userPaused);
+      const label = b.getAttribute(userPaused ? "data-label-play" : "data-label-pause");
+      if (label) b.setAttribute("aria-label", label);
+    }
+  };
+  const onPause = (e: Event) => {
+    e.preventDefault();
+    userPaused = !userPaused;
+    showPaused();
+    sync();
+  };
+  pauses.forEach((b) => b.addEventListener("click", onPause));
   function sync() {
-    const run = ms > 0 && !isStatic && !hover && !focus && document.visibilityState === "visible";
+    const run = ms > 0 && !isStatic && !userPaused && !hover && !focus && document.visibilityState === "visible";
     if (run && !timer) timer = setInterval(() => step(1), ms);
     if (!run && timer) {
       clearInterval(timer);
@@ -160,6 +187,7 @@ function wire(root: HTMLElement, reduced: boolean, freeze: boolean): () => void 
     prev.forEach((b) => b.removeEventListener("click", onPrev));
     next.forEach((b) => b.removeEventListener("click", onNext));
     dots.forEach((d, k) => d.removeEventListener("click", dotHandlers[k]));
+    pauses.forEach((b) => b.removeEventListener("click", onPause));
     root.removeEventListener("keydown", onKey);
     track.removeEventListener("scroll", onScroll);
     cancelAnimationFrame(raf);
