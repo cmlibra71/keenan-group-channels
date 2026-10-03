@@ -31,7 +31,7 @@ async function goneHtml(port: string): Promise<string> {
 }
 
 export async function GET(req: Request) {
-  const html = await goneHtml(new URL(req.url).port);
+  const html = await goneHtml(process.env.PORT || new URL(req.url).port);
   return new Response(html, {
     status: 410,
     headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" },
