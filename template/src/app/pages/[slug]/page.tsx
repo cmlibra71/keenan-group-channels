@@ -5,7 +5,7 @@ import type { Metadata } from "next";
 import { getContentPage, getCmsPage, getCmsTemplate, getFeatureFlag, getNamedStyles, getComponents, getDraftComponents, getChannelSetting, CHANNEL_ID, getEnabledCmsFunctions, getSiteConfig } from "@/lib/store";
 import { getMemberContext } from "@/lib/member";
 import { sanitizeHtml } from "@/lib/sanitize-html";
-import { composeContentPagePayload, calendarNow, pageJsonLdBlocks, jsonLdScriptText, resolvePageCanonical, collectPageLists, bindPageLists, type PageSeo } from "@keenan/services/builder";
+import { composeContentPagePayload, calendarNow, pageJsonLdBlocks, jsonLdScriptText, resolvePageCanonical, collectPageLists, bindPageLists, listingForPageLists, type PageSeo } from "@keenan/services/builder";
 import { loadPageLists } from "@/builder/page-lists-data";
 import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
 import { siteBaseUrl } from "@/lib/seo";
@@ -171,6 +171,7 @@ export default async function ContentPage({
               pricing: pageLists.pricing,
               gst: { inclusive: parseGstInclusive(cookieStore.get(GST_COOKIE)?.value), pricesIncludeTax: !!pricesIncludeTax },
               memberPricingAvailable: !!memberPricingAvailable,
+              listing: listingForPageLists(listDecls),
             };
           })()
         : null;
