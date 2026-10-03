@@ -9,7 +9,8 @@ import type { BuilderCssOptions } from "@keenan/services/builder";
 //
 // formPolicy.keepEmptyOptionValue — a "Choose…" placeholder <option value="">
 //   keeps its empty value, so a required dropdown rejects the placeholder
-//   instead of accepting (and submitting) its text. (WP2-b, IK info pages)
+//   instead of accepting (and submitting) its text. formPolicy.scopeFieldIds —
+//   field ids inside each form/instance get a unique prefix (WP2-q). (WP2-b, IK info pages)
 // onlyUsedFunctions — a node page is handed only the cms_functions its tree and
 //   the masters it draws can call (WP2-h); a page calling none loads no
 //   QuickJS sandbox, server or browser. Without it every enabled function rides
@@ -37,7 +38,7 @@ export const siteRenderPolicy: {
   /** Accordion <details> carrying data-open-base apply it below 1024px. */
   responsiveDetails?: boolean;
 } = {
-  formPolicy: { keepEmptyOptionValue: true },
+  formPolicy: { keepEmptyOptionValue: true, scopeFieldIds: true },
   onlyUsedFunctions: true,
   builderCss: { commaSafeSelectors: true },
   embedPolicy: { calculator: true },

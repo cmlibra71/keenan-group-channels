@@ -64,6 +64,9 @@ export function useFormHandlers() {
           else if (k === "__t") t = Number(s);
           else if (k === "cf-turnstile-response") turnstileToken = s;
           else if (k.startsWith("__")) continue;
+          // A name that repeats (a group of tick boxes) becomes a list; a
+          // single entry stays a plain string, exactly as before (WP2-p).
+          else if (k in values) values[k] = ([] as string[]).concat(values[k] as string | string[], s);
           else values[k] = s;
         }
 
