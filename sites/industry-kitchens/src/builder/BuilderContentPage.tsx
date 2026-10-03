@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { NodeTree } from "@keenan/services/builder";
 import { BuilderTree, BuilderActionsProvider, type NativeComponents } from "@keenan/services/builder-react";
 import { siteRenderPolicy } from "./site-render-policy";
+import { ResponsiveDetails } from "./responsive-details";
 import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 import { contentNatives } from "./content-natives";
 
@@ -54,6 +55,7 @@ export function BuilderContentPage({
     <BuilderActionsProvider handlers={formHandlers} navigate={(to) => router.push(to)}>
       <BuilderTree
         formPolicy={siteRenderPolicy.formPolicy}
+        embedPolicy={siteRenderPolicy.embedPolicy}
         tree={confirmed.tree}
         payload={payload}
         namedStyles={namedStyles}
@@ -65,6 +67,7 @@ export function BuilderContentPage({
         imageComponent={BuilderImage}
         draft={draft}
       />
+      {siteRenderPolicy.responsiveDetails ? <ResponsiveDetails /> : null}
     </BuilderActionsProvider>
   );
 }

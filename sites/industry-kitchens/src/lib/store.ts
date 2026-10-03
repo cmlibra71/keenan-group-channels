@@ -116,6 +116,7 @@ export const {
   // per-viewer price overlays so its tile reads "Starting From" instead of "Call for Price".
   attachFromPrices,
   getRedirectForPath,
+  getGonePaths,
   getTopCategories,
   // Wrapped below so a pictureless category borrows a product photograph (InEoeMZh).
   getCategories: getCategoriesRaw,

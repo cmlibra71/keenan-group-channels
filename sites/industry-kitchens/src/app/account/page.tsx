@@ -6,6 +6,7 @@ import { contactService, getFeatureFlag, getActiveSubscriptionForContact,
   getMemberSince, getUpcomingDraws, drawEntryService, CHANNEL_ID } from "@/lib/store";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { safeNextPath, signInPrompt } from "@/lib/account-redirect";
+import { signInNoticeText } from "@/lib/sign-in-notice";
 import { normaliseEmail, looksLikeEmail } from "@/lib/checkout/account-prompt";
 import { chooseSignInEmail } from "@/lib/known-device";
 import { logout } from "@/lib/actions/auth";
@@ -19,7 +20,7 @@ export const metadata = {
 export default async function AccountPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; email?: string }>;
+  searchParams: Promise<{ next?: string; email?: string; notice?: string }>;
 }) {
   const session = await getSession();
 
@@ -36,6 +37,10 @@ export default async function AccountPage({
     // starts with their address already in the field, so they type only their
     // password. A typed address (the register form's "sign in instead" hand-off)
     // still wins over the remembered one.
+    // A redirect for a members-only page lands here as ?notice=<key>; the text
+    // is this storefront's data (portal Settings → Sign-in Notices), shown as
+    // plain text. Unknown key or no setting → nothing. (WP2-l)
+    const notice = await signInNoticeText(params.notice);
     const { email: prefillEmail, fromDevice } = chooseSignInEmail({
       typed: looksLikeEmail(typedEmail) ? typedEmail : null,
       remembered: await readRememberedEmail(),
@@ -43,6 +48,11 @@ export default async function AccountPage({
     return (
       <AccountShell>
         <h1 className="text-3xl font-bold text-zinc-900 mb-8">My Account</h1>
+        {notice && (
+          <p className="mb-4 rounded-md border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700" role="status">
+            {notice}
+          </p>
+        )}
         {next && <p className="text-zinc-600 mb-4">{signInPrompt(next)}</p>}
         <LoginForm next={next} defaultEmail={prefillEmail} rememberedDevice={fromDevice} />
       </AccountShell>

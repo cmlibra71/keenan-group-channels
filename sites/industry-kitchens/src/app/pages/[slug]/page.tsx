@@ -6,7 +6,7 @@ import { getContentPage, getCmsPage, getCmsTemplate, getFeatureFlag, getNamedSty
 import { CONTENT_FONTS_HREF, hasContentFonts } from "@/lib/content-fonts";
 import { getMemberContext } from "@/lib/member";
 import { sanitizeHtml } from "@/lib/sanitize-html";
-import { composeContentPagePayload } from "@keenan/services/builder";
+import { composeContentPagePayload, calendarNow } from "@keenan/services/builder";
 import { RichContent } from "@/components/content/RichContent";
 import { chooseContentPageTree } from "@/lib/content-page-tree";
 import { financeApplyFunderForSlug, withFinanceApplyLogo } from "@/lib/finance/finance-apply-logo";
@@ -126,6 +126,9 @@ export default async function ContentPage({
         },
         draft,
         sanitizeHtml,
+        // Today's date (storefront timezone) for {{context.now.*}}. Pages render
+        // per request (root layout force-dynamic), so it is never stale.
+        ...(siteRenderPolicy.contentNow ? { now: calendarNow() } : {}),
       });
       const namedStyles = await getNamedStyles().catch(() => ({}));
       const components = (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<string, NodeTree>;

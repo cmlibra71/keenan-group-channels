@@ -197,6 +197,7 @@ function CategoryPageTree({
       />
       <BuilderTree
         formPolicy={siteRenderPolicy.formPolicy}
+        embedPolicy={siteRenderPolicy.embedPolicy}
         tree={confirmed.tree}
         payload={livePayload}
         namedStyles={namedStyles}

@@ -299,6 +299,7 @@ function ActionsBridge({
     <BuilderActionsProvider handlers={actionHandlers} navigate={(to) => router.push(to)}>
       <BuilderTree
         formPolicy={siteRenderPolicy.formPolicy}
+        embedPolicy={siteRenderPolicy.embedPolicy}
         tree={confirmed.tree}
         payload={livePayload}
         namedStyles={namedStyles}

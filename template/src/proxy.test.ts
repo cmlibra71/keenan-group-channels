@@ -32,6 +32,10 @@ const ALLOWED_PROXY_IMPORTS = new Set([
   "@/lib/guard",
   "@/lib/acquisition-campaign",
   "@/lib/search-session",
+  // WP2-k: gone-paths imports only lib/redirect-path, which imports nothing;
+  // gone-policy is a one-line per-site constant.
+  "@/lib/gone-paths",
+  "@/lib/gone-policy",
 ]);
 
 test("proxy.ts imports nothing that would drag the data layer into the middleware", () => {

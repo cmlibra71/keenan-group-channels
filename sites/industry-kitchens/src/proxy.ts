@@ -14,6 +14,8 @@ import {
   // no @/lib/store) — see the note at the top of `lib/guard/index.ts`. The server-side
   // reader lives in `@/lib/acquisition` and must never be imported here.
 } from "@/lib/acquisition-campaign";
+import { goneCandidate, isGonePath } from "@/lib/gone-paths";
+import { GONE_FROM_DATA } from "@/lib/gone-policy";
 
 /**
  * Runs for EVERY storefront route (see matcher), and dispatches:
@@ -30,7 +32,7 @@ import {
  * — a fall-through would tag every storefront page with `x-cms-render` and
  * render the whole shop chrome-free.
  */
-export default function proxy(req: NextRequest) {
+export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // ── 1. Abuse guard ─────────────────────────────────────────────────────────
@@ -78,6 +80,24 @@ export default function proxy(req: NextRequest) {
     );
     res.headers.set("X-Robots-Tag", "noindex, nofollow");
     return res;
+  }
+
+  // ── 3b. Gone (410) addresses — data, not code (WP2-k) ──────────────────────
+  // url_redirects rows with status 410 answer with the site's not-found page
+  // and status 410. Per-site switch (lib/gone-policy.ts); the set lives in
+  // memory and refreshes in the background (lib/gone-paths.ts), so this never
+  // waits on the database.
+  if (GONE_FROM_DATA && goneCandidate(pathname, req.method)) {
+    const origin = `http://127.0.0.1:${process.env.PORT || req.nextUrl.port || "3000"}`;
+    if (await isGonePath(pathname, origin)) {
+      // A rewrite cannot carry the status into a page render (Next replaces it
+      // with the not-found page's 404), so the route handler serves the
+      // not-found HTML itself with 410.
+      const url = req.nextUrl.clone();
+      url.pathname = "/api/internal/gone-page";
+      url.search = "";
+      return NextResponse.rewrite(url);
+    }
   }
 
   // ── 4. Ordinary storefront traffic ─────────────────────────────────────────
