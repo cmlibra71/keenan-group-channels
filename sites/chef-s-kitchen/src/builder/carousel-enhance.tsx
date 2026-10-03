@@ -145,6 +145,8 @@ function wire(root: HTMLElement, reduced: boolean, freeze: boolean): () => void 
     // The accessible NAME says what the button will do ("Pause" / "Play"); no aria-pressed on top
     // of a swapping label (it would announce "Play, pressed").
     for (const b of pauses) {
+      // the button's own data-paused drives its icon (no group variant needed)
+      b.toggleAttribute("data-paused", userPaused);
       const label = b.getAttribute(userPaused ? "data-label-play" : "data-label-pause");
       if (label) b.setAttribute("aria-label", label);
     }
