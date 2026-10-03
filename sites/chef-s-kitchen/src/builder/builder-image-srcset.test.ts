@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { responsiveImageAttrs } from "./builder-image-srcset";
+import { responsiveImageAttrs, hiDpiImageAttrs } from "./builder-image-srcset";
 import imageLoader from "../lib/image-loader";
 
 // The widths <BuilderImage> uses — next.config.ts `images.deviceSizes`.
@@ -37,4 +37,13 @@ test("a src the loader passes through untouched gets no srcSet", () => {
     assert.equal(attrs.src, src);
     assert.equal(attrs.srcSet, undefined);
   }
+});
+
+test("hiDpiImageAttrs: box ×1 / ×2 snapped to served widths, capped at the original file", () => {
+  const L = ({ src, width }: { src: string; width: number }) => `${src}?w=${width}`;
+  assert.deepEqual(hiDpiImageAttrs("x", 270, null, L), { src: "x?w=400", srcSet: "x?w=400 1x, x?w=600 2x" });
+  assert.deepEqual(hiDpiImageAttrs("x", 270, 500, L), { src: "x?w=400", srcSet: "x?w=400 1x, x?w=600 2x" });
+  assert.deepEqual(hiDpiImageAttrs("x", 270, 300, L), { src: "x?w=400" });
+  assert.deepEqual(hiDpiImageAttrs("x", 1440, null, L), { src: "x?w=1600" });
+  assert.deepEqual(hiDpiImageAttrs("x", 700, 1200, L), { src: "x?w=800", srcSet: "x?w=800 1x, x?w=1280 2x" });
 });

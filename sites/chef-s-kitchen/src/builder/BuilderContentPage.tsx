@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import BuilderImage from "./builder-image";
+import BuilderImage, { HiDpiImagesContext } from "./builder-image";
 import { useRouter } from "next/navigation";
 import type { NodeTree } from "@keenan/services/builder";
 import { BuilderTree, BuilderActionsProvider, type NativeComponents } from "@keenan/services/builder-react";
@@ -59,6 +59,7 @@ export function BuilderContentPage({
   const addToQuote = useAddToQuoteHandler();
   const handlers = siteRenderPolicy.pageLists ? { ...formHandlers, addToCart, addToQuote } : formHandlers;
   return (
+    <HiDpiImagesContext.Provider value={!!siteRenderPolicy.hiDpiImages}>
     <BuilderActionsProvider handlers={handlers} navigate={(to) => router.push(to)}>
       <BuilderTree
         formPolicy={siteRenderPolicy.formPolicy}
@@ -77,5 +78,6 @@ export function BuilderContentPage({
       {siteRenderPolicy.responsiveDetails ? <ResponsiveDetails /> : null}
       {siteRenderPolicy.carousels ? <CarouselEnhance /> : null}
     </BuilderActionsProvider>
+    </HiDpiImagesContext.Provider>
   );
 }

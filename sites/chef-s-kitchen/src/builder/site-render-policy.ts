@@ -41,6 +41,10 @@ export const siteRenderPolicy: {
   carousels?: boolean;
   /** Content pages load their declared product / blog lists (info-product-grid, info-blog-list — WP2-a/o). */
   pageLists?: boolean;
+  /** Images with a known box render width/height + a box ×1/×2 srcset capped at the file (WP2-e). */
+  hiDpiImages?: boolean;
+  /** Content pages fill dimensionless static images from registered asset sizes (WP2-e). */
+  registeredImageDims?: boolean;
 } = {
   formPolicy: { keepEmptyOptionValue: true },
   // Chefs Depot since 2026-10-03 (coordinator-approved perf flip): no CD tree

@@ -2,11 +2,11 @@ import { notFound } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import { draftMode, headers, cookies } from "next/headers";
 import type { Metadata } from "next";
-import { getContentPage, getCmsPage, getCmsTemplate, getFeatureFlag, getNamedStyles, getComponents, getDraftComponents, getChannelSetting, CHANNEL_ID, getEnabledCmsFunctions, getSiteConfig, getDesignTokens, getDraftDesignTokens } from "@/lib/store";
+import { getContentPage, getCmsPage, getCmsTemplate, getFeatureFlag, getNamedStyles, getComponents, getDraftComponents, getChannelSetting, CHANNEL_ID, getEnabledCmsFunctions, getSiteConfig, getAssetDims, getDesignTokens, getDraftDesignTokens } from "@/lib/store";
 import { CONTENT_FONTS_HREF, hasContentFonts } from "@/lib/content-fonts";
 import { getMemberContext } from "@/lib/member";
 import { sanitizeHtml } from "@/lib/sanitize-html";
-import { composeContentPagePayload, calendarNow, pageJsonLdBlocks, jsonLdScriptText, resolvePageCanonical, collectPageLists, bindPageLists, listingForPageLists, type PageSeo } from "@keenan/services/builder";
+import { composeContentPagePayload, calendarNow, pageJsonLdBlocks, jsonLdScriptText, resolvePageCanonical, collectPageLists, bindPageLists, listingForPageLists, collectStaticImageUrls, applyRegisteredImageDims, type PageSeo } from "@keenan/services/builder";
 import { loadPageLists } from "@/builder/page-lists-data";
 import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
 import { siteBaseUrl } from "@/lib/seo";
@@ -160,6 +160,13 @@ export default async function ContentPage({
       const listDecls = siteRenderPolicy.pageLists ? collectPageLists(tree) : [];
       const pageLists = listDecls.length ? await loadPageLists(listDecls) : null;
       if (pageLists) tree = bindPageLists(tree, listDecls);
+      // Registered asset sizes for dimensionless static images (WP2-e, site policy): reserved
+      // space, and the original width that caps the hi-DPI srcset.
+      if (siteRenderPolicy.registeredImageDims) {
+        const urls = collectStaticImageUrls(tree);
+        const dims = urls.length ? await getAssetDims(urls).catch(() => ({}) as Record<string, { width: number; height: number }>) : {};
+        tree = applyRegisteredImageDims(tree, new Map(Object.entries(dims)));
+      }
       const listContext = pageLists
         ? await (async () => {
             const [pricesIncludeTax, cookieStore, memberPricingAvailable] = await Promise.all([
