@@ -63,8 +63,15 @@ export async function generateMetadata({
     const { site, channel } = await getSiteConfig();
     const base = siteBaseUrl(site?.url);
     const url = resolvePageCanonical(pageSeoOf(cms), base, `/pages/${slug}`);
-    const rawImage = meta.og_image_url || cms.og_image_url || null;
-    const image = rawImage ? (rawImage.startsWith("/") ? base + rawImage : rawImage) : null;
+    // The share image is versioned like the rest (page_meta of the served version).
+    const rawImage = meta.og_image_url || null;
+    const image = rawImage
+      ? rawImage.startsWith("//")
+        ? `https:${rawImage}`
+        : rawImage.startsWith("/")
+          ? base + rawImage
+          : rawImage
+      : null;
     return {
       title,
       description,
