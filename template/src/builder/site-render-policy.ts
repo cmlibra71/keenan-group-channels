@@ -18,6 +18,7 @@ import type { BuilderCssOptions } from "@keenan/services/builder";
 // builderCss.commaSafeSelectors — the draft-preview compile splits selector
 //   lists on top-level commas only, as the portal's publish does for this
 //   channel (WP2-j; mirrors the portal's lib/cms/site-render-policy.ts).
+// embedPolicy.canva — Canva published-design viewer frames (WP2-c).
 // embedPolicy.calculator — node-tree iframes may frame the two exact SilverChef
 //   pages (WP2-m; mirrors the portal's lib/cms/site-render-policy.ts).
 // contentNow — content pages carry context.now (WP2-s).
@@ -45,7 +46,7 @@ export const siteRenderPolicy: {
   formPolicy: { keepEmptyOptionValue: true, scopeFieldIds: true },
   onlyUsedFunctions: true,
   builderCss: { commaSafeSelectors: true },
-  embedPolicy: { calculator: true },
+  embedPolicy: { calculator: true, canva: true },
   contentNow: true,
   responsiveDetails: true,
   pageSeo: true,
