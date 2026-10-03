@@ -113,6 +113,8 @@ export const {
   getProducts,
   // A page's declared product list (WP2-a): channel visibility, declared order.
   getProductsByPaths,
+  // Registered pixel sizes of our own assets, by URL (WP2-e).
+  getAssetDims,
   getProductBySlug,
   // configurable-from-price: a configurable row's "Starting From" list/sale, attached AFTER the
   // per-viewer price overlays so its tile reads "Starting From" instead of "Call for Price".

@@ -2,7 +2,11 @@
 import * as React from "react";
 import Image from "next/image";
 import imageLoader from "@/lib/image-loader";
-import { responsiveImageAttrs } from "./builder-image-srcset";
+import { responsiveImageAttrs, hiDpiImageAttrs } from "./builder-image-srcset";
+
+/** On for CONTENT pages of a site with policy hiDpiImages (BuilderContentPage provides it); every
+ *  other page keeps the next/image path exactly as before. */
+export const HiDpiImagesContext = React.createContext(false);
 
 // ============================================================================
 // The <img> adapter the Site Builder render engine renders authored image nodes
@@ -83,13 +87,40 @@ export default function BuilderImage(props: Record<string, unknown>) {
     "data-fallback-src": fallbackSrc,
     "data-fallback-class": fallbackClass,
     "data-fallback-alt": fallbackAlt,
+    "data-orig-w": origW,
     ...rest
   } = props;
+  const hiDpi = React.useContext(HiDpiImagesContext);
   const resolved = useImageFallback(src, fallbackSrc, fallbackClass, rest.className);
   if (resolved.hidden) return null;
   const shownSrc = resolved.src;
   const shownAlt =
     resolved.src !== src && typeof fallbackAlt === "string" && fallbackAlt ? fallbackAlt : ((alt as string) ?? "");
+
+  // Known box on a content page of an opted-in site (policy hiDpiImages, WP2-e): reserve the space with width/height and
+  // offer exactly box ×1 / ×2, never wider than the original file (data-orig-w, registered).
+  if (hiDpi && !fill && width != null && height != null && String(shownSrc ?? "")) {
+    const box = Number(width);
+    const orig = Number(origW);
+    const hi = hiDpiImageAttrs(String(shownSrc), box, Number.isFinite(orig) && orig > 0 ? orig : null, imageLoader, quality == null ? undefined : Number(quality));
+    const { style, ...attrs } = rest as { style?: React.CSSProperties };
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        {...(attrs as Record<string, unknown>)}
+        className={resolved.className as string | undefined}
+        onError={resolved.onError}
+        style={{ color: "transparent", ...(style ?? {}) }}
+        src={hi.src}
+        {...(hi.srcSet ? { srcSet: hi.srcSet } : {})}
+        width={box}
+        height={Number(height)}
+        alt={shownAlt}
+        loading={priority ? "eager" : ((loading as "lazy" | "eager") ?? "lazy")}
+        decoding="async"
+      />
+    );
+  }
 
   // Authored dimensions (or fill) — next/image handles it, exactly as before.
   if (fill || (width != null && height != null)) {

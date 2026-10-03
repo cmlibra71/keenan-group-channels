@@ -30,3 +30,29 @@ export function responsiveImageAttrs(
     srcSet: widths.map((w, i) => `${candidates[i]} ${w}w`).join(", "),
   };
 }
+
+/** The widths the image route serves (lib/image-params ALLOWED_WIDTHS — next.config imageSizes + deviceSizes). */
+export const SERVED_WIDTHS = [100, 200, 400, 600, 800, 1024, 1280, 1600] as const;
+
+/**
+ * Hi-DPI attributes for an image whose display box is known (authored or registered width): a
+ * 1x candidate at the box width and a 2x candidate at twice it, each snapped UP to a served width —
+ * but never wider than the original file (`origWidth`, registered asset width) when known, so no
+ * candidate is more than one served step above the file. One distinct URL → no srcset at all.
+ */
+export function hiDpiImageAttrs(
+  src: string,
+  boxWidth: number,
+  origWidth: number | null,
+  loader: ImageLoaderFn,
+  quality?: number
+): ResponsiveImageAttrs {
+  const snap = (w: number) => SERVED_WIDTHS.find((s) => s >= w) ?? SERVED_WIDTHS[SERVED_WIDTHS.length - 1];
+  const cap = (w: number) => (origWidth && origWidth > 0 ? Math.min(w, snap(origWidth)) : w);
+  const one = cap(snap(Math.max(1, boxWidth)));
+  const two = cap(snap(Math.max(1, boxWidth) * 2));
+  const u1 = loader({ src, width: one, quality });
+  const u2 = loader({ src, width: two, quality });
+  if (u1 === u2) return { src: u1 };
+  return { src: u1, srcSet: `${u1} 1x, ${u2} 2x` };
+}

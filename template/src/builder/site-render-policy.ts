@@ -42,6 +42,10 @@ export const siteRenderPolicy: {
   carousels?: boolean;
   /** Content pages load their declared product / blog lists (info-product-grid, info-blog-list — WP2-a/o). */
   pageLists?: boolean;
+  /** Images with a known box render width/height + a box ×1/×2 srcset capped at the file (WP2-e). */
+  hiDpiImages?: boolean;
+  /** Content pages fill dimensionless static images from registered asset sizes (WP2-e). */
+  registeredImageDims?: boolean;
   /** Content pages emit canonical + Open Graph and the page's JSON-LD (cms_pages.seo). */
   pageSeo?: boolean;
 } = {
@@ -54,4 +58,6 @@ export const siteRenderPolicy: {
   pageSeo: true,
   carousels: true,
   pageLists: true,
+  hiDpiImages: true,
+  registeredImageDims: true,
 };
