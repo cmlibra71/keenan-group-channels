@@ -14,6 +14,9 @@ import { financeRatesForChannel } from "@/lib/finance/finance-rates";
 import { CartQuoteCountsProvider } from "@/lib/cart-quote-counts";
 import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
 import { siteBaseUrl, siteRobots } from "@/lib/seo";
+import { getSiteStructuredData } from "@/lib/site-structured-data";
+import { siteRenderPolicy } from "@/builder/site-render-policy";
+import { siteJsonLdBlocks, defaultOgImage, jsonLdScriptText } from "@keenan/services/builder";
 import "./globals.css";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +30,12 @@ export const viewport: Viewport = {
 
 export async function generateMetadata(): Promise<Metadata> {
   const { site, channel } = await getSiteConfig();
+  // The site's default share image (structured-data settings) for pages that set no openGraph of
+  // their own; a page that does set one names its image itself (see /pages/[slug]).
+  const sd = siteRenderPolicy.siteJsonLd ? await getSiteStructuredData() : null;
+  const ogDefault = defaultOgImage(sd, siteBaseUrl(site?.url));
   return {
+    ...(ogDefault ? { openGraph: { images: [{ url: ogDefault }] } } : {}),
     metadataBase: new URL(siteBaseUrl(site?.url)),
     title: site?.metaTitle || channel?.name || "Store",
     description: site?.metaDescription || `Welcome to ${channel?.name || "our store"}`,
@@ -96,6 +104,10 @@ export default async function RootLayout({
     // request and read by the product page's SilverChef panel.
     financeRatesForChannel(),
   ]);
+  // Organization + WebSite JSON-LD on every page (site policy; channel data, nothing hard-coded).
+  const siteLd = siteRenderPolicy.siteJsonLd
+    ? siteJsonLdBlocks(await getSiteStructuredData(), siteBaseUrl(site?.url))
+    : [];
   const storeName = site?.siteName || channel?.name || "Store";
   const logoUrl = site?.logoUrl || null;
   const logoAlt = site?.logoAlt || null;
@@ -129,6 +141,9 @@ export default async function RootLayout({
           </FinanceRatesProvider>
         </GstProvider>
         <GoogleAnalytics measurementId={ga4MeasurementId} />
+        {siteLd.map((b, i) => (
+          <script key={`site-ld-${i}`} type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScriptText(b) }} />
+        ))}
       </body>
     </html>
   );

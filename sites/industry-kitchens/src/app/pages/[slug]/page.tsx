@@ -6,10 +6,11 @@ import { getContentPage, getCmsPage, getCmsTemplate, getFeatureFlag, getNamedSty
 import { CONTENT_FONTS_HREF, hasContentFonts } from "@/lib/content-fonts";
 import { getMemberContext } from "@/lib/member";
 import { sanitizeHtml } from "@/lib/sanitize-html";
-import { composeContentPagePayload, calendarNow, pageJsonLdBlocks, jsonLdScriptText, resolvePageCanonical, collectPageLists, bindPageLists, listingForPageLists, collectStaticImageUrls, applyRegisteredImageDims, type PageSeo } from "@keenan/services/builder";
+import { composeContentPagePayload, calendarNow, pageJsonLdBlocks, jsonLdScriptText, resolvePageCanonical, collectPageLists, bindPageLists, listingForPageLists, collectStaticImageUrls, applyRegisteredImageDims, defaultOgImage, type PageSeo } from "@keenan/services/builder";
 import { loadPageLists } from "@/builder/page-lists-data";
 import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
 import { siteBaseUrl } from "@/lib/seo";
+import { getSiteStructuredData } from "@/lib/site-structured-data";
 import { RichContent } from "@/components/content/RichContent";
 import { chooseContentPageTree } from "@/lib/content-page-tree";
 import { financeApplyFunderForSlug, withFinanceApplyLogo } from "@/lib/finance/finance-apply-logo";
@@ -66,7 +67,7 @@ export async function generateMetadata({
     const base = siteBaseUrl(site?.url);
     const url = resolvePageCanonical(pageSeoOf(cms), base, `/pages/${slug}`);
     // The share image is versioned like the rest (page_meta of the served version).
-    const rawImage = meta.og_image_url || null;
+    const rawImage = meta.og_image_url || (siteRenderPolicy.siteJsonLd ? defaultOgImage(await getSiteStructuredData(), base) : null) || null;
     const image = rawImage
       ? rawImage.startsWith("//")
         ? `https:${rawImage}`
