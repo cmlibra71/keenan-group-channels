@@ -7,6 +7,7 @@ import {
   builderCompilerKey,
   collectPageBuilderClasses,
   draftCompileClasses,
+  themeVarsFromInputs,
   type BuilderCssInputs,
   type NodeTree,
 } from "@keenan/services/builder";
@@ -107,7 +108,7 @@ export async function draftBuilderCss(input: {
     const pageClasses = collectPageBuilderClasses(input.tree, input.components ?? {}, input.namedStyles ?? {});
     const classes = draftCompileClasses(pageClasses, input.inputs);
     if (!classes) return null;
-    const themeVars = input.inputs?.theme_vars ?? {};
+    const themeVars = themeVarsFromInputs(input.inputs);
     const themeKey = builderCompilerKey(themeVars);
     const sheetKey = createHash("sha256").update(themeKey).update("\0").update(classes.join(" ")).digest("hex");
     const hit = sheets.get(sheetKey);
