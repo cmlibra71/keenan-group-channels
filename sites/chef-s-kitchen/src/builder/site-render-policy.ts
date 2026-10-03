@@ -45,6 +45,8 @@ export const siteRenderPolicy: {
   hiDpiImages?: boolean;
   /** Content pages fill dimensionless static images from registered asset sizes (WP2-e). */
   registeredImageDims?: boolean;
+  /** Every page carries the site's Organization + WebSite JSON-LD and the default share image (channel data). */
+  siteJsonLd?: boolean;
 } = {
   formPolicy: { keepEmptyOptionValue: true },
   // Chefs Depot since 2026-10-03 (coordinator-approved perf flip): no CD tree

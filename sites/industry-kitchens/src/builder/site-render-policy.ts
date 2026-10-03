@@ -46,6 +46,8 @@ export const siteRenderPolicy: {
   hiDpiImages?: boolean;
   /** Content pages fill dimensionless static images from registered asset sizes (WP2-e). */
   registeredImageDims?: boolean;
+  /** Every page carries the site's Organization + WebSite JSON-LD and the default share image (channel data). */
+  siteJsonLd?: boolean;
   /** Content pages emit canonical + Open Graph and the page's JSON-LD (cms_pages.seo). */
   pageSeo?: boolean;
 } = {
@@ -60,4 +62,5 @@ export const siteRenderPolicy: {
   pageLists: true,
   hiDpiImages: true,
   registeredImageDims: true,
+  siteJsonLd: true,
 };
