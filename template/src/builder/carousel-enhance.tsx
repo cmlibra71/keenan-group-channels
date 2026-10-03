@@ -52,7 +52,9 @@ function wire(root: HTMLElement, reduced: boolean, freeze: boolean): () => void 
   let targetLeft: number | null = null;
 
   const mark = () => {
-    const i = currentDot(want, nearestIndex(offsets(), track.scrollLeft), track.scrollLeft >= maxScroll() - 1);
+    // While our own scroll is under way the target slide stays lit (no flicker through the ones between).
+    const i =
+      targetLeft !== null ? want : currentDot(want, nearestIndex(offsets(), track.scrollLeft), track.scrollLeft >= maxScroll() - 1);
     dots.forEach((d, k) => {
       // aria-current for assistive tech; data-current for styling (class tokens cannot carry "=")
       if (k === i) {
@@ -80,6 +82,8 @@ function wire(root: HTMLElement, reduced: boolean, freeze: boolean): () => void 
     isStatic = maxScroll() <= 1 || slides().length <= 1;
     for (const el of [...prev, ...next, ...dots]) el.style.display = isStatic ? "none" : "";
     if (isStatic) want = 0;
+    // Widened so the track is no longer at its end: the index follows what is shown.
+    else if (track.scrollLeft < maxScroll() - 1) want = nearestIndex(offsets(), track.scrollLeft);
     mark();
     sync();
   };
@@ -107,7 +111,10 @@ function wire(root: HTMLElement, reduced: boolean, freeze: boolean): () => void 
     if (settle) clearTimeout(settle);
     settle = setTimeout(() => {
       // A swipe (not our own scrollTo) moves the index to where the track came to rest.
-      if (targetLeft === null || Math.abs(track.scrollLeft - targetLeft) > 2) {
+      if (targetLeft !== null && Math.abs(track.scrollLeft - targetLeft) <= 2) {
+        targetLeft = null; // our scroll arrived
+        mark();
+      } else {
         const atEnd = track.scrollLeft >= maxScroll() - 1;
         const near = nearestIndex(offsets(), track.scrollLeft);
         want = atEnd && want > near ? want : near;
