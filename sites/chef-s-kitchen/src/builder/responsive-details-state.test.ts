@@ -19,3 +19,15 @@ test("detailsOpenFor: data-open-xl wins from 1280px, else lg applies", () => {
   assert.equal(detailsOpenFor("", "open", true, false, null, true), true, "no xl → lg at xl width");
   assert.equal(detailsOpenFor("", null, true, true, null, true), true, "no xl, no lg → unchanged");
 });
+
+test("data-open-at: parse + pick the largest min ≤ width; junk ignored", async () => {
+  const { parseOpenAt, openAtFor } = await import("./responsive-details-state.ts");
+  const p = parseOpenAt(" 900:open , 0:closed, nope, 1280:x, 99999:open");
+  assert.deepEqual(p, [{ min: 0, open: false }, { min: 900, open: true }, { min: 10000, open: true }]);
+  assert.equal(openAtFor(p, 390, true), false);
+  assert.equal(openAtFor(p, 899, true), false);
+  assert.equal(openAtFor(p, 900, false), true);
+  assert.equal(openAtFor(parseOpenAt("1280:open"), 1024, false), false, "below every min → unchanged");
+  assert.deepEqual(parseOpenAt(""), []);
+  assert.deepEqual(parseOpenAt(null), []);
+});

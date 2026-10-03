@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { detailsOpenFor } from "./responsive-details-state";
+import { detailsOpenFor, parseOpenAt, openAtFor } from "./responsive-details-state";
 
 // ============================================================================
 // Responsive accordion open state (WP2-n). An FAQ <details> authored with
@@ -8,8 +8,9 @@ import { detailsOpenFor } from "./responsive-details-state";
 // desktop (lg) state; below 1024 px this applies the base value on load and
 // whenever the breakpoint is crossed — but never undoes a visitor's own click
 // on that item. data-open-xl (optional) is the state from 1280 px, for items
-// Zoey opened only on wide screens. Site opt-in (site-render-policy
-// responsiveDetails).
+// Zoey opened only on wide screens. data-open-at ("0:closed,900:open") is a
+// data-driven list of collapse points and wins over the fixed attributes.
+// Site opt-in (site-render-policy responsiveDetails).
 // ============================================================================
 
 const LG = "(min-width: 1024px)";
@@ -25,10 +26,16 @@ export function ResponsiveDetails() {
     // it for any details parsed with `open`, so every item would look touched.
     const touched = new WeakSet<HTMLDetailsElement>();
     const items = () =>
-      Array.from(document.querySelectorAll<HTMLDetailsElement>("[data-kg-nodes] details[data-open-base], [data-kg-nodes] details[data-open-lg], [data-kg-nodes] details[data-open-xl]"));
+      Array.from(document.querySelectorAll<HTMLDetailsElement>("[data-kg-nodes] details[data-open-base], [data-kg-nodes] details[data-open-lg], [data-kg-nodes] details[data-open-xl], [data-kg-nodes] details[data-open-at]"));
     const apply = () => {
       for (const d of items()) {
         if (touched.has(d)) continue;
+        const at = parseOpenAt(d.getAttribute("data-open-at"));
+        if (at.length) {
+          const w = openAtFor(at, window.innerWidth, d.open);
+          if (d.open !== w) d.open = w;
+          continue;
+        }
         const want = detailsOpenFor(
           d.getAttribute("data-open-base"),
           d.getAttribute("data-open-lg"),
@@ -49,7 +56,17 @@ export function ResponsiveDetails() {
     apply();
     mq.addEventListener("change", apply);
     mqXl.addEventListener("change", apply);
+    // data-open-at points are arbitrary widths: re-apply on resize (cheap, rAF-throttled)
+    let raf = 0;
+    const onResize = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(apply);
+    };
+    const hasAt = items().some((d) => d.hasAttribute("data-open-at"));
+    if (hasAt) window.addEventListener("resize", onResize);
     return () => {
+      if (hasAt) window.removeEventListener("resize", onResize);
+      cancelAnimationFrame(raf);
       document.removeEventListener("click", onClick, true);
       mq.removeEventListener("change", apply);
       mqXl.removeEventListener("change", apply);
