@@ -2,10 +2,11 @@ import { notFound } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
 import { draftMode, headers } from "next/headers";
 import type { Metadata } from "next";
-import { getContentPage, getCmsPage, getCmsTemplate, getFeatureFlag, getNamedStyles, getComponents, getDraftComponents, getChannelSetting, CHANNEL_ID, getEnabledCmsFunctions } from "@/lib/store";
+import { getContentPage, getCmsPage, getCmsTemplate, getFeatureFlag, getNamedStyles, getComponents, getDraftComponents, getChannelSetting, CHANNEL_ID, getEnabledCmsFunctions, getSiteConfig } from "@/lib/store";
 import { getMemberContext } from "@/lib/member";
 import { sanitizeHtml } from "@/lib/sanitize-html";
-import { composeContentPagePayload, calendarNow } from "@keenan/services/builder";
+import { composeContentPagePayload, calendarNow, pageJsonLdBlocks, jsonLdScriptText, resolvePageCanonical, type PageSeo } from "@keenan/services/builder";
+import { siteBaseUrl } from "@/lib/seo";
 import { RichContent } from "@/components/content/RichContent";
 import { chooseContentPageTree } from "@/lib/content-page-tree";
 import { financeApplyFunderForSlug, withFinanceApplyLogo } from "@/lib/finance/finance-apply-logo";
@@ -24,6 +25,22 @@ import {
   type NodeTree,
 } from "@keenan/services/builder";
 
+/** The page's SEO settings (cms_pages.seo, published = the served version's). */
+function pageSeoOf(cms: unknown): PageSeo | null {
+  return ((cms as { seo?: PageSeo | null }).seo ?? null) as PageSeo | null;
+}
+
+/** The page's JSON-LD (its own blocks + the FAQPage built from its accordions), site policy. */
+function PageJsonLd({ blocks }: { blocks: Record<string, unknown>[] }) {
+  return (
+    <>
+      {blocks.map((b, i) => (
+        <script key={i} type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScriptText(b) }} />
+      ))}
+    </>
+  );
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -35,10 +52,38 @@ export async function generateMetadata({
 
   const cms = await getCmsPage(slug, draft);
   if (cms) {
-    const meta = cms.page_meta as { meta_title?: string; meta_description?: string };
+    const meta = cms.page_meta as { meta_title?: string; meta_description?: string; og_image_url?: string | null };
+    const title = meta.meta_title || cms.meta_title || cms.title;
+    const description = meta.meta_description || cms.meta_description || undefined;
+    if (!siteRenderPolicy.pageSeo) return { title, description };
+    // Page SEO (site policy): canonical + Open Graph, as the old Zoey info pages
+    // carried. `robots` is deliberately not named — that would replace the
+    // layout's site-wide siteRobots() (lib/seo.ts).
+    const { site, channel } = await getSiteConfig();
+    const base = siteBaseUrl(site?.url);
+    const url = resolvePageCanonical(pageSeoOf(cms), base, `/pages/${slug}`);
+    // The share image is versioned like the rest (page_meta of the served version).
+    const rawImage = meta.og_image_url || null;
+    const image = rawImage
+      ? rawImage.startsWith("//")
+        ? `https:${rawImage}`
+        : rawImage.startsWith("/")
+          ? base + rawImage
+          : rawImage
+      : null;
     return {
-      title: meta.meta_title || cms.meta_title || cms.title,
-      description: meta.meta_description || cms.meta_description || undefined,
+      title,
+      description,
+      alternates: { canonical: url },
+      openGraph: {
+        title,
+        description,
+        url,
+        siteName: site?.siteName || channel?.name || undefined,
+        locale: "en_AU",
+        type: "article",
+        images: image ? [{ url: image }] : undefined,
+      },
     };
   }
 
@@ -157,8 +202,10 @@ export default async function ContentPage({
         await loadJsSandbox(jsFunctions).catch(() => null);
         callResults = await computeCallResults(tree.root, jsFunctions, payload as object).catch(() => ({}));
       }
+      const jsonLd = siteRenderPolicy.pageSeo ? pageJsonLdBlocks(pageSeoOf(cms), tree, components) : [];
       return (
         <>
+          {jsonLd.length ? <PageJsonLd blocks={jsonLd} /> : null}
           {draftCss ? (
             <style href={draftCssId(draftCss)} precedence="kg-builder">
               {draftCss}
@@ -180,7 +227,13 @@ export default async function ContentPage({
     }
     // No wrapper — blocks bring their own layout (the content_page block is a full
     // <article>), so a migrated page renders pixel-identically to the legacy path.
-    return <BlockRenderer blocks={cms.blocks as unknown as RenderedBlock[]} draft={draft} />;
+    const blockJsonLd = siteRenderPolicy.pageSeo ? pageJsonLdBlocks(pageSeoOf(cms), null) : [];
+    return (
+      <>
+        {blockJsonLd.length ? <PageJsonLd blocks={blockJsonLd} /> : null}
+        <BlockRenderer blocks={cms.blocks as unknown as RenderedBlock[]} draft={draft} />
+      </>
+    );
   }
 
   const page = await getContentPage(slug);
