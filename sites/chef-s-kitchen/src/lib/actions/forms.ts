@@ -5,6 +5,7 @@ import {
   cmsFormSubmissionService,
   cmsFormSubmissionFileService,
   resolveFormNotificationRecipients,
+  submissionValueText,
   thankYouBodyHtml,
   renderThankYouCopy,
   parseFieldDefs,
@@ -165,7 +166,7 @@ async function deliverNotifications(ctx: {
   // key so a drifted definition still produces a readable email.
   const lines = Object.entries(payload).map(([name, value]) => ({
     label: fieldDefs.find((f) => f.name === name)?.label ?? name,
-    value: String(value ?? ""),
+    value: submissionValueText(value),
   }));
   const attachments = files.map((f) => ({
     fileName: String(f.file_name ?? "attachment"),
