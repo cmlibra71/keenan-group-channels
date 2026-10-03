@@ -25,6 +25,7 @@ export function ResponsiveDetails() {
     // activation dispatches click too). `toggle` cannot be used: browsers fire
     // it for any details parsed with `open`, so every item would look touched.
     const touched = new WeakSet<HTMLDetailsElement>();
+    const lastBand = new WeakMap<HTMLDetailsElement, number>();
     const items = () =>
       Array.from(document.querySelectorAll<HTMLDetailsElement>("[data-kg-nodes] details[data-open-base], [data-kg-nodes] details[data-open-lg], [data-kg-nodes] details[data-open-xl], [data-kg-nodes] details[data-open-at]"));
     const apply = () => {
@@ -32,6 +33,11 @@ export function ResponsiveDetails() {
         if (touched.has(d)) continue;
         const at = parseOpenAt(d.getAttribute("data-open-at"));
         if (at.length) {
+          // act only when the width crosses into another band (a resize inside one band — e.g. a
+          // mobile toolbar collapsing — must not undo find-in-page or a #hash opening the item)
+          const band = at.filter((p) => p.min <= window.innerWidth).length;
+          if (lastBand.get(d) === band) continue;
+          lastBand.set(d, band);
           const w = openAtFor(at, window.innerWidth, d.open);
           if (d.open !== w) d.open = w;
           continue;
