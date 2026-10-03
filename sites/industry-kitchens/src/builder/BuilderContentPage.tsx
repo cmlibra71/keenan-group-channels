@@ -10,6 +10,7 @@ import { ResponsiveDetails } from "./responsive-details";
 import { CarouselEnhance } from "./carousel-enhance";
 import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 import { contentNatives } from "./content-natives";
+import { useAddToCartHandler, useAddToQuoteHandler } from "./master-leaves";
 
 // ============================================================================
 // A CONTENT page rendered from a node tree (Site Builder) — the generic,
@@ -17,8 +18,10 @@ import { contentNatives } from "./content-natives";
 // one-off pages AND the shared policy layout. The payload is composed by the
 // route via the SHARED composers (@keenan/services page-payloads) — the same
 // functions the portal designer samples with, so bindings resolve identically.
-// Cart/quote Actions are not wired here (no-op); internal links navigate
-// through next/link.
+// Cart/quote Actions are wired only where the site loads page product lists
+// (site policy pageLists — WP2-a: a list's tiles add to basket / quote as on a
+// category page); elsewhere they stay no-ops. Internal links navigate through
+// next/link.
 // ============================================================================
 
 export function BuilderContentPage({
@@ -52,8 +55,14 @@ export function BuilderContentPage({
   // one is set (card XBOxpQmd). Identity-returning when the page carries no
   // form, which is almost every page.
   const confirmed = useFormConfirmations(tree, components);
+  const addToCart = useAddToCartHandler();
+  const addToQuote = useAddToQuoteHandler();
+  const handlers = React.useMemo(
+    () => (siteRenderPolicy.pageLists ? { ...formHandlers, addToCart, addToQuote } : formHandlers),
+    [formHandlers, addToCart, addToQuote]
+  );
   return (
-    <BuilderActionsProvider handlers={formHandlers} navigate={(to) => router.push(to)}>
+    <BuilderActionsProvider handlers={handlers} navigate={(to) => router.push(to)}>
       <BuilderTree
         formPolicy={siteRenderPolicy.formPolicy}
         embedPolicy={siteRenderPolicy.embedPolicy}
