@@ -9,7 +9,7 @@ test("this site's form policy", () => {
 });
 
 test("this site's function loading", () => {
-  assert.equal(siteRenderPolicy.onlyUsedFunctions ?? false, false);
+  assert.equal(siteRenderPolicy.onlyUsedFunctions ?? false, true);
 });
 
 test("this site's builder stylesheet compile choices", () => {

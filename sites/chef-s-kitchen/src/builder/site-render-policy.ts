@@ -39,4 +39,8 @@ export const siteRenderPolicy: {
   responsiveDetails?: boolean;
 } = {
   formPolicy: { keepEmptyOptionValue: true },
+  // Chefs Depot since 2026-10-03 (coordinator-approved perf flip): no CD tree
+  // calls a library function, so CD pages stop shipping ListCategories and
+  // stop booting the QuickJS sandbox.
+  onlyUsedFunctions: true,
 };
