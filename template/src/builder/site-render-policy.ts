@@ -40,6 +40,8 @@ export const siteRenderPolicy: {
   responsiveDetails?: boolean;
   /** Authored carousels (data-kg-carousel) get arrows, dots, keyboard, autoplay (WP3 K1). */
   carousels?: boolean;
+  /** Content pages load their declared product / blog lists (info-product-grid, info-blog-list — WP2-a/o). */
+  pageLists?: boolean;
   /** Content pages emit canonical + Open Graph and the page's JSON-LD (cms_pages.seo). */
   pageSeo?: boolean;
 } = {
@@ -51,4 +53,5 @@ export const siteRenderPolicy: {
   responsiveDetails: true,
   pageSeo: true,
   carousels: true,
+  pageLists: true,
 };

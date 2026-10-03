@@ -1,11 +1,13 @@
 import { notFound } from "next/navigation";
 import { redirectIfMapped } from "@/lib/redirect-seam";
-import { draftMode, headers } from "next/headers";
+import { draftMode, headers, cookies } from "next/headers";
 import type { Metadata } from "next";
 import { getContentPage, getCmsPage, getCmsTemplate, getFeatureFlag, getNamedStyles, getComponents, getDraftComponents, getChannelSetting, CHANNEL_ID, getEnabledCmsFunctions, getSiteConfig } from "@/lib/store";
 import { getMemberContext } from "@/lib/member";
 import { sanitizeHtml } from "@/lib/sanitize-html";
-import { composeContentPagePayload, calendarNow, pageJsonLdBlocks, jsonLdScriptText, resolvePageCanonical, type PageSeo } from "@keenan/services/builder";
+import { composeContentPagePayload, calendarNow, pageJsonLdBlocks, jsonLdScriptText, resolvePageCanonical, collectPageLists, bindPageLists, type PageSeo } from "@keenan/services/builder";
+import { loadPageLists } from "@/builder/page-lists-data";
+import { GST_COOKIE, parseGstInclusive } from "@/lib/gst-cookie";
 import { siteBaseUrl } from "@/lib/seo";
 import { RichContent } from "@/components/content/RichContent";
 import { chooseContentPageTree } from "@/lib/content-page-tree";
@@ -152,6 +154,26 @@ export default async function ContentPage({
     // with the portal-compiled builder CSS for authored classes. The payload is
     // built by the SHARED composer (same one the designer samples with). ═══
     if (tree) {
+      // Declared product / blog lists (WP2-a/o, site policy): loaded in one batch with the
+      // viewer's visibility and prices; each list master gets `items` bound to its list.
+      const listDecls = siteRenderPolicy.pageLists ? collectPageLists(tree) : [];
+      const pageLists = listDecls.length ? await loadPageLists(listDecls) : null;
+      if (pageLists) tree = bindPageLists(tree, listDecls);
+      const listContext = pageLists
+        ? await (async () => {
+            const [pricesIncludeTax, cookieStore, memberPricingAvailable] = await Promise.all([
+              getFeatureFlag("prices_include_tax").catch(() => false),
+              cookies(),
+              getFeatureFlag("member_pricing_enabled").catch(() => false),
+            ]);
+            return {
+              lists: pageLists.lists,
+              pricing: pageLists.pricing,
+              gst: { inclusive: parseGstInclusive(cookieStore.get(GST_COOKIE)?.value), pricesIncludeTax: !!pricesIncludeTax },
+              memberPricingAvailable: !!memberPricingAvailable,
+            };
+          })()
+        : null;
       const contentBlock = (cms.blocks as Array<{ block_type: string; props?: Record<string, unknown> }>)?.find(
         (b) => b.block_type === "content_page"
       );
@@ -173,6 +195,7 @@ export default async function ContentPage({
         // Today's date (storefront timezone) for {{context.now.*}}. Pages render
         // per request (root layout force-dynamic), so it is never stale.
         ...(siteRenderPolicy.contentNow ? { now: calendarNow() } : {}),
+        ...(listContext ?? {}),
       });
       const namedStyles = await getNamedStyles().catch(() => ({}));
       const components = (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<string, NodeTree>;
