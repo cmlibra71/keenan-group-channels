@@ -7,9 +7,11 @@ import {
   builderCompilerKey,
   collectPageBuilderClasses,
   draftCompileClasses,
+  themeVarsFromInputs,
   type BuilderCssInputs,
   type NodeTree,
 } from "@keenan/services/builder";
+import { siteRenderPolicy } from "./site-render-policy";
 
 // ============================================================================
 // Draft preview CSS — the builder stylesheet a DRAFT page would get once
@@ -106,7 +108,7 @@ export async function draftBuilderCss(input: {
     const pageClasses = collectPageBuilderClasses(input.tree, input.components ?? {}, input.namedStyles ?? {});
     const classes = draftCompileClasses(pageClasses, input.inputs);
     if (!classes) return null;
-    const themeVars = input.inputs?.theme_vars ?? {};
+    const themeVars = themeVarsFromInputs(input.inputs);
     const themeKey = builderCompilerKey(themeVars);
     const sheetKey = createHash("sha256").update(themeKey).update("\0").update(classes.join(" ")).digest("hex");
     const hit = sheets.get(sheetKey);
@@ -125,7 +127,7 @@ export async function draftBuilderCss(input: {
       compilers.set(themeKey, compiler);
       compiler.catch(() => compilers.delete(themeKey));
     }
-    const css = buildLiveBuilderCss(await compiler, classes);
+    const css = buildLiveBuilderCss(await compiler, classes, siteRenderPolicy.builderCss ?? {});
     if (sheets.size >= MAX_SHEETS) sheets.delete(sheets.keys().next().value as string);
     sheets.set(sheetKey, css);
     return css;
