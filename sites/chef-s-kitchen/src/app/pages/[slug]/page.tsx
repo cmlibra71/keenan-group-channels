@@ -13,7 +13,8 @@ import { BlockRenderer, type RenderedBlock } from "@/blocks/BlockRenderer";
 import { BuilderContentPage } from "@/builder/BuilderContentPage";
 import { BuilderCssLink } from "@/builder/builder-css-link";
 import { usedComponents } from "@/builder/used-components";
-import { loadJsSandbox, computeCallResults, type NodeTree } from "@keenan/services/builder";
+import { siteRenderPolicy } from "@/builder/site-render-policy";
+import { loadJsSandbox, computeCallResults, usedCmsFunctions, type NodeTree } from "@keenan/services/builder";
 
 export async function generateMetadata({
   params,
@@ -121,7 +122,11 @@ export default async function ContentPage({
       const components = (await (draft ? getDraftComponents() : getComponents()).catch(() => ({}))) as Record<string, NodeTree>;
       const builderCss =
         ((await getChannelSetting("builder_published_css").catch(() => null)) as { css?: string } | null)?.css ?? "";
-      const jsFunctions = await getEnabledCmsFunctions().catch(() => ({}) as Record<string, string>);
+      const allFunctions = await getEnabledCmsFunctions().catch(() => ({}) as Record<string, string>);
+      // Only what this page can call (site policy) — none → no QuickJS sandbox.
+      const jsFunctions = siteRenderPolicy.onlyUsedFunctions
+        ? usedCmsFunctions(tree, components, allFunctions)
+        : allFunctions;
       let callResults: Record<string, unknown> = {};
       if (Object.keys(jsFunctions).length > 0) {
         await loadJsSandbox(jsFunctions).catch(() => null);
