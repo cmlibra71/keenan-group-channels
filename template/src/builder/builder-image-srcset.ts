@@ -1,3 +1,4 @@
+import { ALLOWED_WIDTHS } from "../lib/image-params";
 // Pure seam behind <BuilderImage>: the responsive attributes for an authored
 // builder <img> node that declared no dimensions. next/image would normally
 // compute these, but it refuses to run at all without a width, so we compute
@@ -31,8 +32,8 @@ export function responsiveImageAttrs(
   };
 }
 
-/** The widths the image route serves (lib/image-params ALLOWED_WIDTHS — next.config imageSizes + deviceSizes). */
-export const SERVED_WIDTHS = [100, 200, 400, 600, 800, 1024, 1280, 1600] as const;
+/** The widths the image route serves (the route's own list). */
+export const SERVED_WIDTHS = ALLOWED_WIDTHS;
 
 /**
  * Hi-DPI attributes for an image whose display box is known (authored or registered width): a

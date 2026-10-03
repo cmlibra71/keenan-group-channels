@@ -99,7 +99,8 @@ export default function BuilderImage(props: Record<string, unknown>) {
 
   // Known box on a content page of an opted-in site (policy hiDpiImages, WP2-e): reserve the space with width/height and
   // offer exactly box ×1 / ×2, never wider than the original file (data-orig-w, registered).
-  if (hiDpi && !fill && width != null && height != null && String(shownSrc ?? "")) {
+  // (an authored `sizes`, or a box that is not a pixel number, keeps the next/image path)
+  if (hiDpi && !fill && width != null && height != null && !sizes && Number.isFinite(Number(width)) && Number(width) > 0 && String(shownSrc ?? "")) {
     const box = Number(width);
     const orig = Number(origW);
     const hi = hiDpiImageAttrs(String(shownSrc), box, Number.isFinite(orig) && orig > 0 ? orig : null, imageLoader, quality == null ? undefined : Number(quality));
@@ -115,6 +116,7 @@ export default function BuilderImage(props: Record<string, unknown>) {
         {...(hi.srcSet ? { srcSet: hi.srcSet } : {})}
         width={box}
         height={Number(height)}
+        data-nimg="1"
         alt={shownAlt}
         loading={priority ? "eager" : ((loading as "lazy" | "eager") ?? "lazy")}
         decoding="async"
