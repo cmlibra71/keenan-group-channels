@@ -37,6 +37,8 @@ export const siteRenderPolicy: {
   contentNow?: boolean;
   /** Accordion <details> carrying data-open-base apply it below 1024px. */
   responsiveDetails?: boolean;
+  /** Content pages emit canonical + Open Graph and the page's JSON-LD (cms_pages.seo). */
+  pageSeo?: boolean;
 } = {
   formPolicy: { keepEmptyOptionValue: true, scopeFieldIds: true },
   onlyUsedFunctions: true,
@@ -44,4 +46,5 @@ export const siteRenderPolicy: {
   embedPolicy: { calculator: true },
   contentNow: true,
   responsiveDetails: true,
+  pageSeo: true,
 };
