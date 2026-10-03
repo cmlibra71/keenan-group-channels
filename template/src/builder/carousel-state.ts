@@ -29,3 +29,12 @@ export function autoplayMs(raw: string | null): number {
   if (!raw || !Number.isFinite(n) || n <= 0) return 0;
   return Math.max(1500, Math.min(60000, Math.round(n)));
 }
+
+/**
+ * The dot to light: the slide navigation is on (`want`) while the track rests at its end and
+ * `want` lies past the leftmost visible slide (several slides per view — the track cannot move
+ * further, but the count goes on); otherwise the slide the track actually shows.
+ */
+export function currentDot(want: number, nearest: number, atEnd: boolean): number {
+  return atEnd && want > nearest ? want : nearest;
+}

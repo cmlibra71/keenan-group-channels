@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { autoplayMs, nearestIndex, stepIndex } from "./carousel-state.ts";
+import { autoplayMs, currentDot, nearestIndex, stepIndex } from "./carousel-state.ts";
 
 test("stepIndex wraps when looping, clamps otherwise", () => {
   assert.equal(stepIndex(4, 5, 1, true), 0);
@@ -26,4 +26,10 @@ test("autoplayMs: empty/invalid = off; clamped to 1.5–60 s", () => {
   assert.equal(autoplayMs("5000"), 5000);
   assert.equal(autoplayMs("100"), 1500);
   assert.equal(autoplayMs("999999"), 60000);
+});
+
+test("currentDot: past the track's end the navigated slide stays lit", () => {
+  assert.equal(currentDot(7, 2, true), 7);
+  assert.equal(currentDot(1, 2, true), 2);
+  assert.equal(currentDot(7, 2, false), 2);
 });
