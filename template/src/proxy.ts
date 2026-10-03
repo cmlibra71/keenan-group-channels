@@ -14,7 +14,7 @@ import {
   // no @/lib/store) — see the note at the top of `lib/guard/index.ts`. The server-side
   // reader lives in `@/lib/acquisition` and must never be imported here.
 } from "@/lib/acquisition-campaign";
-import { goneCandidate, isGonePath } from "@/lib/gone-paths";
+import { goneCandidate, isGonePath, selfOrigin } from "@/lib/gone-paths";
 import { GONE_FROM_DATA } from "@/lib/gone-policy";
 
 /**
@@ -88,8 +88,7 @@ export default async function proxy(req: NextRequest) {
   // memory and refreshes in the background (lib/gone-paths.ts), so this never
   // waits on the database.
   if (GONE_FROM_DATA && goneCandidate(pathname, req.method)) {
-    const origin = `http://127.0.0.1:${process.env.PORT || req.nextUrl.port || "3000"}`;
-    if (await isGonePath(pathname, origin)) {
+    if (await isGonePath(pathname, selfOrigin(process.env.PORT || req.nextUrl.port))) {
       // A rewrite cannot carry the status into a page render (Next replaces it
       // with the not-found page's 404), so the route handler serves the
       // not-found HTML itself with 410.

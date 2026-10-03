@@ -18,3 +18,14 @@ test("goneCandidate: GET/HEAD page addresses only", () => {
   assert.equal(goneCandidate("/api/internal/gone-paths", "GET"), false);
   assert.equal(goneCandidate("/_next/static/x.js", "GET"), false);
 });
+
+test("the gone body path is never itself gone; selfOrigin follows $HOSTNAME", async () => {
+  const { GONE_BODY_PATH, selfOrigin } = await import("./gone-paths.ts");
+  assert.equal(goneCandidate(GONE_BODY_PATH, "GET"), false);
+  const prev = process.env.HOSTNAME;
+  process.env.HOSTNAME = "f28e0b294374";
+  assert.equal(selfOrigin("3000"), "http://f28e0b294374:3000");
+  process.env.HOSTNAME = "0.0.0.0";
+  assert.equal(selfOrigin("3011"), "http://127.0.0.1:3011");
+  if (prev === undefined) delete process.env.HOSTNAME; else process.env.HOSTNAME = prev;
+});

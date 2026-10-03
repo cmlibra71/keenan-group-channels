@@ -17,6 +17,22 @@ import { normalizeLookupPath } from "./redirect-path";
 
 const TTL_MS = 5 * 60 * 1000;
 const FIRST_LOAD_TIMEOUT_MS = 1500;
+const FETCH_TIMEOUT_MS = 3000;
+
+/** The internal page the gone route renders for its body — never itself gone. */
+export const GONE_BODY_PATH = "/__kg-gone__";
+
+/**
+ * This server's own address. Next standalone binds to $HOSTNAME (Docker sets it
+ * to the container id, which resolves to the container's IP) or 0.0.0.0, so
+ * the loopback must use the same host — 127.0.0.1 is NOT listening in the
+ * production containers.
+ */
+export function selfOrigin(port: string | undefined): string {
+  const h = process.env.HOSTNAME;
+  const host = h && h !== "0.0.0.0" && h !== "::" ? h : "127.0.0.1";
+  return `http://${host}:${port || process.env.PORT || "3000"}`;
+}
 
 let paths: Set<string> | null = null;
 let loadedAt = 0;
@@ -32,6 +48,7 @@ export function isGoneIn(set: Set<string> | null, pathname: string): boolean {
 /** Paths the proxy never treats as gone (its own data source, framework, APIs). */
 export function goneCandidate(pathname: string, method: string): boolean {
   if (method !== "GET" && method !== "HEAD") return false;
+  if (pathname === GONE_BODY_PATH) return false;
   return !pathname.startsWith("/api/") && !pathname.startsWith("/_next/");
 }
 
@@ -39,16 +56,20 @@ function refresh(origin: string): Promise<void> {
   if (!inflight) {
     inflight = (async () => {
       try {
-        const res = await fetch(`${origin}/api/internal/gone-paths`, { cache: "no-store" });
-        if (res.ok) {
-          const list = (await res.json()) as unknown;
-          if (Array.isArray(list)) {
-            paths = new Set(list.map((p) => normalizeLookupPath(String(p))).filter((p): p is string => !!p));
-          }
+        const res = await fetch(`${origin}/api/internal/gone-paths`, {
+          cache: "no-store",
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+        const list = res.ok ? ((await res.json()) as unknown) : null;
+        if (Array.isArray(list)) {
+          paths = new Set(list.map((p) => normalizeLookupPath(String(p))).filter((p): p is string => !!p));
         }
       } catch {
         // keep the previous set
       } finally {
+        // A failed FIRST load still settles to an empty set, so the next try
+        // waits for the 5-minute schedule instead of every request retrying.
+        if (paths === null) paths = new Set();
         loadedAt = Date.now();
         inflight = null;
       }
