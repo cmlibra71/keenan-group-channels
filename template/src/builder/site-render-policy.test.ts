@@ -17,7 +17,7 @@ test("this site's builder stylesheet compile choices", () => {
 });
 
 test("this site's embeds, content date and responsive accordions", () => {
-  assert.deepEqual(siteRenderPolicy.embedPolicy ?? {}, { calculator: true, canva: true });
+  assert.deepEqual(siteRenderPolicy.embedPolicy ?? {}, { calculator: true, canva: true, skope: true });
   assert.equal(siteRenderPolicy.contentNow ?? false, true);
   assert.equal(siteRenderPolicy.responsiveDetails ?? false, true);
 });

@@ -46,7 +46,7 @@ export const siteRenderPolicy: {
   formPolicy: { keepEmptyOptionValue: true, scopeFieldIds: true },
   onlyUsedFunctions: true,
   builderCss: { commaSafeSelectors: true },
-  embedPolicy: { calculator: true, canva: true },
+  embedPolicy: { calculator: true, canva: true, skope: true },
   contentNow: true,
   responsiveDetails: true,
   pageSeo: true,
