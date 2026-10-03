@@ -91,6 +91,7 @@ export default async function RootLayout({
     tokenVars,
     ga4MeasurementId,
     financeRates,
+    siteData,
   ] = await Promise.all([
     getSiteConfig(),
     getFeatureFlag("subscriptions_enabled"),
@@ -103,11 +104,10 @@ export default async function RootLayout({
     // This storefront's weekly-rent rates (card 6GBlDtwf), resolved once per
     // request and read by the product page's SilverChef panel.
     financeRatesForChannel(),
+    siteRenderPolicy.siteJsonLd ? getSiteStructuredData() : Promise.resolve(null),
   ]);
   // Organization + WebSite JSON-LD on every page (site policy; channel data, nothing hard-coded).
-  const siteLd = siteRenderPolicy.siteJsonLd
-    ? siteJsonLdBlocks(await getSiteStructuredData(), siteBaseUrl(site?.url))
-    : [];
+  const siteLd = siteJsonLdBlocks(siteData, siteBaseUrl(site?.url));
   const storeName = site?.siteName || channel?.name || "Store";
   const logoUrl = site?.logoUrl || null;
   const logoAlt = site?.logoAlt || null;
