@@ -37,6 +37,8 @@ export const siteRenderPolicy: {
   contentNow?: boolean;
   /** Accordion <details> carrying data-open-base apply it below 1024px. */
   responsiveDetails?: boolean;
+  /** Authored carousels (data-kg-carousel) get arrows, dots, keyboard, autoplay (WP3 K1). */
+  carousels?: boolean;
   /** Content pages emit canonical + Open Graph and the page's JSON-LD (cms_pages.seo). */
   pageSeo?: boolean;
 } = {
@@ -47,4 +49,5 @@ export const siteRenderPolicy: {
   contentNow: true,
   responsiveDetails: true,
   pageSeo: true,
+  carousels: true,
 };

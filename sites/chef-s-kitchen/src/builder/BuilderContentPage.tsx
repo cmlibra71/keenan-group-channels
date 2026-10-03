@@ -7,6 +7,7 @@ import type { NodeTree } from "@keenan/services/builder";
 import { BuilderTree, BuilderActionsProvider, type NativeComponents } from "@keenan/services/builder-react";
 import { siteRenderPolicy } from "./site-render-policy";
 import { ResponsiveDetails } from "./responsive-details";
+import { CarouselEnhance } from "./carousel-enhance";
 import { useFormHandlers, useFormConfirmations } from "./use-form-handlers";
 import { contentNatives } from "./content-natives";
 
@@ -68,6 +69,7 @@ export function BuilderContentPage({
         draft={draft}
       />
       {siteRenderPolicy.responsiveDetails ? <ResponsiveDetails /> : null}
+      {siteRenderPolicy.carousels ? <CarouselEnhance /> : null}
     </BuilderActionsProvider>
   );
 }
