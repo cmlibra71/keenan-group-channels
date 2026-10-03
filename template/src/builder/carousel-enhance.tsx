@@ -71,7 +71,9 @@ function wire(root: HTMLElement, reduced: boolean, freeze: boolean): () => void 
     if (!o.length) return;
     want = Math.max(0, Math.min(o.length - 1, i));
     targetLeft = Math.min(o[want], maxScroll());
-    track.scrollTo({ left: targetLeft, behavior: reduced ? "auto" : "smooth" });
+    // Already there (e.g. stepping past the track's end): no scroll event will come to clear it.
+    if (Math.abs(track.scrollLeft - targetLeft) <= 2) targetLeft = null;
+    else track.scrollTo({ left: targetLeft, behavior: reduced ? "auto" : "smooth" });
     mark();
   };
   const step = (dir: 1 | -1) => go(stepIndex(want, slides().length, dir, loop));
@@ -83,7 +85,7 @@ function wire(root: HTMLElement, reduced: boolean, freeze: boolean): () => void 
     for (const el of [...prev, ...next, ...dots]) el.style.display = isStatic ? "none" : "";
     if (isStatic) want = 0;
     // Widened so the track is no longer at its end: the index follows what is shown.
-    else if (track.scrollLeft < maxScroll() - 1) want = nearestIndex(offsets(), track.scrollLeft);
+    else if (targetLeft === null && track.scrollLeft < maxScroll() - 1) want = nearestIndex(offsets(), track.scrollLeft);
     mark();
     sync();
   };
