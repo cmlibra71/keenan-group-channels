@@ -57,10 +57,7 @@ export function BuilderContentPage({
   const confirmed = useFormConfirmations(tree, components);
   const addToCart = useAddToCartHandler();
   const addToQuote = useAddToQuoteHandler();
-  const handlers = React.useMemo(
-    () => (siteRenderPolicy.pageLists ? { ...formHandlers, addToCart, addToQuote } : formHandlers),
-    [formHandlers, addToCart, addToQuote]
-  );
+  const handlers = siteRenderPolicy.pageLists ? { ...formHandlers, addToCart, addToQuote } : formHandlers;
   return (
     <BuilderActionsProvider handlers={handlers} navigate={(to) => router.push(to)}>
       <BuilderTree

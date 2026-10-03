@@ -142,8 +142,9 @@ function wire(root: HTMLElement, reduced: boolean, freeze: boolean): () => void 
   let userPaused = false;
   const showPaused = () => {
     root.toggleAttribute("data-paused", userPaused);
+    // The accessible NAME says what the button will do ("Pause" / "Play"); no aria-pressed on top
+    // of a swapping label (it would announce "Play, pressed").
     for (const b of pauses) {
-      b.setAttribute("aria-pressed", userPaused ? "true" : "false");
       const label = b.getAttribute(userPaused ? "data-label-play" : "data-label-pause");
       if (label) b.setAttribute("aria-label", label);
     }
